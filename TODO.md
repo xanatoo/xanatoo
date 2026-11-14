@@ -8,6 +8,18 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Image links never leave the app
+
+- Android showed "Open with…" for gallery-page thumbnails: `<li><a
+  href=big.jpg><img src=small.jpg>` is an inline image span with `href`, and
+  `gallery_items` listed only the thumbnail, so `open_link_image` missed and
+  the click fell through to `open_external_url`. Inline spans now use a linked
+  original as the item's `src`.
+- Any http(s) image address not among the page's images (address bar, links,
+  sessions, Reload) is a one-image page (`image_url_document`) shown as
+  `URL//gallery//item:1`. Verified under Xvfb (thumb click, address bar,
+  Back); not yet on the device.
+
 ## Status (2026-11-14) — Gallery as a `//gallery` view pipe
 
 - The full-window Lightbox overlay is gone. `page//gallery` shows every image
