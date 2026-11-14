@@ -384,6 +384,13 @@ std::string import_markdown_path(const std::string& path) {
   return dir.empty() ? std::string() : (dir / "content.md").string();
 }
 
+void invalidate_import(const std::string& path) {
+  const fs::path dir = import_cache_dir(path);
+  if (dir.empty()) return;
+  std::error_code ec;
+  fs::remove(dir / ".format", ec);  // no stamp → no reuse
+}
+
 ImportResult import_via_pandoc(const std::string& epub_path) {
   ImportResult out;
   const std::string reader = pandoc_input_format(epub_path);

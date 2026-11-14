@@ -322,6 +322,16 @@ std::optional<Document> fetch_book(const std::string& epub_url,
 
 }  // namespace
 
+void ebook_forget_download(std::string_view url) {
+  const std::string epub = ebook_download_url(url);
+  const fs::path dir = download_dir();
+  if (epub.empty() || dir.empty()) return;
+  const fs::path file = dir / cache_name(epub);
+  invalidate_import(file.string());
+  std::error_code ec;
+  fs::remove(file, ec);
+}
+
 std::optional<Document> ebook_fetch(std::string_view url, std::string* err,
                                     std::string* local_path) {
   std::string epub = ebook_download_url(url);

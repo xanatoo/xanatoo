@@ -19,9 +19,14 @@ Next bundle number: **348** (this delivery is **347**)
   store the origin, and reopening the same file reuses its buffer.
   Relative links resolve beside the original, falling back to the import
   dir when only the derived target exists. Checked under Xvfb.
-- Open: ForceReload does not yet force a fresh conversion (reuse is by
-  mtime + format stamp); old history / sessions that stored a cache
-  `content.md` path still open that file as before.
+- Reload vs Force Reload: Reload (Ctrl+R, F5, click) reuses a current
+  import; Force Reload (Ctrl+Shift+R, Shift+F5, Shift+click, Reload
+  button right-click menu, File menu) converts again (`invalidate_import`)
+  and re-downloads ebooks (`ebook_forget_download`). Ctrl+R / F5 now also
+  work in browse mode (the browse key filter used to drop Ctrl+R).
+  Checked under Xvfb.
+- Old history / sessions that stored a cache `content.md` path still open
+  that file as before (fine as is).
 
 ## Status (2026-11-14) — `file:` URLs for local pages
 

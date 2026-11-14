@@ -38,6 +38,9 @@ Document parse_standard_ebooks_listing(std::string_view html,
 // Catalogue pages are scraped into a list; book URLs download the EPUB to
 // the cache (reused when present) and import it via pandoc. For books
 // `local_path` receives the derived Markdown path (images resolve there).
+// Force Reload of a book URL: drop its downloaded EPUB (and so its import)
+// so the next ebook_fetch downloads and converts it again.
+void ebook_forget_download(std::string_view url);
 std::optional<Document> ebook_fetch(std::string_view url,
                                     std::string* err = nullptr,
                                     std::string* local_path = nullptr);

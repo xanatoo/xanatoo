@@ -20,7 +20,9 @@
 #include "xanatoo/reddit_credentials.hpp"
 #include "xanatoo/catalog_credentials.hpp"
 #include "xanatoo/platform.hpp"
+#include "xanatoo/ebooks.hpp"
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/lemmy.hpp"
@@ -1578,6 +1580,15 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
                           "File → Revert to Saved drops them");
         break;
       }
+      // Force: converted pages are converted afresh, downloaded books
+      // downloaded again; a plain Reload reuses what is still current.
+      if (cmd == C::ForceReload) {
+        if (xanatoo::looks_like_local_path(rpath) && xanatoo::is_pandoc_path(rpath))
+          xanatoo::invalidate_import(rpath);
+#if defined(XANATOO_EBOOKS) && XANATOO_EBOOKS
+        if (xanatoo::is_ebook_url(rpath)) xanatoo::ebook_forget_download(rpath);
+#endif
+      }
       if (is_in_app_remote_url(rpath)) {
         refetch_page(app, app.focus);
         break;
@@ -1593,7 +1604,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       reset_blink(app);
       update_title(app);
       app.needs_layout = true;
-      flash_status(app, (cmd == C::RevertToSaved ? "Reverted to " : "Reloaded ") +
+      flash_status(app, (cmd == C::RevertToSaved ? "Reverted to "
+                         : cmd == C::ForceReload ? "Force reloaded "
+                                                 : "Reloaded ") +
                             rpath);
       break;
     }

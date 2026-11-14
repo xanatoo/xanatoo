@@ -1183,9 +1183,24 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
     if (state.loading)
       tool_button("tb_stop", "stop", "Stop loading (Esc)",
                   UiCommand::StopLoading, cmd, true);
-    else
-      tool_button("tb_reload", "reload", "Reload (Ctrl+R)", UiCommand::Reload,
-                  cmd, state.has_path);
+    else {
+      // Shift+click forces; right-click offers both.
+      bool reload_context = false;
+      tool_button("tb_reload", "reload",
+                  "Reload (Ctrl+R, F5) · Shift+click: Force Reload "
+                  "(Ctrl+Shift+R, Shift+F5)",
+                  UiCommand::Reload, cmd, state.has_path, &reload_context);
+      if (cmd == UiCommand::Reload && ImGui::GetIO().KeyShift)
+        cmd = UiCommand::ForceReload;
+      if (reload_context) ImGui::OpenPopup("##reload_menu");
+      if (ImGui::BeginPopup("##reload_menu")) {
+        menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path,
+                      "Ctrl+R / F5");
+        menu_item_cmd("Force Reload", UiCommand::ForceReload, cmd,
+                      state.has_path, "Ctrl+Shift+R / Shift+F5");
+        ImGui::EndPopup();
+      }
+    }
 
     // Location / URL field (path or gemini://)
     auto location_field = [&] {
@@ -2274,9 +2289,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Export as XML (experimental)…", UiCommand::ExportXml, cmd, true);
       menu_item_cmd("Export as Markdown…", UiCommand::ExportMarkdown, cmd, true);
       ImGui::Separator();
-      menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path, "Ctrl+R");
+      menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path, "Ctrl+R / F5");
       menu_item_cmd("Force Reload", UiCommand::ForceReload, cmd, state.has_path,
-                    "Ctrl+Shift+R");
+                    "Ctrl+Shift+R / Shift+F5");
       menu_item_cmd("Revert to Saved", UiCommand::RevertToSaved, cmd,
                     state.has_path && state.dirty);
       menu_item_cmd("Drafts", UiCommand::OpenDrafts, cmd);

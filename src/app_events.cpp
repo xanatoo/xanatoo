@@ -1878,6 +1878,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
     if (!prompt_key) return;
   } else if (imgui_keys && xanatoo::sdl::keycode(ev) != SDLK_ESCAPE &&
              xanatoo::sdl::keycode(ev) != SDLK_F1 && xanatoo::sdl::keycode(ev) != SDLK_F2 &&
+             xanatoo::sdl::keycode(ev) != SDLK_F5 &&
              xanatoo::sdl::keycode(ev) != SDLK_F8 && xanatoo::sdl::keycode(ev) != SDLK_F9 &&
              xanatoo::sdl::keycode(ev) != SDLK_F11) {
     return;
@@ -1905,16 +1906,16 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (browsing(app) && !status_prompt) {
     const SDL_Keycode k = xanatoo::sdl::keycode(ev);
     const bool browse_ok =
-        k == SDLK_ESCAPE || k == SDLK_F1 || k == SDLK_F2 || k == SDLK_F8 ||
-        k == SDLK_F9 || k == SDLK_F11 || k == SDLK_LEFT ||
+        k == SDLK_ESCAPE || k == SDLK_F1 || k == SDLK_F2 || k == SDLK_F5 ||
+        k == SDLK_F8 || k == SDLK_F9 || k == SDLK_F11 || k == SDLK_LEFT ||
         k == SDLK_RIGHT || k == SDLK_UP || k == SDLK_DOWN || k == SDLK_PAGEUP ||
         k == SDLK_PAGEDOWN || k == SDLK_HOME || k == SDLK_END ||
         k == SDLK_TAB || k == SDLK_RETURN || k == SDLK_KP_ENTER ||
         k == SDLK_SPACE || k == SDLK_LEFTBRACKET || k == SDLK_RIGHTBRACKET ||
         // Ctrl+C / A / S: copy, select, save an editable Markdown copy.
-        // Ctrl+T / W: new / close tab (not document edits).
+        // Ctrl+T / W: new / close tab (not document edits). Ctrl+R reload.
         (ctrl && (k == SDLK_q || k == SDLK_o || k == SDLK_f || k == SDLK_g ||
-                  k == SDLK_c || k == SDLK_a || k == SDLK_s ||
+                  k == SDLK_c || k == SDLK_a || k == SDLK_s || k == SDLK_r ||
                   k == SDLK_t || k == SDLK_w ||
                   k == SDLK_BACKSLASH || k == SDLK_l ||
                   k == SDLK_EQUALS || k == SDLK_MINUS || k == SDLK_PLUS ||
@@ -2041,6 +2042,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
     case SDLK_F11:
       toggle_chrome(app);
+      break;
+
+    case SDLK_F5:  // as in browsers: Shift+F5 forces
+      execute_command(app, shift ? UiCommand::ForceReload : UiCommand::Reload);
       break;
 
     case SDLK_F8:
