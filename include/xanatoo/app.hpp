@@ -545,7 +545,7 @@ struct SiteCache {
 // Search bar (app_search.cpp). The engine in use is
 // ViewSettings::search_engine (saved in view.conf).
 struct SearchBar {
-  bool open = false;
+  bool open = true;  // shown by default: hidden it is hard to find
   std::vector<xanatoo::SearchEngine> engines;
 };
 

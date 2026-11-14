@@ -13,7 +13,8 @@ Search is an address, not a widget in the document and not a panel.
   address (`final_url`), so Back / Forward, bookmarks, tabs, split browsing
   and session restore need no search code. Results are read-only foreign
   documents like any remote page.
-- **Search bar:** `ui.cpp` row `##toolbar_search`, hidden by default
+- **Search bar:** in `ui.cpp`, right of the location field on the second
+  toolbar row, shown by default
   (`App::search.open`, Ctrl+K / View → Search Bar, Esc closes): an engine
   button with a dropdown (badge letters, no per-engine art yet), a field,
   Go. It only issues `UiCommand::Search`; `run_search` builds the address and

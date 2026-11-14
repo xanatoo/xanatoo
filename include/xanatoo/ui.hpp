@@ -690,9 +690,6 @@ private:
   bool focus_search_ = false;    // Ctrl+K / View → Search Bar
   bool url_bar_editing_ = false;
   bool wanted_text_input_ = false;  // io.WantTextInput last frame
-  // Width of the button group right of the URL field (last frame), so the
-  // field leaves exactly that much room.
-  float url_right_w_ = 200.f;
 
   // Tab bar: one-shot SetSelected so keyboard Next/Prev syncs ImGui without
   // fighting click selection every frame (which caused flicker).

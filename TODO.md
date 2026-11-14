@@ -8,6 +8,15 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Location and search share the second toolbar row
+
+- The location field always has its own (second) toolbar row; the search
+  bar sits at its right instead of in a separate row: engine badge, a field
+  sized for an average query (≤ ~40 % of the row), Go. The location takes
+  the rest. The search bar is now shown by default (`SearchBar::open`);
+  Ctrl+K / View → Search Bar / Esc still hide it for the session.
+  Checked under Xvfb.
+
 ## Status (2026-11-14) — Active panel: one lit title bar
 
 - Embedded ImGui panels (Subscriptions, Bookmarks, Styles, Nostr / Lemmy,

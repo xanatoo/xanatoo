@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Search bar (docs/SEARCH.md): the hidden-by-default row under the
-// navigation toolbar. It builds a `search:<engine>:<query>` address and
-// navigates to it; fetching, history and session restore are the ordinary
-// page machinery. The Ctrl+L bar understands "<keyword> <query>" too.
+// Search bar (docs/SEARCH.md): the box right of the location field on the
+// second toolbar row (shown by default). It builds a
+// `search:<engine>:<query>` address and navigates to it; fetching, history
+// and session restore are the ordinary page machinery. The Ctrl+L bar
+// understands "<keyword> <query>" too.
 
 #include "xanatoo/app.hpp"
 

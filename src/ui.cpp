@@ -1054,18 +1054,22 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
 
   // -- Browse / navigation row (browser chrome) --
   const float button_row_h = 32.f * scale_ + 16.f;
-  // Keep a useful location field when the navigation controls crowd it.
-  const float min_url_w = 200.f * scale_;
-  const float button_w = 32.f * scale_ + 8.f + ImGui::GetStyle().ItemSpacing.x;
-  const int right_buttons = state.browse ? 7 : 6;
   const int url_extras = (state.alternate_url.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
                          (state.site_search.empty() ? 0 : 1);
-  const bool url_own_row = vp->Size.x <
-      12.f + (5 + right_buttons) * button_w + 15.f + min_url_w +
-          url_extras * (30.f * scale_ + 2.f);
-  const float browse_h = button_row_h + (url_own_row ? button_row_h : 0.f);
+  // The location field has a row of its own, shared with the search bar.
+  // Search bar width: engine badge + a field for an average query + Go,
+  // never more than ~40 % of the row so the location keeps most of it.
+  const float search_badge_w = 40.f * scale_;
+  const float search_go_w = 44.f * scale_;
+  const float search_field_w = std::min(
+      ImGui::CalcTextSize("an average search query here").x + 16.f * scale_,
+      std::max(80.f * scale_, vp->Size.x * 0.4f - search_badge_w - search_go_w));
+  const float search_w = state.searchbar
+      ? 6.f * scale_ + search_badge_w + 4.f + search_field_w + 4.f + search_go_w
+      : 0.f;
+  const float browse_h = 2.f * button_row_h;
   ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
   ImGui::SetNextWindowSize(ImVec2(vp->Size.x, browse_h));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.f, 4.f));
@@ -1114,8 +1118,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       tool_button("tb_reload", "reload", "Reload (Ctrl+R)", UiCommand::Reload,
                   cmd, state.has_path);
 
-    if (!url_own_row) toolbar_separator();
-
     // Location / URL field (path or gemini://)
     auto location_field = [&] {
       const float row_y = ImGui::GetCursorPosY();
@@ -1131,10 +1133,9 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       // Context controls stay with the address on either toolbar row.
       const float right_pad = url_extras ? 2.f * scale_ : 0.f;
       const float extra_w = url_extras * 28.f * scale_ + right_pad;
-      // Leave room for the buttons right of the field (measured last frame).
-      float field_w =
-          ImGui::GetContentRegionAvail().x -
-          (url_own_row ? 0.f : url_right_w_ + 6.f);
+      // Leave room for the search bar right of the field.
+      float field_w = ImGui::GetContentRegionAvail().x -
+                      (search_w > 0.f ? search_w + 6.f : 0.f);
       if (field_w < 40.f + extra_w) field_w = 40.f + extra_w;
       ImGui::SetNextItemWidth(std::max(40.f, field_w - extra_w));
       ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
@@ -1442,13 +1443,67 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       if (state.has_site)
         extra("url_sitemap", "sitemap", "S", state.sitemap ? "Close site map" : "Find and open site map",
               UiCommand::ToggleSitemap, state.sitemap);
-      if (!url_own_row) {
-        ImGui::SameLine(0.f, 6.f + right_pad);
-        ImGui::SetCursorPosY(row_y);
+    };
+    // Search box right of the location, like the old Firefox search box.
+    // The engine only changes which search: address a search builds
+    // (docs/SEARCH.md).
+    auto search_field = [&](float row_y) {
+      const float button_h = 32.f * scale_ + 6.f;
+      const float field_h = 32.f * scale_;
+      const UiSearchEngine* cur = nullptr;
+      for (const UiSearchEngine& e : state.search_engines)
+        if (e.id == state.search_engine) cur = &e;
+      if (!cur && !state.search_engines.empty()) cur = &state.search_engines[0];
+      ImGui::SameLine(0.f, 0.f);
+      ImGui::SetCursorPosX(ImGui::GetWindowWidth() -
+                           ImGui::GetStyle().WindowPadding.x - search_w +
+                           6.f * scale_);
+      ImGui::PushStyleVar(
+          ImGuiStyleVar_FramePadding,
+          ImVec2(ImGui::GetStyle().FramePadding.x,
+                 std::max(0.f, (field_h - ImGui::GetFontSize()) * 0.5f)));
+      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
+      const std::string badge = (cur ? cur->badge : std::string("?")) + "##eng";
+      if (classic_button(badge.c_str(), ImVec2(search_badge_w, 0.f)))
+        ImGui::OpenPopup("##search_engines");
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Search engine: %s · click to change",
+                          cur ? cur->name.c_str() : "none");
+      if (ImGui::BeginPopup("##search_engines")) {
+        for (const UiSearchEngine& e : state.search_engines) {
+          std::string label = e.badge + "   " + e.name;
+          if (!e.keyword.empty()) label += "   (" + e.keyword + ")";
+          if (ImGui::Selectable(label.c_str(), cur && e.id == cur->id)) {
+            cmd = UiCommand::SelectSearchEngine;
+            result.arg = e.id;
+          }
+        }
+        ImGui::TextDisabled("(keyword): Ctrl+L, e.g. \"w xanadu\"");
+        ImGui::EndPopup();
+      }
+      ImGui::SameLine(0.f, 4.f);
+      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
+      ImGui::SetNextItemWidth(search_field_w);
+      if (focus_search_) {
+        ImGui::SetKeyboardFocusHere();
+        focus_search_ = false;
+      }
+      const std::string hint =
+          std::string("Search ") + (cur ? cur->name : "") + " …";
+      const bool enter = ImGui::InputTextWithHint(
+          "##searchfield", hint.c_str(), search_input_, sizeof(search_input_),
+          ImGuiInputTextFlags_EnterReturnsTrue);
+      if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        cmd = UiCommand::ToggleSearchBar;
+      ImGui::SameLine(0.f, 4.f);
+      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
+      const bool go = classic_button("Go", ImVec2(search_go_w, 0.f));
+      ImGui::PopStyleVar();
+      if (enter || go) {
+        cmd = UiCommand::Search;
+        result.arg = search_input_;
       }
     };
-    if (!url_own_row) location_field();
-    const float right_x0 = ImGui::GetCursorPosX();
 
     {
       std::string bm_tip =
@@ -1517,76 +1572,16 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                 UiCommand::ToggleEdit, cmd, state.can_edit, nullptr,
                 !state.browse);
     // tool_button ends with SameLine, so the cursor sits after the group.
-    url_right_w_ = ImGui::GetCursorPosX() - right_x0;
-    if (url_own_row) {
-      ImGui::SetCursorPos(ImVec2(6.f, 4.f + button_row_h));
+    {
+      const float row_y = 4.f + button_row_h;
+      ImGui::SetCursorPos(ImVec2(6.f, row_y));
       location_field();
+      if (state.searchbar) search_field(row_y);
     }
   }
   ImGui::End();
   ImGui::PopStyleVar(2);
   result.top_reserved += browse_h;
-
-  // -- Search bar (hidden by default): engine button + field, like the old
-  // Firefox search box. The engine only changes which search: address a
-  // search builds (docs/SEARCH.md).
-  if (state.searchbar) {
-    const float search_h = 32.f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
-    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, search_h));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.f, 3.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
-    if (ImGui::Begin("##toolbar_search", nullptr, tb_flags)) {
-      const UiSearchEngine* cur = nullptr;
-      for (const UiSearchEngine& e : state.search_engines)
-        if (e.id == state.search_engine) cur = &e;
-      if (!cur && !state.search_engines.empty()) cur = &state.search_engines[0];
-
-      const std::string badge = (cur ? cur->badge : std::string("?")) + "##eng";
-      if (classic_button(badge.c_str(), ImVec2(40.f * scale_, 0.f)))
-        ImGui::OpenPopup("##search_engines");
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Search engine: %s · click to change",
-                          cur ? cur->name.c_str() : "none");
-      if (ImGui::BeginPopup("##search_engines")) {
-        for (const UiSearchEngine& e : state.search_engines) {
-          std::string label = e.badge + "   " + e.name;
-          if (!e.keyword.empty()) label += "   (" + e.keyword + ")";
-          if (ImGui::Selectable(label.c_str(), cur && e.id == cur->id)) {
-            cmd = UiCommand::SelectSearchEngine;
-            result.arg = e.id;
-          }
-        }
-        ImGui::TextDisabled("(keyword): Ctrl+L, e.g. \"w xanadu\"");
-        ImGui::EndPopup();
-      }
-      ImGui::SameLine(0.f, 4.f);
-
-      const float go_w = 44.f * scale_;
-      ImGui::SetNextItemWidth(std::max(
-          100.f, ImGui::GetContentRegionAvail().x - go_w - 8.f * scale_));
-      if (focus_search_) {
-        ImGui::SetKeyboardFocusHere();
-        focus_search_ = false;
-      }
-      const std::string hint =
-          std::string("Search ") + (cur ? cur->name : "") + " …";
-      const bool enter = ImGui::InputTextWithHint(
-          "##searchfield", hint.c_str(), search_input_, sizeof(search_input_),
-          ImGuiInputTextFlags_EnterReturnsTrue);
-      if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-        cmd = UiCommand::ToggleSearchBar;
-      ImGui::SameLine(0.f, 4.f);
-      const bool go = classic_button("Go", ImVec2(go_w, 0.f));
-      if (enter || go) {
-        cmd = UiCommand::Search;
-        result.arg = search_input_;
-      }
-    }
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-    result.top_reserved += search_h;
-  }
 
   // -- Edit row (compact: primary icons + dropdown groups) --
   // Not while browsing: its reading tools are on the browse row then.
