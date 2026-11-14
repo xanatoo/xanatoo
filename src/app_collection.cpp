@@ -157,9 +157,14 @@ bool open_link_image(App& app, int pi, const std::string& href) {
   // Relative links of a Gemini page are gemini:// resources.
   if (!link_base_url(app, pi).empty() && !xanatoo::starts_with_ci(href, "http"))
     return false;
-  if (pane_gallery(app.panes[pi])) return false;
-  return show_in_gallery(app, pi, xanatoo::INVALID_NODE, xanatoo::INVALID_NODE,
-                         href);
+  if (!pane_gallery(app.panes[pi]) &&
+      show_in_gallery(app, pi, xanatoo::INVALID_NODE, xanatoo::INVALID_NODE,
+                      href))
+    return true;
+  // Not one of the page's images: that image on its own, in this view.
+  if (!xanatoo::is_image_address(href)) return false;
+  focus_view(app, pi);
+  return navigate_pane(app, pi, href);
 }
 
 void note_collection_target(App& app, int pi, float lx, float my) {

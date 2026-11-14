@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/epub_import.hpp"
@@ -103,6 +104,7 @@ xanatoo::Document load_doc(App& app, std::string path) {
   if (path.empty()) {
     return xanatoo::parse_document(xanatoo::fallback_document(), {});
   }
+  if (xanatoo::is_image_address(path)) return xanatoo::image_url_document(path);
   if (xanatoo::is_pandoc_path(path)) {
     std::string md = resolve_open_path(app, path);
     if (md.empty()) {

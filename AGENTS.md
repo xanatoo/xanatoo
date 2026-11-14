@@ -640,7 +640,9 @@ history or distribute patch files.
   (`layout_remote_image`); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: http(s) or local path by extension)
   show that image in the page's `//gallery` (`open_link_image`, checked
-  before split / external handling), never the system browser.
+  before split / external handling), never the system browser; one not
+  among the page's images opens as `URL//gallery//item:1`
+  (`is_image_address` / `image_url_document`, `gallery.hpp`).
 - No posting or secret-key management in v1. Publication transport options
   (WebDAV, static export, Nostr, IPFS) are sketched in `docs/PUBLISHING.md`.
 

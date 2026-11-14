@@ -16,6 +16,7 @@
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/file_url.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/nostr.hpp"
@@ -553,6 +554,12 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
       is_stored_original_ref(target))
     return open_page(app, pi, std::move(target), record_history);
   xanatoo::Locator loc = xanatoo::parse_locator(target);
+  // An image address on its own is that image in its one-image gallery.
+  if (xanatoo::is_image_address(loc.base) && !loc.has_selectors()) {
+    loc.pipes = {{xanatoo::SelectorKind::Gallery, {}},
+                 {xanatoo::SelectorKind::Item, xanatoo::gallery_item_value(0)}};
+    target = xanatoo::format_locator(loc);
+  }
   const bool selectors = loc.has_selectors();
   // file:///a/b.md → /a/b.md; only the path reaches the file system.
   if (xanatoo::is_file_url(loc.base)) {
@@ -653,6 +660,14 @@ static bool open_page(App& app, int pi, std::string target,
   }
   if (xanatoo::starts_with(target, "draft:")) {
     if (!open_draft(app, pi, target)) return false;
+    if (record_history) push_nav_history(app, pi, target);
+    return true;
+  }
+  // A remote image: a page of just that image (no fetch; the image cache
+  // downloads it like any remote image).
+  if (xanatoo::is_image_address(target)) {
+    if (!stash_or_confirm(app, p.buf)) return false;
+    show_doc_in_pane(app, pi, xanatoo::image_url_document(target), target);
     if (record_history) push_nav_history(app, pi, target);
     return true;
   }
@@ -876,7 +891,8 @@ void activate_at_caret(App& app) {
         std::string resolved = xanatoo::resolve_gemini_url(base, abs);
         if (!resolved.empty()) abs = resolved;
       }
-      if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs)) {
+      if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
+          xanatoo::is_image_address(abs)) {
         navigate_to_url(app, std::move(abs), true,
                         NavLink{*href, {}, hit->node, hit->span_index});
       } else if (is_inapp_doc_href(app, abs)) {

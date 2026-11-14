@@ -175,4 +175,24 @@ int gallery_item_index(std::string_view value, size_t count) {
 
 std::string gallery_item_value(int index) { return std::to_string(index + 1); }
 
+bool is_image_address(std::string_view url) {
+  return (starts_with_ci(url, "https://") || starts_with_ci(url, "http://")) &&
+         is_image_url(url);
+}
+
+Document image_url_document(std::string_view url) {
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  std::string_view path = url.substr(0, url.find_first_of("?#"));
+  const size_t slash = path.rfind('/');
+  std::string name(slash == std::string_view::npos ? path
+                                                   : path.substr(slash + 1));
+  if (name.empty()) name = std::string(url);
+  doc.meta.title = name;
+  const NodeId img = doc.create(NodeKind::Image, root);
+  doc.get(img).src = std::string(url);
+  doc.get(img).alt = name;
+  return doc;
+}
+
 }  // namespace xanatoo

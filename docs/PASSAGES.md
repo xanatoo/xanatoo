@@ -212,8 +212,9 @@ page//id:photos//gallery         the images of that section or collection
 page//gallery#item:7             the grid, scrolled to the 7th card
 ```
 
-- The items (`gallery_items`, `gallery.hpp`, pure) are the Image nodes (a
-  linked original before the picture in the page), inline image spans, links
+- The items (`gallery_items`, `gallery.hpp`, pure) are the Image nodes and
+  inline image spans (for both, a linked original before the picture in the
+  page, so `<li><a href=big.jpg><img src=small.jpg>` is found by its link), links
   to images and bare image URLs in running text, in document order, each
   picture once. A Collection scope steps in its view sort. `item:N` counts
   from 1 in that order; it is a position, so it can name another picture
@@ -233,6 +234,11 @@ page//gallery#item:7             the grid, scrolled to the 7th card
 - Up (Esc): image → grid at its card → the page at what the gallery was of
   (`page//id:photos//gallery` → `page#photos`). View → Image Gallery
   (Ctrl+Alt+I) toggles it for what the view shows.
+- An http(s) image address on its own (`is_image_address`) is a page of
+  just that image (`image_url_document`) and opens as
+  `URL//gallery//item:1`: from the address bar, and for image links that are
+  not among the page's images. Image addresses never go to the system
+  browser.
 
 **Up.** `page_up_url` handles pipes before `up_url`:
 

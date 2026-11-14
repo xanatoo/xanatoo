@@ -2878,6 +2878,20 @@ void test_gallery_linked_inline_thumb() {
             0);
 }
 
+void test_image_address() {
+  EXPECT(xanatoo::is_image_address("https://cdn.x.org/c/0012-01_1200.jpg"));
+  EXPECT(xanatoo::is_image_address("http://x.org/a.PNG?w=3"));
+  EXPECT(!xanatoo::is_image_address("https://x.org/page.html"));
+  EXPECT(!xanatoo::is_image_address("photos/a.jpg"));
+  EXPECT(!xanatoo::is_image_address("gemini://x.org/a.png"));
+  const auto d = xanatoo::image_url_document("https://x.org/c/a_1200.jpg?x=1");
+  EXPECT_EQ(d.meta.title, "a_1200.jpg");
+  const auto items = xanatoo::gallery_items(d, xanatoo::INVALID_NODE);
+  EXPECT_EQ(items.size(), 1u);
+  if (!items.empty())
+    EXPECT_EQ(items[0].src, "https://x.org/c/a_1200.jpg?x=1");
+}
+
 void test_locator() {
   using xanatoo::format_locator;
   using xanatoo::Locator;
@@ -5899,6 +5913,7 @@ int main() {
   test_locator();
   test_gallery();
   test_gallery_linked_inline_thumb();
+  test_image_address();
   test_text_selectors();
   test_bookmark_lines();
   test_math();

@@ -43,4 +43,12 @@ int gallery_index_of(const std::vector<GalleryItem>& items,
 int gallery_item_index(std::string_view value, size_t count);
 std::string gallery_item_value(int index);
 
+// An http(s) address of an image file (by extension, `is_image_url`): it is
+// shown in the app as `URL//gallery//item:1`, never handed to the system
+// browser.
+bool is_image_address(std::string_view url);
+// The page of such an address: one Image node showing it, titled by its
+// file name.
+Document image_url_document(std::string_view url);
+
 }  // namespace xanatoo
