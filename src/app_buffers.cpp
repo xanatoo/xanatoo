@@ -19,6 +19,7 @@
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/feed.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/sitemap.hpp"
@@ -234,6 +235,7 @@ BufferId add_buffer(App& app, xanatoo::Document doc, std::string path) {
   b.id = app.next_buffer_id++;
   b.doc = std::move(doc);
   b.path = std::move(path);
+  b.content_path = derived_content_path(b.path);
   app.buffers.push_back(std::move(b));
   const BufferId id = app.buffers.back().id;
   attach_draft(app, id);
@@ -366,8 +368,18 @@ xanatoo::Document& doc_of(App& app, Pane& p) {
 
 std::string& path_of(App& app, Pane& p) { return buf(app, p.buf).path; }
 
+std::string derived_content_path(const std::string& path) {
+  if (!xanatoo::looks_like_local_path(path) || !xanatoo::is_pandoc_path(path))
+    return {};
+  return xanatoo::import_markdown_path(path);
+}
+
+const std::string& content_file(const DocBuffer& b) {
+  return b.content_path.empty() ? b.path : b.content_path;
+}
+
 std::string base_of(App& app, Pane& p) {
-  return parent_dir(buf(app, p.buf).path);
+  return parent_dir(content_file(buf(app, p.buf)));
 }
 
 bool shared_doc(App& app) { return app.panes[0].buf == app.panes[1].buf; }

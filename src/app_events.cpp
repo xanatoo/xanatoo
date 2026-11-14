@@ -160,7 +160,7 @@ static void on_dropfile(App& app, SDL_Event& ev, bool imgui_mouse,
 
   // Prefer a path relative to the document directory for portable markup.
   std::string store = fpath;
-  std::string base = parent_dir(path_of(app, p));
+  std::string base = base_of(app, p);
   if (!base.empty()) {
     try {
       std::filesystem::path rel = std::filesystem::relative(fpath, base);
@@ -591,7 +591,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
               (path_part.find('.') != std::string::npos ||
                path_part.find('/') != std::string::npos)) {
             std::filesystem::path resolved = path_part;
-            std::string base = path_of(app, p);
+            std::string base = content_file(buf(app, p.buf));
             if (!base.empty() && resolved.is_relative()) {
               resolved = std::filesystem::path(base).parent_path() / path_part;
             }

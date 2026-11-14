@@ -96,7 +96,13 @@ constexpr BufferId kNoBuffer = 0;
 struct DocBuffer {
   BufferId id = kNoBuffer;
   xanatoo::Document doc;
+  // The page's address (Location): what the user opened — a local file, a
+  // URL — never a derived file under cache_dir(). Reload goes through it.
   std::string path;
+  // The local file the document was read from when that is not `path`: the
+  // Markdown an import made (book.epub → cache …/content.md). Relative
+  // images and links resolve against it (`content_file`). Empty = `path`.
+  std::string content_path;
   std::optional<std::string> raw_source;  // HTTP/Gemini body before parsing
   bool dirty = false;
   xanatoo::History history;
@@ -479,6 +485,7 @@ struct FetchShared {
   std::string error;      // with `doc` set: the page is an HTTP error body
   int http_status = 0;    // non-200 answer whose body is in `doc`
   std::string final_url;  // page URL after redirects (buffer path)
+  std::string content_path;  // local file of the document (DocBuffer::content_path)
   const char* service = "";
   // Gemini 10/11: the server asks for input (meta = prompt text).
   int input_status = 0;
@@ -517,6 +524,7 @@ struct FetchJob {
 struct CachedPage {
   std::string url;
   std::string final_url;
+  std::string content_path;
   xanatoo::Document doc;
   std::optional<std::string> raw_source;
   Uint32 ticks = 0;
@@ -1035,6 +1043,9 @@ bool open_stored_original(App& app, int pi, const std::string& ref);
 void open_stored_documents_page(App& app);
 
 // ---- buffers ----
+// The local file to read for `path`: the import's derived Markdown for
+// pandoc formats (converted on demand), else `path`; empty = import failed.
+// The buffer keeps `path` as its address and this as `content_path`.
 std::string resolve_open_path(App& app, std::string path);
 xanatoo::Document load_doc(App& app, std::string path);
 std::string parent_dir(const std::string& path);
@@ -1055,7 +1066,14 @@ std::string path_title(const std::string& path);
 void update_title(App& app);
 xanatoo::Document& doc_of(App& app, Pane& p);
 std::string& path_of(App& app, Pane& p);
-std::string base_of(App& app, Pane& p);
+// The local file behind a buffer: `content_path` when set, else `path`.
+// For resolving relative images / links, never for showing or storing.
+const std::string& content_file(const DocBuffer& b);
+// The derived file a local address is read from (pandoc import → cached
+// content.md), empty when it is read itself. add_buffer / show_doc_in_pane
+// fill DocBuffer::content_path from it unless told otherwise.
+std::string derived_content_path(const std::string& path);
+std::string base_of(App& app, Pane& p);  // directory of content_file
 bool shared_doc(App& app);
 // Some live view other than `except_pane` shows `b`.
 bool shown_anywhere_else(App& app, BufferId b, int except_pane);
@@ -1422,10 +1440,13 @@ void open_address(App& app, const std::string& url);
 // Returns true when a panel row consumed it.
 bool middle_click_float(App& app, int mx, int my);
 // Put a freshly loaded page into pane `pi`: reuses the pane's buffer unless
-// the other visible pane shows it too or it has unsaved edits.
+// the other visible pane shows it too or it has unsaved edits. `label` is
+// the page's address, `content_path` the local file it was read from when
+// that differs (DocBuffer::content_path).
 void show_doc_in_pane(App& app, int pi, xanatoo::Document doc,
                       const std::string& label,
-                      std::optional<std::string> raw_source = std::nullopt);
+                      std::optional<std::string> raw_source = std::nullopt,
+                      std::string content_path = {});
 // Links in pane `pi` resolve against that pane's page (gemini relative URLs).
 std::string link_base_url(App& app, int pi);
 void open_transclude_in_other_pane(App& app);

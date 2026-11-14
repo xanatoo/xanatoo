@@ -83,6 +83,7 @@ BufferId scratch_buffer(App& app, xanatoo::Document doc,
   DocBuffer& b = buf(app, pv.scratch);
   b.doc = std::move(doc);
   b.path = label;
+  b.content_path = derived_content_path(label);
   b.dirty = false;
   b.placeholder = false;
   attach_draft(app, pv.scratch);

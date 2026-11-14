@@ -379,6 +379,11 @@ EpubImportResult import_epub_via_pandoc(const std::string& epub_path) {
   return import_via_pandoc(epub_path);
 }
 
+std::string import_markdown_path(const std::string& path) {
+  const fs::path dir = import_cache_dir(path);
+  return dir.empty() ? std::string() : (dir / "content.md").string();
+}
+
 ImportResult import_via_pandoc(const std::string& epub_path) {
   ImportResult out;
   const std::string reader = pandoc_input_format(epub_path);

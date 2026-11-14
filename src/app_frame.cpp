@@ -533,11 +533,14 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   // Imported EPUBs are stored as content.md beside their extracted media.
   // Use the first image in that document as its cover when present.
   const std::string current = path_of(app, focused_pane(app));
-  if (!ui_state.location_icon && current.find("/epub-import/") != std::string::npos) {
+  const std::string current_file = content_file(buf(app, focused_pane(app).buf));
+  if (!ui_state.location_icon &&
+      current_file.find("/epub-import/") != std::string::npos) {
     const auto& doc = doc_of(app, focused_pane(app));
     for (const auto& node : doc.nodes) {
       if (node.kind != xanatoo::NodeKind::Image || node.src.empty()) continue;
-      const auto& cover = app.images.thumb(node.src, fs::path(current).parent_path().string(), 128);
+      const auto& cover = app.images.thumb(
+          node.src, fs::path(current_file).parent_path().string(), 128);
       if (cover.ok) ui_state.location_icon = cover.texture;
       break;
     }

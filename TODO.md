@@ -8,6 +8,21 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Converted pages keep their origin as address
+
+- Pandoc / native imports (`book.epub` → cache `…/content.md`) and
+  downloaded ebooks now keep the original as the buffer's address
+  (`DocBuffer::path`: `file:///…/book.epub`, the book URL); the derived
+  Markdown is `DocBuffer::content_path`, used only to resolve images, media
+  and the cover icon (`content_file` / `base_of`). Reload re-imports from
+  the source, the tab shows `book.epub`, history / bookmarks / sessions
+  store the origin, and reopening the same file reuses its buffer.
+  Relative links resolve beside the original, falling back to the import
+  dir when only the derived target exists. Checked under Xvfb.
+- Open: ForceReload does not yet force a fresh conversion (reuse is by
+  mtime + format stamp); old history / sessions that stored a cache
+  `content.md` path still open that file as before.
+
 ## Status (2026-11-14) — `file:` URLs for local pages
 
 - Local pages show and are stored as `file:///abs/path` (location bar,

@@ -30,7 +30,8 @@ namespace xanatoo::app {
 // A command-line source path is an alias of its previously imported working
 // document. Startup must honor the same alias as regular navigation.
 static void add_startup_document(App& app, xanatoo::Document doc,
-                                 std::string path) {
+                                 std::string path,
+                                 std::string content_path = {}) {
   if (!path.empty()) {
     const std::string source = is_in_app_remote_url(path)
         ? path : xanatoo::file_doc_key(path);
@@ -50,7 +51,8 @@ static void add_startup_document(App& app, xanatoo::Document doc,
       }
     }
   }
-  add_buffer(app, std::move(doc), std::move(path));
+  const BufferId id = add_buffer(app, std::move(doc), path);
+  if (content_path != path) buf(app, id).content_path = std::move(content_path);
 }
 
 bool app_init(App& app) {
@@ -185,28 +187,18 @@ bool app_init(App& app) {
       if (p0.empty())
         std::cerr << "Note: examples/welcome.md not found; starting empty.\n";
     }
-    std::string b0_path;
-    xanatoo::Document b0_doc;
-    {
-      std::string r0 = resolve_open_path(app, p0);
-      b0_path = r0.empty() ? p0 : r0;
-      b0_doc = load_doc_or_placeholder(app, b0_path.empty() ? p0 : b0_path);
-      // If EPUB resolve failed, still attempt load_doc on original for error
-      // page.
-      if (xanatoo::is_pandoc_path(p0) && r0.empty()) b0_doc = load_doc(app, p0);
-    }
-    add_startup_document(app, std::move(b0_doc), std::move(b0_path));
-    if (!p1.empty()) {
-      std::string b1_path;
-      xanatoo::Document b1_doc;
-      {
-        std::string r1 = resolve_open_path(app, p1);
-        b1_path = r1.empty() ? p1 : r1;
-        b1_doc = load_doc_or_placeholder(app, b1_path);
-        if (xanatoo::is_pandoc_path(p1) && r1.empty()) b1_doc = load_doc(app, p1);
-      }
-      add_startup_document(app, std::move(b1_doc), std::move(b1_path));
-    }
+    // The buffer's address is the given path (book.epub); an import's
+    // derived Markdown is only where it is read from (content_path).
+    auto startup = [&](const std::string& given) {
+      const std::string read = resolve_open_path(app, given);
+      // A failed import still loads the original for its error page.
+      xanatoo::Document doc = read.empty()
+          ? load_doc(app, given) : load_doc_or_placeholder(app, read);
+      add_startup_document(app, std::move(doc), given,
+                           read.empty() ? given : read);
+    };
+    startup(p0);
+    if (!p1.empty()) startup(p1);
   }
   for (const auto& b : app.buffers) app.tab_order.push_back(b.id);
   update_title(app);

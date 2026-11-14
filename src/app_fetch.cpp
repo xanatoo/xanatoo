@@ -186,10 +186,9 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   } else if (xanatoo::is_ebook_url(url)) {
 #if defined(XANATOO_EBOOKS) && XANATOO_EBOOKS
     out->service = "Ebooks";
-    // Books open as their imported Markdown, so images resolve locally.
-    std::string local;
-    out->doc = xanatoo::ebook_fetch(url, &out->error, &local);
-    if (!local.empty()) out->final_url = local;
+    // The book keeps its URL as address; it is read from the imported
+    // Markdown, so images resolve there (DocBuffer::content_path).
+    out->doc = xanatoo::ebook_fetch(url, &out->error, &out->content_path);
 #endif
   } else if (xanatoo::is_sitemap_ref(url)) {
 #if defined(XANATOO_WEB) && XANATOO_WEB
@@ -273,7 +272,8 @@ void cache_page(App& app, const FetchJob& job) {
   c.erase(std::remove_if(c.begin(), c.end(),
                          [&](const CachedPage& e) { return e.url == job.url; }),
           c.end());
-  c.push_back({job.url, job.shared->final_url, *job.shared->doc,
+  c.push_back({job.url, job.shared->final_url, job.shared->content_path,
+               *job.shared->doc,
                job.shared->raw_source,
                xanatoo::sdl::ticks()});
   if (c.size() > kPageCacheMax) c.erase(c.begin());
@@ -413,6 +413,7 @@ void finish_tab(App& app, const FetchJob& job) {
   b->doc = r.doc ? std::move(*r.doc) : load_error_doc(job);
   b->raw_source = std::move(r.raw_source);
   b->path = r.doc ? r.final_url : job.url;
+  b->content_path = r.doc ? r.content_path : std::string();
   b->placeholder = false;
   b->dirty = false;
   const std::string path = b->path;
@@ -471,7 +472,7 @@ void finish_navigate(App& app, const FetchJob& job) {
     cache_page(app, job);
   }
   show_doc_in_pane(app, job.pane, std::move(*r.doc), r.final_url,
-                   std::move(r.raw_source));
+                   std::move(r.raw_source), r.content_path);
   // Redirected: the sitemap lists the requested URL.
   if (job.url != r.final_url)
     note_page_seen(app, job.url, buf(app, app.panes[job.pane].buf).doc);

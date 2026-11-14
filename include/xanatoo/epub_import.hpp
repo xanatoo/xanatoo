@@ -44,6 +44,9 @@ using EpubImportResult = ImportResult;
 EpubImportResult import_epub_via_pandoc(const std::string& epub_path);
 // Any is_pandoc_path file → cached Markdown (same rules as EPUB).
 ImportResult import_via_pandoc(const std::string& path);
+// Where import_via_pandoc puts the Markdown for `path` (whether or not it
+// exists yet); empty without a cache dir. No conversion runs.
+std::string import_markdown_path(const std::string& path);
 
 // Built-in EPUB reader, used by the imports when pandoc is missing (Android).
 // `media` holds (path relative to the Markdown, bytes) of the book's images.

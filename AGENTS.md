@@ -565,6 +565,12 @@ history or distribute patch files.
   tex, typ, wiki, ipynb, csv, …); `is_pandoc_path` / `import_via_pandoc`
   convert to cached GFM Markdown with `--extract-media`. The original file
   is never touched and the import is read-only (foreign).
+- Location: a converted page's address is always its origin
+  (`file:///…/book.epub`, the book URL), never the cache file, so Reload,
+  history, bookmarks and sessions go back to the source. The cached Markdown
+  is `DocBuffer::content_path` (`derived_content_path` / `import_markdown_path`
+  fill it for local pandoc paths); `content_file` / `base_of` resolve images
+  and media against it. Never show or store `content_path`.
 - Without pandoc (Android), `.epub` goes through `epub_to_markdown`
   (`src/epub_native.cpp`: zip + OPF spine → `parse_html_page` → Markdown).
 - Pandoc misbehaviour and our workarounds (Lua filter, post-passes) are
@@ -585,8 +591,8 @@ history or distribute patch files.
   `/subjects/x`) are scraped into a Markdown book list.
 - Book URLs (Standard Ebooks book pages, Gutenberg `/ebooks/N`, any `.epub`
   link) download into `~/.cache/xanatoo/downloads/` and open through the
-  pandoc EPUB import; the pane path is the derived `content.md` so images
-  resolve. Never previewed on hover.
+  pandoc EPUB import; the buffer keeps the book URL as its address and the
+  derived `content.md` as `DocBuffer::content_path`. Never previewed on hover.
 - `examples/books.md` is the curated entry page.
 
 ## Nostr

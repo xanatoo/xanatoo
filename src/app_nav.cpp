@@ -270,7 +270,17 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href) {
     }
     // t.url keeps the pipes: "other.md//id:ch3" opens as a cut.
     xanatoo::Locator loc = xanatoo::parse_locator(path);
-    loc.base = resolve_doc_href(app, loc.base, path_of(app, p));
+    // Relative links resolve beside the page's address; an import's own
+    // files (extracted media) beside the derived Markdown it was read from.
+    const DocBuffer& pb = buf(app, p.buf);
+    std::string resolved = resolve_doc_href(app, loc.base, pb.path);
+    if (!pb.content_path.empty()) {
+      std::error_code ec;
+      std::string derived = resolve_doc_href(app, loc.base, pb.content_path);
+      if (!fs::exists(resolved, ec) && fs::exists(derived, ec))
+        resolved = std::move(derived);
+    }
+    loc.base = std::move(resolved);
     t.kind = LinkKind::Doc;
     t.url = xanatoo::format_locator(loc);
     return t;
@@ -293,12 +303,15 @@ static BufferId page_buffer(App& app, int pi) {
 
 void show_doc_in_pane(App& app, int pi, xanatoo::Document doc,
                       const std::string& label,
-                      std::optional<std::string> raw_source) {
+                      std::optional<std::string> raw_source,
+                      std::string content_path) {
   Pane& p = app.panes[pi];
   p.buf = page_buffer(app, pi);
   DocBuffer& b = buf(app, p.buf);
   b.doc = std::move(doc);
   b.path = label;
+  if (content_path.empty()) content_path = derived_content_path(label);
+  b.content_path = content_path == label ? std::string() : std::move(content_path);
   b.raw_source = std::move(raw_source);
   b.dirty = false;
   b.placeholder = false;
@@ -412,7 +425,8 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
           flash_status(app, "Import failed (need pandoc on PATH)");
           return;
         }
-        bi = add_buffer(app, load_doc(app, open_path), open_path);
+        // The address stays the original (book.epub), not the cache file.
+        bi = add_buffer(app, load_doc(app, open_path), path);
       }
       break;
     }
@@ -446,6 +460,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
       if (const CachedPage* c = find_cached_page(app, t.url)) {
         bi = add_buffer(app, c->doc, c->final_url);
         buf(app, bi).raw_source = c->raw_source;
+        buf(app, bi).content_path = c->content_path;
         break;
       }
       bi = add_buffer(
@@ -650,7 +665,8 @@ static bool open_page(App& app, int pi, std::string target,
       if (const CachedPage* c = find_cached_page(app, target)) {
         // Fresh from a hover preview: no second fetch.
         const std::string final_url = c->final_url;
-        show_doc_in_pane(app, pi, c->doc, final_url, c->raw_source);
+        show_doc_in_pane(app, pi, c->doc, final_url, c->raw_source,
+                         c->content_path);
         if (xanatoo::is_gemini_url(final_url)) {
           app.gemini_current_url = final_url;
           app.edit_mode = false;
@@ -745,10 +761,13 @@ static bool open_page(App& app, int pi, std::string target,
       flash_status(app, "Import failed (need pandoc on PATH)");
       return false;
     }
-    show_doc_in_pane(app, pi, load_doc(app, open_path), open_path);
-    if (record_history) push_nav_history(app, pi, open_path);
-    flash_status(app, was_import ? ("Imported " + path + " → " + open_path)
-                               : ("Opened " + open_path));
+    // The page keeps its own address; the import's Markdown under
+    // cache_dir() is only where it is read from (and media resolve).
+    show_doc_in_pane(app, pi, load_doc(app, open_path), path, std::nullopt,
+                     open_path);
+    if (record_history) push_nav_history(app, pi, path);
+    flash_status(app, was_import ? ("Imported " + path)
+                               : ("Opened " + path));
   }
   return true;
 }
@@ -800,7 +819,7 @@ void open_transclude_in_other_pane(App& app) {
     return;
   }
   std::filesystem::path resolved = path_part;
-  std::string base = path_of(app, p);
+  std::string base = content_file(buf(app, p.buf));
   if (!base.empty() && resolved.is_relative())
     resolved = std::filesystem::path(base).parent_path() / path_part;
   if (!std::filesystem::exists(resolved)) {

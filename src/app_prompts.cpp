@@ -307,6 +307,7 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       DocBuffer& b = buf(app, p.buf);
       b.doc = load_doc(app, path);
       b.path = path;
+      b.content_path = derived_content_path(path);
       b.dirty = false;
       attach_draft(app, p.buf);
       xanatoo::ensure_valid_caret(b.doc, p.sel.focus);
