@@ -1611,6 +1611,40 @@ static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool sh
   return false;
 }
 
+// Browse mode draws no caret: Up / Down scroll the view by a line instead
+// of moving an invisible caret (Shift still extends the selection; paged
+// views keep the caret, which turns the page).
+static bool browse_scrolls(App& app, const Pane& p, bool shift) {
+  return browsing(app) && !shift && !p.pages.on;
+}
+
+static void browse_scroll_line(App& app, Pane& p, int dir) {
+  const float step =
+      static_cast<float>(app.fonts.regular.line_height()) * 2.f;
+  p.scroll_y = std::clamp(p.scroll_y + static_cast<float>(dir) * step, 0.f,
+                          pane_max_scroll(app, p));
+  ensure_virtual_layout(app, p);
+}
+
+// Browse mode Home / End (with or without Ctrl): the top / bottom of the
+// page. The implicit caret goes along, so Shift selects to there and
+// Space / Enter / a later edit start from it.
+static void browse_to_end(App& app, Pane& p, xanatoo::Document& d, bool shift,
+                          bool end) {
+  if (!shift) p.sel.anchor = p.sel.focus;
+  if (end)
+    xanatoo::move_to_document_end(d, p.sel.focus);
+  else
+    xanatoo::move_to_document_start(d, p.sel.focus);
+  if (!shift) p.sel.anchor = p.sel.focus;
+  // Lays out the far end when it is outside the materialised band.
+  scroll_caret_into_view(app, p);
+  if (!p.pages.on) {
+    p.scroll_y = end ? pane_max_scroll(app, p) : 0.f;
+    ensure_virtual_layout(app, p);
+  }
+}
+
 // Caret / viewport navigation keys (arrows, Home/End, PageUp/Down, Alt+arrow
 // history and block moves). True when the key was one of these.
 static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
@@ -1675,6 +1709,8 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
           app.needs_layout = true;
           reset_blink(app);
         }
+      } else if (browse_scrolls(app, p, shift)) {
+        browse_scroll_line(app, p, -1);
       } else {
         move_and_sel([&] {
           if (!xanatoo::move_up(p.layout, p.sel.focus, p.preferred_x))
@@ -1692,6 +1728,8 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
           app.needs_layout = true;
           reset_blink(app);
         }
+      } else if (browse_scrolls(app, p, shift)) {
+        browse_scroll_line(app, p, +1);
       } else {
         move_and_sel([&] {
           if (!xanatoo::move_down(p.layout, p.sel.focus, p.preferred_x))
@@ -1744,6 +1782,10 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
         execute_command(app, xanatoo::UiCommand::GoHome, {});
         return true;
       }
+      if (browsing(app)) {  // no caret to place: Home is the page's top
+        browse_to_end(app, p, d, shift, false);
+        return true;
+      }
       move_and_sel([&] {
         if (ctrl) {
           xanatoo::move_to_document_start(d, p.sel.focus);
@@ -1775,6 +1817,10 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
       return true;
 
     case SDLK_END:
+      if (browsing(app)) {
+        browse_to_end(app, p, d, shift, true);
+        return true;
+      }
       move_and_sel([&] {
         if (ctrl) {
           xanatoo::move_to_document_end(d, p.sel.focus);

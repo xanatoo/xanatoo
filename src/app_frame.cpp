@@ -3470,8 +3470,9 @@ static void draw_pane_overlays(App& app, int i) {
     auto cpos =
         xanatoo::caret_screen_pos(pane.layout, pane.sel.focus, draw_scroll, lh);
     if (cpos.valid) pane.preferred_x = cpos.x;
-    // Browse mode: steady caret (reading focus). Edit mode: blink.
-    if (browsing(app) ||
+    // Browse mode keeps the caret implicit (selection anchor / focus,
+    // Space / Enter target) and draws none. Edit mode: blinking caret.
+    if (!browsing(app) &&
         ((xanatoo::sdl::ticks() - app.caret_blink_start) % 1000) < 600) {
       app.renderer.draw_caret(cpos, ox);
     }

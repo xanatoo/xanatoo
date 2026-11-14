@@ -171,7 +171,9 @@ number of columns, Edit → Preferences → **Paged reading by default** the
 default for views not switched themselves. See `docs/PAGED.md`.
 
 ### Keyboard (browse)
-- Arrows / Page / Home / End — move and scroll
+- **↑** / **↓** / **Page Up** / **Down** — scroll (no caret is shown;
+  Shift+arrows still select)
+- **Home** / **End** — top / bottom of the page
 - **Space** or **Enter** — expand/collapse stretch or follow link under caret
 - **Ctrl+[** / **Ctrl+]** — collapse / expand all stretches
 - **F2** — toggle editing (only on editable local documents)
