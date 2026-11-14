@@ -307,7 +307,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
     }
     const auto lic = field("licenseurl");
     if (!lic.empty() && (starts_with(lic[0], "http://") || starts_with(lic[0], "https://")))
-      add("License", link(lic[0], "external:" + lic[0]));
+      add("License", link(lic[0], lic[0]));
     const auto src = field("source");
     if (!src.empty() && (starts_with(src[0], "http://") || starts_with(src[0], "https://")))
       add("Source", link(src[0], src[0]));

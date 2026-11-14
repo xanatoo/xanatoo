@@ -49,6 +49,9 @@ int main() {
   assert(has(md, "my%20book.epub"));
   assert(!has(md, "book_meta.xml") && !has(md, "torrent"));
   assert(has(md, "external:https://archive.org/details/book"));
+  // The license is an ordinary page: it opens in-app like any other link.
+  assert(has(md, "](http://creativecommons.org/publicdomain/zero/1.0/)"));
+  assert(!has(md, "external:http://creativecommons.org"));
   assert(!has(md, "mpv"));  // texts are not played
 
   // Media gets a mpv link.
