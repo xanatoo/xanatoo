@@ -183,6 +183,16 @@ struct BookmarkMarks {
   std::vector<BookmarkMark> items;
 };
 
+// Links of the page a view shows whose target another tab already shows
+// (update_open_tab_links), drawn as a dotted underline. Keyed on the layout
+// and the set of open tab pages.
+struct OpenTabLinks {
+  uint64_t layout_gen = 0;
+  std::string tabs_key;  // page addresses of the other tabs, '\n'-joined
+  bool valid = false;
+  std::vector<std::pair<xanatoo::NodeId, size_t>> spans;  // node, span index
+};
+
 struct AnnotationMark {
   std::string annotation_id;
   std::string layer_id;
@@ -267,6 +277,7 @@ struct Pane {
   GalleryView gallery;                          // `//gallery` (source_doc)
   BookmarkMarks bookmark_marks;
   AnnotationMarks annotation_marks;
+  OpenTabLinks open_tab_links;
   bool section_focus = false;  // Section Focus: the outline picks the cut
   // Reader mode of this view: page chrome (Chrome nodes) hidden. Unset =
   // ViewSettings::reader_mode; kept across navigation. View state, never
@@ -1349,6 +1360,12 @@ void push_nav_history(App& app, int pi, const std::string& url);
 void sync_nav_history(App& app);
 // The link to be highlighted when Back has returned to its source page.
 const NavLink* forward_nav_link(App& app, int pi);
+// The link just clicked in view `pi` while its target page is still being
+// fetched for that view (the page shown is still the link's page).
+const NavLink* pending_nav_link(App& app, int pi);
+// Recompute Pane::open_tab_links of view `pi` when its layout or the open
+// tabs changed.
+void update_open_tab_links(App& app, int pi);
 // Back (dir −1) / Forward (+1) in the focused view; false when there is
 // no page that way.
 bool can_nav_step(App& app, int dir);

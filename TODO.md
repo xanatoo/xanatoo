@@ -8,6 +8,18 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Link marks: loading click, open in another tab
+
+- A clicked link whose page is still being fetched gets a pulsing accent
+  wash (`pending_nav_link`: the view's Navigate fetch + `NavHistory::
+  pending_link` from the shown page) until the new page replaces it, or the
+  fetch fails / is stopped. Trail mode already marks its link at once.
+- Links whose target page another tab shows get a dotted underline
+  (`update_open_tab_links`, cached per pane on layout generation + the set
+  of tab pages in `Pane::open_tab_links`). The forward-history wash (Back
+  shows where you came from) already existed. Verified under Xvfb with a
+  slow local HTTP server.
+
 ## Status (2026-11-14) — Touch long press opens the context menu
 
 - The document context menu was unreachable on Android / touchscreens. A long

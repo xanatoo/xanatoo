@@ -105,6 +105,64 @@ const NavLink* forward_nav_link(App& app, int pi) {
   return nav_history_forward_link(p.nav, pane_address(app, p));
 }
 
+const NavLink* pending_nav_link(App& app, int pi) {
+  if (pi < 0 || pi >= kMaxViews ||
+      (split_browsing(app) && pi < kCentreViews))
+    return nullptr;  // Trail marks its link at once (split_trail_href)
+  const FetchJob* f = pane_fetch(app, pi);
+  if (!f || f->purpose != FetchPurpose::Navigate) return nullptr;
+  Pane& p = app.panes[pi];
+  const NavLink& l = p.nav.pending_link;
+  if (l.href.empty() || l.from_url != pane_address(app, p)) return nullptr;
+  return &l;
+}
+
+void update_open_tab_links(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  OpenTabLinks& ol = p.open_tab_links;
+  std::vector<std::string> pages;
+  for (BufferId id : app.tab_order) {
+    if (id == p.buf) continue;
+    const DocBuffer* b = find_buf(app, id);
+    if (!b || b->path.empty()) continue;
+    pages.push_back(page_address(xanatoo::parse_locator(b->path).base));
+  }
+  std::sort(pages.begin(), pages.end());
+  pages.erase(std::unique(pages.begin(), pages.end()), pages.end());
+  std::string key;
+  for (const std::string& s : pages) key += s + '\n';
+  if (ol.valid && ol.layout_gen == p.layout.generation && ol.tabs_key == key)
+    return;
+  ol.valid = true;
+  ol.layout_gen = p.layout.generation;
+  ol.tabs_key = std::move(key);
+  ol.spans.clear();
+  if (pages.empty()) return;
+  const std::string own = xanatoo::parse_locator(pane_address(app, p)).base;
+  const xanatoo::Document& d = doc_of(app, p);
+  std::vector<std::pair<xanatoo::NodeId, size_t>> seen;
+  for (const auto& pg : p.layout.glyphs) {
+    if (pg.kind != xanatoo::InlineKind::Link ||
+        pg.node == xanatoo::INVALID_NODE || pg.node >= d.next_id)
+      continue;
+    const std::pair<xanatoo::NodeId, size_t> k{pg.node, pg.span_index};
+    if (!seen.empty() && seen.back() == k) continue;  // same run
+    if (std::find(seen.begin(), seen.end(), k) != seen.end()) continue;
+    seen.push_back(k);
+    const xanatoo::Node& n = d.get(pg.node);
+    if (pg.span_index >= n.spans.size()) continue;
+    const std::string& href = n.spans[pg.span_index].href;
+    if (href.empty() || href[0] == '#') continue;
+    const LinkTarget t = resolve_link(app, pi, href);
+    if (t.kind != LinkKind::Doc && t.kind != LinkKind::Remote) continue;
+    const std::string page =
+        page_address(xanatoo::parse_locator(t.url).base);
+    if (page.empty() || page == own) continue;
+    if (std::binary_search(pages.begin(), pages.end(), page))
+      ol.spans.push_back(k);
+  }
+}
+
 bool can_nav_step(App& app, int dir) {
   if (split_browsing(app) && app.focus < kCentreViews)
     return split_history_can_step(app, dir);

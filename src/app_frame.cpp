@@ -2870,6 +2870,67 @@ static void draw_pane_overlays(App& app, int i) {
           xanatoo::sdl::draw_line(app.sdl, x + k, cy - (h - k), x + k, cy + (h - k));
       }
     }
+    // Links whose page another tab already shows: a dotted underline.
+    update_open_tab_links(app, i);
+    if (!pane.open_tab_links.spans.empty()) {
+      const auto& spans = pane.open_tab_links.spans;
+      const auto ad = xanatoo::theme::palette().accent_dark;
+      for_each_link_run(
+          app, pane,
+          [&](const xanatoo::PositionedGlyph& pg) {
+            if (pg.kind != xanatoo::InlineKind::Link) return false;
+            return std::find(spans.begin(), spans.end(),
+                             std::pair{pg.node, pg.span_index}) != spans.end();
+          },
+          [&](float x0, float x1, float, float base, float) {
+            const int uy = static_cast<int>(base + 3.f - draw_scroll);
+            const int a = static_cast<int>(x0 + ox), b = static_cast<int>(x1 + ox);
+            SDL_SetRenderDrawColor(app.sdl, ad.r, ad.g, ad.b, 200);
+            for (int x = a; x < b; x += 4)
+              xanatoo::sdl::draw_line(app.sdl, x, uy + 1, std::min(x + 1, b - 1),
+                                      uy + 1);
+          });
+    }
+    // A link just clicked whose page is still loading: a pulsing wash until
+    // the new page replaces this one (or the fetch fails / is stopped).
+    if (const NavLink* pend = pending_nav_link(app, i)) {
+      const xanatoo::Document& d = doc_of(app, pane);
+      const bool exact = pend->node != xanatoo::INVALID_NODE &&
+                         pend->node < d.next_id &&
+                         d.get(pend->node).id == pend->node &&
+                         pend->span < d.get(pend->node).spans.size() &&
+                         d.get(pend->node).spans[pend->span].href == pend->href;
+      const auto accent = xanatoo::theme::palette().accent;
+      const float phase = static_cast<float>(xanatoo::sdl::ticks() % 1200) /
+                          1200.f * 6.2831853f;
+      const Uint8 fill_a =
+          static_cast<Uint8>(85.f + 45.f * std::sin(phase));
+      for_each_link_run(
+          app, pane,
+          [&](const xanatoo::PositionedGlyph& pg) {
+            if (pg.kind != xanatoo::InlineKind::Link ||
+                pg.node == xanatoo::INVALID_NODE) return false;
+            if (exact)
+              return pg.node == pend->node && pg.span_index == pend->span;
+            const xanatoo::Node& n = d.get(pg.node);
+            return pg.span_index < n.spans.size() &&
+                   n.spans[pg.span_index].href == pend->href;
+          },
+          [&](float x0, float x1, float top, float base, float bot) {
+            SDL_Rect r{static_cast<int>(x0 + ox) - 2,
+                       static_cast<int>(top - draw_scroll) - 2,
+                       static_cast<int>(x1 - x0) + 4,
+                       static_cast<int>(bot - top) + 4};
+            SDL_SetRenderDrawColor(app.sdl, accent.r, accent.g, accent.b,
+                                   fill_a);
+            xanatoo::sdl::fill_rect(app.sdl, &r);
+            const int uy = static_cast<int>(base + 3.f - draw_scroll);
+            SDL_SetRenderDrawColor(app.sdl, accent.r, accent.g, accent.b, 255);
+            xanatoo::sdl::draw_line(app.sdl, r.x + 1, uy, r.x + r.w - 2, uy);
+            xanatoo::sdl::draw_line(app.sdl, r.x + 1, uy + 1, r.x + r.w - 2,
+                                    uy + 1);
+          });
+    }
     // Ordinary Back/Forward: wash the precise link which led to the next
     // history stop. It is navigation state, not a document style or edit.
     NavLink split_next;
