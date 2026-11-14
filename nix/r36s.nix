@@ -289,6 +289,8 @@ let
       cp -L ${sysroot}/usr/lib/${multiarch}/libsqlite3.so.0 $out/xanatoo/libs/
       cp ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf \
          $out/xanatoo/fonts/DejaVuSans.ttf
+      cp ${../data/fonts/latinmodern-math.otf} $out/xanatoo/fonts/latinmodern-math.otf
+      cp ${../data/fonts/LICENSE-LatinModernMath.txt} $out/xanatoo/fonts/LICENSE-LatinModernMath.txt
       cp ${../LICENSE} $out/xanatoo/LICENSE.txt
       cp ${../data/icons/hicolor/256x256/apps/xanatoo.png} $out/xanatoo/cover.png
       cp ${../docs/screenshot.png} $out/screenshot.png

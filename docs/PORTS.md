@@ -14,7 +14,8 @@ Emscripten, and **OFF** elsewhere. It disables:
   feeds, Wikipedia, web pages, and remote ebooks).
 
 This keeps the required third-party dependencies to SDL and FreeType. Fonts
-are loaded from `share/xanatoo/fonts/` (bundled DejaVu faces); images fall
+are loaded from `share/xanatoo/fonts/` (bundled DejaVu faces, Latin Modern
+Math for TeX formulas); images fall
 back to the built-in stb_image decoders. Local Markdown, Org, structured
 documents, simplified HTML, direct EPUB import, editing, links, and the
 document UI remain available. An external `http(s)` link can still open in

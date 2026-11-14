@@ -59,7 +59,9 @@ kerning of script corners (MathKernInfo), line breaking inside a formula.
 
 ## Font
 
-`find_math_font_path`: `data_dir()/fonts/latinmodern-math.otf` first, then the
+`find_math_font_path`: `data_dir()/fonts/latinmodern-math.otf` first (shipped
+in `data/fonts/`, installed by every build and bundled into the Android APK,
+the R36S package, Windows and WebAssembly), then the
 first installed of Latin Modern Math, STIX Two Math, Libertinus Math, XITS
 Math, TeX Gyre Pagella / Termes Math, Asana Math, Cambria Math, Fira Math,
 DejaVu Math TeX Gyre, IBM Plex Math, Noto Sans Math. Without any, formulas

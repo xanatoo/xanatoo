@@ -12,7 +12,8 @@
 #      APP_NAME, APP_DIR (manifest, res/, jni/Android.mk), APP_SRC_DIR (the
 #      repository: src/, include/, external/, examples/, styles/, icons/svg,
 #      scripts/rasterize_icons.py, FORMAT.md), DEJAVU_DIR (TTFs bundled as
-#      fonts/: same faces as desktop, and glyphs Roboto lacks — ▸ ▾ ☐ ☑),
+#      fonts/: same faces as desktop, and glyphs Roboto lacks — ▸ ▾ ☐ ☑;
+#      plus data/fonts/latinmodern-math.otf for TeX math),
 #      FREETYPE_SRC (tarball), SQLITE_SRC (dir with sqlite3.c/.h), SQLITE_MK,
 #      MBEDTLS_SRC (source tree), MBEDTLS_MK, THUMTOO_MK, IMAGELIBS (dir
 #      with <abi>/lib/libimagedeps.a + <abi>/include per ABI),
@@ -99,6 +100,9 @@ for f in DejaVuSans DejaVuSans-Bold DejaVuSans-Oblique DejaVuSans-BoldOblique \
          DejaVuSansMono-BoldOblique; do
   cp "$DEJAVU_DIR/$f.ttf" "$A/fonts/"
 done
+# TeX math font (find_math_font_path), GUST Font License.
+cp "$APP_SRC_DIR"/data/fonts/latinmodern-math.otf \
+   "$APP_SRC_DIR"/data/fonts/LICENSE-LatinModernMath.txt "$A/fonts/"
 cp -r "$APP_SRC_DIR"/examples/. "$A/examples/"
 cp "$APP_SRC_DIR"/styles/*.xss "$A/styles/"
 cp "$APP_SRC_DIR"/FORMAT.md "$A/"

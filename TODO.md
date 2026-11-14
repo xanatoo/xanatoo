@@ -1936,9 +1936,11 @@ Next bundle number: **348** (this delivery is **347**)
   annotations, Wikipedia `mwe-math-element`, KaTeX, MathJax scripts),
   clipboard `$…$`, `examples/math.md`, About entry. Unit test `test_math`.
 - Checked under Xvfb: examples/math.md and `wikipedia:Quadratic_formula`.
-- Open: bundle a math font (Latin Modern Math is GFL, STIX Two Math OFL;
-  needed for Android and for systems without one — `find_math_font_path`
-  already looks for `fonts/latinmodern-math.otf` in the data dir), MathKernInfo
+- Done (2026-11-14): Latin Modern Math 1.959 (GUST Font License) ships in
+  `data/fonts/`; installed by every build, bundled into the Android APK,
+  R36S, Windows and WebAssembly packages (checked: APK assets, win64 share,
+  wasm preload; desktop logs `math font: …/share/xanatoo/fonts/…`).
+- Open: MathKernInfo
   for script corners (integral limits), `\middle`, `\cancel`, wide display
   formulas (overflow instead of scale / scroll), selection rectangles and
   caret height around tall formulas, editing a formula in place (the span is

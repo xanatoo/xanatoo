@@ -537,6 +537,14 @@ install(DIRECTORY styles/
 # that the menu lists every page.
 install(DIRECTORY examples/ DESTINATION share/xanatoo/examples)
 
+# TeX math font (find_math_font_path looks here before FontConfig), on
+# every build so formulas look the same everywhere.
+install(FILES data/fonts/latinmodern-math.otf
+              data/fonts/LICENSE-LatinModernMath.txt
+        DESTINATION share/xanatoo/fonts)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data/fonts/latinmodern-math.otf
+     DESTINATION ${XANATOO_BUILD_DATA_DIR}/fonts)
+
 if(XANATOO_MINIMAL_PORT)
   install(DIRECTORY data/fonts/ DESTINATION share/xanatoo/fonts
           FILES_MATCHING PATTERN "*.ttf" PATTERN "LICENSE-DejaVu.txt"

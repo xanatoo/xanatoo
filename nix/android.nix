@@ -104,6 +104,7 @@ let
       ../src ../include ../external
       ../examples ../styles ../icons/svg ../scripts/rasterize_icons.py
       ../FORMAT.md
+      ../data/fonts/latinmodern-math.otf ../data/fonts/LICENSE-LatinModernMath.txt
     ];
   };
 
