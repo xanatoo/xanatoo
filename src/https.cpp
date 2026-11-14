@@ -5,6 +5,7 @@
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/net_address.hpp"
 #include "xanatoo/tls.hpp"
+#include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
@@ -148,6 +149,20 @@ private:
   TlsStream tls_;
 };
 
+std::string header_value(const std::string& headers, const char* key) {
+  const std::string lower = ascii_lower(headers);
+  const std::string needle = std::string("\n") + key + ":";
+  size_t at = lower.find(needle);
+  if (at == std::string::npos) return {};
+  at = headers.find(':', at) + 1;
+  size_t end = headers.find("\r\n", at);
+  // The block usually ends without a CRLF after its last header.
+  if (end == std::string::npos) end = headers.size();
+  std::string_view value(headers.data() + at, end - at);
+  trim_ascii(value);
+  return std::string(value);
+}
+
 }  // namespace
 
 int tcp_connect_host(const std::string& host, int port, std::string* err) {
@@ -212,10 +227,32 @@ std::optional<HttpResult> https_request(std::string_view method,
 
   std::string data;
   char buf[4096];
+  meter_expect(-1);
+  bool metered_headers = false;
   for (;;) {
     int n = conn.read(buf, sizeof(buf));
     if (n <= 0) break;
     data.append(buf, static_cast<size_t>(n));
+    meter_bytes(static_cast<size_t>(n));
+    if (!metered_headers) {
+      // Once the headers are in, the Content-Length tells how much is left.
+      const size_t end = data.find("\r\n\r\n");
+      if (end != std::string::npos) {
+        metered_headers = true;
+        const std::string head = data.substr(0, end);
+        const std::string length = header_value(head, "content-length");
+        int64_t len = -1;
+        if (!length.empty() &&
+            ascii_lower(header_value(head, "transfer-encoding"))
+                    .find("chunked") == std::string::npos) {
+          auto [p, ec] = std::from_chars(length.data(),
+                                         length.data() + length.size(), len);
+          if (ec != std::errc{} || len < 0) len = -1;
+        }
+        const int64_t have = static_cast<int64_t>(data.size() - end - 4);
+        if (len >= 0) meter_expect(std::max<int64_t>(0, len - have));
+      }
+    }
     if (data.size() > security.max_response_bytes) {
       if (err) *err = "HTTP response exceeds size limit";
       return std::nullopt;
@@ -299,19 +336,6 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
 
 namespace {
 
-std::string header_value(const std::string& headers, const char* key) {
-  const std::string lower = ascii_lower(headers);
-  const std::string needle = std::string("\n") + key + ":";
-  size_t at = lower.find(needle);
-  if (at == std::string::npos) return {};
-  at = headers.find(':', at) + 1;
-  const size_t end = headers.find("\r\n", at);
-  if (end == std::string::npos) return {};
-  std::string_view value(headers.data() + at, end - at);
-  trim_ascii(value);
-  return std::string(value);
-}
-
 struct ChunkDecoder {
   enum class State { Size, Data, CrLf, Done } state = State::Size;
   std::string pending;
@@ -390,8 +414,10 @@ bool stream_once(const std::string& url, std::string_view agent,
   int64_t left = -1;
   char buf[8192];
   uint64_t total_read = 0;
+  meter_expect(-1);
   for (;;) {
     const int n = conn.read(buf, sizeof(buf));
+    if (n > 0) meter_bytes(static_cast<size_t>(n));
     if (n < 0) {
       if (err) {
         std::string where = have_headers
@@ -444,6 +470,9 @@ bool stream_once(const std::string& url, std::string_view agent,
       is_chunked = ascii_lower(header_value(headers, "transfer-encoding"))
                        .find("chunked") != std::string::npos;
       result.content_length = is_chunked ? -1 : left;
+      if (!is_chunked && left >= 0)
+        meter_expect(std::max<int64_t>(
+            0, left - static_cast<int64_t>(pending.size() - end - 4)));
       have_headers = true;
       if (!on_headers(result)) return false;
       // Redirect bodies are irrelevant: follow Location immediately rather

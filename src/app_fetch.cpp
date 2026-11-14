@@ -653,9 +653,14 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
                               purpose != FetchPurpose::Subscription);
 #else
   // Detached: a cancelled job just finishes into its (orphaned) shared state.
-  std::thread(fetch_page, url, job.shared,
-              purpose != FetchPurpose::Preview &&
-              purpose != FetchPurpose::Subscription).detach();
+  std::thread(
+      [url, shared = job.shared,
+       allow = purpose != FetchPurpose::Preview &&
+               purpose != FetchPurpose::Subscription] {
+        xanatoo::TransferMeterScope meter(&shared->meter);
+        fetch_page(url, shared, allow);
+      })
+      .detach();
 #endif
   app.fetches.push_back(std::move(job));
   return app.fetches.back().id;
@@ -812,15 +817,26 @@ void draw_load_indicator(App& app, int pi) {
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
 
-  // Indeterminate bar: a segment sweeping across the pane's top edge.
+  // Known size: the bar fills with the bytes received. Otherwise it is
+  // indeterminate, a segment sweeping across the pane's top edge.
   const int bar_h = std::max(3, static_cast<int>(3.f * app.ui_scale));
   th::fill(app.sdl, SDL_Rect{p.x, top, w, bar_h}, pal.accent_soft, 200);
-  const float phase = std::fmod(t * 0.8f, 1.f);
-  const int seg_w = std::max(40, w / 4);
-  const int seg_x = p.x - seg_w + static_cast<int>(phase * (w + seg_w));
-  SDL_Rect seg{std::max(p.x, seg_x), top,
-               std::min(p.x + w, seg_x + seg_w) - std::max(p.x, seg_x), bar_h};
-  if (seg.w > 0) th::fill(app.sdl, seg, pal.accent);
+  const xanatoo::TransferMeter& meter = job->shared->meter;
+  const uint64_t got = meter.received.load(std::memory_order_relaxed);
+  const int64_t expected = meter.expected.load(std::memory_order_relaxed);
+  if (expected > 0 && got <= static_cast<uint64_t>(expected)) {
+    const int fill_w = static_cast<int>(
+        static_cast<double>(w) * static_cast<double>(got) /
+        static_cast<double>(expected));
+    if (fill_w > 0) th::fill(app.sdl, SDL_Rect{p.x, top, fill_w, bar_h}, pal.accent);
+  } else {
+    const float phase = std::fmod(t * 0.8f, 1.f);
+    const int seg_w = std::max(40, w / 4);
+    const int seg_x = p.x - seg_w + static_cast<int>(phase * (w + seg_w));
+    SDL_Rect seg{std::max(p.x, seg_x), top,
+                 std::min(p.x + w, seg_x + seg_w) - std::max(p.x, seg_x), bar_h};
+    if (seg.w > 0) th::fill(app.sdl, seg, pal.accent);
+  }
 
   // Label pill below the bar, top-right of the pane.
   static const char* kSpin[] = {"◐", "◓", "◑", "◒"};
@@ -831,6 +847,8 @@ void draw_load_indicator(App& app, int pi) {
                       (job->purpose == FetchPurpose::Preview ? "Preview "
                                                              : "Loading ") +
                       short_target(job->url) + "…" + secs;
+  const std::string bytes = xanatoo::transfer_label(job->shared->meter);
+  if (!bytes.empty()) label += "  ·  " + bytes;
   Font& font = app.ui_font;
   const int pad = 8;
   label = fit_text(font, label, std::max(40, w - 4 * pad));

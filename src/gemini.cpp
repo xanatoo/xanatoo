@@ -5,6 +5,7 @@
 
 #include "xanatoo/https.hpp"
 #include "xanatoo/tls.hpp"
+#include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/gemini_tofu.hpp"
 #include "xanatoo/paths.hpp"
 
@@ -212,6 +213,7 @@ static std::optional<GeminiResponse> gemini_fetch_once(const GeminiUrl& u,
     int n = tls.read(buf, sizeof(buf));
     if (n <= 0) break;
     data.append(buf, static_cast<size_t>(n));
+    meter_bytes(static_cast<size_t>(n));  // Gemini sends no length
     if (data.size() > 8 * 1024 * 1024) break;  // 8 MiB cap
   }
   tls.close();

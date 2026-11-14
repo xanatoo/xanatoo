@@ -63,6 +63,7 @@
 #endif
 #include <cstdlib>
 #include <iostream>
+#include "xanatoo/transfer_meter.hpp"
 #include <string>
 #include <algorithm>
 #include <string_view>
@@ -5649,7 +5650,37 @@ void test_math() {
   EXPECT(mx.width > 1.f && mx.ascent + mx.depth > 2.f * base.ascent);
 }
 
+static void test_transfer_label() {
+  using xanatoo::transfer_label;
+  EXPECT_EQ(transfer_label(0, -1, 0), std::string());
+  EXPECT_EQ(transfer_label(512, -1, 1000), std::string("512 B"));
+  // Known size, too early for a rate.
+  EXPECT_EQ(transfer_label(1024, 4096, 100),
+            std::string("1.0 KiB / 4.0 KiB (25%)"));
+  // 1 KiB/s with 3 KiB left.
+  EXPECT_EQ(transfer_label(1024, 4096, 1000),
+            std::string("1.0 KiB / 4.0 KiB (25%) · 3 s left"));
+  EXPECT_EQ(transfer_label(1024, 1024 + 125 * 1024, 1000),
+            std::string("1.0 KiB / 126.0 KiB (0%) · 2 min 05 s left"));
+  // Finished response: no ETA; overshoot (next request) drops the total.
+  EXPECT_EQ(transfer_label(4096, 4096, 2000),
+            std::string("4.0 KiB / 4.0 KiB (100%)"));
+  EXPECT_EQ(transfer_label(5000, 4096, 2000), std::string("4.9 KiB"));
+  // The thread's meter collects bytes and the expected end.
+  xanatoo::TransferMeter m;
+  {
+    xanatoo::TransferMeterScope scope(&m);
+    xanatoo::meter_bytes(100);
+    xanatoo::meter_expect(900);
+  }
+  xanatoo::meter_bytes(50);  // no meter installed any more
+  EXPECT_EQ(m.received.load(), 100u);
+  EXPECT_EQ(m.expected.load(), 1000);
+  EXPECT(m.first_ms.load() >= 0);
+}
+
 int main() {
+  test_transfer_label();
   test_reply_markdown();
   test_sdl_time_bridge();
   test_about_markdown();

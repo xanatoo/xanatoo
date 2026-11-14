@@ -314,6 +314,8 @@ StatusLine compute_status(App& app) {
     std::snprintf(secs, sizeof(secs), "%.1f s",
                   static_cast<double>(xanatoo::sdl::ticks() - job->started) / 1000.0);
     label = "Loading " + job->url + " …  " + secs;
+    const std::string bytes = xanatoo::transfer_label(job->shared->meter);
+    if (!bytes.empty()) label += "  ·  " + bytes;
     if (app.split) label += job->pane == 0 ? "  (left pane)" : "  (right pane)";
     label += "  ·  Esc stops";
     tone = StatusTone::Info;

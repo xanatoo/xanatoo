@@ -33,6 +33,7 @@
 #include "xanatoo/render.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/annotations.hpp"
 #include "xanatoo/search.hpp"
 #include "xanatoo/sitemap.hpp"
@@ -482,6 +483,8 @@ struct FetchShared {
   std::optional<xanatoo::Document> doc;
   std::optional<std::string> raw_source;
   std::shared_ptr<xanatoo::DownloadProgress> download;
+  // Bytes received so far, fed by the network readers on the worker thread.
+  xanatoo::TransferMeter meter;
   std::string error;      // with `doc` set: the page is an HTTP error body
   int http_status = 0;    // non-200 answer whose body is in `doc`
   std::string final_url;  // page URL after redirects (buffer path)

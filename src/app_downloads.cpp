@@ -31,16 +31,7 @@ std::vector<std::shared_ptr<xanatoo::DownloadProgress>> visible(const App& app) 
   return result;
 }
 
-std::string bytes_label(uint64_t n) {
-  char s[48];
-  if (n >= 1048576)
-    std::snprintf(s, sizeof(s), "%.1f MiB", static_cast<double>(n) / 1048576.0);
-  else if (n >= 1024)
-    std::snprintf(s, sizeof(s), "%.1f KiB", static_cast<double>(n) / 1024.0);
-  else
-    std::snprintf(s, sizeof(s), "%llu B", static_cast<unsigned long long>(n));
-  return s;
-}
+std::string bytes_label(uint64_t n) { return xanatoo::transfer_bytes_label(n); }
 
 std::string status(const xanatoo::DownloadProgress& d,
                    xanatoo::DownloadPhase phase) {

@@ -8,6 +8,21 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Loading indicator: bytes, size, ETA
+
+- The loading pill and status line show bytes received, the total with
+  percentage when the response has a Content-Length, and the time left
+  (average rate since the first byte). With a known size the top bar fills
+  instead of sweeping. `transfer_meter.hpp`: the fetch worker installs a
+  thread-local `TransferMeter` (`FetchShared::meter`); `https.cpp`
+  (`https_request`, `stream_once`) and `gemini.cpp` feed it, so service
+  clients need no parameter. Multi-request services count all bytes; the
+  total is that of the response in flight. Checked under Xvfb with a
+  throttled local server.
+- Fixed on the way: `header_value` in `https.cpp` missed the last header
+  of a block (no trailing CRLF), e.g. a final Content-Length.
+- Open: the browser (WASM) fetch reads whole bodies, so no progress there.
+
 ## Status (2026-11-14) — Converted pages keep their origin as address
 
 - Pandoc / native imports (`book.epub` → cache `…/content.md`) and
