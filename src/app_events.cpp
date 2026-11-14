@@ -691,11 +691,11 @@ static void mouse_middle_down(App& app, SDL_Event& ev, bool imgui_mouse) {
     }
 }
 
-// Right press: floats absorb it; otherwise open the context menu.
-static void mouse_right_down(App& app, SDL_Event& ev, bool imgui_mouse) {
+// Right press (or a touch long press): floats absorb it; otherwise open
+// the context menu.
+void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
     // Soft windows / outline / help absorb right-clicks (no doc menu under
     // them).
-    const int rx = ev.button.x, ry = ev.button.y;
     // The title belongs to the native frame, not the document's text. Give
     // each document window its own context command, regardless of focus.
     if (FloatWindow* w = float_at(app, rx, ry);
@@ -725,9 +725,9 @@ static void mouse_right_down(App& app, SDL_Event& ev, bool imgui_mouse) {
     }
     // Document context menu (ImGui popup).
     if (!over_soft && !imgui_mouse) {
-      float mx = static_cast<float>(ev.button.x);
-      focus_view(app, pane_at(app, mx, static_cast<float>(ev.button.y)));
-      float my = content_y(app, static_cast<float>(ev.button.y), app.focus);
+      float mx = static_cast<float>(rx);
+      focus_view(app, pane_at(app, mx, static_cast<float>(ry)));
+      float my = content_y(app, static_cast<float>(ry), app.focus);
       Pane& p = focused_pane(app);
       float lx = local_x(app, mx, app.focus);
       app.context_comment_native.clear();
@@ -784,8 +784,8 @@ static void mouse_right_down(App& app, SDL_Event& ev, bool imgui_mouse) {
       }
       if (const BookmarkMark* bm = bookmark_icon_at(app, p, lx, my)) {
         app.bookmark_menu = bm->address;
-        app.ui.open_bookmark_menu(static_cast<float>(ev.button.x),
-                                  static_cast<float>(ev.button.y));
+        app.ui.open_bookmark_menu(static_cast<float>(rx),
+                                  static_cast<float>(ry));
         return;
       }
       // Keep an existing selection when the click lands inside it
@@ -809,8 +809,8 @@ static void mouse_right_down(App& app, SDL_Event& ev, bool imgui_mouse) {
         }
       }
       note_collection_target(app, app.focus, lx, my);
-      app.ui.open_context_menu(static_cast<float>(ev.button.x),
-                               static_cast<float>(ev.button.y));
+      app.ui.open_context_menu(static_cast<float>(rx),
+                               static_cast<float>(ry));
     }
 }
 
@@ -832,7 +832,7 @@ static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
       mouse_middle_down(app, ev, imgui_mouse);
       break;
     case SDL_BUTTON_RIGHT:
-      mouse_right_down(app, ev, imgui_mouse);
+      pointer_right_down(app, ev.button.x, ev.button.y, imgui_mouse);
       break;
     default:
       break;

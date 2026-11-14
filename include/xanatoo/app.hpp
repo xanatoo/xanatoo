@@ -428,7 +428,10 @@ enum class TouchMode : uint8_t {
   Idle,     // no finger down
   Pending,  // one finger down: not yet a tap, pan or long press
   Pan,      // dragging scrolls the target
-  Select,   // after a long press: dragging extends the selection
+  Select,   // after a long press on text: dragging extends the selection,
+            // lifting opens the context menu
+  Hold,     // long press on no text: lifting opens the context menu,
+            // moving pans instead
   Direct,   // scrollbar / float frame / split gutter: plain pointer drag
   Pinch,    // two fingers: zoom
   Image,    // one finger on a single-image gallery view: pan / swipe / tap
@@ -1326,6 +1329,8 @@ void reset_blink(App& app);
 void pointer_left_down(App& app, int x, int y, bool imgui_mouse);
 void pointer_motion(App& app, int x, int y, bool imgui_mouse);
 void pointer_left_up(App& app, int x, int y);
+// Right press: the context menu of what lies at (x, y); touch long press too.
+void pointer_right_down(App& app, int x, int y, bool imgui_mouse);
 
 // ---- touch (app_touch.cpp) ----
 // Mouse events SDL synthesises from a touchscreen (which == SDL_TOUCH_MOUSEID).

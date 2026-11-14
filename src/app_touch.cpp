@@ -3,7 +3,9 @@
 
 // Touchscreen gestures, browser style: tap = left click (follow links,
 // place caret), drag = scroll with momentum, long press = select word and
-// drag to extend, two-finger pinch = zoom. Touches on ImGui chrome are left
+// drag to extend, lifting then opens the context menu (the touch right
+// click; on no text it opens on lift without the selection), two-finger
+// pinch = zoom. Touches on ImGui chrome are left
 // to ImGui, which sees SDL's touch-synthesised mouse events.
 
 #include <algorithm>
@@ -18,7 +20,7 @@ namespace xanatoo::app {
 namespace {
 
 constexpr float kSlopPx = 10.f;         // movement before a touch is a pan
-constexpr Uint32 kLongPressMs = 500;    // hold this long → selection
+constexpr Uint32 kLongPressMs = 500;    // hold this long → selection / menu
 constexpr Uint32 kFlingMaxIdleMs = 80;  // finger rested → no fling
 constexpr float kFlingMinSpeed = 60.f;  // px/s to start a fling
 constexpr float kFlingStopSpeed = 15.f;
@@ -117,14 +119,19 @@ void begin_gesture(App& app, float x, float y) {
 }
 
 // Long press on pane text: select the word and let the drag extend it.
+// Elsewhere (no text, a panel's client) the press only waits for the lift.
 void begin_select(App& app) {
   Touch& t = app.touch;
+  if (t.on_float) {
+    t.mode = TouchMode::Hold;
+    return;
+  }
   Pane& p = app.panes[t.pane];
   const float lx = local_x(app, t.start_x, t.pane);
   const float my = content_y(app, t.start_y, t.pane);
   auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y);
   if (!hit) {
-    t.mode = TouchMode::Pan;  // nothing to select; keep scrolling
+    t.mode = TouchMode::Hold;  // nothing to select; menu on lift
     return;
   }
   if (prompt_active(app) && !prompt_is_search(app)) close_prompt(app);
@@ -192,8 +199,8 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   t.fingers[t.count++] = TouchPoint{xanatoo::sdl::finger_id(tf), x, y};
   if (t.count == 1) {
     begin_gesture(app, x, y);
-  } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Pan ||
-             t.mode == TouchMode::Image) {
+  } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
+             t.mode == TouchMode::Pan || t.mode == TouchMode::Image) {
     begin_pinch(app);
   }
 }
@@ -212,6 +219,7 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
   const bool primary = f == &t.fingers[0];
   switch (t.mode) {
     case TouchMode::Pending:
+    case TouchMode::Hold:
       if (std::hypot(x - t.start_x, y - t.start_y) < kSlopPx) break;
       t.mode = TouchMode::Pan;
       // Start from the origin so the content stays under the finger.
@@ -298,6 +306,19 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
       }
       break;
     case TouchMode::Select:
+      // Target the pressed spot: it lies inside the selected word, so the
+      // menu keeps the (possibly extended) selection for Copy & co.
+      if (primary) {
+        pointer_left_up(app, xi, yi);
+        pointer_right_down(app, static_cast<int>(t.start_x),
+                           static_cast<int>(t.start_y), false);
+      }
+      break;
+    case TouchMode::Hold:
+      if (primary)
+        pointer_right_down(app, static_cast<int>(t.start_x),
+                           static_cast<int>(t.start_y), false);
+      break;
     case TouchMode::Direct:
       if (primary) pointer_left_up(app, xi, yi);
       break;
@@ -335,8 +356,7 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
 void update_touch(App& app) {
   Touch& t = app.touch;
   const Uint32 now = xanatoo::sdl::ticks();
-  if (t.mode == TouchMode::Pending && !t.on_float &&
-      now - t.start_ticks >= kLongPressMs)
+  if (t.mode == TouchMode::Pending && now - t.start_ticks >= kLongPressMs)
     begin_select(app);
   if (!t.flinging) return;
   const float dt = static_cast<float>(now - t.fling_ticks) / 1000.f;

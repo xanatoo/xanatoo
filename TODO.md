@@ -8,6 +8,16 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Touch long press opens the context menu
+
+- The document context menu was unreachable on Android / touchscreens. A long
+  press still selects the word under the finger (drag extends it); lifting
+  now opens the context menu at the pressed spot, keeping the selection for
+  Copy etc. A long press on no text (or a panel client) opens the menu on
+  lift; moving first pans instead. The right-click handler is now the shared
+  `pointer_right_down` (`app_events.cpp`), called by `app_touch.cpp`
+  (`TouchMode::Hold`). Not yet: long press on a single gallery image.
+
 ## Status (2026-11-14) — Image links never leave the app
 
 - Android showed "Open with…" for gallery-page thumbnails: `<li><a
