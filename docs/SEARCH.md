@@ -35,6 +35,19 @@ Search is an address, not a widget in the document and not a panel.
   (space "+") (site "host" "ref:") (color "#rrggbb"))`; without `color`
   a known id keeps its built-in tile colour, others get one hashed from the id; a built-in id is replaced, a new one appended). `kind` is
   `page` (default), `feed` or a JSON mapper (below).
+- **On / off:** the engine menu, keywords and the location bar's search
+  button only use engines that are switched on (`App::search.active`,
+  `engines_on`). Built-ins that need an API key or that the service locks
+  out start off (`kOffByDefault` in `search.cpp`, with the reason shown as
+  `SearchEngine::note`; checked 2026-11-14): IGDB, RAWG, TMDB movies /
+  series, Discogs (credentials), Google Books (shared anonymous quota, 429),
+  Library of Congress ×4 and Reddit (403). The engine menu's first entry
+  "Choose engines" and Edit → Preferences → Search engines list every engine
+  with a checkbox (`UiCommand::ToggleSearchEngine`, the menu stays open);
+  view.conf keeps only the differences from the defaults (`search_on=` /
+  `search_off=` id lists), so later default changes still reach users.
+  `search.sexp` engines take `(enabled no)`. An engine that is off still
+  resolves its `search:` addresses (bookmarks, history, links).
 - **No forms in documents.** A document can *link* to a search
   (`[x](search:arxiv:electron+spin)`); it cannot contain an input. That keeps
   the document format free of application state.

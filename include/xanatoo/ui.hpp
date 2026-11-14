@@ -197,6 +197,7 @@ enum class UiCommand {
   FocusSearchBar,     // show the search bar and focus its field
   Search,             // search bar committed (arg = what was typed)
   SelectSearchEngine, // arg = engine id (search.hpp)
+  ToggleSearchEngine, // arg = engine id: switch it on / off in the menu
   SearchSite,         // location bar button: search bar with engine arg
   TogglePage,     // navigation / side bars of the focused page, as a panel
   SitemapPrev,    // previous / next page in the site map's order
@@ -276,6 +277,8 @@ struct UiService {
 struct UiSearchEngine {
   std::string id, name, keyword, badge;
   uint32_t color = 0;  // tile background, 0xRRGGBB (engine_color)
+  bool on = true;      // in the menu (engine_on)
+  std::string note;    // why it is off by default (SearchEngine::note)
 };
 
 struct UiState {

@@ -16,7 +16,7 @@
 // engines in `user_data_dir()/search.sexp`:
 //   (engine "id" (name "Title") (keyword "k") (badge "T")
 //                (url "https://host/find?q=%s") (kind feed) (space "+")
-//                (site "host" "ref:"))
+//                (site "host" "ref:") (enabled no))
 // `kind` says how the answer becomes a document: page (default, a web page
 // or any page xanatoo opens), feed (RSS / Atom) or the name of a JSON
 // mapper in search_results.hpp (wikipedia, hn, archive, lemmy, bluesky,
@@ -48,6 +48,12 @@ struct SearchEngine {
   // Background of the engine's favicon-style tile (0xRRGGBB); 0 = the
   // built-in colour of a known id, else one derived from the id.
   uint32_t color = 0;
+  // Shown in the engine menu, keywords and the location bar's search button
+  // unless the user switched it (ViewSettings::search_on / search_off).
+  // Built-ins that need an API key or that the service locks out start off.
+  bool enabled = true;
+  // Why it starts off ("needs an API key", "HTTP 403"), for the settings.
+  std::string note = {};
 };
 
 // The engines shipped with xanatoo, in menu order.
@@ -61,6 +67,14 @@ std::vector<SearchEngine> parse_engines(std::string_view source,
 // Built-in engines, then the user's file: an entry with a known id replaces
 // the built-in one in place, new ids are appended.
 std::vector<SearchEngine> load_engines();
+
+// Whether `e` is switched on: the user's lists override `e.enabled`.
+bool engine_on(const SearchEngine& e, const std::vector<std::string>& on,
+               const std::vector<std::string>& off);
+// The engines switched on, in order.
+std::vector<SearchEngine> engines_on(const std::vector<SearchEngine>& engines,
+                                     const std::vector<std::string>& on,
+                                     const std::vector<std::string>& off);
 
 struct SearchRef {
   std::string engine;

@@ -4191,6 +4191,31 @@ void test_search() {
     }
   }
 
+  // On / off: engines needing keys or locked out start off; the user's
+  // lists override the default, and an off engine still resolves addresses.
+  {
+    const auto& all = builtin_engines();
+    auto find = [&](std::string_view id) {
+      for (const SearchEngine& e : all)
+        if (e.id == id) return e;
+      return SearchEngine{};
+    };
+    EXPECT(find("wikipedia").enabled);
+    EXPECT(!find("tmdb-movie").enabled && !find("tmdb-movie").note.empty());
+    EXPECT(!find("loc-books").enabled);
+    EXPECT(!engine_on(find("igdb"), {}, {}));
+    EXPECT(engine_on(find("igdb"), {"igdb"}, {}));
+    EXPECT(!engine_on(find("hn"), {}, {"hn"}));
+    const auto on = engines_on(all, {}, {"hn"});
+    EXPECT(on.size() < all.size());
+    for (const SearchEngine& e : on) EXPECT(e.id != "hn" && e.id != "rawg");
+    EXPECT(search_from_keyword("hn rust", on).empty());
+    EXPECT(search_plan("search:rawg:doom", all).has_value());
+    const auto user = parse_engines(
+        "(engine \"q\" (url \"https://q.org/?q=%s\") (enabled no))");
+    EXPECT(user.size() == 1 && !user[0].enabled);
+  }
+
   const std::vector<SearchEngine> eng = builtin_engines();
   EXPECT_EQ(search_target(ref, eng),
             "feed:https://export.arxiv.org/api/query?search_query=all:"

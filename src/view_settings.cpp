@@ -119,6 +119,19 @@ bool load_view_settings(ViewSettings& out) {
         out.style = val;
       else if (key == "search_engine" && !val.empty())
         out.search_engine = val;
+      else if (key == "search_on" || key == "search_off") {
+        auto& list = key == "search_on" ? out.search_on : out.search_off;
+        list.clear();
+        std::string_view rest = val;
+        while (!rest.empty()) {
+          const size_t comma = rest.find(',');
+          std::string_view id = rest.substr(0, comma);
+          trim_ascii(id);
+          if (!id.empty()) list.emplace_back(id);
+          if (comma == std::string_view::npos) break;
+          rest.remove_prefix(comma + 1);
+        }
+      }
       else if (key == "ui_scale")
         out.ui_scale = std::stof(val);
     } catch (...) {
@@ -151,6 +164,13 @@ bool save_view_settings(const ViewSettings& in) {
   out << "page_columns=" << v.page_columns << "\n";
   out << "style=" << v.style << "\n";
   out << "search_engine=" << v.search_engine << "\n";
+  auto ids = [](const std::vector<std::string>& list) {
+    std::string s;
+    for (const std::string& id : list) s += (s.empty() ? "" : ",") + id;
+    return s;
+  };
+  out << "search_on=" << ids(v.search_on) << "\n";
+  out << "search_off=" << ids(v.search_off) << "\n";
   out << "ui_scale=" << v.ui_scale << "\n";
   return write_file_atomic(path, out.str());
 }

@@ -210,11 +210,14 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.searchbar = app.search.open;
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
-      path_of(app, focused_pane(app)), app.search.engines);
+      path_of(app, focused_pane(app)), app.search.active);
   ui_state.search_engines.clear();
   for (const auto& e : app.search.engines)
     ui_state.search_engines.push_back(
-        {e.id, e.name, e.keyword, e.badge, xanatoo::engine_color(e)});
+        {e.id, e.name, e.keyword, e.badge, xanatoo::engine_color(e),
+         xanatoo::engine_on(e, app.view_settings.search_on,
+                            app.view_settings.search_off),
+         e.note});
   ui_state.diff = app.diff_mode;
   ui_state.can_diff = !shared_doc(app) &&
                       app.panes[0].buf != app.panes[1].buf;
@@ -739,7 +742,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ToggleOutline ||
         c == C::ToggleBacklinks || c == C::ToggleSitemap || c == C::TogglePage ||
         c == C::ToggleSearchBar || c == C::FocusSearchBar || c == C::Search ||
-        c == C::SelectSearchEngine || c == C::SearchSite ||
+        c == C::SelectSearchEngine || c == C::ToggleSearchEngine ||
+        c == C::SearchSite ||
         c == C::SitemapPrev || c == C::SitemapNext ||
         c == C::OpenTranscludeOther ||
         c == C::ToggleDiff || c == C::ToggleStructure || c == C::ToggleEdit ||
@@ -2211,6 +2215,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::SelectSearchEngine:
       select_search_engine(app, arg);
       break;
+    case C::ToggleSearchEngine:
+      toggle_search_engine(app, arg);
+      break;
     case C::SearchSite:
       search_site(app, arg);
       break;
@@ -2691,7 +2698,9 @@ void run_chrome(App& app) {
       ui_frame.cmd != xanatoo::UiCommand::ReorderTabs &&
       ui_frame.cmd != xanatoo::UiCommand::EditReply &&
       ui_frame.cmd != xanatoo::UiCommand::LemmySetSearch &&
-      ui_frame.cmd != xanatoo::UiCommand::NostrSearchLocal)
+      ui_frame.cmd != xanatoo::UiCommand::NostrSearchLocal &&
+      // Engine checkboxes: the menu stays open to tick several.
+      ui_frame.cmd != xanatoo::UiCommand::ToggleSearchEngine)
     app.ui.release_input_capture();
 }
 

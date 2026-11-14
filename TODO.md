@@ -8,6 +8,18 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Search engines can be switched off
+
+- Per-engine on / off (`engine_on` / `engines_on`, `ViewSettings::
+  search_on` / `search_off` in view.conf as differences from the default).
+  Off by default after probing every endpoint anonymously: IGDB, RAWG, TMDB
+  ×2 (401 / key), Discogs (our client needs a token), Google Books (429,
+  shared quota), Library of Congress ×4 and Reddit search RSS (403): 32 of
+  43 remain in the menu. Toggle via the engine menu's "Choose engines"
+  submenu or Edit → Preferences. Off engines keep resolving `search:`
+  addresses. Verified under Xvfb. Possible next step: switch a credentialed
+  engine on automatically once its key is saved.
+
 ## Status (2026-11-14) — Link marks: loading click, open in another tab
 
 - A clicked link whose page is still being fetched gets a pulsing accent

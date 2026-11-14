@@ -572,7 +572,9 @@ struct SiteCache {
 // ViewSettings::search_engine (saved in view.conf).
 struct SearchBar {
   bool open = true;  // shown by default: hidden it is hard to find
-  std::vector<xanatoo::SearchEngine> engines;
+  std::vector<xanatoo::SearchEngine> engines;  // all, for search: addresses
+  // Those switched on (engines_on): the menu, keywords, site search.
+  std::vector<xanatoo::SearchEngine> active;
 };
 
 struct SitemapPanel {
@@ -1705,6 +1707,8 @@ std::string search_engine_id(const App& app);  // the engine in use
 void show_search_bar(App& app);                // open and focus
 void toggle_search_bar(App& app);
 void select_search_engine(App& app, const std::string& id);
+// Switch an engine on / off in the menu (saved in view.conf).
+void toggle_search_engine(App& app, const std::string& id);
 // Location bar search button: show the bar with this engine, or hide it
 // when it is already showing that engine.
 void search_site(App& app, const std::string& id);

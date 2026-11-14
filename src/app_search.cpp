@@ -14,17 +14,47 @@
 
 namespace xanatoo::app {
 
+namespace {
+
+void update_active(App& app) {
+  app.search.active = xanatoo::engines_on(app.search.engines,
+                                          app.view_settings.search_on,
+                                          app.view_settings.search_off);
+}
+
+}  // namespace
+
 void init_search(App& app) {
   app.search.engines = xanatoo::load_engines();
-  std::cerr << "search: " << app.search.engines.size() << " engines, in use "
+  update_active(app);
+  std::cerr << "search: " << app.search.engines.size() << " engines, "
+            << app.search.active.size() << " on, in use "
             << search_engine_id(app) << "\n";
 }
 
-// The engine in use: the saved one, else the first.
+// The engine in use: the saved one while it is on, else the first one on.
 std::string search_engine_id(const App& app) {
-  for (const xanatoo::SearchEngine& e : app.search.engines)
+  const auto& list =
+      app.search.active.empty() ? app.search.engines : app.search.active;
+  for (const xanatoo::SearchEngine& e : list)
     if (e.id == app.view_settings.search_engine) return e.id;
-  return app.search.engines.empty() ? std::string() : app.search.engines[0].id;
+  return list.empty() ? std::string() : list[0].id;
+}
+
+void toggle_search_engine(App& app, const std::string& id) {
+  auto& vs = app.view_settings;
+  for (const xanatoo::SearchEngine& e : app.search.engines) {
+    if (e.id != id) continue;
+    const bool on = !xanatoo::engine_on(e, vs.search_on, vs.search_off);
+    std::erase(vs.search_on, id);
+    std::erase(vs.search_off, id);
+    if (on != e.enabled) (on ? vs.search_on : vs.search_off).push_back(id);
+    xanatoo::save_view_settings(vs);
+    update_active(app);
+    flash_status(app, e.name + (on ? ": in the search menu"
+                                   : ": removed from the search menu"));
+    return;
+  }
 }
 
 void show_search_bar(App& app) {
@@ -44,7 +74,7 @@ void toggle_search_bar(App& app) {
 }
 
 void select_search_engine(App& app, const std::string& id) {
-  for (const xanatoo::SearchEngine& e : app.search.engines) {
+  for (const xanatoo::SearchEngine& e : app.search.active) {
     if (e.id != id) continue;
     app.view_settings.search_engine = id;
     xanatoo::save_view_settings(app.view_settings);
@@ -74,7 +104,7 @@ void run_search(App& app, const std::string& text) {
 }
 
 std::string search_from_location(const App& app, const std::string& text) {
-  std::string ref = xanatoo::search_from_keyword(text, app.search.engines);
+  std::string ref = xanatoo::search_from_keyword(text, app.search.active);
   if (ref.empty()) return {};
   // "w notes.md" must still open a file of that name.
   std::error_code ec;

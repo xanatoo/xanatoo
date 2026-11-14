@@ -204,6 +204,26 @@ void draw_engine_tile(ImDrawList* draw, ImVec2 p, float side,
   draw->AddText(font, size, ImVec2(at.x + 0.6f, at.y), ink, text.c_str());
 }
 
+// One checkbox per engine, on = in the search menu; a click issues
+// ToggleSearchEngine (saved in view.conf). The note says why one is off
+// by default.
+void search_engine_checkboxes(const xanatoo::UiState& state,
+                              xanatoo::UiCommand& cmd, std::string& arg) {
+  for (const xanatoo::UiSearchEngine& e : state.search_engines) {
+    bool on = e.on;
+    ImGui::PushID(e.id.c_str());
+    if (ImGui::Checkbox(e.name.c_str(), &on)) {
+      cmd = xanatoo::UiCommand::ToggleSearchEngine;
+      arg = e.id;
+    }
+    if (!e.note.empty()) {
+      ImGui::SameLine();
+      ImGui::TextDisabled("(%s)", e.note.c_str());
+    }
+    ImGui::PopID();
+  }
+}
+
 // Go button at the right end of an address / search field: a green
 // triangle, Enter for the mouse. An item without layout (ItemAdd), so it can
 // sit inside the field's frame.
@@ -1624,8 +1644,15 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       ImGui::SetNextWindowPos(ImVec2(field_end.x, field_end.y + 2.f * scale_),
                               ImGuiCond_Always, ImVec2(1.f, 0.f));
       if (ImGui::BeginPopup("##search_engines")) {
+        // First, so a long list does not hide it below the fold.
+        if (ImGui::BeginMenu("Choose engines")) {
+          search_engine_checkboxes(state, cmd, result.arg);
+          ImGui::EndMenu();
+        }
+        ImGui::Separator();
         const float side = ImGui::GetTextLineHeight() + 4.f * scale_;
         for (const UiSearchEngine& e : state.search_engines) {
+          if (!e.on) continue;
           std::string label = e.name;
           if (!e.keyword.empty()) label += "   (" + e.keyword + ")";
           ImGui::PushID(e.id.c_str());
@@ -3102,6 +3129,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::EndCombo();
       }
       ImGui::TextDisabled("32 px icons at the platform default; text scales too.");
+      ImGui::SeparatorText("Search engines");
+      if (ImGui::TreeNode("Engines in the search menu")) {
+        search_engine_checkboxes(state, cmd, result.arg);
+        ImGui::TreePop();
+      }
+      ImGui::TextDisabled("  Engines that need an API key or refuse anonymous "
+                          "use start off");
       ImGui::SeparatorText("Accounts and APIs");
       ImGui::TextWrapped("API keys are managed in a separate dialog, not in "
                          "view.conf or a document.");

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace xanatoo {
 
@@ -47,6 +48,9 @@ struct ViewSettings {
   std::string style = "default";
   // Engine of the search bar (search.hpp id).
   std::string search_engine = "wikipedia";
+  // Engines the user switched on / off against their default
+  // (SearchEngine::enabled); view.conf keeps comma-separated ids.
+  std::vector<std::string> search_on, search_off;
   // Multiplier on the platform's normal chrome scale; 1 = platform default.
   float ui_scale = 1.f;
 

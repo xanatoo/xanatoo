@@ -94,9 +94,47 @@ const SearchEngine* find_engine(const std::vector<SearchEngine>& engines,
 
 }  // namespace
 
+namespace {
+
+// Built-ins that start switched off (checked 2026-11-14): they need
+// credentials (Edit → Credentials) or the service refuses anonymous clients.
+const std::pair<std::string_view, std::string_view> kOffByDefault[] = {
+    {"igdb", "needs a Twitch client ID and token"},
+    {"rawg", "needs an API key"},
+    {"tmdb-movie", "needs an API key"},
+    {"tmdb-tv", "needs an API key"},
+    {"discogs", "needs a token"},
+    {"googlebooks", "shared anonymous quota exhausted (HTTP 429)"},
+    {"loc-books", "blocked (HTTP 403)"},
+    {"loc-newspapers", "blocked (HTTP 403)"},
+    {"loc-films", "blocked (HTTP 403)"},
+    {"loc-music", "blocked (HTTP 403)"},
+    {"reddit", "blocked (HTTP 403), RSS feeds discontinued"},
+};
+
+std::vector<SearchEngine> builtin_table();
+
+}  // namespace
+
 const std::vector<SearchEngine>& builtin_engines() {
+  static const std::vector<SearchEngine> k = [] {
+    std::vector<SearchEngine> v = builtin_table();
+    for (SearchEngine& e : v)
+      for (const auto& [id, why] : kOffByDefault)
+        if (e.id == id) {
+          e.enabled = false;
+          e.note = std::string(why);
+        }
+    return v;
+  }();
+  return k;
+}
+
+namespace {
+
+std::vector<SearchEngine> builtin_table() {
   // id, name, keyword, badge, url, kind, space, sites
-  static const std::vector<SearchEngine> k = {
+  return {
       {"wikipedia", "Wikipedia", "w", "W",
        "https://en.wikipedia.org/w/api.php?action=query&list=search"
        "&srsearch=%s&srlimit=30&format=json&formatversion=2",
@@ -146,7 +184,7 @@ const std::vector<SearchEngine>& builtin_engines() {
       {"steam", "Steam games", "st", "St",
        "https://store.steampowered.com/api/storesearch/?term=%s&l=english&cc=us",
        "steam", "+", {"store.steampowered.com", "steamcommunity.com"}},
-      {"igdb", "IGDB games (Twitch token)", "ig", "IG",
+      {"igdb", "IGDB games", "ig", "IG",
        "https://api.igdb.com/v4/games?search=%s", "igdb", "+", {"igdb.com"}},
       {"anilist-anime", "AniList anime", "anime", "An",
        "https://graphql.anilist.co/?search=%s", "anilist-anime", "+",
@@ -154,13 +192,13 @@ const std::vector<SearchEngine>& builtin_engines() {
       {"anilist-manga", "AniList manga", "manga", "Mn",
        "https://graphql.anilist.co/?search=%s", "anilist-manga", "+",
        {"anilist.co"}},
-      {"rawg", "RAWG games (API key)", "rw", "Rw",
+      {"rawg", "RAWG games", "rw", "Rw",
        "https://api.rawg.io/api/games?search=%s&page_size=25", "rawg", "+",
        {"rawg.io"}},
-      {"tmdb-movie", "TMDB movies (API key)", "tm", "Tm",
+      {"tmdb-movie", "TMDB movies", "tm", "Tm",
        "https://api.themoviedb.org/3/search/movie?query=%s", "tmdb", "+",
        {"themoviedb.org"}},
-      {"tmdb-tv", "TMDB series (API key)", "tt", "Tt",
+      {"tmdb-tv", "TMDB series", "tt", "Tt",
        "https://api.themoviedb.org/3/search/tv?query=%s", "tmdb", "+",
        {"themoviedb.org"}},
       {"ifdb", "IFDB interactive fiction", "if", "IF",
@@ -193,7 +231,7 @@ const std::vector<SearchEngine>& builtin_engines() {
       {"gcd", "Grand Comics Database series", "gcd", "GCD",
        "https://www.comics.org/api/series/name/%s/", "gcd", "%20",
        {"comics.org"}},
-      {"discogs", "Discogs releases (token)", "dg", "Dg",
+      {"discogs", "Discogs releases", "dg", "Dg",
        "https://api.discogs.com/database/search?q=%s&type=release&per_page=25",
        "discogs", "+", {"discogs.com"}},
       {"standard-ebooks", "Standard Ebooks", "se", "SE",
@@ -242,7 +280,24 @@ const std::vector<SearchEngine>& builtin_engines() {
        "https://html.duckduckgo.com/html/?q=%s", "page", "+",
        {"duckduckgo.com"}},
   };
-  return k;
+}
+
+}  // namespace
+
+bool engine_on(const SearchEngine& e, const std::vector<std::string>& on,
+               const std::vector<std::string>& off) {
+  if (std::find(off.begin(), off.end(), e.id) != off.end()) return false;
+  if (std::find(on.begin(), on.end(), e.id) != on.end()) return true;
+  return e.enabled;
+}
+
+std::vector<SearchEngine> engines_on(const std::vector<SearchEngine>& engines,
+                                     const std::vector<std::string>& on,
+                                     const std::vector<std::string>& off) {
+  std::vector<SearchEngine> out;
+  for (const SearchEngine& e : engines)
+    if (engine_on(e, on, off)) out.push_back(e);
+  return out;
 }
 
 uint32_t engine_color(const SearchEngine& e) {
@@ -363,6 +418,15 @@ std::vector<SearchEngine> parse_engines(std::string_view source,
           warn("engine " + e.id + ": unknown kind " + val);
       }
       else if (key == "space") e.space = val;
+      else if (key == "enabled") {
+        const std::string v = ascii_lower(val);
+        if (v == "yes" || v == "true" || v == "1" || v == "on")
+          e.enabled = true;
+        else if (v == "no" || v == "false" || v == "0" || v == "off")
+          e.enabled = false;
+        else
+          warn("engine " + e.id + ": enabled needs yes or no, not " + val);
+      }
       else if (key == "color") {
         if (auto c = parse_hex_color(val); c && *c != 0)
           e.color = *c;
