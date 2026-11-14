@@ -191,8 +191,10 @@ A figure is an image with a caption, kept together as one block.
 A **collection** is an ordered set of images or figures, shown as cards.
 How it looks is a view setting: right-click a card, or use **View →
 Collection**, to switch between grid, list and full size, or to change the
-card size and sort order. Click a card to view the images fullscreen: ←/→
-steps, **F** toggles fullscreen, **Esc** closes. Thumbnails are never
+card size and sort order. Click a card to view the image on its own (the
+address gets `//gallery//item:N`): ←/→ steps, the wheel or a pinch zooms,
+**Esc** goes back to the grid of all the collection's images. **View → Image
+Gallery** shows every image of a page that way. Thumbnails are never
 stored in the document. They come from the shared thumtoo tile cache.
 
 :::collection

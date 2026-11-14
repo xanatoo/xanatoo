@@ -169,6 +169,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         default: break;
       }
   }
+  ui_state.gallery = pane_gallery(focused_pane(app)) != nullptr;
   ui_state.split = app.split;
   ui_state.trail = app.split && app.tile_mode == TileMode::Trail;
   ui_state.tiles_stacked = app.tile_axis == TileAxis::Rows;
@@ -719,7 +720,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::CloseTab || c == C::NextTab || c == C::PrevTab ||
         c == C::SelectTab || c == C::ReorderTabs || c == C::TearTab || c == C::PopOut || c == C::PopIn ||
         c == C::ViewSourceRendered || c == C::ViewSourceRaw ||
-        c == C::ViewSourceSexpr || c == C::ViewSourceXml || c == C::Save ||
+        c == C::ViewSourceSexpr || c == C::ViewSourceXml ||
+        c == C::ToggleGallery || c == C::Save ||
         c == C::Publish || c == C::EditLocalCopy || c == C::ViewOriginal ||
         c == C::SaveAs || c == C::ExportSexpr || c == C::ExportXml ||
         c == C::ExportMarkdown ||
@@ -745,7 +747,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ToggleReader || c == C::ToggleReaderDefault ||
         c == C::TogglePaged || c == C::TogglePagedDefault ||
         c == C::PageColumns ||
-        c == C::CollectionView ||
+        c == C::CollectionView || c == C::ToggleGallery ||
         c == C::ToggleHelp || c == C::ToggleVirtualKeyboard ||
         c == C::OpenFormatDoc || c == C::OpenSemanticDoc ||
         c == C::OpenInWindow || c == C::OpenExample || c == C::LoadDiffDemo ||
@@ -1493,6 +1495,29 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       apply_locator(app, app.focus, std::move(loc));
       if (!previous.empty())
         push_nav_history(app, app.focus, pane_address(app, p));
+      break;
+    }
+    case C::ToggleGallery: {
+      // In: the images of what the view shows (its cut). Out: that again.
+      xanatoo::Locator loc = xanatoo::parse_locator(pane_address(app, p));
+      if (loc.base.empty()) break;
+      const auto g = std::find_if(
+          loc.pipes.begin(), loc.pipes.end(), [](const xanatoo::Selector& s) {
+            return s.kind == xanatoo::SelectorKind::Gallery ||
+                   xanatoo::is_source_pipe(s.kind);
+          });
+      const bool in = pane_gallery(p) != nullptr;
+      const bool gallery =
+          g != loc.pipes.end() && g->kind == xanatoo::SelectorKind::Gallery;
+      loc.pipes.erase(g, loc.pipes.end());
+      loc.point.reset();
+      if (!in) {
+        loc.pipes.push_back({xanatoo::SelectorKind::Gallery, {}});
+      } else if (gallery && !loc.pipes.empty()) {
+        loc.point = std::move(loc.pipes.back());  // the page, at its scope
+        loc.pipes.pop_back();
+      }
+      navigate_pane(app, app.focus, xanatoo::format_locator(loc), true);
       break;
     }
     case C::Publish:
@@ -3946,6 +3971,12 @@ static bool update_pane_raster(App& app, int i, int w, int h, float scroll) {
 // Text, selection and the three layers above, then the scrollbar.
 void draw_pane(App& app, int i) {
   Pane& pane = app.panes[i];
+  if (pane_image_view(pane)) {  // `//gallery//item:N`: the picture alone
+    draw_gallery_image(app, i);
+    draw_preview_badge(app, i);
+    draw_load_indicator(app, i);
+    return;
+  }
   pane.scroll_y = std::min(pane.scroll_y, pane_max_scroll(app, pane));
   // Paged: always at the top of a spread.
   if (pane.pages.on)
@@ -4646,9 +4677,6 @@ void run_frame(App& app) {
   draw_status_bar(app);
   draw_dock_preview(app);
   draw_hover_tooltip(app);
-  // The gallery covers document chrome, but ImGui menus/windows must remain
-  // on top so they can be seen and interacted with while the lightbox is open.
-  draw_lightbox(app);
   present_frame(app);
 }
 

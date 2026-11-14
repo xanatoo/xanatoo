@@ -68,6 +68,9 @@ Export via *File → Export as S-expression…* or *Export as Markdown…*.
 - **Ctrl+K** — Search bar (hidden by default; engine button + field,
   Enter searches, Esc closes). **Ctrl+L** takes `w xanadu` / `ax electron
   spin` too (engine keywords, see the Directory's Search page)
+- **Ctrl+Alt+I** — Image gallery of the page (or the cut): all its images as
+  cards; click one to view it alone (←/→ step, wheel / pinch zoom, Esc back
+  to the grid, again to the page)
 - **Ctrl+Alt+P** — Page navigation: the `<nav>` / side bar parts of a web
   page in a dockable panel (↑/↓ select, Enter follows, Esc closes)
 - **Ctrl+Alt+M** — Site map of the current web page's site (from its

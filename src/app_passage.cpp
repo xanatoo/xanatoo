@@ -155,6 +155,13 @@ std::optional<xanatoo::SelectorKind> source_pipe(const xanatoo::Locator& loc) {
   return std::nullopt;
 }
 
+bool has_gallery_pipe(const xanatoo::Locator& loc) {
+  return std::any_of(loc.pipes.begin(), loc.pipes.end(),
+                     [](const xanatoo::Selector& s) {
+                       return s.kind == xanatoo::SelectorKind::Gallery;
+                     });
+}
+
 std::optional<std::string> raw_source_of(const DocBuffer& b) {
   if (b.raw_source) return b.raw_source;
   // A local file's raw view reflects the bytes currently on disk, not the
@@ -192,6 +199,7 @@ void reset_pane_locator(Pane& p) {
   p.cut = xanatoo::INVALID_NODE;
   p.marks.clear();
   p.section_focus = false;
+  p.gallery = {};
 }
 
 xanatoo::NodeId pane_cut(App& app, Pane& p) {
@@ -247,6 +255,7 @@ void apply_locator(App& app, int pi, xanatoo::Locator loc) {
     }
     p.source_doc = build_source_view(buf(app, p.buf), *source);
     p.source_buf = p.buf;
+    p.gallery = {};
     loc.base.clear();
     p.locator = std::move(loc);
     p.locator_buf = p.buf;
@@ -263,10 +272,15 @@ void apply_locator(App& app, int pi, xanatoo::Locator loc) {
     app.needs_layout = true;
     return;
   }
+  if (has_gallery_pipe(loc)) {
+    apply_gallery_locator(app, pi, std::move(loc), /*keep=*/false);
+    return;
+  }
   const bool was_source = p.source_buf == p.buf && p.source_doc.has_value();
   if (was_source) {
     p.source_doc.reset();
     p.source_buf = kNoBuffer;
+    p.gallery = {};
     p.sel = {};
     p.scroll_y = 0.f;
     p.view_anchor.reset();
@@ -317,8 +331,122 @@ void apply_locator(App& app, int pi, xanatoo::Locator loc) {
       app.focus = pi;  // expand_ancestors_for_node works on the focused pane
       expand_ancestors_for_node(app, dest.node);
       app.focus = saved;
+      // A passage without text (a collection of images) holds no caret: the
+      // view goes to its box, the caret stays where it is valid.
+      const xanatoo::Selection valid = p.sel;
+      if (!within(d, p.sel.focus.node, target)) {
+        // force_full_pane_layout would move the caret back out of it.
+        if (p.layout.boxes.empty()) force_full_pane_layout(app, p);
+        p.sel = {dest, dest};
+      }
       scroll_caret_to_top(app, p);
+      p.sel = valid;
     }
+  }
+}
+
+std::vector<xanatoo::GalleryItem> page_gallery_items(
+    App& app, const xanatoo::Document& d, xanatoo::NodeId scope) {
+  std::vector<xanatoo::GalleryItem> items = xanatoo::gallery_items(d, scope);
+  if (!node_alive(d, scope) ||
+      d.get(scope).kind != xanatoo::NodeKind::Collection)
+    return items;
+  // A collection's gallery steps through its cards as the view sorts them.
+  const auto it = app.collection_views.find(scope);
+  const xanatoo::CollectionSort sort =
+      it != app.collection_views.end() ? it->second.sort
+                                       : xanatoo::CollectionSort::Document;
+  if (sort == xanatoo::CollectionSort::Document) return items;
+  std::vector<xanatoo::GalleryItem> sorted;
+  for (const auto& card : xanatoo::collection_items(d, scope, sort)) {
+    const int i = xanatoo::gallery_index_of(items, card.image);
+    if (i >= 0) sorted.push_back(items[static_cast<size_t>(i)]);
+  }
+  for (const auto& item : items)  // images that are no cards, after them
+    if (xanatoo::gallery_index_of(sorted, item.src) < 0)
+      sorted.push_back(item);
+  return sorted;
+}
+
+void apply_gallery_locator(App& app, int pi, xanatoo::Locator loc, bool keep) {
+  Pane& p = app.panes[pi];
+  const xanatoo::Document& d = buf(app, p.buf).doc;
+  const auto g = std::find_if(loc.pipes.begin(), loc.pipes.end(),
+                              [](const xanatoo::Selector& s) {
+                                return s.kind == xanatoo::SelectorKind::Gallery;
+                              });
+  // Before `//gallery`: the cut whose images it shows. After it: at most
+  // one `item:N`.
+  xanatoo::Locator scope;
+  scope.pipes.assign(loc.pipes.begin(), g);
+  std::vector<xanatoo::Selector> tail(g + 1, loc.pipes.end());
+  std::string lost;
+  const Resolved r = resolve_locator(d, scope, lost);
+  if (!lost.empty()) flash_status(app, "Passage not found: " + lost);
+
+  GalleryView old = std::move(p.gallery);
+  const bool same_view = keep && old.buf == p.buf;
+  GalleryView& gv = p.gallery;
+  gv = {};
+  gv.buf = p.buf;
+  gv.items = page_gallery_items(app, d, r.cut);
+  std::string title = d.meta.title.empty() ? "Images" : "Images: " + d.meta.title;
+  p.source_doc = xanatoo::gallery_document(gv.items, title, &gv.cards);
+  p.source_buf = p.buf;
+
+  if (!tail.empty()) {
+    const int i = tail.front().kind == xanatoo::SelectorKind::Item
+                      ? xanatoo::gallery_item_index(tail.front().value,
+                                                    gv.items.size())
+                      : -1;
+    if (i < 0) {
+      flash_status(app, "No such image: " + tail.front().value);
+      tail.clear();
+    } else {
+      gv.index = i;
+      tail.resize(1);
+      tail.front().value = xanatoo::gallery_item_value(i);
+    }
+  }
+  int point = -1;
+  if (loc.point) {
+    point = loc.point->kind == xanatoo::SelectorKind::Item
+                ? xanatoo::gallery_item_index(loc.point->value, gv.items.size())
+                : -1;
+    if (point < 0 || gv.index >= 0) loc.point.reset();
+  }
+  if (same_view && old.index == gv.index) {
+    gv.scale = old.scale;
+    gv.pan_x = old.pan_x;
+    gv.pan_y = old.pan_y;
+  }
+
+  loc.base.clear();
+  loc.pipes = scope.pipes;
+  loc.pipes.push_back({xanatoo::SelectorKind::Gallery, {}});
+  loc.pipes.insert(loc.pipes.end(), tail.begin(), tail.end());
+  p.locator = std::move(loc);
+  p.locator_buf = p.buf;
+  p.cut = xanatoo::INVALID_NODE;
+  p.marks.clear();
+  p.section_focus = false;
+  app.needs_layout = true;
+  if (same_view) return;  // the grid keeps its scroll position
+  p.sel = {};
+  xanatoo::ensure_valid_caret(*p.source_doc, p.sel.focus);
+  p.sel.anchor = p.sel.focus;
+  p.scroll_y = 0.f;
+  p.view_anchor.reset();
+  p.layout = {};
+  drop_height_hints_for_buf(app, p.buf);
+  if (point >= 0 && static_cast<size_t>(point) < gv.cards.size()) {
+    // Back from an image: the grid at its card.
+    const xanatoo::Selection home = p.sel;
+    force_full_pane_layout(app, p);
+    p.sel.focus = {gv.cards[static_cast<size_t>(point)], 0, 0};
+    p.sel.anchor = p.sel.focus;
+    scroll_caret_to_top(app, p);
+    p.sel = home;  // an image holds no caret
   }
 }
 
@@ -326,6 +454,7 @@ void set_pane_cut(App& app, Pane& p, xanatoo::NodeId node) {
   if (pane_cut(app, p) == node && !p.source_doc) return;
   p.source_doc.reset();
   p.source_buf = kNoBuffer;
+  p.gallery = {};
   p.marks.clear();
   p.locator = {};
   p.cut = node;
@@ -345,6 +474,11 @@ void clear_pane_point(App& app, Pane& p) {
 
 void refresh_pane_locator(App& app, Pane& p) {
   if (!locator_live(p)) return;
+  if (has_gallery_pipe(p.locator) && !source_pipe(p.locator)) {
+    const int pi = static_cast<int>(&p - app.panes);
+    apply_gallery_locator(app, pi, p.locator, /*keep=*/true);
+    return;
+  }
   if (const auto source = source_pipe(p.locator)) {
     p.source_doc = build_source_view(buf(app, p.buf), *source);
     p.source_buf = p.buf;

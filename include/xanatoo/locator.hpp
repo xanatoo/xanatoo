@@ -20,6 +20,8 @@ namespace xanatoo {
 enum class SelectorKind : uint8_t {
   Id, Path, Text, Rect, At,
   SourceRaw, SourceSexpr, SourceXml,  // payload-free document-view pipes
+  Gallery,  // payload-free: the images of what the pipes before it show
+  Item,     // item:N (1-based) of a gallery, after `//gallery`
 };
 
 inline bool is_source_pipe(SelectorKind kind) {
@@ -48,15 +50,18 @@ struct Locator {
 };
 
 // Never fails: without selectors the whole input is the base. Only known
-// selector names or source-raw/source-sexpr/source-xml at the end are taken;
+// selector names or source-raw/source-sexpr/source-xml/gallery at the end
+// are taken;
 // thumtoo pipes
 // (`//page:12`) and any other `//` stay in the base.
 Locator parse_locator(std::string_view address);
 std::string format_locator(const Locator& loc);
 
 // One step towards the whole document: drops the point, else the last pipe
-// becomes the point (the context of a cut, the cut still marked). False
-// without selectors.
+// becomes the point (the context of a cut, the cut still marked). A view
+// pipe (source-*) is dropped; so is a gallery, with its `#item:` point, and
+// what it was the gallery of becomes the point.
+// False without selectors.
 bool locator_up(Locator& loc);
 
 enum class Resolve : uint8_t { Exact, Lost };

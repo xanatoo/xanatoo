@@ -165,6 +165,7 @@ add_executable(xanatoo
   src/app_pages.cpp
   src/paginate.cpp
   src/app_collection.cpp
+  src/app_gallery.cpp
   src/app_drafts.cpp
   src/app_revisions.cpp
   src/app_nostr.cpp
@@ -184,6 +185,7 @@ add_executable(xanatoo
   src/parse.cpp
   src/xml.cpp
   src/source_view.cpp
+  src/gallery.cpp
   src/org.cpp
   src/editor.cpp
   src/images.cpp
@@ -593,6 +595,7 @@ add_executable(xanatoo_tests
   src/parse.cpp
   src/xml.cpp
   src/source_view.cpp
+  src/gallery.cpp
   src/org.cpp
   src/editor.cpp
   src/reddit.cpp

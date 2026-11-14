@@ -8,6 +8,26 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Gallery as a `//gallery` view pipe
+
+- The full-window Lightbox overlay is gone. `page//gallery` shows every image
+  of the page (or of the cut before the pipe: `page//id:photos//gallery`) as a
+  grid of cards in the pane (derived Collection in `Pane::source_doc`);
+  `page//gallery//item:N` shows one image filling the pane with view-local
+  zoom / pan (`Pane::gallery`). Pure item extraction / grid / item index in
+  `gallery.hpp` (Image nodes with linked originals, Figure captions, inline
+  image spans, image links, bare image URLs), unit-tested; `SelectorKind::
+  Gallery` / `Item` in `locator.hpp`, with `locator_up` going image → grid at
+  `#item:N` → page at the scope.
+- Clicks on cards, images and image links open the gallery item in the same
+  view with a history entry; stepping replaces it (Back leaves the gallery).
+  Esc goes up; View → Image Gallery (Ctrl+Alt+I) toggles it. Split views and
+  document windows each have their own. Touch: one-finger pan, swipe steps,
+  pinch zoom (untested on a touchscreen). Generic `apply_locator` now scrolls
+  to textless targets (collections) too.
+- Verified under Xvfb: grid, card → item, step / zoom, Esc chain, scoped
+  gallery, Back / Forward, toggle, split.
+
 ## Status (2026-11-14) — Image viewer pinch zoom actually reaches the viewer
 
 - `lightbox_event` consumed FingerDown/Motion/Up, so `handle_event` returned

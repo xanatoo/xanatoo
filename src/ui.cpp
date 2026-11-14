@@ -2378,6 +2378,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           cmd = UiCommand::ViewSourceXml;
         ImGui::EndMenu();
       }
+      if (ImGui::MenuItem("Image Gallery", "Ctrl+Alt+I", state.gallery,
+                          state.has_path || state.gallery))
+        cmd = UiCommand::ToggleGallery;
       ImGui::Separator();
       if (ImGui::MenuItem("Focus current section", "Ctrl+Alt+F", state.section_focus))
         cmd = UiCommand::ToggleSectionFocus;

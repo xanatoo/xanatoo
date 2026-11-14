@@ -21,6 +21,7 @@
 #include "xanatoo/json_min.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/locator.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/nostr_relays.hpp"
 #include "xanatoo/nostr_store.hpp"
@@ -2747,6 +2748,111 @@ std::vector<xanatoo::NodeId> nodes_of(const xanatoo::Document& doc,
   for (const auto& n : doc.nodes)
     if (n.id != xanatoo::INVALID_NODE && n.kind == kind) out.push_back(n.id);
   return out;
+}
+
+
+void test_gallery() {
+  using xanatoo::Document;
+  using xanatoo::format_locator;
+  using xanatoo::InlineKind;
+  using xanatoo::InlineSpan;
+  using xanatoo::NodeKind;
+  using xanatoo::parse_locator;
+  using xanatoo::SelectorKind;
+
+  // Address: `//gallery` and `//item:N`, scoped by the pipes before it.
+  xanatoo::Locator l = parse_locator("book.md//id:photos//gallery//item:3");
+  EXPECT_EQ(l.base, "book.md");
+  EXPECT_EQ(l.pipes.size(), 3u);
+  EXPECT(l.pipes[1].kind == SelectorKind::Gallery);
+  EXPECT(l.pipes[2].kind == SelectorKind::Item);
+  EXPECT_EQ(l.pipes[2].value, "3");
+  EXPECT_EQ(format_locator(l), "book.md//id:photos//gallery//item:3");
+  // Up: image → grid at its card → the cut it was the gallery of.
+  EXPECT(xanatoo::locator_up(l));
+  EXPECT_EQ(format_locator(l), "book.md//id:photos//gallery#item:3");
+  EXPECT(xanatoo::locator_up(l));
+  EXPECT_EQ(format_locator(l), "book.md#photos");
+  l = parse_locator("https://example.org/a//gallery");
+  EXPECT_EQ(l.base, "https://example.org/a");
+  EXPECT(l.pipes.size() == 1 && l.pipes[0].kind == SelectorKind::Gallery);
+  EXPECT(xanatoo::locator_up(l));
+  EXPECT_EQ(format_locator(l), "https://example.org/a");
+  // Not a selector: stays in the base.
+  EXPECT_EQ(parse_locator("https://example.org/gallery").base,
+            "https://example.org/gallery");
+
+  EXPECT_EQ(xanatoo::gallery_item_index("1", 3), 0);
+  EXPECT_EQ(xanatoo::gallery_item_index("3", 3), 2);
+  EXPECT_EQ(xanatoo::gallery_item_index("4", 3), -1);
+  EXPECT_EQ(xanatoo::gallery_item_index("0", 3), -1);
+  EXPECT_EQ(xanatoo::gallery_item_index("2x", 3), -1);
+  EXPECT_EQ(xanatoo::gallery_item_value(0), "1");
+
+  // Items: image nodes (linked original first), figure captions, inline
+  // images, image links, bare image URLs in text; each picture once.
+  Document d;
+  const auto root = d.create(NodeKind::Document);
+  const auto fig = d.create(NodeKind::Figure, root);
+  const auto img = d.create(NodeKind::Image, fig);
+  d.get(img).src = "thumb.jpg";
+  d.get(img).alt = "alt";
+  InlineSpan orig;
+  orig.kind = InlineKind::Link;
+  orig.href = "full.jpg";
+  d.get(img).spans.push_back(orig);
+  const auto cap = d.create(NodeKind::Caption, fig);
+  d.append_text(cap, "A caption");
+  const auto para = d.create(NodeKind::Paragraph, root);
+  d.append_text(para, "see ");
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = "https://x.org/b.png";
+  link.text = "[image: B]";
+  d.get(para).spans.push_back(link);
+  d.get(para).spans.push_back(xanatoo::inline_image("c.gif", "C"));
+  d.get(para).spans.push_back(link);  // again: once only
+  d.append_text(para, " and https://x.org/d.webp, or https://x.org/page");
+  InlineSpan page_link;
+  page_link.kind = InlineKind::Link;
+  page_link.href = "https://x.org/page.html";
+  page_link.text = "page";
+  d.get(para).spans.push_back(page_link);
+  const auto code = d.create(NodeKind::CodeBlock, root);
+  d.append_text(code, "https://x.org/no.png");
+
+  const auto items = xanatoo::gallery_items(d, xanatoo::INVALID_NODE);
+  EXPECT_EQ(items.size(), 4u);
+  if (items.size() == 4u) {
+    EXPECT_EQ(items[0].src, "full.jpg");
+    EXPECT_EQ(items[0].thumb, "thumb.jpg");
+    EXPECT_EQ(items[0].caption, "A caption");
+    EXPECT_EQ(items[0].node, img);
+    EXPECT_EQ(items[1].src, "https://x.org/b.png");
+    EXPECT_EQ(items[1].caption, "B");
+    EXPECT_EQ(items[2].src, "c.gif");
+    EXPECT_EQ(items[2].caption, "C");
+    EXPECT_EQ(items[3].src, "https://x.org/d.webp");
+  }
+  EXPECT_EQ(xanatoo::gallery_index_of(items, img), 0);
+  EXPECT_EQ(xanatoo::gallery_index_of(items, std::string_view("thumb.jpg")), 0);
+  EXPECT_EQ(xanatoo::gallery_index_of(items, std::string_view("c.gif")), 2);
+  EXPECT_EQ(xanatoo::gallery_index_of(items, std::string_view("zz.png")), -1);
+  // Scope: only below the node.
+  EXPECT_EQ(xanatoo::gallery_items(d, para).size(), 3u);
+
+  std::vector<xanatoo::NodeId> cards;
+  const Document g = xanatoo::gallery_document(items, "Images", &cards);
+  EXPECT_EQ(cards.size(), items.size());
+  if (!cards.empty()) {
+    const auto& card = g.get(cards[0]);
+    EXPECT(card.kind == NodeKind::Image);
+    EXPECT_EQ(card.src, "thumb.jpg");
+    EXPECT(g.get(card.parent).kind == NodeKind::Collection);
+  }
+  const Document empty = xanatoo::gallery_document({}, "Images", &cards);
+  EXPECT(cards.empty());
+  EXPECT(empty.root != xanatoo::INVALID_NODE);
 }
 
 void test_locator() {
@@ -5768,6 +5874,7 @@ int main() {
   test_style_assignments();
   test_footnotes();
   test_locator();
+  test_gallery();
   test_text_selectors();
   test_bookmark_lines();
   test_math();

@@ -198,6 +198,7 @@ static void on_mousewheel(App& app, SDL_Event& ev, bool imgui_mouse,
   if (imgui_mouse) return;
   if (myw >= app.win_h - status_bar_h) return;
   int pi = pane_at(app, static_cast<float>(mxw), static_cast<float>(myw));
+  if (gallery_wheel(app, pi, mxw, myw, ev.wheel.y)) return;
   Pane& p = app.panes[pi];
   if (p.pages.on) {  // a notch turns the page (not faster than a flip a beat)
     const Uint32 now = xanatoo::sdl::ticks();
@@ -292,6 +293,8 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     float mx = static_cast<float>(x);
     const int at = pane_at(app, mx, static_cast<float>(y));
     float my = content_y(app, static_cast<float>(y), at);
+    // A single gallery image: edge zones and panning, nothing of the page.
+    if (gallery_pointer_down(app, at, x, y, SDL_BUTTON_LEFT)) return;
 
     // Note tabs open their independent layer editor without touching text.
     if (at >= 0)
@@ -818,6 +821,12 @@ static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
       pointer_left_down(app, ev.button.x, ev.button.y, imgui_mouse);
       break;
     case SDL_BUTTON_MIDDLE:
+      if (!imgui_mouse && !over_float_chrome(app, ev.button.x, ev.button.y) &&
+          gallery_pointer_down(
+              app, pane_at(app, static_cast<float>(ev.button.x),
+                           static_cast<float>(ev.button.y)),
+              ev.button.x, ev.button.y, SDL_BUTTON_MIDDLE))
+        break;
       mouse_middle_down(app, ev, imgui_mouse);
       break;
     case SDL_BUTTON_RIGHT:
@@ -829,6 +838,7 @@ static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
 }
 
 void pointer_left_up(App& app, int x, int y) {
+  gallery_pointer_up(app);
   dock_split_release(app);
   float_release(app, x, y);
   if (app.dragging_block && app.drag_block_id != xanatoo::INVALID_NODE &&
@@ -881,6 +891,9 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
     if (app.page_slider_pane >= 0 && page_pointer_drag(app, mx_i, my_i)) return;
     // Soft-window interactions handled; rest of motion is for panes.
     if (imgui_mouse && !app.dragging_diff_overview) return;
+    if (!app.dragging_sel && !app.dragging_scroll && !app.dragging_split &&
+        gallery_pointer_motion(app, mx_i, my_i))
+      return;
 
     // Status bar is not part of the document surface.
     if (my_i >= app.win_h - status_bar_h && !app.dragging_sel &&
@@ -1893,6 +1906,16 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (!status_prompt && app.key_focus == KeyFocus::Panel)
     panel_key_unused(app, ev, ctrl, alt);
 
+  // Gallery views: a single image steps / zooms, Esc goes up a level.
+  if (!status_prompt && app.key_focus == KeyFocus::Document &&
+      gallery_key(app, xanatoo::sdl::keycode(ev), ctrl, alt, shift))
+    return;
+  if (!status_prompt && ctrl && alt && !shift &&
+      xanatoo::sdl::keycode(ev) == SDLK_i) {
+    execute_command(app, UiCommand::ToggleGallery);
+    return;
+  }
+
   // Paged reading, read-only: ← → turn the page like PgUp / PgDn.
   if (!status_prompt && browsing(app) && focused_pane(app).pages.on && !ctrl &&
       !alt && !shift &&
@@ -2737,14 +2760,13 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
 void handle_event(App& app, SDL_Event& ev) {
   // Android Back (trapped, see platform_pre_init) acts like Escape
-  // everywhere: lightbox, ImGui popups, prompts, panels. The scancode stays
+  // everywhere: gallery images, ImGui popups, prompts, panels. The scancode stays
   // AC_BACK, so where Escape has nothing to close Back steps history back.
   if ((xanatoo::sdl::event_kind(ev) == xanatoo::sdl::EventKind::KeyDown ||
        xanatoo::sdl::event_kind(ev) == xanatoo::sdl::EventKind::KeyUp) &&
       xanatoo::sdl::keycode(ev) == SDLK_AC_BACK) {
     xanatoo::sdl::set_keycode(ev, SDLK_ESCAPE);
   }
-  if (lightbox_event(app, ev)) return;  // fullscreen viewer owns the input
   // An obscured ImGui form can otherwise receive the down/wheel before the
   // next frame's native panel order is synchronized. Do still forward button
   // releases so an ImGui drag cannot be left held when a panel crosses it.

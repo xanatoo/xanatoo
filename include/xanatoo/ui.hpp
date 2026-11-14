@@ -212,6 +212,7 @@ enum class UiCommand {
   ViewSourceRaw,      // focused document's raw source (if available)
   ViewSourceSexpr,    // focused document's S-expression representation
   ViewSourceXml,      // focused document's XML representation
+  ToggleGallery,      // focused view: `//gallery` of the page, or back out
   ToggleReader,  // focused view: hide / show the page chrome (nav, aside, …)
   TogglePaged,        // focused view: scrolling ↔ ebook style pages (F8)
   TogglePagedDefault, // Preferences: paged reading for new views
@@ -447,6 +448,7 @@ struct UiState {
   std::string up_url;  // parent page of the focused one ("" at the top)
   bool native_view = false;  // focused page is a native ref (alternate = web)
   std::string source_mode;  // empty = rendered, otherwise source-raw/sexpr/xml
+  bool gallery = false;      // the focused view shows `//gallery`
   // Caret / right-click inside a Collection: its current view for the
   // Collection menus (layout 0 grid, 1 list, 2 full; sort 0 doc, 1 name,
   // 2 name reversed; card size in px).

@@ -199,7 +199,40 @@ same thing, generalised:
 - Text ranges (slice 4): blocks from start to end, clipping the first and last block at
   the carets (layout input: `Extent`, not `NodeId`).
 - Images (slice 5): a source rect at draw time, in the pane, on the Image node and in
-  the `Lightbox`. Same decode and tile cache, no new image.
+  the gallery's single-image view. Same decode and tile cache, no new image.
+
+**Gallery.** `//gallery` is a view pipe like `//source-xml`: the pane shows
+the images of what the pipes before it select (the whole page without any)
+instead of the page, `//gallery//item:N` one of them on its own.
+
+```text
+page//gallery                    every image of the page, as a grid of cards
+page//gallery//item:7            the 7th, filling the view (zoom, pan, step)
+page//id:photos//gallery         the images of that section or collection
+page//gallery#item:7             the grid, scrolled to the 7th card
+```
+
+- The items (`gallery_items`, `gallery.hpp`, pure) are the Image nodes (a
+  linked original before the picture in the page), inline image spans, links
+  to images and bare image URLs in running text, in document order, each
+  picture once. A Collection scope steps in its view sort. `item:N` counts
+  from 1 in that order; it is a position, so it can name another picture
+  once a fetched page changes.
+- The grid is a derived document (`gallery_document`: a Collection of cards)
+  in `Pane::source_doc`, like a source view, and as read-only. Card size and
+  layout are the usual collection view settings.
+- The single image is drawn into the pane's rect (`app_gallery.cpp`). Zoom
+  and pan are view state (`Pane::gallery`), never in the address. Mouse,
+  wheel, touch (pinch, pan, swipe) and keys act on the view under the pointer
+  or with the focus, so split views and document windows each have their own.
+- Clicking an image or a collection card in a page opens
+  `page//gallery//item:N` (a card: `page//<collection>//gallery//item:N`) in
+  the same view, with a history entry; Back returns to the page. Stepping
+  (←/→, swipe, edge zones) replaces that entry instead of adding one, so Back
+  never walks through the images one by one.
+- Up (Esc): image → grid at its card → the page at what the gallery was of
+  (`page//id:photos//gallery` → `page#photos`). View → Image Gallery
+  (Ctrl+Alt+I) toggles it for what the view shows.
 
 **Up.** `page_up_url` handles pipes before `up_url`:
 
@@ -241,7 +274,7 @@ or a passage in it is bookmarked, its tooltip counts the passages.
 
 Later the marks become one list of `{Extent, role}`: one draw path for `#`
 targets, bookmarks, search hits, and images (a frame over the image, in the
-pane and the Lightbox).
+pane and the gallery's single-image view).
 
 - Generalises the `SplitTrail` wash and the selection wash.
 - Bookmark roles come from `DocStyle` as well.
@@ -355,7 +388,7 @@ Each is useful on its own. 1 to 3 are done:
    caret or selection; `Bookmark` record; panel with quotes.
 4. Text range cuts (clipped first and last block). "Show only this" on a
    selection; Copy address.
-5. Images: `rect:` / `at:` in pane and Lightbox, drag-select a region,
+5. Images: `rect:` / `at:` in pane and gallery image, drag-select a region,
    `src` with a Locator.
 6. Embeds through Locators; `rev:` pinning with the revision store; link index
    and backlinks over all Locators (`docs/BRAINSTORM.md` §6).

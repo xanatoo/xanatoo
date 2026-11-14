@@ -41,8 +41,8 @@ see [docs/BRAINSTORM.md](docs/BRAINSTORM.md) and [TODO.md](TODO.md).
   panel (Panels → Downloads). Search with a configurable engine list and browse
   a curated directory.
 - **Read books and images.** Open EPUB, browse Standard Ebooks and Gutenberg,
-  import many other formats through Pandoc, and view image collections in a
-  zoomable lightbox. TeX math uses an OpenType MATH font when available.
+  import many other formats through Pandoc, and view any page's images as a
+  zoomable gallery (`page//gallery`). TeX math uses an OpenType MATH font when available.
 - **Keep drafts.** Unsaved local edits are autosaved to a content-addressed
   SQLite revision store when enabled. Revert, reopen drafts, and continue where
   you left off without an automatic discard of unfinished work.
@@ -133,7 +133,7 @@ CMake commands, packaged assets, and the currently unsupported features.
 | `wikipedia:`, `hn:`, `reddit:`, `lemmy:`, `nostr:` | Service-specific read-only document views |
 | EPUB | Imported for reading; a native EPUB importer is available without Pandoc |
 | DOCX, ODT, reStructuredText, LaTeX, and more | Read-only import through optional Pandoc |
-| Images and `:::collection` | Inline/block images, cards, thumbnails, lightbox |
+| Images and `:::collection` | Inline/block images, cards, thumbnails, `//gallery` view |
 
 The document language includes headings/sections/articles, nested lists and
 tasks, links and typed relations, tables, definition lists, figures, citations,

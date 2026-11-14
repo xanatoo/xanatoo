@@ -20,7 +20,7 @@ struct SelectorName {
 constexpr SelectorName kNames[] = {
     {"id", SelectorKind::Id},     {"path", SelectorKind::Path},
     {"text", SelectorKind::Text}, {"rect", SelectorKind::Rect},
-    {"at", SelectorKind::At},
+    {"at", SelectorKind::At},     {"item", SelectorKind::Item},
 };
 
 int hex_value(char c) {
@@ -72,7 +72,8 @@ std::optional<Selector> parse_selector(std::string_view s) {
   for (const auto& [name, kind] : {
            SelectorName{"source-raw", SelectorKind::SourceRaw},
            {"source-sexpr", SelectorKind::SourceSexpr},
-           {"source-xml", SelectorKind::SourceXml}})
+           {"source-xml", SelectorKind::SourceXml},
+           {"gallery", SelectorKind::Gallery}})
     if (s == name) return Selector{kind, {}};
   const size_t colon = s.find(':');
   if (colon == std::string_view::npos || colon + 1 == s.size())
@@ -91,13 +92,15 @@ std::string_view selector_name(SelectorKind kind) {
   if (kind == SelectorKind::SourceRaw) return "source-raw";
   if (kind == SelectorKind::SourceSexpr) return "source-sexpr";
   if (kind == SelectorKind::SourceXml) return "source-xml";
+  if (kind == SelectorKind::Gallery) return "gallery";
   for (const SelectorName& n : kNames)
     if (n.kind == kind) return n.name;
   return {};
 }
 
 std::string format_selector(const Selector& sel) {
-  if (is_source_pipe(sel.kind)) return std::string(selector_name(sel.kind));
+  if (is_source_pipe(sel.kind) || sel.kind == SelectorKind::Gallery)
+    return std::string(selector_name(sel.kind));
   return std::string(selector_name(sel.kind)) + ":" +
          (sel.kind == SelectorKind::Text ? sel.value : percent_encode(sel.value));
 }
@@ -399,6 +402,17 @@ std::string format_locator(const Locator& loc) {
 }
 
 bool locator_up(Locator& loc) {
+  // The grid (at an image): the page, at what the gallery was of.
+  if (!loc.pipes.empty() && loc.pipes.back().kind == SelectorKind::Gallery &&
+      (!loc.point || loc.point->kind == SelectorKind::Item)) {
+    loc.pipes.pop_back();
+    loc.point.reset();
+    if (!loc.pipes.empty()) {
+      loc.point = std::move(loc.pipes.back());
+      loc.pipes.pop_back();
+    }
+    return true;
+  }
   if (loc.point) {
     loc.point.reset();
     return true;

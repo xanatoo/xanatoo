@@ -67,15 +67,10 @@ void begin_gesture(App& app, float x, float y) {
   t.start_ticks = xanatoo::sdl::ticks();
   t.last_move_ticks = t.start_ticks;
   t.on_float = false;
-  t.on_lightbox = false;
+  t.on_image = false;
   const int xi = static_cast<int>(x), yi = static_cast<int>(y);
   if (app.ui.captures_point(x, y, float_layer_at(app, xi, yi))) {
     t.mode = TouchMode::Ignored;
-    return;
-  }
-  if (lightbox_touch_target(app, x, y)) {
-    t.on_lightbox = true;
-    t.mode = TouchMode::Lightbox;
     return;
   }
   if (y < app.ui_top || yi >= app.win_h - status_bar_h) {
@@ -98,6 +93,12 @@ void begin_gesture(App& app, float x, float y) {
   }
   t.pane = pane_at(app, x, y);
   const Pane& p = app.panes[t.pane];
+  if (pane_image_view(p)) {  // a single gallery image: pan, swipe, pinch
+    focus_view(app, t.pane);
+    t.on_image = true;
+    t.mode = TouchMode::Image;
+    return;
+  }
   const bool on_scrollbar = xi >= sb_x(p) && xi < sb_x(p) + kSbW;
   const SDL_Rect divider = tile_divider_rect(app);
   const SDL_Rect badge = tile_mode_button_rect(app);
@@ -143,8 +144,8 @@ void begin_pinch(App& app) {
   t.pinch_dist = finger_distance(t);
   t.pinch_body_px = app.body_px;
   t.pinch_anchor.reset();
-  if (t.on_lightbox) {
-    t.mode = TouchMode::LightboxPinch;
+  if (t.on_image) {
+    t.mode = TouchMode::ImagePinch;
     return;
   }
   if (!t.on_float) {
@@ -192,7 +193,7 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   if (t.count == 1) {
     begin_gesture(app, x, y);
   } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Pan ||
-             t.mode == TouchMode::Lightbox) {
+             t.mode == TouchMode::Image) {
     begin_pinch(app);
   }
 }
@@ -204,6 +205,7 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
   if (!f) return;
   const float x = tf.x * static_cast<float>(app.win_w);
   const float y = tf.y * static_cast<float>(app.win_h);
+  const float dx = x - f->x;
   const float dy = y - f->y;
   f->x = x;
   f->y = y;
@@ -243,18 +245,22 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
         zoom_by(app, target - app.body_px);
       }
       break;
-    case TouchMode::LightboxPinch:
+    case TouchMode::ImagePinch:
       if (t.pinch_dist > 0.f) {
         const float distance = finger_distance(t);
         const float factor = distance / t.pinch_dist;
         t.pinch_dist = distance;
         const float mx = (t.fingers[0].x + t.fingers[1].x) * 0.5f;
         const float my = (t.fingers[0].y + t.fingers[1].y) * 0.5f;
-        lightbox_touch_zoom(app, factor, mx, my);
+        // Both fingers moving together drag the picture along.
+        gallery_pan(app, t.pane, dx * 0.5f, dy * 0.5f);
+        gallery_zoom(app, t.pane, factor, mx, my);
       }
       break;
+    case TouchMode::Image:
+      if (primary) gallery_pan(app, t.pane, dx, dy);
+      break;
     case TouchMode::Idle:
-    case TouchMode::Lightbox:
     case TouchMode::Ignored:
       break;
   }
@@ -296,11 +302,26 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
       if (primary) pointer_left_up(app, xi, yi);
       break;
     case TouchMode::Pinch:  // the remaining finger does nothing
-    case TouchMode::LightboxPinch:
+    case TouchMode::ImagePinch:
       t.mode = TouchMode::Ignored;
       break;
+    case TouchMode::Image:
+      if (primary && pane_image_view(app.panes[t.pane])) {
+        const float dx = f->x - t.start_x, dy = f->y - t.start_y;
+        const bool zoomed = app.panes[t.pane].gallery.scale > 0.f;
+        if (std::hypot(dx, dy) < kSlopPx) {
+          // Tap: the edge zones (previous / next / up to the grid).
+          const int sx = static_cast<int>(t.start_x);
+          const int sy = static_cast<int>(t.start_y);
+          gallery_pointer_down(app, t.pane, sx, sy, SDL_BUTTON_LEFT);
+          gallery_pointer_up(app);
+        } else if (!zoomed && std::abs(dx) >= 48.f * app.ui_scale &&
+                   std::abs(dx) > std::abs(dy)) {
+          gallery_step(app, t.pane, dx < 0 ? 1 : -1);  // swipe
+        }
+      }
+      break;
     case TouchMode::Idle:
-    case TouchMode::Lightbox:
     case TouchMode::Ignored:
       break;
   }

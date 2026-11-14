@@ -102,8 +102,7 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
    docked neighbours are drawn after the panels.
 4. Fixed status line (on top of a floating frame that extends too far down),
    and transient docking preview / native hover tooltip.
-5. Modal lightbox above native document chrome.
-6. ImGui menu bar, toolbars, popups, settings dialog, and other non-panel
+5. ImGui menu bar, toolbars, popups, settings dialog, and other non-panel
    draw lists, rendered in `Ui::end_frame` above the SDL chrome.
 
 `Ui::prepare_render` finalizes ImGui draw lists after `run_chrome`, before

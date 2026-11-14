@@ -21,6 +21,7 @@
 #include "xanatoo/download.hpp"
 #include "xanatoo/editor.hpp"
 #include "xanatoo/font.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gemini_tofu.hpp"
 #include "xanatoo/images.hpp"
@@ -221,6 +222,24 @@ struct PageView {
   xanatoo::PageMap map;
 };
 
+// The `//gallery` view of a pane (app_gallery.cpp, docs/PASSAGES.md
+// "Gallery"): the images of the page, shown as a grid (Pane::source_doc, a
+// Collection of cards) or, with `//item:N`, one of them filling the view.
+// Valid while `buf` is the pane's buffer; use pane_gallery / pane_image_view.
+struct GalleryView {
+  BufferId buf = kNoBuffer;
+  std::vector<xanatoo::GalleryItem> items;
+  std::vector<xanatoo::NodeId> cards;  // grid Image node of each item
+  int index = -1;                      // the single image; -1 = the grid
+  // Zoom of the single image: scale = screen px per image px, 0 = fit the
+  // view. pan = offset of the image centre from the view centre. View state,
+  // reset when the image changes.
+  float scale = 0.f;
+  float pan_x = 0.f, pan_y = 0.f;
+  bool drag = false;
+  int drag_x = 0, drag_y = 0;  // last pointer position of a pan drag
+};
+
 struct Pane {
   BufferId buf = kNoBuffer;
   NavHistory nav;  // this view's own Back / Forward
@@ -245,6 +264,7 @@ struct Pane {
   BufferId source_buf = kNoBuffer;
   xanatoo::NodeId cut = xanatoo::INVALID_NODE;  // what the pipes selected
   std::vector<xanatoo::Selection> marks;        // the `#` passage
+  GalleryView gallery;                          // `//gallery` (source_doc)
   BookmarkMarks bookmark_marks;
   AnnotationMarks annotation_marks;
   bool section_focus = false;  // Section Focus: the outline picks the cut
@@ -369,25 +389,6 @@ struct ReplyDraft {
 };
 
 // What the pointer is currently over (rebuilt on every mouse move).
-// Fullscreen image viewer over the whole window (app_collection.cpp): a
-// snapshot of one Collection's items in view order.
-struct LightboxItem {
-  std::string src;
-  std::string caption;
-};
-struct Lightbox {
-  bool open = false;
-  std::vector<LightboxItem> items;
-  std::string base;  // directory for relative image paths
-  int index = 0;
-  // Zoom of the current image: scale = screen px per image px, 0 = fit the
-  // window. pan = offset of the image centre from the view centre. Both reset
-  // when the image changes.
-  float scale = 0.f;
-  float pan_x = 0.f, pan_y = 0.f;
-  bool drag = false;
-};
-
 struct Hover {
   std::string href;
   std::string datetime;  // semantic instant under pointer, even without href
@@ -430,8 +431,8 @@ enum class TouchMode : uint8_t {
   Select,   // after a long press: dragging extends the selection
   Direct,   // scrollbar / float frame / split gutter: plain pointer drag
   Pinch,    // two fingers: zoom
-  Lightbox, // one finger in the image viewer, awaiting a tap or second finger
-  LightboxPinch, // two fingers in the image viewer: image zoom
+  Image,    // one finger on a single-image gallery view: pan / swipe / tap
+  ImagePinch,  // two fingers there: zoom the image
   Ignored,  // ImGui's touch or a finished pinch; wait for all fingers up
 };
 
@@ -448,7 +449,7 @@ struct Touch {
   float start_x = 0.f, start_y = 0.f;
   Uint32 start_ticks = 0;
   bool on_float = false;
-  bool on_lightbox = false;
+  bool on_image = false;  // `pane` shows a single gallery image
   int pane = 0;
   // Pan velocity (scroll px/s) and the fling that continues it.
   float velocity = 0.f;
@@ -904,7 +905,6 @@ struct App {
   std::unordered_map<xanatoo::NodeId, xanatoo::CollectionView> collection_views;
   // Collection the last right-click hit (context menu target).
   xanatoo::NodeId collection_target = xanatoo::INVALID_NODE;
-  Lightbox lightbox;
   std::string last_fold_doc_key;
   bool diff_mode = false;
   std::vector<xanatoo::NodeId> diff_marks[2];
@@ -1528,22 +1528,52 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my);
 // Collection under the caret (or the last right-click target), else INVALID.
 xanatoo::NodeId current_collection(App& app);
 // UiCommand::CollectionView: "grid" / "list" / "full", "small" / "medium" /
-// "large", "sort-doc" / "sort-name" / "sort-name-desc", "view" (lightbox).
+// "large", "sort-doc" / "sort-name" / "sort-name-desc", "view" (the
+// collection's `//gallery`, at its first image).
 void collection_command(App& app, const std::string& arg);
-// Press on a collection card or inline thumbnail (remote image) in pane
-// `pi`: open the lightbox at that item.
+// Press on a collection card or image in pane `pi`: follow its link, or show
+// it in the pane's `//gallery//item:N`. True = consumed.
 bool click_collection_card(App& app, int pi, float lx, float my);
 // Link to an image (http(s) or a local file, `is_image_url`) in pane `pi`:
-// the lightbox over every image link of the page, at this one. False (and
-// nothing opened) when `href` is no image link.
+// show it in the page's gallery. False (nothing done) when `href` is no
+// image link.
 bool open_link_image(App& app, int pi, const std::string& href);
 // Right-click: remember the collection under the point for the menu.
 void note_collection_target(App& app, int pi, float lx, float my);
-// While the lightbox is open it takes every event. True = consumed.
-bool lightbox_event(App& app, const SDL_Event& ev);
-bool lightbox_touch_target(const App& app, float x, float y);
-void lightbox_touch_zoom(App& app, float factor, float x, float y);
-void draw_lightbox(App& app);
+
+// ---- gallery views (app_gallery.cpp, docs/PASSAGES.md "Gallery") ----
+// Images of `scope` (INVALID = the whole page) in gallery order: document
+// order, a Collection scope in its view sort.
+std::vector<xanatoo::GalleryItem> page_gallery_items(App& app,
+                                                     const xanatoo::Document& d,
+                                                     xanatoo::NodeId scope);
+// apply_locator / refresh_pane_locator for an address with `//gallery`:
+// builds the grid document and resolves `//item:N` / `#item:N`. `keep`
+// keeps scroll and zoom (refresh of the same view).
+void apply_gallery_locator(App& app, int pi, xanatoo::Locator loc, bool keep);
+// The pane's gallery view, when it shows one.
+GalleryView* pane_gallery(Pane& p);
+// The pane shows a single gallery image (not the grid).
+bool pane_image_view(const Pane& p);
+// Navigate pane `pi` to `//gallery//item:N` of the page it shows, with the
+// pipes `scope_pipes` before `//gallery` (a cut or a Collection).
+void open_gallery_item(App& app, int pi,
+                       std::vector<xanatoo::Selector> scope_pipes, int index);
+// Single image: next / previous image (replaces the history entry).
+void gallery_step(App& app, int pi, int delta);
+// Input for single-image views. Pointer events go to the image view under
+// the pointer, keys to the focused one. True = consumed.
+bool gallery_pointer_down(App& app, int pi, int x, int y, int button);
+bool gallery_pointer_motion(App& app, int x, int y);
+bool gallery_pointer_up(App& app);
+bool gallery_wheel(App& app, int pi, int x, int y, int dy);
+bool gallery_key(App& app, SDL_Keycode key, bool ctrl, bool alt, bool shift);
+// Zoom the image of pane `pi` by `factor` around window point (x, y).
+void gallery_zoom(App& app, int pi, float factor, float x, float y);
+// Pan it by (dx, dy) window pixels; false when it is not zoomed in.
+bool gallery_pan(App& app, int pi, float dx, float dy);
+// Draw pane `pi`'s single image into its rect (instead of the document).
+void draw_gallery_image(App& app, int pi);
 
 // ---- fixed-layout pages (app_pagetiles.cpp, docs/FIXED_LAYOUT.md) ----
 // Once per frame before drawing: run thumtoo's tile scheduler when it asked

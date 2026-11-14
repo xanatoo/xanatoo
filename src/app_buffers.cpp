@@ -598,6 +598,7 @@ void pop_out_focused(App& app) {
   v.locator_buf = p.locator_buf;
   v.source_doc = p.source_doc;
   v.source_buf = p.source_buf;
+  v.gallery = p.gallery;
   v.cut = p.cut;
   v.marks = p.marks;
   v.section_focus = p.section_focus;
@@ -625,6 +626,7 @@ void tear_tab(App& app, BufferId bi, int mx, int my) {
   const std::optional<xanatoo::Document> source_doc =
       from ? from->source_doc : std::nullopt;
   const BufferId source_buf = from ? from->source_buf : kNoBuffer;
+  const GalleryView gallery = from ? from->gallery : GalleryView{};
   const xanatoo::NodeId cut = from ? from->cut : xanatoo::INVALID_NODE;
   const std::vector<xanatoo::Selection> marks =
       from ? from->marks : std::vector<xanatoo::Selection>{};
@@ -645,6 +647,7 @@ void tear_tab(App& app, BufferId bi, int mx, int my) {
   v.locator_buf = locator_buf;
   v.source_doc = source_doc;
   v.source_buf = source_buf;
+  v.gallery = gallery;
   v.cut = cut;
   v.marks = marks;
   v.section_focus = section_focus;
@@ -680,6 +683,7 @@ void pop_in_soft(App& app, size_t si) {
     c.locator_buf = v.locator_buf;
     c.source_doc = std::move(v.source_doc);
     c.source_buf = v.source_buf;
+    c.gallery = std::move(v.gallery);
     c.cut = v.cut;
     c.marks = std::move(v.marks);
     c.section_focus = v.section_focus;

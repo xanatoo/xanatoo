@@ -44,12 +44,13 @@ behaviour is free functions ("systems") taking `App&`:
 | `search_results.cpp` | JSON search engines → Markdown result documents (`search_results_markdown`, pure; `search_fetch` needs HTTPS): wikipedia / hn / archive / gutendex / lemmy / bluesky mappers; link text is literal in our parser, only brackets are changed |
 | `app_search.cpp` | search bar state (`App::search`, engine = `ViewSettings::search_engine`): show / toggle / select engine / `run_search`; the ImGui row is in `ui.cpp` |
 | `app_softwin.cpp` | window placement: `Dock` (None / Left / Right / Max) for every role — `dock_window` / `undock_window` / `toggle_maximize`, `place_windows` derives docked geometry, `dock_column_w` is what `layout_panes` leaves out |
-| `app_touch.cpp` | touchscreen gestures: tap → click, drag/fling scroll, long-press select, pane text zoom and Lightbox image zoom |
+| `app_touch.cpp` | touchscreen gestures: tap → click, drag/fling scroll, long-press select, pane text zoom; on a single gallery image pan, swipe to step, pinch zoom |
 | `app_buffers.cpp` / `app_view.cpp` / `app_nav.cpp` / `app_softwin.cpp` / `app_prompts.cpp` / `app_pointer.cpp` | document buffers, scroll/fold/outline, URL history + bookmarks, floating windows, minibuffer, cursor/gamepad |
 | `app_fetch.cpp` | background page fetches (`FetchJob` on a worker thread → `poll_fetches`), page cache, loading indicator |
 | `app_images.cpp` | remote (http/https) images: worker downloads of what `ImageCache` queued → `cache_dir()/images/`, relayout on completion and on finished thumbnails (`poll_images`); cache pruning at startup |
 | `images_thumtoo.cpp` | `image_backend.hpp` over vendored thumtoo (`XANATOO_THUMTOO`): libvips decode, thumbnails composed from the shared tile cache |
-| `app_collection.cpp` | collection view state (layout / size / sort), card clicks, fullscreen `Lightbox` viewer |
+| `app_collection.cpp` | collection view state (layout / size / sort), card and image-link clicks → the page's `//gallery//item:N` |
+| `app_gallery.cpp` / `gallery.cpp` | gallery views (`docs/PASSAGES.md` "Gallery"): `//gallery` grid is a derived Collection in `Pane::source_doc` (built by `apply_gallery_locator` in `app_passage.cpp`, items by pure `gallery_items`); `//gallery//item:N` draws one image into the pane rect with view-local zoom / pan (`Pane::gallery`, `pane_image_view`). Stepping replaces the history entry. No window-wide overlay |
 | `app_drafts.cpp` | unsaved edits → drafts in the revision store (`revstore.hpp`): autosave, restore on load (`attach_draft`), save / revert, `drafts:` page |
 | `app_about.cpp` | `about:` page (Help → About): services, document formats, images (thumtoo / libvips loaders, MuPDF / DjVu) and libraries of this build, gathered from the feature switches and runtime versions; `about_markdown` (`about.hpp`) formats it. New services and user-visible optional deps get an entry there |
 | `app_report.cpp` | startup report on stderr (gamepkgstd `LOGGING.md`): version / build / compiler, features, system, SDL / loader env, each library's runtime vs built-against version and the mapped file, video, renderer + GL strings, controllers with the mapping SDL applies, directories. New libraries get a line there too; choices made while loading (fonts, icons, style, ImGui render path) are logged where they are made, as `topic: details` on stderr |
@@ -519,8 +520,8 @@ history or distribute patch files.
   from `ImageCache::thumb` (box-filtered, cached as BMP under
   `cache_dir()/thumbs/`, keyed by path + size + mtime); no resize handle.
 - `app_collection.cpp`: Collection menus (`UiCommand::CollectionView` +
-  arg, context menu and View menu), click on a card → `Lightbox` (full-
-  window viewer drawn after ImGui; `lightbox_event` takes all input first).
+  arg, context menu and View menu), click on a card → the collection's
+  `//gallery//item:N` in the same view (`open_gallery_item`, app_gallery.cpp).
 
 ## Site maps (`sitemap.hpp`)
 
@@ -636,11 +637,10 @@ history or distribute patch files.
   it queues the URL (`take_requests`) and returns a `pending` placeholder;
   `poll_images` (app_images.cpp) downloads it and calls `remote_done`.
 - Layout draws remote images from their `kRemoteThumbEdge` thumbnail
-  (`layout_remote_image`); a click opens the lightbox over all document
-  images.
+  (`layout_remote_image`); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: http(s) or local path by extension)
-  open the lightbox over every image link of the page (`open_link_image`,
-  checked before split / external handling), never the system browser.
+  show that image in the page's `//gallery` (`open_link_image`, checked
+  before split / external handling), never the system browser.
 - No posting or secret-key management in v1. Publication transport options
   (WebDAV, static export, Nostr, IPFS) are sketched in `docs/PUBLISHING.md`.
 
