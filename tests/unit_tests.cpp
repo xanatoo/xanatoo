@@ -4022,6 +4022,25 @@ void test_search() {
   EXPECT(odd.find('#') == std::string::npos && odd.find('|') == std::string::npos &&
          odd.find("//") == std::string::npos);
 
+  // Engine tiles: every built-in engine has its own colour, user engines
+  // take (color "#rrggbb") or a stable colour derived from the id.
+  for (const SearchEngine& e : builtin_engines()) EXPECT(engine_color(e) != 0);
+  EXPECT_EQ(parse_hex_color("#3a6").value_or(0), 0x33aa66u);
+  EXPECT_EQ(parse_hex_color("FF8000").value_or(0), 0xff8000u);
+  EXPECT(!parse_hex_color("#12345"));
+  EXPECT(!parse_hex_color("#zzzzzz"));
+  {
+    const auto user = parse_engines(
+        "(engine \"mine\" (url \"https://x.org/?q=%s\") (color \"#102030\"))"
+        "(engine \"other\" (url \"https://y.org/?q=%s\"))");
+    EXPECT(user.size() == 2);
+    if (user.size() == 2) {
+      EXPECT_EQ(engine_color(user[0]), 0x102030u);
+      EXPECT_EQ(engine_color(user[1]), engine_color(user[1]));
+      EXPECT(engine_color(user[1]) != 0);
+    }
+  }
+
   const std::vector<SearchEngine> eng = builtin_engines();
   EXPECT_EQ(search_target(ref, eng),
             "feed:https://export.arxiv.org/api/query?search_query=all:"

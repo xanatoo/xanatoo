@@ -274,6 +274,7 @@ struct UiService {
 // One engine of the search bar's menu.
 struct UiSearchEngine {
   std::string id, name, keyword, badge;
+  uint32_t color = 0;  // tile background, 0xRRGGBB (engine_color)
 };
 
 struct UiState {
@@ -500,6 +501,10 @@ struct UiState {
   };
   std::vector<SubscriptionItem> subscriptions;
   SDL_Texture* location_icon = nullptr;
+  // Without a real favicon: an icon name from pseudo_favicon.hpp, or for a
+  // search: address the id of the engine whose tile stands in.
+  std::string location_pseudo_icon;
+  std::string location_engine;
   std::vector<SDL_Texture*> bookmark_icons;
   // Tab strip (labels left→right); active_tab is index into tab_labels.
   std::vector<std::string> tab_labels;

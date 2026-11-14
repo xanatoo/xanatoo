@@ -27,6 +27,7 @@
 #include "xanatoo/lemmy_directory.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
+#include "xanatoo/pseudo_favicon.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/scrollbar_geometry.hpp"
@@ -209,7 +210,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       path_of(app, focused_pane(app)), app.search.engines);
   ui_state.search_engines.clear();
   for (const auto& e : app.search.engines)
-    ui_state.search_engines.push_back({e.id, e.name, e.keyword, e.badge});
+    ui_state.search_engines.push_back(
+        {e.id, e.name, e.keyword, e.badge, xanatoo::engine_color(e)});
   ui_state.diff = app.diff_mode;
   ui_state.can_diff = !shared_doc(app) &&
                       app.panes[0].buf != app.panes[1].buf;
@@ -539,6 +541,21 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       if (cover.ok) ui_state.location_icon = cover.texture;
       break;
     }
+  }
+  ui_state.location_pseudo_icon.clear();
+  ui_state.location_engine.clear();
+  if (!ui_state.location_icon) {
+    const std::string base = xanatoo::parse_locator(ui_state.doc_label).base;
+    bool is_dir = false;
+    if (!current.empty() && !base.empty() &&
+        base.find("://") == std::string::npos) {
+      std::error_code ec;
+      is_dir = fs::is_directory(current, ec);
+    }
+    ui_state.location_pseudo_icon = xanatoo::pseudo_favicon(base, is_dir);
+    if (ui_state.location_pseudo_icon == "search")
+      if (auto ref = xanatoo::parse_search_ref(base))
+        ui_state.location_engine = ref->engine;
   }
   ui_state.bookmark_icons.clear();
   for (const auto& bookmark : app.bookmarks)

@@ -23,6 +23,7 @@
 // gutendex): native result documents with links to wikipedia: / hn: /
 // lemmy: pages.
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -44,6 +45,9 @@ struct SearchEngine {
   // an entry with ':' is an address prefix ("hn:", "wikipedia:de:"), any
   // other a host that also matches its subdomains ("ycombinator.com").
   std::vector<std::string> sites;
+  // Background of the engine's favicon-style tile (0xRRGGBB); 0 = the
+  // built-in colour of a known id, else one derived from the id.
+  uint32_t color = 0;
 };
 
 // The engines shipped with xanatoo, in menu order.
@@ -104,6 +108,12 @@ std::string search_from_keyword(std::string_view text,
 // engine claims the address.
 std::string engine_for_address(std::string_view address,
                                const std::vector<SearchEngine>& engines);
+
+// Tile colour of an engine (0xRRGGBB): `color` when set, else the built-in
+// colour for its id, else a colour hashed from the id.
+uint32_t engine_color(const SearchEngine& e);
+// "#3a6" / "#33aa66" / "33aa66" → 0x33aa66; nullopt when malformed.
+std::optional<uint32_t> parse_hex_color(std::string_view s);
 
 // Query of a search address, decoded for display ("" for other addresses).
 std::string search_query_text(std::string_view ref);

@@ -8,6 +8,27 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Engine tiles, Go triangles, pseudo-favicons
+
+- The search bar's engine button became a favicon-style tile inside the
+  field frame: a rounded square in the engine's colour (`engine_color`:
+  built-in table near each service's own favicon, `(color "#rrggbb")` in
+  search.sexp, else hashed from the id) with the badge letters. A click
+  opens the engine menu, which lists the same tiles; the menu hangs left
+  from the field's right edge.
+- Location and search fields end in a green Go triangle (`go_button`),
+  Enter for the mouse / touch.
+- Location pseudo-favicons when there is no real favicon, cover or PDF
+  thumbnail: `pseudo_favicon.hpp` (pure, `pseudo_favicon_tests`) maps
+  local files / folders, `about:`, the revision store (`db:` / drafts),
+  feeds, Nostr, `sitemap:`, Gemini and any other network address (globe,
+  also while a favicon loads) to `icons/svg/site-*.svg`; a `search:`
+  address shows its engine's tile.
+- The tile is registered before the search InputText (no AllowOverlap), so
+  a tap / instant click focuses the field without a frame of hover first.
+  The location field's Gemini site button still uses AllowOverlap.
+  Checked under Xvfb.
+
 ## Status (2026-11-14) — Location and search share the second toolbar row
 
 - The location field always has its own (second) toolbar row; the search

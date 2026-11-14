@@ -170,6 +170,71 @@ bool classic_button(const char* label, const ImVec2& size = ImVec2(0.f, 0.f)) {
   return clicked;
 }
 
+// Favicon-style tile of a search engine: a rounded square in the engine's
+// colour with its badge letters, so engines stay told apart by shorthand.
+void draw_engine_tile(ImDrawList* draw, ImVec2 p, float side,
+                      const xanatoo::UiSearchEngine* e) {
+  const uint32_t c = e && e->color ? e->color : 0x707070u;
+  const int r = static_cast<int>((c >> 16) & 0xff);
+  const int g = static_cast<int>((c >> 8) & 0xff);
+  const int b = static_cast<int>(c & 0xff);
+  const ImVec2 q(p.x + side, p.y + side);
+  const float round = side * 0.22f;
+  draw->AddRectFilled(p, q, IM_COL32(r, g, b, 255), round);
+  draw->AddRectFilled(ImVec2(p.x + 1.f, p.y + 1.f),
+                      ImVec2(q.x - 1.f, p.y + side * 0.48f),
+                      IM_COL32(255, 255, 255, 46), round,
+                      ImDrawFlags_RoundCornersTop);
+  draw->AddRect(p, q, IM_COL32(r * 3 / 5, g * 3 / 5, b * 3 / 5, 255), round);
+  const std::string text = e && !e->badge.empty() ? e->badge : "?";
+  const bool light = 299 * r + 587 * g + 114 * b > 165000;
+  const ImU32 ink = light ? IM_COL32(28, 28, 28, 255) : IM_COL32(255, 255, 255, 255);
+  ImFont* font = ImGui::GetFont();
+  float size = side * (text.size() <= 1 ? 0.8f : text.size() == 2 ? 0.66f : 0.54f);
+  ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.f, text.c_str());
+  const float room = side - 3.f;
+  if (ts.x > room) {
+    size *= room / ts.x;
+    ts = font->CalcTextSizeA(size, FLT_MAX, 0.f, text.c_str());
+  }
+  const ImVec2 at(std::floor(p.x + (side - ts.x) * 0.5f),
+                  std::floor(p.y + (side - ts.y) * 0.5f));
+  // A one-pixel offset copy thickens the small letters a little.
+  draw->AddText(font, size, at, ink, text.c_str());
+  draw->AddText(font, size, ImVec2(at.x + 0.6f, at.y), ink, text.c_str());
+}
+
+// Go button at the right end of an address / search field: a green
+// triangle, Enter for the mouse. An item without layout (ItemAdd), so it can
+// sit inside the field's frame.
+bool go_button(const char* id, const ImRect& bb, const char* tip) {
+  const ImGuiID gid = ImGui::GetID(id);
+  bool hot = false, held = false;
+  bool pressed = false;
+  if (ImGui::ItemAdd(bb, gid))
+    pressed = ImGui::ButtonBehavior(bb, gid, &hot, &held);
+  ImDrawList* draw = ImGui::GetWindowDrawList();
+  if (hot || held)
+    draw->AddRectFilled(bb.Min, bb.Max,
+                        ImGui::GetColorU32(held ? ImGuiCol_ButtonActive
+                                                : ImGuiCol_ButtonHovered),
+                        ImGui::GetStyle().FrameRounding);
+  const float h = std::min(bb.GetWidth(), bb.GetHeight()) * 0.56f;
+  const ImVec2 c = bb.GetCenter();
+  const float dx = held ? 1.f : 0.f;
+  const ImVec2 a(c.x - h * 0.42f + dx, c.y - h * 0.5f + dx);
+  const ImVec2 b(c.x + h * 0.52f + dx, c.y + dx);
+  const ImVec2 d(c.x - h * 0.42f + dx, c.y + h * 0.5f + dx);
+  draw->AddTriangleFilled(a, b, d, hot ? IM_COL32(0x5c, 0xb8, 0x3c, 255)
+                                       : IM_COL32(0x4a, 0xa0, 0x2c, 255));
+  // Upper facet lighter, like the bevelled toolbar icons.
+  draw->AddTriangleFilled(a, b, ImVec2(a.x, c.y + dx),
+                          IM_COL32(255, 255, 255, 60));
+  draw->AddTriangle(a, b, d, IM_COL32(0x2e, 0x5e, 0x1e, 255), 1.f);
+  if (hot) ImGui::SetTooltip("%s", tip);
+  return pressed;
+}
+
 void same_line_if_fits(const char* next_label) {
   const ImGuiStyle& s = ImGui::GetStyle();
   const float available = ImGui::GetWindowPos().x +
@@ -468,6 +533,8 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "zoomin", "zoomout", "structure", "diff",
       "back", "forward", "up", "home", "reload", "stop", "bookmark", "bookmark-outline", "history", "downloads", "edit", "native", "reader", "sitemap",
       "linespacing", "measure", "style", "gemini", "gemini-changed",
+      "site-file", "site-folder", "site-about", "site-store", "site-web",
+      "site-feed", "site-nostr",
       "format", "insert", "view", "lists",
   };
 
@@ -1059,15 +1126,17 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
                          (state.site_search.empty() ? 0 : 1);
   // The location field has a row of its own, shared with the search bar.
-  // Search bar width: engine badge + a field for an average query + Go,
+  // Both fields carry their icon at the left end inside the frame (favicon,
+  // engine tile) and a green Go triangle at the right end.
+  const float go_w = 26.f * scale_;
+  const float field_icon_w = 30.f * scale_;
+  // Search bar width: engine tile + a field for an average query + Go,
   // never more than ~40 % of the row so the location keeps most of it.
-  const float search_badge_w = 40.f * scale_;
-  const float search_go_w = 44.f * scale_;
   const float search_field_w = std::min(
       ImGui::CalcTextSize("an average search query here").x + 16.f * scale_,
-      std::max(80.f * scale_, vp->Size.x * 0.4f - search_badge_w - search_go_w));
+      std::max(80.f * scale_, vp->Size.x * 0.4f - field_icon_w - go_w));
   const float search_w = state.searchbar
-      ? 6.f * scale_ + search_badge_w + 4.f + search_field_w + 4.f + search_go_w
+      ? 6.f * scale_ + field_icon_w + search_field_w + go_w
       : 0.f;
   const float browse_h = 2.f * button_row_h;
   ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
@@ -1132,7 +1201,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       }
       // Context controls stay with the address on either toolbar row.
       const float right_pad = url_extras ? 2.f * scale_ : 0.f;
-      const float extra_w = url_extras * 28.f * scale_ + right_pad;
+      const float extra_w = url_extras * 28.f * scale_ + right_pad + go_w;
       // Leave room for the search bar right of the field.
       float field_w = ImGui::GetContentRegionAvail().x -
                       (search_w > 0.f ? search_w + 6.f : 0.f);
@@ -1180,7 +1249,17 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                   ? "gemini-changed" : "gemini");
         loc_icon = ic ? ic->texture : nullptr;
       }
-      const bool has_loc_icon = loc_icon || site_button;
+      // No favicon of its own: a search shows its engine's tile, local
+      // files, built-in pages and the like a pseudo-favicon.
+      const UiSearchEngine* loc_engine = nullptr;
+      if (!loc_icon && !site_button) {
+        for (const UiSearchEngine& e : state.search_engines)
+          if (e.id == state.location_engine) loc_engine = &e;
+        if (!loc_engine && !state.location_pseudo_icon.empty())
+          if (const Icon* ic = icon(state.location_pseudo_icon.c_str()))
+            loc_icon = ic->texture;
+      }
+      const bool has_loc_icon = loc_icon || site_button || loc_engine;
       ImGui::PushStyleVar(
           ImGuiStyleVar_FramePadding,
           ImVec2((has_loc_icon ? 30.f : 6.f) * scale_,
@@ -1287,7 +1366,11 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                 ImGui::GetStyle().FrameRounding);
           if (hot) ImGui::SetTooltip("%s", state.site_identity_tip.c_str());
         }
-        if (loc_icon) {
+        if (loc_engine) {
+          draw_engine_tile(ImGui::GetWindowDrawList(),
+                           ImVec2(x0, p.y + (field_h - side) * 0.5f), side,
+                           loc_engine);
+        } else if (loc_icon) {
           const ImVec2 size = icon_size(loc_icon, side);
           const float y = p.y + (field_h - size.y) * 0.5f;
           ImGui::GetWindowDrawList()->AddImage(
@@ -1371,6 +1454,13 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           }
         }
         ImGui::EndPopup();
+      }
+      {
+        const float inset = 3.f * scale_;
+        const ImRect go_bb(ImVec2(field_end.x - go_w + 1.f, field_pos.y + inset),
+                           ImVec2(field_end.x - inset, field_end.y - inset));
+        if (go_button("##url_go", go_bb, "Go to the address (Enter)"))
+          enter = true;
       }
       if (enter) {
         cmd = UiCommand::NavigateUrl;
@@ -1458,48 +1548,95 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       ImGui::SetCursorPosX(ImGui::GetWindowWidth() -
                            ImGui::GetStyle().WindowPadding.x - search_w +
                            6.f * scale_);
+      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
+      // One frame like the location field: engine tile, query, Go.
+      const ImVec2 field_pos = ImGui::GetCursorScreenPos();
+      const ImVec2 field_end(field_pos.x + search_w - 6.f * scale_,
+                             field_pos.y + field_h);
+      ImDrawList* draw = ImGui::GetWindowDrawList();
+      draw->AddRectFilled(field_pos, field_end, IM_COL32(242, 242, 247, 255),
+                          ImGui::GetStyle().FrameRounding);
+      draw->AddRect(field_pos, field_end, ImGui::GetColorU32(ImGuiCol_Border),
+                    ImGui::GetStyle().FrameRounding);
+      {
+        // The engine tile is the engine menu, like a favicon button. Added
+        // before the field, so it wins the hover over the field's padding
+        // without AllowOverlap (which costs a tap a frame of hover first).
+        const float side = 20.f * scale_;
+        const float pad = 3.f * scale_;
+        const float x0 = field_pos.x + 5.f * scale_;
+        const float y0 = field_pos.y + (field_h - side) * 0.5f;
+        const ImRect bb(ImVec2(x0 - pad, y0 - pad),
+                        ImVec2(x0 + side + pad, y0 + side + pad));
+        const ImGuiID id = ImGui::GetID("##search_engine_tile");
+        bool hot = false, held = false;
+        if (ImGui::ItemAdd(bb, id) &&
+            ImGui::ButtonBehavior(bb, id, &hot, &held))
+          ImGui::OpenPopup("##search_engines");
+        if (hot || held || ImGui::IsPopupOpen("##search_engines"))
+          draw->AddRectFilled(bb.Min, bb.Max,
+                              ImGui::GetColorU32(held ? ImGuiCol_ButtonActive
+                                                      : ImGuiCol_ButtonHovered),
+                              ImGui::GetStyle().FrameRounding);
+        draw_engine_tile(draw, ImVec2(x0, y0), side, cur);
+        if (hot)
+          ImGui::SetTooltip("Search engine: %s · click to change",
+                            cur ? cur->name.c_str() : "none");
+      }
+      ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.f, 0.f, 0.f, 0.f));
+      ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.f, 0.f, 0.f, 0.f));
+      ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.f, 0.f, 0.f, 0.f));
+      ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
       ImGui::PushStyleVar(
           ImGuiStyleVar_FramePadding,
-          ImVec2(ImGui::GetStyle().FramePadding.x,
+          ImVec2(field_icon_w,
                  std::max(0.f, (field_h - ImGui::GetFontSize()) * 0.5f)));
-      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
-      const std::string badge = (cur ? cur->badge : std::string("?")) + "##eng";
-      if (classic_button(badge.c_str(), ImVec2(search_badge_w, 0.f)))
-        ImGui::OpenPopup("##search_engines");
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Search engine: %s · click to change",
-                          cur ? cur->name.c_str() : "none");
-      if (ImGui::BeginPopup("##search_engines")) {
-        for (const UiSearchEngine& e : state.search_engines) {
-          std::string label = e.badge + "   " + e.name;
-          if (!e.keyword.empty()) label += "   (" + e.keyword + ")";
-          if (ImGui::Selectable(label.c_str(), cur && e.id == cur->id)) {
-            cmd = UiCommand::SelectSearchEngine;
-            result.arg = e.id;
-          }
-        }
-        ImGui::TextDisabled("(keyword): Ctrl+L, e.g. \"w xanadu\"");
-        ImGui::EndPopup();
-      }
-      ImGui::SameLine(0.f, 4.f);
-      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
-      ImGui::SetNextItemWidth(search_field_w);
+      ImGui::SetNextItemWidth(field_icon_w + search_field_w);
       if (focus_search_) {
         ImGui::SetKeyboardFocusHere();
         focus_search_ = false;
       }
       const std::string hint =
           std::string("Search ") + (cur ? cur->name : "") + " …";
-      const bool enter = ImGui::InputTextWithHint(
+      bool enter = ImGui::InputTextWithHint(
           "##searchfield", hint.c_str(), search_input_, sizeof(search_input_),
           ImGuiInputTextFlags_EnterReturnsTrue);
       if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         cmd = UiCommand::ToggleSearchBar;
-      ImGui::SameLine(0.f, 4.f);
-      ImGui::SetCursorPosY(row_y + (button_h - field_h) * 0.5f);
-      const bool go = classic_button("Go", ImVec2(search_go_w, 0.f));
-      ImGui::PopStyleVar();
-      if (enter || go) {
+      ImGui::PopStyleVar(2);
+      ImGui::PopStyleColor(3);
+      // The bar sits at the right window edge: the menu hangs leftwards.
+      ImGui::SetNextWindowPos(ImVec2(field_end.x, field_end.y + 2.f * scale_),
+                              ImGuiCond_Always, ImVec2(1.f, 0.f));
+      if (ImGui::BeginPopup("##search_engines")) {
+        const float side = ImGui::GetTextLineHeight() + 4.f * scale_;
+        for (const UiSearchEngine& e : state.search_engines) {
+          std::string label = e.name;
+          if (!e.keyword.empty()) label += "   (" + e.keyword + ")";
+          ImGui::PushID(e.id.c_str());
+          const ImVec2 rp = ImGui::GetCursorScreenPos();
+          const float text_x = side + 8.f * scale_;
+          if (ImGui::Selectable(
+                  "##engine", cur && e.id == cur->id, 0,
+                  ImVec2(text_x + ImGui::CalcTextSize(label.c_str()).x, side))) {
+            cmd = UiCommand::SelectSearchEngine;
+            result.arg = e.id;
+          }
+          ImDrawList* pd = ImGui::GetWindowDrawList();
+          draw_engine_tile(pd, rp, side, &e);
+          pd->AddText(ImVec2(rp.x + text_x,
+                             rp.y + (side - ImGui::GetTextLineHeight()) * 0.5f),
+                      ImGui::GetColorU32(ImGuiCol_Text), label.c_str());
+          ImGui::PopID();
+        }
+        ImGui::TextDisabled("(keyword): Ctrl+L, e.g. \"w xanadu\"");
+        ImGui::EndPopup();
+      }
+      const float inset = 3.f * scale_;
+      const ImRect go_bb(ImVec2(field_end.x - go_w + 1.f, field_pos.y + inset),
+                         ImVec2(field_end.x - inset, field_end.y - inset));
+      if (go_button("##search_go", go_bb, "Search (Enter)")) enter = true;
+      if (enter) {
         cmd = UiCommand::Search;
         result.arg = search_input_;
       }

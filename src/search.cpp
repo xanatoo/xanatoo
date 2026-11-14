@@ -8,6 +8,7 @@
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -244,6 +245,75 @@ const std::vector<SearchEngine>& builtin_engines() {
   return k;
 }
 
+uint32_t engine_color(const SearchEngine& e) {
+  if (e.color != 0) return e.color;
+  // Close to each service's own favicon, so the tile is recognisable.
+  static const std::pair<std::string_view, uint32_t> kColors[] = {
+      {"wikipedia", 0x3a3d40},  {"wikipedia-de", 0x3a3d40},
+      {"hn", 0xff6600},         {"arxiv", 0xb31b1b},
+      {"archive", 0x4a4a4a},    {"openlibrary", 0x0376b8},
+      {"tvmaze", 0x3c948b},     {"musicbrainz", 0xba478f},
+      {"wikidata", 0x006699},   {"openalex", 0x4f46e5},
+      {"crossref", 0xd8323c},   {"steam", 0x1b2838},
+      {"igdb", 0x9147ff},       {"anilist-anime", 0x02a9ff},
+      {"anilist-manga", 0x0b84c6}, {"rawg", 0x262626},
+      {"tmdb-movie", 0x0d253f}, {"tmdb-tv", 0x0d253f},
+      {"ifdb", 0x6b4e9b},       {"bookbrainz-work", 0xeb743b},
+      {"bookbrainz-edition", 0xeb743b}, {"googlebooks", 0x4285f4},
+      {"loc-books", 0x0f3d63},  {"loc-newspapers", 0x0f3d63},
+      {"loc-films", 0x0f3d63},  {"loc-music", 0x0f3d63},
+      {"zdb", 0x00589c},        {"gcd", 0xa50000},
+      {"discogs", 0x333333},    {"standard-ebooks", 0x2b8a8a},
+      {"gutenberg", 0x8a2c18},  {"reddit", 0xff4500},
+      {"lemmy", 0x00a37a},      {"bluesky", 0x1185fe},
+      {"mastodon-tag", 0x6364ff}, {"flickr", 0xff0084},
+      {"marginalia", 0x9c7d4a}, {"wiby", 0x000080},
+      {"youtube", 0xff0000},    {"peertube", 0xf1680d},
+      {"odysee", 0xe50054},     {"dailymotion", 0x0066dc},
+      {"duckduckgo", 0xde5833},
+  };
+  for (const auto& [id, c] : kColors)
+    if (e.id == id) return c;
+  // FNV-1a of the id → a hue; fixed saturation / value read well with white.
+  uint32_t h = 2166136261u;
+  for (unsigned char ch : e.id) h = (h ^ ch) * 16777619u;
+  const float hue = static_cast<float>(h % 360u) / 60.f;
+  const float s = 0.6f, v = 0.7f;
+  const float c = v * s;
+  const float x = c * (1.f - std::abs(std::fmod(hue, 2.f) - 1.f));
+  float r = 0, g = 0, b = 0;
+  switch (static_cast<int>(hue)) {
+    case 0: r = c; g = x; break;
+    case 1: r = x; g = c; break;
+    case 2: g = c; b = x; break;
+    case 3: g = x; b = c; break;
+    case 4: r = x; b = c; break;
+    default: r = c; b = x; break;
+  }
+  const float m = v - c;
+  auto ch = [&](float f) {
+    return static_cast<uint32_t>((f + m) * 255.f + 0.5f) & 0xff;
+  };
+  const uint32_t out = (ch(r) << 16) | (ch(g) << 8) | ch(b);
+  return out != 0 ? out : 0x010101;
+}
+
+std::optional<uint32_t> parse_hex_color(std::string_view s) {
+  if (!s.empty() && s.front() == '#') s.remove_prefix(1);
+  if (s.size() != 3 && s.size() != 6) return std::nullopt;
+  uint32_t v = 0;
+  for (char ch : s) {
+    int d;
+    if (ch >= '0' && ch <= '9') d = ch - '0';
+    else if (ch >= 'a' && ch <= 'f') d = ch - 'a' + 10;
+    else if (ch >= 'A' && ch <= 'F') d = ch - 'A' + 10;
+    else return std::nullopt;
+    v = (v << 4) | static_cast<uint32_t>(d);
+    if (s.size() == 3) v = (v << 4) | static_cast<uint32_t>(d);
+  }
+  return v;
+}
+
 bool is_json_search_kind(std::string_view kind) {
   return kind == "wikipedia" || kind == "hn" || kind == "archive" ||
          kind == "lemmy" || kind == "bluesky" || kind == "gutendex" ||
@@ -293,6 +363,12 @@ std::vector<SearchEngine> parse_engines(std::string_view source,
           warn("engine " + e.id + ": unknown kind " + val);
       }
       else if (key == "space") e.space = val;
+      else if (key == "color") {
+        if (auto c = parse_hex_color(val); c && *c != 0)
+          e.color = *c;
+        else
+          warn("engine " + e.id + ": color needs #rrggbb, not " + val);
+      }
       else if (key == "site") {
         for (size_t j = 1; j < p.kids.size(); ++j) {
           std::string site = sexpr_text(p.kids[j]);

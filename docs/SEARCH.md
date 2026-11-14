@@ -15,9 +15,12 @@ Search is an address, not a widget in the document and not a panel.
   documents like any remote page.
 - **Search bar:** in `ui.cpp`, right of the location field on the second
   toolbar row, shown by default
-  (`App::search.open`, Ctrl+K / View → Search Bar, Esc closes): an engine
-  button with a dropdown (badge letters, no per-engine art yet), a field,
-  Go. It only issues `UiCommand::Search`; `run_search` builds the address and
+  (`App::search.open`, Ctrl+K / View → Search Bar, Esc closes): one field
+  frame with the engine's favicon-style tile at its left end (a rounded
+  square in `engine_color` with the badge letters; a click opens the engine
+  menu, which shows the same tiles) and a green Go triangle at its right
+  end (`go_button`, also on the location field). A `search:` address shows
+  its engine's tile in the location bar. It only issues `UiCommand::Search`; `run_search` builds the address and
   navigates. The engine in use is `ViewSettings::search_engine` (view.conf).
 - **Location bar button:** a magnifier beside the address when an engine
   searches the focused page's service (`engine_for_address`: the engine of a
@@ -29,7 +32,8 @@ Search is an address, not a widget in the document and not a panel.
   (`search_from_location`), unless a file of that name exists.
 - **Engines:** the table in `search.cpp` plus `user_data_dir()/search.sexp`
   (`(engine "id" (name …) (keyword …) (badge …) (url "…%s…") (kind feed)
-  (space "+") (site "host" "ref:"))`; a built-in id is replaced, a new one appended). `kind` is
+  (space "+") (site "host" "ref:") (color "#rrggbb"))`; without `color`
+  a known id keeps its built-in tile colour, others get one hashed from the id; a built-in id is replaced, a new one appended). `kind` is
   `page` (default), `feed` or a JSON mapper (below).
 - **No forms in documents.** A document can *link* to a search
   (`[x](search:arxiv:electron+spin)`); it cannot contain an input. That keeps
