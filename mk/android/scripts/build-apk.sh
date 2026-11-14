@@ -37,12 +37,13 @@ sed -e "s/@VERSION_NAME@/$APP_VERSION/" -e "s/@VERSION_CODE@/$VERSION_CODE/" \
   -e "s/@MIN_SDK@/$PACKAGE_PLATFORM/" \
   "$APP_DIR/AndroidManifest.xml" > src/AndroidManifest.xml
 
-# xanatoo: sources (TLS through Mbed TLS, not OpenSSL), headers, vendored
+# xanatoo: sources (TLS through Mbed TLS, not OpenSSL; sockets, not the
+# browser fetch of https_wasm.cpp), headers, vendored
 # ImGui/stb.
 mkdir -p src/jni/src/src
 for f in "$APP_SRC_DIR"/src/*.cpp; do
   case "$(basename "$f")" in
-    tls_openssl.cpp) ;;
+    tls_openssl.cpp|https_wasm.cpp) ;;
     *) cp "$f" src/jni/src/src/ ;;
   esac
 done
