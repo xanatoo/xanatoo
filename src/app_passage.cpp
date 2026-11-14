@@ -6,6 +6,7 @@
 // to a node, the `#` part scrolls to a node and marks it.
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/source_view.hpp"
 #include "xanatoo/util.hpp"
@@ -202,8 +203,33 @@ xanatoo::NodeId pane_cut(App& app, Pane& p) {
   return node_alive(doc_of(app, p), p.cut) ? p.cut : xanatoo::INVALID_NODE;
 }
 
+std::string page_address(std::string_view page) {
+  if (!xanatoo::looks_like_local_path(page)) return std::string(page);
+  std::error_code ec;
+  std::filesystem::path abs =
+      std::filesystem::absolute(std::filesystem::path(page), ec);
+  if (ec) return std::string(page);
+  std::string s = abs.lexically_normal().generic_string();
+  if (xanatoo::ends_with(page, "/") && !xanatoo::ends_with(s, "/")) s += '/';
+  return xanatoo::file_url(s);
+}
+
+std::string canonical_address(std::string_view address) {
+  if (address.empty()) return {};
+  xanatoo::Locator loc = xanatoo::parse_locator(address);
+  if (!xanatoo::looks_like_local_path(loc.base)) return std::string(address);
+  loc.base = page_address(loc.base);
+  return xanatoo::format_locator(loc);
+}
+
+bool same_page(std::string_view a, std::string_view b) {
+  if (a == b) return true;
+  if (a.empty() || b.empty()) return false;
+  return page_address(a) == page_address(b);
+}
+
 std::string pane_address(App& app, Pane& p) {
-  std::string page = pane_page(app, p);
+  std::string page = page_address(pane_page(app, p));
   if (!locator_live(p) || page.empty()) return page;
   xanatoo::Locator loc = p.locator;
   loc.base = std::move(page);
@@ -347,7 +373,8 @@ void for_page_bookmarks(App& app, const std::string& page, F&& f) {
   if (page.empty()) return;
   for (const xanatoo::Bookmark& b : app.bookmarks) {
     xanatoo::Locator loc = xanatoo::parse_locator(b.address);
-    if (loc.has_selectors() && loc.base == page) f(b, std::move(loc));
+    if (loc.has_selectors() && same_page(loc.base, page))
+      f(b, std::move(loc));
   }
 }
 
@@ -422,9 +449,10 @@ void update_annotation_marks(App& app, Pane& p) {
     if (app.hidden_annotation_layers.contains(layer.id)) continue;
     for (const auto& annotation : layer.annotations) {
       for (const auto& target : annotation.targets) {
-        if (target.document_key != key && target.document_key != page) continue;
+        if (target.document_key != key && !same_page(target.document_key, page))
+          continue;
         auto loc = xanatoo::parse_locator(target.locator);
-        if (loc.base != page && loc.base != key) continue;
+        if (!same_page(loc.base, page) && loc.base != key) continue;
         std::string lost;
         const Resolved resolved = resolve_locator(doc, loc, lost);
         const auto range = resolved.mark

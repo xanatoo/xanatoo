@@ -8,6 +8,17 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — `file:` URLs for local pages
+
+- Local pages show and are stored as `file:///abs/path` (location bar,
+  Copy Address, history, bookmarks, session, annotations). `file:` URLs
+  (`file:///`, `file://localhost/`, `file:/`) work in the location bar, in
+  document links and as command-line arguments; `navigate_pane` decodes
+  them to paths. Pure helpers in `file_url.hpp` (`tests/file_url_tests.cpp`),
+  shared with text drops. Old plain-path bookmarks/history still match.
+- Open: `file://otherhost/…` is refused; revstore doc keys (`file:/path`)
+  remain unencoded keys, not URLs.
+
 ## Status (2026-11-14) — Engine tiles, Go triangles, pseudo-favicons
 
 - The search bar's engine button became a favicon-style tile inside the

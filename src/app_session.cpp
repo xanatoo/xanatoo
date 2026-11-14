@@ -400,7 +400,7 @@ void apply_pending_scroll(App& app) {
       if (j.pane == pi && j.purpose == FetchPurpose::Navigate) loading = true;
     if (loading) continue;
     Pane& p = app.panes[pi];
-    if (find_buf(app, p.buf) && path_of(app, p) == ps.base &&
+    if (find_buf(app, p.buf) && same_page(path_of(app, p), ps.base) &&
         !app.needs_layout) {
       p.scroll_y = std::clamp(ps.y, 0.f, std::max(0.f, pane_max_scroll(app, p)));
       app.needs_layout = true;

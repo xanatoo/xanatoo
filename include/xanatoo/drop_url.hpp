@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
+#include "xanatoo/file_url.hpp"
+
 #include <string>
 #include <string_view>
 
@@ -26,37 +28,6 @@ inline std::string dropped_navigation_target(std::string_view text) {
   auto prefix = [](std::string_view s, std::string_view p) {
     return s.starts_with(p);
   };
-  auto local_file = [](std::string_view uri) -> std::string {
-    uri.remove_prefix(7); // file://
-    if (uri.starts_with("localhost/")) uri.remove_prefix(9);
-    if (uri.empty() || uri.front() != '/') return {};
-    std::string path;
-    path.reserve(uri.size());
-    auto hex = [](char c) -> int {
-      if (c >= '0' && c <= '9') return c - '0';
-      if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-      if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-      return -1;
-    };
-    for (size_t i = 0; i < uri.size(); ++i) {
-      char c = uri[i];
-      if (c == '%') {
-        if (i + 2 >= uri.size()) return {};
-        const int hi = hex(uri[i + 1]), lo = hex(uri[i + 2]);
-        if (hi < 0 || lo < 0) return {};
-        c = static_cast<char>(hi * 16 + lo);
-        i += 2;
-      }
-      if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f) return {};
-      path.push_back(c);
-    }
-#if defined(_WIN32)
-    if (path.size() >= 3 && path[0] == '/' && path[2] == ':')
-      path.erase(path.begin());
-#endif
-    return path;
-  };
-
   while (!text.empty()) {
     const size_t end = text.find('\n');
     std::string_view line = text.substr(0, end);
@@ -64,7 +35,7 @@ inline std::string dropped_navigation_target(std::string_view text) {
     trim(line);
     if (line.empty() || line.front() == '#' || !valid(line)) continue;
     if (prefix(line, "file://")) {
-      if (std::string path = local_file(line); !path.empty()) return path;
+      if (std::string path = file_url_path(line); !path.empty()) return path;
       continue;
     }
     if (prefix(line, "https://") || prefix(line, "http://") ||

@@ -177,6 +177,14 @@ happens once, at the top of `navigate_pane`. Consequences:
   the resolved `cut` and the marked ranges (`marks`, `Selection`s).
   `pane_address` gives the address for the location bar, history and
   bookmarks, `pane_cut` is what layout uses.
+- Local pages are addressed as `file:///abs/path` (`file_url.hpp`:
+  `'%'`, `'#'`, `'?'`, space and control bytes percent-encoded, so a
+  filename never reads as a selector). `pane_address` and
+  `push_nav_history` spell them that way (`page_address` /
+  `canonical_address`); `navigate_pane`, link clicks and command-line
+  arguments decode `file:` back to the path before anything touches the
+  file system. Buffers keep plain paths. Bookmarks and history saved with
+  plain paths still match (`same_page`).
 
 ## Presentation
 

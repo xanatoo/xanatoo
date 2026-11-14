@@ -15,6 +15,7 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/nostr.hpp"
@@ -29,8 +30,10 @@ namespace fs = std::filesystem;
 
 namespace xanatoo::app {
 
-void push_nav_history(App& app, int pi, const std::string& url) {
-  if (url.empty() || pi < 0 || pi >= kMaxViews) return;
+void push_nav_history(App& app, int pi, const std::string& raw) {
+  if (raw.empty() || pi < 0 || pi >= kMaxViews) return;
+  // Local paths are stored as file: URLs, like pane_address shows them.
+  const std::string url = canonical_address(raw);
   if (app.visited.empty() || app.visited.back() != url) {
     app.visited.push_back(url);
     if (static_cast<int>(app.visited.size()) > kMaxNavHistory)
@@ -43,7 +46,7 @@ void push_nav_history(App& app, int pi, const std::string& url) {
     xanatoo::push_minibuffer_history(app.minibuf_hist_url, url);
     xanatoo::save_minibuffer_history("url", app.minibuf_hist_url);
   }
-  split_history_note(app, pi, url);  // no-op unless split browsing
+  split_history_note(app, pi, raw);  // no-op unless split browsing (paths)
   Pane& p = app.panes[pi];
   NavHistory& h = p.nav;
   NavHistoryEntry e;
@@ -134,8 +137,12 @@ bool nav_step(App& app, int dir) {
 
 namespace {
 auto bookmark_it(App& app, const std::string& url) {
+  const std::string want = canonical_address(url);
   return std::find_if(app.bookmarks.begin(), app.bookmarks.end(),
-                      [&](const xanatoo::Bookmark& b) { return b.address == url; });
+                      [&](const xanatoo::Bookmark& b) {
+                        return b.address == url ||
+                               canonical_address(b.address) == want;
+                      });
 }
 }  // namespace
 
@@ -235,6 +242,20 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href) {
   if (!xanatoo::is_gemini_url(abs) && !base.empty()) {
     std::string r = xanatoo::resolve_gemini_url(base, abs);
     if (!r.empty()) abs = std::move(r);
+  }
+  if (xanatoo::is_file_url(abs)) {
+    // file:///a/b.md#x: '#' in the path is %23, so the first '#' is ours.
+    std::string url = abs;
+    if (size_t hash = url.find('#'); hash != std::string::npos) {
+      t.fragment = url.substr(hash);
+      url.resize(hash);
+    }
+    xanatoo::Locator loc = xanatoo::parse_locator(url);
+    loc.base = xanatoo::file_url_path(loc.base);
+    if (loc.base.empty()) return t;  // another host: nothing to open
+    t.kind = LinkKind::Doc;
+    t.url = xanatoo::format_locator(loc);
+    return t;
   }
   if (is_in_app_remote_url(abs)) {
     t.kind = LinkKind::Remote;
@@ -518,12 +539,23 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
     return open_page(app, pi, std::move(target), record_history);
   xanatoo::Locator loc = xanatoo::parse_locator(target);
   const bool selectors = loc.has_selectors();
-  std::error_code ec;
-  if (selectors && fs::exists(target, ec))  // a file called "a#b.md"
-    return open_page(app, pi, std::move(target), record_history);
+  // file:///a/b.md → /a/b.md; only the path reaches the file system.
+  if (xanatoo::is_file_url(loc.base)) {
+    std::string path = xanatoo::file_url_path(loc.base);
+    if (path.empty()) {
+      flash_status(app, "Not a local file URL: " + loc.base);
+      return false;
+    }
+    loc.base = std::move(path);
+    if (!selectors) target = loc.base;
+  } else {
+    std::error_code ec;
+    if (selectors && fs::exists(target, ec))  // a file called "a#b.md"
+      return open_page(app, pi, std::move(target), record_history);
+  }
   // Another view of the page on screen, nothing to load.
-  if (loc.base == path_of(app, p) && !loc.base.empty() &&
-      (selectors || pane_address(app, p) != loc.base)) {
+  if (!loc.base.empty() && same_page(loc.base, path_of(app, p)) &&
+      (selectors || pane_address(app, p) != page_address(loc.base))) {
     apply_locator(app, pi, std::move(loc));
     if (record_history) push_nav_history(app, pi, pane_address(app, p));
     return true;
@@ -825,7 +857,7 @@ void activate_at_caret(App& app) {
         std::string resolved = xanatoo::resolve_gemini_url(base, abs);
         if (!resolved.empty()) abs = resolved;
       }
-      if (is_in_app_remote_url(abs)) {
+      if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs)) {
         navigate_to_url(app, std::move(abs), true,
                         NavLink{*href, {}, hit->node, hit->span_index});
       } else if (is_inapp_doc_href(app, abs)) {

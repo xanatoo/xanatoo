@@ -2782,6 +2782,12 @@ void test_locator() {
   l = parse_locator("book.md//source-sexpr");
   EXPECT_EQ(l.pipes[0].kind, SelectorKind::SourceSexpr);
 
+  // file: URLs stay whole; '#' in the path is %23.
+  l = parse_locator("file:///a/b%23c.md//id:ch3#id:x");
+  EXPECT_EQ(l.base, "file:///a/b%23c.md");
+  EXPECT(l.pipes.size() == 1 && l.point);
+  EXPECT_EQ(parse_locator("file:///").base, "file:///");
+
   l = parse_locator("map.png//rect:0.2,0.1,0.3,0.3#at:0.5,0.5");
   EXPECT_EQ(l.base, "map.png");
   EXPECT(l.pipes[0].kind == SelectorKind::Rect);

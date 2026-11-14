@@ -10,6 +10,7 @@
 #include <iostream>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/gemini.hpp"
@@ -166,8 +167,19 @@ bool app_init(App& app) {
   prune_image_caches();
 
   {
-    std::string p0 = app.opt.file_path;
-    std::string p1 = app.opt.file_path2;
+    // file:///a/b.md (+ selectors) → the path; a file named "a#b.md" stays
+    // whole when there are no selectors.
+    auto local = [](std::string a) {
+      xanatoo::Locator loc = xanatoo::parse_locator(a);
+      if (!xanatoo::is_file_url(loc.base)) return a;
+      std::string path = xanatoo::file_url_path(loc.base);
+      if (path.empty()) return a;
+      if (!loc.has_selectors()) return path;
+      loc.base = std::move(path);
+      return xanatoo::format_locator(loc);
+    };
+    std::string p0 = local(app.opt.file_path);
+    std::string p1 = local(app.opt.file_path2);
     if (p0.empty()) {
       p0 = xanatoo::find_default_document();
       if (p0.empty())

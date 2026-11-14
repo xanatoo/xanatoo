@@ -1344,8 +1344,17 @@ void refetch_page(App& app, int pi);
 // app_passage.cpp: the passage a view shows (docs/PASSAGES.md).
 // Node the view is cut to, INVALID_NODE for the whole document.
 xanatoo::NodeId pane_cut(App& app, Pane& p);
-// Full address of what the view shows: page + selectors.
+// Full address of what the view shows: page + selectors. Local pages are
+// file:///abs/path URLs.
 std::string pane_address(App& app, Pane& p);
+// The address spelling of a page: a local path (relative to the cwd) as its
+// file: URL, everything else unchanged.
+std::string page_address(std::string_view page);
+// `address` with its base spelled by page_address (old plain-path bookmarks
+// and history compare equal to file: URLs).
+std::string canonical_address(std::string_view address);
+// Both name the same page (path vs file: URL).
+bool same_page(std::string_view a, std::string_view b);
 // Show `loc`'s selectors in the page the view already shows, no load. A
 // passage that cannot be found drops out of the address with a status flash.
 void apply_locator(App& app, int pi, xanatoo::Locator loc);

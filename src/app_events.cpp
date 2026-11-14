@@ -12,6 +12,7 @@
 #include <iostream>
 #include <optional>
 
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/app.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/drop_url.hpp"
@@ -506,7 +507,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
           std::string resolved = xanatoo::resolve_gemini_url(base, abs);
           if (!resolved.empty()) abs = resolved;
         }
-        if (is_in_app_remote_url(abs)) {
+        if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs)) {
           navigate_to_url(app, std::move(abs), true,
                           NavLink{*href, {}, hit->node, hit->span_index});
           return;
