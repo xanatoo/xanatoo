@@ -483,10 +483,13 @@ bool lightbox_event(App& app, const SDL_Event& ev) {
       return true;
     case EventKind::TextInput:
     case EventKind::KeyUp:
+      return true;
+    // Raw finger events go on to app_touch.cpp, which routes touches inside
+    // the viewer to TouchMode::Lightbox / LightboxPinch (pinch zoom).
     case EventKind::FingerDown:
     case EventKind::FingerUp:
     case EventKind::FingerMotion:
-      return true;
+      return false;
     default:
       return false;  // quit, window, render resets keep their handlers
   }

@@ -8,6 +8,15 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-14) — Image viewer pinch zoom actually reaches the viewer
+
+- `lightbox_event` consumed FingerDown/Motion/Up, so `handle_event` returned
+  before `touch_finger_*` and `TouchMode::LightboxPinch` (3cf8e99) could never
+  start. Finger events now pass through; touch-synthesised mouse events still
+  drive single-finger pan and edge taps. Built; not tested on a touchscreen.
+- Planned: replace the Lightbox overlay with a `//gallery` view pipe
+  (pane-local, in history and the location bar, like `//source-*`).
+
 ## Status (2026-11-14) — Loading indicator: bytes, size, ETA
 
 - The loading pill and status line show bytes received, the total with
