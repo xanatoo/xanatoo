@@ -2855,6 +2855,29 @@ void test_gallery() {
   EXPECT(empty.root != xanatoo::INVALID_NODE);
 }
 
+// A linked inline thumbnail (gallery pages: <li><a href=big.jpg><img
+// src=small.jpg>) is found by its link target, so clicking it opens the
+// in-app gallery instead of falling through to the system browser.
+void test_gallery_linked_inline_thumb() {
+  using xanatoo::Document;
+  using xanatoo::NodeKind;
+  Document d;
+  const auto root = d.create(NodeKind::Document);
+  const auto li = d.create(NodeKind::ListItem, root);
+  auto span = xanatoo::inline_image("https://cdn.x.org/a_w400.jpg", "A");
+  span.href = "https://cdn.x.org/a_1200.jpg";
+  d.get(li).spans.push_back(span);
+  const auto items = xanatoo::gallery_items(d, xanatoo::INVALID_NODE);
+  EXPECT_EQ(items.size(), 1u);
+  if (items.size() == 1u) {
+    EXPECT_EQ(items[0].src, "https://cdn.x.org/a_1200.jpg");
+    EXPECT_EQ(items[0].thumb, "https://cdn.x.org/a_w400.jpg");
+  }
+  EXPECT_EQ(xanatoo::gallery_index_of(
+                items, std::string_view("https://cdn.x.org/a_1200.jpg")),
+            0);
+}
+
 void test_locator() {
   using xanatoo::format_locator;
   using xanatoo::Locator;
@@ -5875,6 +5898,7 @@ int main() {
   test_footnotes();
   test_locator();
   test_gallery();
+  test_gallery_linked_inline_thumb();
   test_text_selectors();
   test_bookmark_lines();
   test_math();

@@ -102,7 +102,11 @@ std::vector<GalleryItem> gallery_items(const Document& doc, NodeId scope) {
     }
     for (const auto& s : n.spans) {
       if (s.kind == InlineKind::Image && !s.src.empty())
-        add({s.src, s.src, link_caption(s.alt), id});
+        // A thumbnail linking to its original (gallery pages put these in
+        // list items, where images are inline): the viewer shows the
+        // original, and a click on the link finds it by that URL.
+        add({is_image_url(s.href) ? s.href : s.src, s.src,
+             link_caption(s.alt), id});
       else if (s.kind == InlineKind::Link && is_image_url(s.href) &&
                n.kind != NodeKind::Image)
         add({s.href, s.href, link_caption(s.text), id});
