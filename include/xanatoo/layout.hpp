@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -32,6 +33,15 @@ struct PositionedGlyph {
   InlineKind kind = InlineKind::Text;
   FontRole font = FontRole::Body;
   Rgba color;  // computed from the style sheet (block role + inline kind)
+};
+
+// Start of a line laid out but not materialised (LayoutResult::skipped_lines).
+struct SkippedLine {
+  NodeId node = INVALID_NODE;
+  uint32_t span_index = 0;
+  uint32_t char_index = 0;
+  float x = 0.f;  // left edge of the line
+  float y = 0.f;  // baseline
 };
 
 struct LayoutBox {
@@ -116,6 +126,11 @@ struct LayoutResult {
   // back to a full scan.
   std::vector<uint32_t> glyphs_by_y;
   std::vector<std::string> auto_links;  // targets of PositionedGlyph::auto_link
+  // Lines of a laid-out block that emitted no glyphs because they lie
+  // outside the materialised band (line-level virtualization of huge
+  // blocks): where each starts, in layout order. Lets caret positions and
+  // scroll targets inside a partly materialised block stay exact.
+  std::vector<SkippedLine> skipped_lines;
   std::vector<LayoutBox> boxes;
   std::vector<PositionedImage> images;
   std::vector<PositionedMath> maths;
@@ -311,6 +326,34 @@ private:
     FloatSide side = FloatSide::Right;
   };
   std::vector<FloatBox> floats_;
+  // Line starts of a big text block from an earlier layout() call. With a
+  // viewport only the lines near it get glyphs (line-level virtualization);
+  // a later layout of the unchanged block re-breaks just those lines and
+  // takes the positions of the others from here instead of measuring every
+  // character again. Kept for blocks that had lines outside the band, valid
+  // while `fingerprint` (text, fonts, width, spacing) matches.
+  struct LineTable {
+    struct Line {
+      uint32_t flat = 0;  // index among the block's characters
+      uint32_t span = 0;
+      uint32_t ch = 0;    // character index within the span
+      size_t byte = 0;    // byte offset of `ch` in the span text
+      float dy = 0.f;     // baseline − block top
+      bool start = false;  // a line start (else a newline placeholder)
+    };
+    struct Link {  // a URL found in the text (PositionedGlyph::auto_link)
+      uint32_t flat_b = 0, flat_e = 0;
+      std::string href;
+    };
+    uint64_t fingerprint = 0;
+    std::vector<Line> lines;  // in layout order
+    std::vector<Link> links;
+    float end_dy = 0.f;  // block bottom (the y after it) − block top
+    uint64_t used = 0;   // line_table_clock_ of the last use
+  };
+  static constexpr size_t kMaxLineTables = 8;
+  std::map<std::pair<const Document*, NodeId>, LineTable> line_tables_;
+  uint64_t line_table_clock_ = 0;
   // Narrow [x, x + w) to what the floats leave free between top and bottom.
   void float_band(float top, float bottom, float& x, float& w) const;
   // y below every float that reaches into [x, x + w) at y.

@@ -208,6 +208,8 @@ CaretScreenPos caret_screen_pos(const LayoutResult& layout,
   CaretScreenPos pos;
   pos.height = line_height;
 
+  // Char index of the glyph `pos` follows (when valid and not exact).
+  size_t before_char = 0;
   for (size_t i = 0; i < layout.glyphs.size(); ++i) {
     const auto& g = layout.glyphs[i];
     if (g.node != caret.node || g.span_index != caret.span_index) continue;
@@ -219,6 +221,7 @@ CaretScreenPos caret_screen_pos(const LayoutResult& layout,
       return pos;
     }
     if (g.char_index < caret.char_index) {
+      before_char = g.char_index;
       float gw = g.advance > 0.f ? g.advance : 8.f;
       if (i + 1 < layout.glyphs.size() &&
           layout.glyphs[i + 1].node == g.node &&
@@ -232,6 +235,25 @@ CaretScreenPos caret_screen_pos(const LayoutResult& layout,
     }
   }
 
+  // A line of a partly materialised block (line-level virtualization): the
+  // caret is on the last skipped line starting at or before it, unless a
+  // materialised glyph lies between that line start and the caret.
+  const SkippedLine* line = nullptr;
+  for (const SkippedLine& l : layout.skipped_lines) {
+    if (l.node != caret.node) continue;
+    if (l.span_index > caret.span_index ||
+        (l.span_index == caret.span_index && l.char_index > caret.char_index))
+      continue;
+    if (!line || l.span_index > line->span_index ||
+        (l.span_index == line->span_index && l.char_index > line->char_index))
+      line = &l;
+  }
+  if (line && (!pos.valid || (line->span_index == caret.span_index &&
+                              line->char_index > before_char))) {
+    pos.x = line->x;
+    pos.y = line->y - scroll_y;
+    pos.valid = true;
+  }
   if (!pos.valid) {
     for (const auto& box : layout.boxes) {
       if (box.node == caret.node) {

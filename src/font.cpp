@@ -66,6 +66,7 @@ void Font::drop_cache() {
     if (g.texture) SDL_DestroyTexture(g.texture);
   }
   cache_.clear();
+  latin1_.fill(nullptr);
 }
 
 void Font::set_size(int pixel_size) {
@@ -146,13 +147,13 @@ Glyph Font::load_glyph(uint32_t codepoint) {
 }
 
 const Glyph& Font::glyph(uint32_t codepoint) {
+  if (codepoint < latin1_.size() && latin1_[codepoint])
+    return *latin1_[codepoint];
   auto it = cache_.find(codepoint);
-  if (it != cache_.end()) {
-    return it->second;
-  }
-  Glyph g = load_glyph(codepoint);
-  auto [ins, _] = cache_.emplace(codepoint, std::move(g));
-  return ins->second;
+  if (it == cache_.end())
+    it = cache_.emplace(codepoint, load_glyph(codepoint)).first;
+  if (codepoint < latin1_.size()) latin1_[codepoint] = &it->second;
+  return it->second;
 }
 
 int Font::measure(const std::string& text) {

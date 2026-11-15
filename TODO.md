@@ -3490,7 +3490,7 @@ LCS structural diff marks; cross-document `:::include`.
 - [x] Bugfix: soft-window doc access, stretch undo, reload/new soft sync
 - [x] Build fix: org unused var; soft relative links; tab close keeps floats
 - [x] Perf: large-doc render cull, history depth, org parse, outline, hit_test
-- [x] Perf: y-sorted glyph index (`glyphs_by_y`) for pointer hit tests; big pages no longer freeze on mouse motion. Scrollbar section marks and status word counts cached per layout generation (were whole-document walks every frame). Open: render and diff-word highlight still visit all glyphs per frame
+- [x] Perf: y-sorted glyph index (`glyphs_by_y`) for pointer hit tests; big pages no longer freeze on mouse motion. Scrollbar section marks and status word counts cached per layout generation (were whole-document walks every frame). Huge single blocks (10 MB source view): line-level virtualization + per-block line tables in LayoutEngine (relayout ~3 ms). Open: render and diff-word highlight still visit all glyphs per frame; the first layout of a 10 MB block still takes ~1 s; `append_result` (columns, cells) does not carry `auto_links` over
 - [x] Initial layout uses real window size (was stuck at 920 until resize)
 - [x] Fix endless relayout when window size reports 0; column width clamp; tags copy
 - [x] Diff uses pane buffers; navigate switches existing tab; Next/Prev tab title

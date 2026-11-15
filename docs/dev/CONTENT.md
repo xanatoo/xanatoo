@@ -34,6 +34,18 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Per-frame chrome must not walk the whole document: scrollbar section /
   block ticks (`Pane::scroll_marks`) and the status-bar word counts
   (`Pane::stats`) are cached per `layout.generation`.
+- Line-level virtualization (`layout_paragraph`): with a viewport, lines of
+  a block outside the materialised band are broken and measured but emit
+  no glyphs; `LayoutResult::skipped_lines` keeps each such line's start
+  and baseline, and `caret_screen_pos` falls back to it, so caret / search
+  / scroll targets inside a partly materialised block stay exact.
+- `LayoutEngine` line tables: a plain-text block (no math, inline images,
+  footnote marks, nor floats beside it) that had skipped lines keeps its
+  line starts (+ byte offsets, auto-link ranges), keyed by document and
+  node and checked by a fingerprint of text, fonts, width and spacing. The
+  next layout decodes and breaks only from the last line above the band to
+  the first below it (10 MB block: ~3 ms instead of ~1 s). Few tables
+  (`kMaxLineTables`, LRU).
 - Preferences (`ViewSettings` / `view.conf`): line spacing, margins, measure, plus behaviour switches (footnote overlay, justify, hover preview) shown in Edit → Preferences (ImGui window, `UiCommand::TogglePreferences`); never document format
 - Section Focus mode: `LayoutEngine::layout(..., focus_section)` filters body to one Section/Article (outline still full tree); scroll outside the materialised band
   triggers re-layout. Width changes clear the cache.

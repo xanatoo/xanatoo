@@ -2436,6 +2436,151 @@ void test_glyphs_in_band() {
   EXPECT(indexed.empty());
 }
 
+void test_layout_skips_lines_outside_band() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_skips_lines_outside_band (no font)\n");
+    return;
+  }
+  // One huge block: 3000 lines of source.
+  std::string text;
+  for (int i = 0; i < 3000; ++i)
+    text += "line " + std::to_string(i) + " of the source\n";
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  const NodeId code = doc.create(NodeKind::CodeBlock, root);
+  doc.append_text(code, text);
+  LayoutEngine engine(fonts, nullptr);
+  const LayoutResult full = engine.layout(doc, 800.f);
+  LayoutViewport vp;
+  vp.top = 20000.f;
+  vp.bottom = 20800.f;
+  vp.overscan = 800.f;
+  const LayoutResult part = engine.layout(doc, 800.f, "", vp);
+  // Same geometry, glyphs only near the band.
+  EXPECT(part.virtualized);
+  EXPECT(std::abs(part.content_height - full.content_height) < 0.5f);
+  EXPECT(part.glyphs.size() * 10 < full.glyphs.size());
+  EXPECT(!part.skipped_lines.empty());
+  bool in_band = true;
+  for (const PositionedGlyph& g : part.glyphs)
+    in_band = in_band && g.y > vp.top - vp.overscan - 50.f &&
+              g.y < vp.bottom + vp.overscan + 50.f;
+  EXPECT(in_band);
+  // Materialised glyphs sit where the full layout put them.
+  if (!part.glyphs.empty()) {
+    const PositionedGlyph& g = part.glyphs[part.glyphs.size() / 2];
+    bool found = false;
+    for (const PositionedGlyph& f : full.glyphs)
+      if (f.span_index == g.span_index && f.char_index == g.char_index) {
+        found = std::abs(f.y - g.y) < 0.01f && std::abs(f.x - g.x) < 0.01f;
+        break;
+      }
+    EXPECT(found);
+  }
+  // A caret on a skipped line (before and after the band) still has its
+  // exact line position.
+  for (size_t line : {10u, 2900u}) {
+    size_t ci = 0;
+    for (int i = 0; i < static_cast<int>(line); ++i)
+      ci += ("line " + std::to_string(i) + " of the source\n").size();
+    const Caret at{code, 0, ci + 5};
+    const auto pf = caret_screen_pos(full, at, 0.f, 20.f);
+    const auto pp = caret_screen_pos(part, at, 0.f, 20.f);
+    EXPECT(pf.valid && pp.valid);
+    EXPECT(std::abs(pf.y - pp.y) < 0.01f);
+  }
+}
+
+// Laying out a big block again from its line table (LayoutEngine keeps one
+// once lines fall outside the band) gives exactly what a fresh engine does.
+void test_layout_line_table_matches_fresh() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_line_table_matches_fresh (no font)\n");
+    return;
+  }
+  // Source with long unbreakable lines, empty lines and non-ASCII text.
+  std::string code;
+  for (int i = 0; i < 1500; ++i) {
+    code += "line " + std::to_string(i) + " \xc3\xa9t\xc3\xa9 caf\xc3\xa9\n";
+    if (i % 97 == 0) code += std::string(400 + i % 7, 'x') + "\n\n\n";
+  }
+  // Prose with URLs, some wrapping across lines.
+  std::string prose;
+  for (int i = 0; i < 2500; ++i) {
+    prose += "Sentence " + std::to_string(i) + " has some words in it";
+    if (i % 13 == 0)
+      prose += " see https://example.org/a/very/long/path/" + std::to_string(i) +
+               "/with/more/segments/to/wrap";
+    prose += ". ";
+  }
+  struct Case {
+    NodeKind kind;
+    std::string text;
+  };
+  for (const Case& cs : {Case{NodeKind::CodeBlock, code},
+                         Case{NodeKind::Paragraph, prose}}) {
+    Document doc;
+    const NodeId root = doc.create(NodeKind::Document);
+    const NodeId n = doc.create(cs.kind, root);
+    doc.append_text(n, cs.text);
+    LayoutOptions opts;
+    opts.justify = true;
+    opts.auto_links = true;
+    auto view = [](float top) {
+      LayoutViewport vp;
+      vp.top = top;
+      vp.bottom = top + 700.f;
+      vp.overscan = 900.f;
+      return vp;
+    };
+    LayoutEngine warm(fonts, nullptr);
+    warm.set_options(opts);
+    const LayoutResult first = warm.layout(doc, 700.f, "", view(30000.f));
+    EXPECT(!first.skipped_lines.empty());
+    for (float top : {0.f, 12000.f, 31000.f, first.content_height - 600.f}) {
+      LayoutEngine fresh(fonts, nullptr);
+      fresh.set_options(opts);
+      const LayoutResult a = warm.layout(doc, 700.f, "", view(top));
+      const LayoutResult b = fresh.layout(doc, 700.f, "", view(top));
+      EXPECT(std::abs(a.content_height - b.content_height) < 0.01f);
+      bool same = a.glyphs.size() == b.glyphs.size() &&
+                  a.skipped_lines.size() == b.skipped_lines.size();
+      EXPECT(same);
+      for (size_t i = 0; same && i < a.glyphs.size(); ++i) {
+        const PositionedGlyph& p = a.glyphs[i];
+        const PositionedGlyph& q = b.glyphs[i];
+        same = p.codepoint == q.codepoint && p.x == q.x && p.y == q.y &&
+               p.span_index == q.span_index && p.char_index == q.char_index &&
+               p.kind == q.kind &&
+               (p.auto_link == 0) == (q.auto_link == 0) &&
+               (p.auto_link == 0 ||
+                a.auto_links[p.auto_link - 1] == b.auto_links[q.auto_link - 1]);
+        if (!same)
+          std::fprintf(stderr, "line table: glyph %zu differs at top %.0f\n", i,
+                       top);
+      }
+      for (size_t i = 0; same && i < a.skipped_lines.size(); ++i) {
+        const SkippedLine& p = a.skipped_lines[i];
+        const SkippedLine& q = b.skipped_lines[i];
+        same = p.span_index == q.span_index && p.char_index == q.char_index &&
+               p.x == q.x && p.y == q.y;
+        if (!same)
+          std::fprintf(stderr, "line table: skipped line %zu differs at top %.0f\n",
+                       i, top);
+      }
+      EXPECT(same);
+    }
+  }
+}
+
 void test_layout_wrap_respects_max_width() {
   using namespace xanatoo;
   // Metrics-only: no SDL window. Font textures may be null; advances still work.
@@ -6028,6 +6173,8 @@ int main() {
   test_sanitize_epub_markdown();
   test_epub_native();
   test_hit_test_wrapped_link();
+  test_layout_skips_lines_outside_band();
+  test_layout_line_table_matches_fresh();
   test_glyphs_in_band();
   test_layout_wrap_respects_max_width();
   test_layout_forced_wrap_after_regular_text();

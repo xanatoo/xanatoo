@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <fstream>
+#include <cstring>
+#include <limits>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
@@ -191,6 +193,7 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
   add(out.role_frames, in.role_frames);
   add(out.column_gaps, in.column_gaps);
   add(out.page_gaps, in.page_gaps);
+  add(out.skipped_lines, in.skipped_lines);
 }
 
 // Blocks with a box of their own (fills, grids, pictures) that cannot run
@@ -2138,12 +2141,11 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
   }
 }
 
-static void decode_utf8(const std::string& text,
-                        std::vector<uint32_t>& out) {
-  size_t i = 0;
+// The codepoint at byte `i` of `text`; advances `i` past it. Invalid bytes
+// are skipped (they are no character). False at the end.
+static bool next_utf8(const std::string& text, size_t& i, uint32_t& cp) {
   while (i < text.size()) {
-    unsigned char c = static_cast<unsigned char>(text[i]);
-    uint32_t cp = 0;
+    const unsigned char c = static_cast<unsigned char>(text[i]);
     if (c < 0x80) {
       cp = c;
       ++i;
@@ -2161,8 +2163,16 @@ static void decode_utf8(const std::string& text,
       ++i;
       continue;
     }
-    out.push_back(cp);
+    return true;
   }
+  return false;
+}
+
+static void decode_utf8(const std::string& text,
+                        std::vector<uint32_t>& out) {
+  size_t i = 0;
+  uint32_t cp = 0;
+  while (next_utf8(text, i, cp)) out.push_back(cp);
 }
 
 void LayoutEngine::layout_aside(const Document& doc, const Node& node,
@@ -2498,59 +2508,182 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   const bool ctx_color = ctx_role_ != BlockRole::Count &&
                          (*style_)[ctx_role_].has_color &&
                          !(*style_)[block].has_color;
-  struct CharInfo {
-    uint32_t cp;
-    size_t span_idx;
-    size_t char_idx;
-    InlineKind kind;
-    FontRole role;
-    uint32_t auto_link = 0;  // see PositionedGlyph::auto_link
-    float rise = 0.f;  // baseline lift (footnote marks without superscripts)
-    float img_w = 0.f;  // inline image: an atom of this size (else 0)
-    float img_h = 0.f;
+  // An inline image or formula: one CharInfo of this size.
+  struct Atom {
+    float w = 0.f;  // advance
+    float h = 0.f;  // above the baseline
+    float d = 0.f;  // below the baseline (formulas)
     bool remote = false;
-    // A formula (also an atom): `img_h` above the baseline, `img_d` below.
-    float img_d = 0.f;
     float math_px = 0.f;
     bool display = false;
     std::shared_ptr<const MathBox> math = nullptr;
   };
+  // One codepoint (or atom) of the paragraph. Kept small: a huge block
+  // holds one per character while its lines are broken.
+  struct CharInfo {
+    uint32_t cp;
+    uint32_t span_idx;
+    uint32_t char_idx;
+    InlineKind kind;
+    FontRole role;
+    uint32_t auto_link = 0;  // see PositionedGlyph::auto_link
+    float rise = 0.f;  // baseline lift (footnote marks without superscripts)
+    uint32_t atom = 0;  // 1 + index into `atoms`; 0 = text
+  };
+  std::vector<Atom> atoms;
   std::vector<CharInfo> chars;
+  auto atom_of = [&](const CharInfo& c) -> const Atom* {
+    return c.atom ? &atoms[c.atom - 1] : nullptr;
+  };
+  // Advance of an atom; 0 for text (and for an image without a size,
+  // which is laid out as its placeholder glyph).
+  auto atom_w = [&](const CharInfo& c) {
+    return c.atom ? atoms[c.atom - 1].w : 0.f;
+  };
   const bool small_base = is_small_role(base_role);
-  for (size_t si = 0; si < node.spans.size(); ++si) {
-    const InlineSpan& span = node.spans[si];
-    std::vector<uint32_t> cps;
-    decode_utf8(span.text, cps);
-    const InlineKind kind = span.kind;
-    FontRole r = style_role(base_role, kind);
-    const InlineStyle& inl = (*style_)[kind];
+  // Font of a span's text (its inline style and metadata may override).
+  auto span_role = [&](const InlineSpan& span) {
+    FontRole r = style_role(base_role, span.kind);
+    const InlineStyle& inl = (*style_)[span.kind];
     if (inl.has_font) r = inl.font;
     if (span.role == InlineRole::Metadata && style_->metadata.has_font)
       r = style_->metadata.font;
+    return r;
+  };
+
+  // ---- Line table (LineTable in layout.hpp) ----
+  // Plain text without floats beside it, while virtualizing: every
+  // character is one CharInfo with char_idx = its index in the span, and
+  // lines do not depend on the block's y. Math, inline images and footnote
+  // marks change that, so such blocks are always broken in full.
+  const bool cull_lines = viewport_.active();
+  bool plain_text = cull_lines && floats_.empty();
+  for (const InlineSpan& sp : node.spans)
+    if (sp.kind == InlineKind::Math || sp.kind == InlineKind::Image ||
+        sp.kind == InlineKind::FootnoteRef)
+      plain_text = false;
+  auto fingerprint = [&]() {
+    uint64_t h = 0xcbf29ce484222325ull;
+    auto mix = [&](uint64_t v) {
+      h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+    };
+    auto mix_f = [&](float f) {
+      uint32_t b = 0;
+      std::memcpy(&b, &f, sizeof b);
+      mix(b);
+    };
+    mix_f(x);
+    mix_f(max_width);
+    mix_f(options_.line_spacing);
+    mix(options_.auto_links);
+    mix(static_cast<uint64_t>(base_role));
+    mix(static_cast<uint64_t>(block));
+    for (const InlineSpan& sp : node.spans) {
+      const FontRole r = span_role(sp);
+      const Font& f = fonts_.pick(r);
+      mix(static_cast<uint64_t>(sp.kind));
+      mix(static_cast<uint64_t>(r));
+      mix(static_cast<uint64_t>(f.pixel_size()));
+      mix(std::hash<std::string>{}(f.path()));
+      mix(std::hash<std::string>{}(sp.text));
+    }
+    return h;
+  };
+  const std::pair<const Document*, NodeId> table_key{&doc, node.id};
+  const LineTable* table = nullptr;  // valid table of this block
+  uint64_t print = 0;
+  if (plain_text) {
+    auto it = line_tables_.find(table_key);
+    if (it != line_tables_.end()) {
+      print = fingerprint();
+      if (it->second.fingerprint == print) {
+        it->second.used = ++line_table_clock_;
+        table = &it->second;
+      }
+    }
+  }
+  // With a table: only chars[flat0, flat_end) of the block are built and
+  // broken, from the line start `first` up to the start of the line after
+  // `stop` (the first line below the band); lines before `first` and from
+  // `stop` on come from the table.
+  const float y0 = y;
+  size_t first = 0;  // into table->lines
+  size_t stop = 0;   // into table->lines; == size(): to the block's end
+  size_t flat0 = 0;
+  size_t flat_end = std::numeric_limits<size_t>::max();
+  size_t emit_end = std::numeric_limits<size_t>::max();  // flat
+  if (table) {
+    const auto& L = table->lines;
+    const float band0 = viewport_.top - viewport_.overscan;
+    const float band1 = viewport_.bottom + viewport_.overscan;
+    const Font& m = fonts_.pick(base_role == FontRole::Heading ? FontRole::Heading
+                                : small_base                  ? FontRole::Small
+                                                              : FontRole::Body);
+    const float advance = m.line_height() * options_.line_spacing;
+    stop = L.size();
+    for (size_t i = 0; i < L.size(); ++i) {
+      if (!L[i].start) continue;
+      if (y0 + L[i].dy + advance < band0) first = i;
+      if (y0 + L[i].dy - static_cast<float>(m.ascender()) > band1) {
+        stop = i;
+        break;
+      }
+    }
+    if (!L[first].start) first = 0;
+    flat0 = L[first].flat;
+    if (stop < L.size()) {
+      emit_end = L[stop].flat;
+      for (size_t i = stop + 1; i < L.size(); ++i)
+        if (L[i].start) {
+          flat_end = L[i].flat;
+          break;
+        }
+    }
+  }
+
+  std::vector<uint32_t> cps;
+  const size_t first_span = table ? table->lines[first].span : 0;
+  for (size_t si = first_span; si < node.spans.size(); ++si) {
+    if (flat0 + chars.size() >= flat_end) break;
+    const InlineSpan& span = node.spans[si];
+    const auto si32 = static_cast<uint32_t>(si);
+    // A table range starts inside its first span.
+    const bool from_table = table && si == first_span;
+    const uint32_t ch0 = from_table ? table->lines[first].ch : 0;
+    size_t byte = from_table ? table->lines[first].byte : 0;
+    cps.clear();
+    for (uint32_t cp = 0; flat0 + chars.size() + cps.size() < flat_end &&
+                          next_utf8(span.text, byte, cp);)
+      cps.push_back(cp);
+    const InlineKind kind = span.kind;
+    const FontRole r = span_role(span);
     if (kind == InlineKind::Math) {
       // One atom set from the font's math table; without a math font (or a
       // formula that does not parse) the TeX source is shown as code.
       const InlineSpan& sp = node.spans[si];
       const float em = static_cast<float>(fonts_.pick(r).pixel_size());
       if (auto box = math_box(sp)) {
-        CharInfo c{kInlineImageCp, si, 0, kind, r};
-        c.img_w = std::max(1.f, box->width * em);
-        c.img_h = box->ascent * em;
-        c.img_d = box->depth * em;
-        c.math_px = em;
-        c.display = sp.display;
-        c.math = std::move(box);
-        chars.push_back(std::move(c));
+        Atom a;
+        a.w = std::max(1.f, box->width * em);
+        a.h = box->ascent * em;
+        a.d = box->depth * em;
+        a.math_px = em;
+        a.display = sp.display;
+        a.math = std::move(box);
+        atoms.push_back(std::move(a));
+        CharInfo c{kInlineImageCp, si32, 0, kind, r};
+        c.atom = static_cast<uint32_t>(atoms.size());
+        chars.push_back(c);
       } else {
         const FontRole code = small_base ? FontRole::SmallCode : FontRole::Code;
         std::vector<uint32_t> src;
         decode_utf8(sp.src, src);
-        for (uint32_t cp : src) chars.push_back(CharInfo{cp, si, 0, kind, code});
+        for (uint32_t cp : src) chars.push_back(CharInfo{cp, si32, 0, kind, code});
       }
       continue;
     }
     for (size_t ci = 0; ci < cps.size(); ++ci) {
-      CharInfo c{cps[ci], si, ci, kind, r};
+      CharInfo c{cps[ci], si32, static_cast<uint32_t>(ch0 + ci), kind, r};
       if (kind == InlineKind::FootnoteRef) {
         // Footnote mark: superscript digit when the face has one (same
         // char index, so caret / selection are unaffected), else raised.
@@ -2561,16 +2694,32 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
         else
           c.rise = static_cast<float>(f.ascender()) * 0.4f;
       } else if (kind == InlineKind::Image && c.cp == kInlineImageCp) {
-        inline_image_size(node.spans[si], max_width, c.img_w, c.img_h,
-                          c.remote);
+        Atom a;
+        inline_image_size(node.spans[si], max_width, a.w, a.h, a.remote);
+        atoms.push_back(std::move(a));
+        c.atom = static_cast<uint32_t>(atoms.size());
       }
       chars.push_back(c);
     }
   }
 
   // Plain-text URLs become links for this layout only (the span stays Text).
-  if (options_.auto_links && base_role != FontRole::Code &&
-      base_role != FontRole::SmallCode) {
+  // A table has them for the whole block (a URL may start before chars).
+  std::vector<LineTable::Link> found_links;
+  if (table) {
+    for (const LineTable::Link& l : table->links) {
+      const size_t b = std::max(l.flat_b, static_cast<uint32_t>(flat0));
+      const size_t e = std::min<size_t>(l.flat_e, flat0 + chars.size());
+      if (b >= e) continue;
+      out.auto_links.push_back(l.href);
+      const uint32_t id = static_cast<uint32_t>(out.auto_links.size());
+      for (size_t i = b; i < e; ++i) {
+        chars[i - flat0].kind = InlineKind::Link;
+        chars[i - flat0].auto_link = id;
+      }
+    }
+  } else if (options_.auto_links && base_role != FontRole::Code &&
+             base_role != FontRole::SmallCode) {
     for (size_t lo = 0; lo < chars.size();) {
       size_t hi = lo;
       while (hi < chars.size() && chars[hi].span_idx == chars[lo].span_idx) ++hi;
@@ -2583,6 +2732,9 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
         for (const auto& [b, e] : find_urls(cps)) {
           std::string href;
           for (size_t i = b; i < e; ++i) autolink_append_utf8(href, cps[i]);
+          if (plain_text)
+            found_links.push_back({static_cast<uint32_t>(lo + b),
+                                   static_cast<uint32_t>(lo + e), href});
           out.auto_links.push_back(std::move(href));
           const uint32_t id = static_cast<uint32_t>(out.auto_links.size());
           for (size_t i = lo + b; i < lo + e; ++i) {
@@ -2604,6 +2756,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   }
 
   float baseline = y + metrics.ascender();
+  if (table && flat0 > 0) baseline = y0 + table->lines[first].dy;
   // The current line: left edge and width, narrowed beside floating boxes.
   float lx0 = x;
   float lw = max_width;
@@ -2633,12 +2786,49 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   place_line();
 
   auto char_adv = [&](const CharInfo& c) -> float {
-    if (c.img_w > 0.f) return c.img_w;
+    if (const float w = atom_w(c); w > 0.f) return w;
     return static_cast<float>(fonts_.pick(c.role).glyph(c.cp).advance >> 6);
   };
 
+  // Line-level virtualization: a line wholly outside the materialised band
+  // is broken and measured like any other (the block keeps its exact
+  // height) but emits no glyphs, images or formulas; LayoutResult::
+  // skipped_lines keeps where it starts. A huge block then costs glyphs only
+  // for the lines near the view.
+  const float band0 = viewport_.top - viewport_.overscan;
+  const float band1 = viewport_.bottom + viewport_.overscan;
+  auto in_band = [&](float top, float bottom) {
+    return !cull_lines || (bottom >= band0 && top <= band1);
+  };
+  bool skipped_here = false;
+  auto skip_line = [&](const CharInfo& c, float lx) {
+    out.skipped_lines.push_back(
+        {node.id, c.span_idx, c.char_idx, lx, baseline});
+    skipped_any_ = true;
+    skipped_here = true;
+  };
+  // Lines of a table range outside it (before / from `stop`).
+  auto skip_table_lines = [&](size_t from, size_t to) {
+    for (size_t i = from; i < to; ++i) {
+      const LineTable::Line& l = table->lines[i];
+      out.skipped_lines.push_back({node.id, l.span, l.ch, x, y0 + l.dy});
+    }
+    if (to > from) skipped_any_ = true;
+  };
+  // Recorded for a new table (plain text broken in full).
+  const bool recording = plain_text && !table;
+  std::vector<LineTable::Line> recorded;
+  auto record = [&](const CharInfo& c, size_t i, bool start) {
+    if (recording)
+      recorded.push_back({static_cast<uint32_t>(i), c.span_idx, c.char_idx, 0,
+                          baseline - y0, start});
+  };
+
   // Emit one visual line: chars[lo, hi). last_or_hard → no justify.
-  auto emit_line = [&](size_t lo, size_t hi, bool last_or_hard) {
+  // Returns false when the line was skipped (outside the band).
+  auto emit_line = [&](size_t lo, size_t hi, bool last_or_hard) -> bool {
+    if (flat0 + lo >= emit_end) return false;  // from the table
+    record(chars[lo], lo, true);
     // Trim trailing spaces from the measured/justified run.
     size_t content_hi = hi;
     while (content_hi > lo && chars[content_hi - 1].cp == ' ') --content_hi;
@@ -2654,12 +2844,14 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     if (space_adv < 1.f) space_adv = 4.f;
     for (size_t i = lo; i < content_hi; ++i) {
       natural += char_adv(chars[i]);
-      if (chars[i].img_h > 0.f)
-        img_up = std::max(img_up, chars[i].img_h -
-                                      static_cast<float>(metrics.ascender()));
-      if (chars[i].img_d > 0.f)
-        img_down = std::max(img_down,
-                            chars[i].img_d + static_cast<float>(metrics.descender()));
+      if (const Atom* a = atom_of(chars[i])) {
+        if (a->h > 0.f)
+          img_up = std::max(img_up,
+                            a->h - static_cast<float>(metrics.ascender()));
+        if (a->d > 0.f)
+          img_down = std::max(
+              img_down, a->d + static_cast<float>(metrics.descender()));
+      }
       if (chars[i].cp == ' ') {
         if (seen_nonspace) in_space = true;
       } else {
@@ -2669,6 +2861,14 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       }
     }
     baseline += img_up;
+    const float line_advance =
+        metrics.line_height() * options_.line_spacing + img_down;
+    if (!in_band(baseline - static_cast<float>(metrics.ascender()) - img_up,
+                 baseline + line_advance)) {
+      skip_line(chars[lo], lx0);
+      baseline += line_advance;
+      return false;
+    }
 
     float gap_extra = 0.f;
     const bool can_justify =
@@ -2686,7 +2886,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
     float lx = lx0;
     // A display formula alone on its line is centred.
-    if (content_hi == lo + 1 && chars[lo].display && natural < lw)
+    if (content_hi == lo + 1 && atom_of(chars[lo]) &&
+        atom_of(chars[lo])->display && natural < lw)
       lx += (lw - natural) * 0.5f;
     bool after_space_run = false;
     bool had_nonspace = false;
@@ -2718,37 +2919,38 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
                                style_->metadata.has_color)
                      ? (*style_)[ctx_role_].color
                      : style_->text_color(block, c.kind, semantic);
-      if (c.math) {
+      const Atom* atom = atom_of(c);
+      if (atom && atom->math) {
         // Formula: drawn from its box at the baseline; the glyph is its
         // caret slot.
         pg.x = lx;
-        pg.advance = c.img_w;
+        pg.advance = atom->w;
         PositionedMath pm;
         pm.node = node.id;
         pm.span_index = c.span_idx;
         pm.x = lx;
         pm.y = baseline;
-        pm.px = c.math_px;
-        pm.display = c.display;
-        pm.box = c.math;
+        pm.px = atom->math_px;
+        pm.display = atom->display;
+        pm.box = atom->math;
         pm.color = pg.color;
         out.maths.push_back(std::move(pm));
         out.glyphs.push_back(pg);
-        lx += c.img_w;
+        lx += atom->w;
         continue;
       }
-      if (c.img_w > 0.f) {
+      if (atom && atom->w > 0.f) {
         // Inline image: sits on the baseline; the glyph is its caret slot.
         pg.x = lx;
-        pg.advance = c.img_w;
-        PositionedImage im{node.id, lx, baseline - c.img_h, c.img_w, c.img_h,
+        pg.advance = atom->w;
+        PositionedImage im{node.id, lx, baseline - atom->h, atom->w, atom->h,
                            node.spans[c.span_idx].src, image_base_};
-        if (c.remote) im.thumb = kRemoteThumbEdge;
+        if (atom->remote) im.thumb = kRemoteThumbEdge;
         im.in_text = true;
         im.span_index = c.span_idx;
         out.images.push_back(std::move(im));
         out.glyphs.push_back(pg);
-        lx += c.img_w;
+        lx += atom->w;
         continue;
       }
       Font& font = fonts_.pick(c.role);
@@ -2759,7 +2961,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       out.glyphs.push_back(pg);
       lx += adv;
     }
-    baseline += metrics.line_height() * options_.line_spacing + img_down;
+    baseline += line_advance;
+    return true;
   };
 
   // Word-wrap: build runs separated by spaces / hard breaks.
@@ -2821,6 +3024,9 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     return static_cast<float>(font.glyph(cp).advance >> 6);
   };
 
+  // Lines above the table range.
+  if (table) skip_table_lines(0, first);
+
   for (size_t i = 0; i < chars.size(); ++i) {
     const uint32_t cp = chars[i].cp;
 
@@ -2828,20 +3034,27 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       // Commit any partial word, then hard-break.
       end_word();
       flush_line(i, true);
-      // Placeholder so caret can sit on the newline index.
-      {
-        PositionedGlyph pg;
-        pg.codepoint = ' ';
-        pg.x = lx0;
-        pg.y = baseline;
-        pg.node = node.id;
-        pg.span_index = chars[i].span_idx;
-        pg.char_index = chars[i].char_idx;
-        pg.kind = chars[i].kind;
-        pg.font = chars[i].role;
-        pg.color = style_->text_color(
-            block, chars[i].kind, node.spans[chars[i].span_idx].role);
-        out.glyphs.push_back(pg);
+      // Placeholder so caret can sit on the newline index (past emit_end
+      // the table has it).
+      if (flat0 + i < emit_end) {
+        record(chars[i], i, false);
+        if (in_band(baseline - static_cast<float>(metrics.ascender()),
+                    baseline + static_cast<float>(metrics.descender()))) {
+          PositionedGlyph pg;
+          pg.codepoint = ' ';
+          pg.x = lx0;
+          pg.y = baseline;
+          pg.node = node.id;
+          pg.span_index = chars[i].span_idx;
+          pg.char_index = chars[i].char_idx;
+          pg.kind = chars[i].kind;
+          pg.font = chars[i].role;
+          pg.color = style_->text_color(
+              block, chars[i].kind, node.spans[chars[i].span_idx].role);
+          out.glyphs.push_back(pg);
+        } else {
+          skip_line(chars[i], lx0);
+        }
       }
       if (cp == '\r' && i + 1 < chars.size() && chars[i + 1].cp == '\n') ++i;
       line_lo = i + 1;
@@ -2854,7 +3067,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
     float adv = char_adv(chars[i]);
 
-    if (chars[i].img_w > 0.f) {
+    if (atom_w(chars[i]) > 0.f) {
       // An inline image is a word of its own: breaks before and after it.
       end_word();
       if (line_w > 0.f && line_w + adv > lw) flush_line(i, false);
@@ -2917,7 +3130,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       float remaining_word_w = 0.f;
       for (size_t j = i; j < chars.size(); ++j) {
         if (chars[j].cp == ' ' || chars[j].cp == '\n' ||
-            chars[j].cp == '\r' || chars[j].img_w > 0.f) break;
+            chars[j].cp == '\r' || atom_w(chars[j]) > 0.f) break;
         remaining_word_w += char_adv(chars[j]);
         if (line_w + remaining_word_w > lw) break;
       }
@@ -2927,8 +3140,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     if (word_w > 0.f &&
         word_w + adv + forced_break_mark_width(chars[i - 1].role) > lw) {
       const FontRole role = chars[i - 1].role;
-      emit_line(line_lo, i, false);
-      add_forced_break_mark(role);
+      if (emit_line(line_lo, i, false)) add_forced_break_mark(role);
       place_line();
       line_lo = i;
       word_lo = i;
@@ -2939,10 +3151,46 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   }
 
   // Tail: last word + line.
+  if (table && stop < table->lines.size()) {
+    // The rest of the block: from the table.
+    skip_table_lines(stop, table->lines.size());
+    y = y0 + table->end_dy;
+    return;
+  }
   end_word();
   if (line_lo < chars.size()) flush_line(chars.size(), true);
 
   y = baseline - metrics.ascender() + metrics.line_height() * 0.2f;
+
+  if (recording && skipped_here) {
+    // Bigger than the band: keep its lines for the next layout.
+    LineTable t;
+    t.fingerprint = print ? print : fingerprint();
+    t.lines = std::move(recorded);
+    t.links = std::move(found_links);
+    t.end_dy = y - y0;
+    t.used = ++line_table_clock_;
+    // Byte offsets of the line starts (lines are in text order).
+    size_t span = std::numeric_limits<size_t>::max(), byte = 0;
+    uint32_t ch = 0;
+    for (LineTable::Line& l : t.lines) {
+      if (l.span != span) {
+        span = l.span;
+        byte = 0;
+        ch = 0;
+      }
+      uint32_t cp = 0;
+      while (ch < l.ch && next_utf8(node.spans[span].text, byte, cp)) ++ch;
+      l.byte = byte;
+    }
+    line_tables_[table_key] = std::move(t);
+    while (line_tables_.size() > kMaxLineTables) {
+      auto oldest = line_tables_.begin();
+      for (auto it = line_tables_.begin(); it != line_tables_.end(); ++it)
+        if (it->second.used < oldest->second.used) oldest = it;
+      line_tables_.erase(oldest);
+    }
+  }
 }
 
 }  // namespace xanatoo

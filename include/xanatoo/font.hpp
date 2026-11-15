@@ -6,6 +6,7 @@
 #include FT_FREETYPE_H
 #include "xanatoo/sdl.hpp"
 #include <memory>
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -59,6 +60,10 @@ private:
   int ascender_ = 0;
   int descender_ = 0;
   std::unordered_map<uint32_t, Glyph> cache_;
+  // Direct lookup for Latin-1 (most text): layout measures every character
+  // of a block, so a hash lookup each is the hot path. Points into
+  // `cache_` (node-based, so stable); cleared with it.
+  std::array<const Glyph*, 256> latin1_{};
   // Faces opened for codepoints the primary face lacks, same pixel size.
   struct FallbackFace {
     std::string path;
