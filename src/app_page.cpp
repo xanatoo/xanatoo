@@ -158,8 +158,12 @@ void activate(App& app, const PageRow& r) {
 
 }  // namespace
 
+size_t page_nav_regions(const xanatoo::Document& doc) {
+  return panel_regions(doc).size();
+}
+
 bool page_has_navigation(App& app) {
-  return !panel_regions(doc_of(app, focused_pane(app))).empty();
+  return focused_pane(app).nav_parts > 0;
 }
 
 void toggle_page_panel(App& app) {

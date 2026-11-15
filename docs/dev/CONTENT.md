@@ -33,7 +33,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   (a size mismatch falls back to a full scan).
 - Per-frame chrome must not walk the whole document: scrollbar section /
   block ticks (`Pane::scroll_marks`) and the status-bar word counts
-  (`Pane::stats`) are cached per `layout.generation`.
+  (`Pane::stats`) are cached per `layout.generation`; the page-navigation
+  button reads `Pane::nav_parts` (`page_nav_regions`, counted in
+  `layout_one`). `Renderer::draw` draws only glyphs in the clip band.
 - Line-level virtualization (`layout_paragraph`): with a viewport, lines of
   a block outside the materialised band are broken and measured but emit
   no glyphs; `LayoutResult::skipped_lines` keeps each such line's start

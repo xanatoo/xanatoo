@@ -308,6 +308,7 @@ struct Pane {
   // part of the address (docs/PASSAGES.md "Reader mode"). Use pane_reader.
   std::optional<bool> reader;
   size_t chrome_parts = 0;  // top-level Chrome nodes at the last layout
+  size_t nav_parts = 0;  // Page panel regions (navigation) at the last layout
   // Paged reading of this view (ebook style pages instead of scrolling).
   // Unset = ViewSettings::paged; view state like `reader`. Use pane_paged.
   std::optional<bool> paged;
@@ -1733,6 +1734,9 @@ void close_doc_window(App& app, size_t i);
 FloatWindow* window_of_view(App& app, int pi);
 
 // ---- page panel (app_page.cpp) ----
+// Regions the Page panel lists (navigation, side bars); walks the document.
+size_t page_nav_regions(const xanatoo::Document& doc);
+// Whether the focused view's page has any (from its last layout).
 bool page_has_navigation(App& app);
 void toggle_page_panel(App& app);
 void update_page_panel(App& app);

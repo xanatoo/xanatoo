@@ -112,6 +112,21 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
     if (x + w < clip.x || x > clip.x + clip.w) return false;
     return true;
   };
+  // Glyphs whose baseline is near the clip (a paged layout holds the whole
+  // document), in layout order. The margin covers ascenders, descenders
+  // and decorations of the tallest faces.
+  std::vector<uint32_t> near;
+  if (clipped) {
+    const float margin = 4.f * static_cast<float>(
+                                   fonts_.pick(FontRole::Heading).line_height());
+    glyphs_in_band(layout, scroll_y + static_cast<float>(clip.y) - margin,
+                   scroll_y + static_cast<float>(clip.y + clip.h) + margin,
+                   near);
+  } else {
+    near.resize(layout.glyphs.size());
+    for (size_t i = 0; i < near.size(); ++i)
+      near[i] = static_cast<uint32_t>(i);
+  }
 
   // Message cards (drawn under images, text, code blocks and table fills)
   {
@@ -320,7 +335,8 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
       xanatoo::sdl::fill_rect(sdl_, &r);
       in_run = false;
     };
-    for (const auto& pg : layout.glyphs) {
+    for (uint32_t gi : near) {
+      const PositionedGlyph& pg = layout.glyphs[gi];
       if (pg.kind != InlineKind::Code) {
         flush_run();
         continue;
@@ -358,7 +374,7 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
   }
 
   const auto& glyphs = layout.glyphs;
-  for (size_t i = 0; i < glyphs.size(); ++i) {
+  for (uint32_t i : near) {
     const PositionedGlyph& pg = glyphs[i];
     if (pg.kind == InlineKind::Image) continue;  // drawn with the images
     // The caret slot of a formula (its fallback text is drawn as code).
