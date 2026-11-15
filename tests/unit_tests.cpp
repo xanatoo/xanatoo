@@ -67,6 +67,7 @@
 #include "xanatoo/transfer_meter.hpp"
 #include <string>
 #include <algorithm>
+#include <set>
 #include <string_view>
 
 namespace {
@@ -2579,6 +2580,50 @@ void test_layout_line_table_matches_fresh() {
       EXPECT(same);
     }
   }
+}
+
+// Plain-text URLs in columns (laid out apart, then merged) keep their
+// own targets.
+void test_layout_column_auto_links() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_column_auto_links (no font)\n");
+    return;
+  }
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  doc.append_text(doc.create(NodeKind::Paragraph, root),
+                  "Top https://top.example/");
+  const NodeId cols = doc.create(NodeKind::Columns, root);
+  for (const char* t : {"Left https://left.example/",
+                        "Right https://right.example/"})
+    doc.append_text(doc.create(NodeKind::Paragraph,
+                               doc.create(NodeKind::Column, cols)),
+                    t);
+  LayoutEngine engine(fonts, nullptr);
+  LayoutOptions opts;
+  opts.auto_links = true;
+  engine.set_options(opts);
+  const LayoutResult lr = engine.layout(doc, 900.f);
+  std::set<std::string> seen;
+  bool consistent = true;
+  for (const PositionedGlyph& g : lr.glyphs) {
+    if (g.auto_link == 0) continue;
+    if (g.auto_link > lr.auto_links.size()) {
+      consistent = false;
+      continue;
+    }
+    const std::string& href = lr.auto_links[g.auto_link - 1];
+    seen.insert(href);
+    // The glyph is part of the URL it links to.
+    std::string text = plain_text(doc, g.node);
+    consistent = consistent && text.find(href) != std::string::npos;
+  }
+  EXPECT(consistent);
+  EXPECT_EQ(seen.size(), 3u);
 }
 
 void test_layout_wrap_respects_max_width() {
@@ -6175,6 +6220,7 @@ int main() {
   test_hit_test_wrapped_link();
   test_layout_skips_lines_outside_band();
   test_layout_line_table_matches_fresh();
+  test_layout_column_auto_links();
   test_glyphs_in_band();
   test_layout_wrap_respects_max_width();
   test_layout_forced_wrap_after_regular_text();

@@ -176,7 +176,13 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
   auto add = [](auto& dst, const auto& src) {
     dst.insert(dst.end(), src.begin(), src.end());
   };
+  // Auto-link ids of `in` index its own auto_links: shift them.
+  const auto link_base = static_cast<uint32_t>(out.auto_links.size());
+  add(out.auto_links, in.auto_links);
+  const size_t first_glyph = out.glyphs.size();
   add(out.glyphs, in.glyphs);
+  for (size_t i = first_glyph; i < out.glyphs.size(); ++i)
+    if (out.glyphs[i].auto_link != 0) out.glyphs[i].auto_link += link_base;
   add(out.boxes, in.boxes);
   add(out.images, in.images);
   add(out.maths, in.maths);
@@ -963,11 +969,8 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         s.text = node.summary.empty() ? "▸ …" : ("▸ " + node.summary);
         fake.spans.push_back(std::move(s));
         float start_y = y;
+        // `fake` is a copy of the node: its glyphs already carry `id`.
         layout_paragraph(doc, fake, x, y, max_width, out, FontRole::Body);
-        // Rewrite glyph node ids back to the stretch node so hit-testing works
-        for (auto& g : out.glyphs) {
-          if (g.node == fake.id) g.node = id;
-        }
         y += 10.f;
         out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       } else {
@@ -982,9 +985,6 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           fake.spans.push_back(std::move(s));
           float start_y = y;
           layout_paragraph(doc, fake, x, y, max_width, out, FontRole::Body);
-          for (auto& g : out.glyphs) {
-            if (g.node == fake.id) g.node = id;
-          }
           out.boxes.push_back({id, x, start_y, max_width, y - start_y});
         }
         for (NodeId child : node.children) {
@@ -1190,9 +1190,6 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       const float text_y = y;
       layout_role_text(doc, header, BlockRole::Thread, x, y, max_width, out);
       add_role_band(BlockRole::Thread, id, x, text_y, max_width, y, out);
-      for (auto& g : out.glyphs) {
-        if (g.node == header.id) g.node = id;
-      }
       y += 8.f;
       // Replies by the thread starter get the `message-op` author colour.
       const std::string outer_op = std::move(thread_op_);
