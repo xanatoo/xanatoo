@@ -1723,6 +1723,9 @@ void enter_tile_trail(App& app);  // resume matching trail, or seed anew
 // Follow `href` clicked in pane `pi` the split-browsing way. False = not
 // handled (caller falls back to single-pane behaviour).
 bool follow_link_split(App& app, int pi, const std::string& href);
+// Context menu: show the page of pane `pi` in Trail with `href` opened
+// beside it (enters Trail first; a non-centre view moves to the left tile).
+void open_link_in_trail(App& app, int pi, const std::string& href);
 // Per frame: dwell-timed hover previews for links in the left pane.
 void update_split_preview(App& app);
 // The previewed page stays (a click / scroll in the right pane).

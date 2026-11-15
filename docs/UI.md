@@ -27,6 +27,11 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   **Join Left/Right** (or **Top/Bottom** in stacked mode). Join collapses the
   split while retaining the selected side's view and history. A Trail hover
   preview is reverted first; pending fetches for the discarded side stop.
+- A link's right-click menu has **Open Link in Trail View**: it switches the
+  centre to Trail (resuming a matching suspended trail) and opens the link in
+  the second tile, the page holding the link staying in the first. From the
+  second Trail tile it acts like a click; from the other independent tile or a
+  document window that page moves to the first tile first.
 
 ## Toolbar states
 

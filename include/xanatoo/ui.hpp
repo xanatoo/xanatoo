@@ -88,6 +88,7 @@ enum class UiCommand {
   SelectBookmark,  // arg = address: select its passage in the focused view
   CopyText,        // arg = text for the clipboard (an address)
   OpenLinkInTab,   // arg = href of a link in the focused view: new tab
+  OpenLinkInTrail, // arg = href of a link in the focused view: Trail tiles
   DownloadUrl,     // arg = http(s) URL: save to Downloads, never show
   DownloadAction,  // arg = action on App::download_menu (right-clicked
                    // Downloads row): open / open-tab / system / folder /

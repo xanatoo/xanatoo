@@ -13,8 +13,8 @@ as `attachment`, provided this build can show them. The answer streams into
 `cache_dir()/documents/` (one file per URL, pruned to 1 GiB at startup), not
 into Downloads. To save such a file, or any link, right-click it and choose
 **Download Link**: every 200 answer then goes to Downloads, whatever its type,
-and the current page stays. The same menu has **Open Link in New Tab** and
-**Copy Link Address**.
+and the current page stays. The same menu has **Open Link in New Tab**,
+**Open Link in Trail View** and **Copy Link Address**.
 
 The toolbar's down-arrow button or **Panels → Downloads** opens a panel
 showing active transfers and recently finished files:

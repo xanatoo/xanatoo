@@ -435,6 +435,26 @@ bool follow_link_split(App& app, int pi, const std::string& href) {
   return true;
 }
 
+void open_link_in_trail(App& app, int pi, const std::string& href) {
+  const LinkTarget t = resolve_link(app, pi, href);
+  if (t.kind == LinkKind::None) return;
+  if (t.kind == LinkKind::External) {
+    open_link_in_tab(app, pi, href);  // leaves the app either way
+    return;
+  }
+  if (!split_browsing(app) || pi >= kCentreViews) {
+    // The page holding the link becomes the trail's left page.
+    if (pi != 0) {
+      const Pane& src = app.panes[pi];
+      set_pane_view(app, 0, src.buf, src.sel, src.scroll_y);
+      pi = 0;
+    }
+    app.split = false;  // re-check whether a suspended trail still matches
+    enter_tile_trail(app);
+  }
+  follow_link_split(app, pi, href);
+}
+
 void commit_split_preview(App& app) {
   SplitPreview& pv = app.split_preview;
   if (!pv.active) return;

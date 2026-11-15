@@ -2833,6 +2833,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::OpenLinkInTab;
         result.arg = state.context_link_href;
       }
+      if (ImGui::MenuItem("Open Link in Trail View")) {
+        cmd = UiCommand::OpenLinkInTrail;
+        result.arg = state.context_link_href;
+      }
       if (ImGui::MenuItem("Copy Link Address")) {
         cmd = UiCommand::CopyText;
         result.arg = state.context_link;

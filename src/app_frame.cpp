@@ -734,7 +734,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::OpenAbout ||
         c == C::Copy ||
         c == C::CopyPageUrl || c == C::SelectAll || c == C::SelectBlock ||
-        c == C::CopyText || c == C::OpenLinkInTab || c == C::DownloadUrl ||
+        c == C::CopyText || c == C::OpenLinkInTab || c == C::OpenLinkInTrail ||
+        c == C::DownloadUrl ||
         c == C::OpenReply || c == C::EditReply || c == C::SendReply ||
         c == C::JumpQuote ||
         c == C::Find || c == C::ToggleSplit || c == C::ToggleTrail ||
@@ -1687,6 +1688,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::OpenLinkInTab:
       if (!arg.empty()) open_link_in_tab(app, app.focus, arg);
+      break;
+    case C::OpenLinkInTrail:
+      if (!arg.empty()) open_link_in_trail(app, app.focus, arg);
       break;
     case C::DownloadUrl:
       if (!arg.empty()) start_download(app, arg);
