@@ -96,6 +96,9 @@ read-only service clients. Every client is read-only: never post or log in.
 ## Lemmy
 
 - Read-only client via Lemmy **API v3** JSON (`/api/v3/post/list`, `/api/v3/post`).
+- Post comments come from `/api/v3/comment/list?post_id=…&type_=All`; without
+  `type_=All` anonymous requests get the instance's default listing type
+  (often `Local`) and comments from federated users vanish.
 - Gated by `XANATOO_LEMMY` (default ON; needs OpenSSL).
 - `lemmy:<instance>/c/<community>`, `/u/<person>` and `/post/<id>` refs.
 - Maps posts/comments to Thread + Message nodes.

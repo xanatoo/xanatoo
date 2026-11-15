@@ -562,10 +562,13 @@ std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
       need_comments_for = posts.front().id;
   }
   if (need_comments_for > 0) {
+    // type_=All: without it anonymous requests use the instance's default
+    // listing type (often Local), which drops comments from federated users
+    // and can return an empty list for a post showing "24 comments".
     std::string curl =
         pu.origin + "/api/v3/comment/list?post_id=" +
         std::to_string(need_comments_for) +
-        "&limit=80&max_depth=8&sort=Hot";
+        "&limit=80&max_depth=8&sort=Hot&type_=All";
     std::cerr << "Lemmy: GET " << curl << "\n";
     std::string cerr;
     auto cresp = https_get(curl, lemmy_user_agent(), &cerr);
