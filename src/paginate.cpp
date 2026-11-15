@@ -339,7 +339,9 @@ LayoutResult paginate(const LayoutResult& in, const PageSpec& spec,
   map.columns = std::max(1, spec.columns);
   map.page_h = spec.page_h;
   Paginator p(in, spec, map);
-  return p.run();
+  LayoutResult out = p.run();
+  index_glyphs(out);
+  return out;
 }
 
 }  // namespace xanatoo

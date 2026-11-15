@@ -636,6 +636,7 @@ LayoutResult LayoutEngine::layout(
   for (const MarginArea& m : margins_) y = std::max(y, m.bottom);
   result.content_height = y + options_.margin_y + 24.f;
   result.virtualized = skipped_any_;
+  index_glyphs(result);
   height_hints_ = nullptr;
   folded_sections_ = nullptr;
   focus_section_ = INVALID_NODE;

@@ -2409,6 +2409,31 @@ void test_hit_test_wrapped_link() {
   EXPECT(second && *second == "https://example.org/");
   // Left of line 1's part is not part of the link.
   EXPECT(!hit_test_link(doc, lr, 100.f, 95.f, 0.f));
+  // Same answers through the y index.
+  index_glyphs(lr);
+  EXPECT(hit_test_link(doc, lr, 410.f, 95.f, 0.f) == first);
+  EXPECT(hit_test_link(doc, lr, 50.f, 125.f, 0.f) == second);
+  EXPECT(!hit_test_link(doc, lr, 100.f, 95.f, 0.f));
+  EXPECT(hit_test(lr, 52.f, 125.f, 0.f).has_value());
+}
+
+void test_glyphs_in_band() {
+  using namespace xanatoo;
+  // A second column restarts at the top: y is not monotonic in layout order.
+  LayoutResult lr;
+  for (float y : {100.f, 130.f, 160.f, 100.f, 130.f, 160.f}) {
+    PositionedGlyph g;
+    g.y = y;
+    lr.glyphs.push_back(g);
+  }
+  std::vector<uint32_t> scan, indexed;
+  glyphs_in_band(lr, 120.f, 140.f, scan);
+  index_glyphs(lr);
+  glyphs_in_band(lr, 120.f, 140.f, indexed);
+  EXPECT(scan == (std::vector<uint32_t>{1, 4}));
+  EXPECT(indexed == scan);
+  glyphs_in_band(lr, 0.f, 50.f, indexed);
+  EXPECT(indexed.empty());
 }
 
 void test_layout_wrap_respects_max_width() {
@@ -6003,6 +6028,7 @@ int main() {
   test_sanitize_epub_markdown();
   test_epub_native();
   test_hit_test_wrapped_link();
+  test_glyphs_in_band();
   test_layout_wrap_respects_max_width();
   test_layout_forced_wrap_after_regular_text();
   test_download_mime_and_filenames();

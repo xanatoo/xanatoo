@@ -25,6 +25,12 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Sequential containers (Document, Section, Article, Thread, List, Column,
   DefList, Biblio) skip off-screen children when a prior box height is known.
 - Main keeps per-pane `height_cache`
+- `LayoutResult::glyphs_by_y` (built by `index_glyphs` at the end of
+  `layout` and `paginate`) orders glyphs by baseline; pointer hit tests
+  (`hit_test`, `hit_test_link_ex`, `hit_test_timestamp`) ask
+  `glyphs_in_band` for the lines near the pointer instead of scanning every
+  glyph. Code that moves glyphs afterwards must call `index_glyphs` again
+  (a size mismatch falls back to a full scan).
 - Preferences (`ViewSettings` / `view.conf`): line spacing, margins, measure, plus behaviour switches (footnote overlay, justify, hover preview) shown in Edit → Preferences (ImGui window, `UiCommand::TogglePreferences`); never document format
 - Section Focus mode: `LayoutEngine::layout(..., focus_section)` filters body to one Section/Article (outline still full tree); scroll outside the materialised band
   triggers re-layout. Width changes clear the cache.

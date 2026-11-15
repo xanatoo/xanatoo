@@ -86,6 +86,35 @@ int caret_cmp(const Document& doc, const Caret& a, const Caret& b) {
 
 // ---- Hit testing ----
 
+void index_glyphs(LayoutResult& layout) {
+  const auto& gs = layout.glyphs;
+  layout.glyphs_by_y.resize(gs.size());
+  for (size_t i = 0; i < gs.size(); ++i)
+    layout.glyphs_by_y[i] = static_cast<uint32_t>(i);
+  // Mostly sorted already (text runs top to bottom); columns, asides and
+  // floats interleave.
+  std::stable_sort(layout.glyphs_by_y.begin(), layout.glyphs_by_y.end(),
+                   [&](uint32_t a, uint32_t b) { return gs[a].y < gs[b].y; });
+}
+
+void glyphs_in_band(const LayoutResult& layout, float y0, float y1,
+                    std::vector<uint32_t>& out) {
+  out.clear();
+  const auto& gs = layout.glyphs;
+  const auto& idx = layout.glyphs_by_y;
+  if (idx.size() != gs.size()) {
+    for (size_t i = 0; i < gs.size(); ++i)
+      if (gs[i].y >= y0 && gs[i].y <= y1) out.push_back(static_cast<uint32_t>(i));
+    return;
+  }
+  auto lo = std::lower_bound(idx.begin(), idx.end(), y0,
+                             [&](uint32_t i, float y) { return gs[i].y < y; });
+  for (auto it = lo; it != idx.end() && gs[*it].y <= y1; ++it)
+    out.push_back(*it);
+  // Visit in layout order so ties resolve as a full scan would.
+  std::sort(out.begin(), out.end());
+}
+
 std::optional<Caret> hit_test(const LayoutResult& layout,
                               float sx, float sy, float scroll_y) {
   if (layout.glyphs.empty()) return std::nullopt;
@@ -98,15 +127,16 @@ std::optional<Caret> hit_test(const LayoutResult& layout,
   Caret best_any_c{};
   bool found_on = false, found_any = false;
 
-  for (size_t i = 0; i < layout.glyphs.size(); ++i) {
+  // Only lines near the pointer, so huge pages are not O(all glyphs) on
+  // every motion event.
+  std::vector<uint32_t> near;
+  glyphs_in_band(layout, sy + scroll_y - 120.f, sy + scroll_y + 80.f, near);
+  for (uint32_t i : near) {
     const auto& g = layout.glyphs[i];
     // Org TODO/tag decorations are laid out with node = INVALID_NODE — not
     // a valid caret target.
     if (g.node == INVALID_NODE) continue;
     float gy = g.y - scroll_y;
-    // Glyphs are laid out top-to-bottom overall; skip lines far from the pointer
-    // so 10MB documents are not O(all glyphs) on every motion event.
-    if (gy < sy - 120.f || gy > sy + 80.f) continue;
     float gx = g.x;
     float gw = g.advance > 0.f ? g.advance : 8.f;
     if (i + 1 < layout.glyphs.size() &&
@@ -2339,24 +2369,28 @@ std::optional<LinkHit> hit_test_link_ex(const Document& doc,
     if (hit.href.empty()) continue;
     return hit;
   }
-  for (size_t i = 0; i < layout.glyphs.size(); ++i) {
+  // Same run of a link on one line (kind, span, auto link, baseline).
+  auto same_run = [&](const PositionedGlyph& a, const PositionedGlyph& b) {
+    return a.kind == b.kind && a.node == b.node &&
+           a.span_index == b.span_index && a.auto_link == b.auto_link &&
+           std::abs(a.y - b.y) < 0.5f;
+  };
+  std::vector<uint32_t> near;
+  glyphs_in_band(layout, adj_y - 18.f - 0.5f, adj_y + 18.f + 0.5f, near);
+  for (uint32_t i : near) {
     const auto& g = layout.glyphs[i];
-    // Skip far-away lines (glyphs are laid out top-to-bottom overall).
-    if (g.y < adj_y - 120.f || g.y > adj_y + 80.f) continue;
     if (g.kind != InlineKind::Link && g.kind != InlineKind::Cite &&
         g.kind != InlineKind::FootnoteRef)
       continue;
+    // Not the start of its run: tested with the run's first glyph.
+    if (i > 0 && same_run(layout.glyphs[i - 1], g)) continue;
     // One rect per line: a wrapped link continues as a new run on the
     // next line, tested on its own.
     float x0 = g.x;
     float x1 = x0 + std::max(1.f, g.advance);
     size_t j = i;
     while (j + 1 < layout.glyphs.size() &&
-           layout.glyphs[j + 1].kind == g.kind &&
-           layout.glyphs[j + 1].node == g.node &&
-           layout.glyphs[j + 1].span_index == g.span_index &&
-           layout.glyphs[j + 1].auto_link == g.auto_link &&
-           std::abs(layout.glyphs[j + 1].y - g.y) < 0.5f) {
+           same_run(layout.glyphs[j + 1], g)) {
       ++j;
       x1 = layout.glyphs[j].x + std::max(1.f, layout.glyphs[j].advance);
     }
@@ -2394,7 +2428,6 @@ std::optional<LinkHit> hit_test_link_ex(const Document& doc,
         return hit;
       }
     }
-    i = j;
   }
   return std::nullopt;
 }
@@ -2412,7 +2445,10 @@ std::optional<std::string> hit_test_timestamp(const Document& doc,
                                               float mx, float my,
                                               float scroll_y) {
   const float y = my + scroll_y;
-  for (const auto& g : layout.glyphs) {
+  std::vector<uint32_t> near;
+  glyphs_in_band(layout, y - 6.f, y + 18.f, near);
+  for (uint32_t i : near) {
+    const auto& g = layout.glyphs[i];
     if (g.node == INVALID_NODE || y < g.y - 18.f || y > g.y + 6.f ||
         mx < g.x || mx > g.x + std::max(8.f, g.advance))
       continue;

@@ -110,6 +110,11 @@ struct LayoutResult {
     return it == node_style_index.end() ? base : scoped_styles[it->second - 1];
   }
   std::vector<PositionedGlyph> glyphs;
+  // Indices into `glyphs` ordered by baseline y (index_glyphs), so pointer
+  // hit tests visit only the lines near the pointer instead of every glyph
+  // of a huge page. Empty or stale (size differs from glyphs): callers fall
+  // back to a full scan.
+  std::vector<uint32_t> glyphs_by_y;
   std::vector<std::string> auto_links;  // targets of PositionedGlyph::auto_link
   std::vector<LayoutBox> boxes;
   std::vector<PositionedImage> images;
@@ -196,6 +201,13 @@ bool margin_chrome(const Document& doc, const Node& chrome);
 // for none.
 std::string chrome_hidden_text(const Document& doc,
                                const std::vector<NodeId>& regions);
+
+// Rebuild LayoutResult::glyphs_by_y after glyphs were produced or moved.
+void index_glyphs(LayoutResult& layout);
+// Indices of the glyphs whose baseline y lies in [y0, y1], ascending (the
+// order of `glyphs`). Uses glyphs_by_y when current, else scans.
+void glyphs_in_band(const LayoutResult& layout, float y0, float y1,
+                    std::vector<uint32_t>& out);
 
 // Optional viewport for large-document virtualization.
 // When bottom > top, sequential block children outside
