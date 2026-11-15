@@ -49,3 +49,10 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 path = "data/fonts/*.ttf"
 SPDX-FileCopyrightText = "2003 Bitstream, Inc.; DejaVu changes are in the public domain"
 SPDX-License-Identifier = "Bitstream-Vera"
+
+# Bundled Latin Modern Math (data/fonts/LICENSE-LatinModernMath.txt): GUST
+# Font License = LPPL 1.3c or later plus a non-binding renaming request.
+[[annotations]]
+path = "data/fonts/latinmodern-math.otf"
+SPDX-FileCopyrightText = "2012-2014 B. Jackowski, P. Strzelczyk and P. Pianowski (GUST e-foundry, on behalf of TeX users groups)"
+SPDX-License-Identifier = "LPPL-1.3c+"
