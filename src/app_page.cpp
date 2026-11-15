@@ -172,11 +172,16 @@ void toggle_page_panel(App& app) {
   } else if (app.key_focus == KeyFocus::Page) {
     app.key_focus = KeyFocus::Document;
   }
-  relayout_all(app);
+  // update_page_panel relayouts the panes for the changed chrome.
 }
 
 void update_page_panel(App& app) {
-  app.layout_engine.set_hide_panel_chrome(app.page.shown);
+  // The panes leave the panel's regions out while it is open. Relayout when
+  // that changes: the toggle's own relayout ran before the flag was set.
+  if (app.layout_engine.hide_panel_chrome() != app.page.shown) {
+    app.layout_engine.set_hide_panel_chrome(app.page.shown);
+    relayout_all(app);
+  }
   if (!app.page.shown) return;
   rebuild(app);
 }

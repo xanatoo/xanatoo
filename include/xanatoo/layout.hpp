@@ -259,6 +259,7 @@ public:
   void set_hide_chrome(bool hide) { hide_chrome_ = hide; }
   // Leave navigation / side bar chrome out (the Page panel lists it).
   void set_hide_panel_chrome(bool hide) { hide_panel_chrome_ = hide; }
+  bool hide_panel_chrome() const { return hide_panel_chrome_; }
 
   // height_hints: optional prior block heights (from a previous LayoutResult's
   // boxes). Used only when viewport is active to skip off-screen sequential
