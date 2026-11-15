@@ -58,6 +58,12 @@ read-only service clients. Every client is read-only: never post or log in.
   `time.cpp` formats UTC, local and relative hover lines. Keep this semantic
   annotation separate from style-sheet roles.
 
+## Quote links (`quote_links.hpp`)
+
+- `find_quote_links(doc)` links quotes in `Message` bodies (`BlockQuote`
+  nodes, `>` lines in raw Markdown text) to the message they came from.
+  Pure, no SDL; derived data, never stored. Design: `docs/QUOTES.md`.
+
 ## Feeds (RSS / Atom)
 
 - `src/feed.cpp`, gated by `XANATOO_FEEDS` (default ON). Small tolerant XML

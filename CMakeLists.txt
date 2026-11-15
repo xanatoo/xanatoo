@@ -233,6 +233,7 @@ add_executable(xanatoo
   src/download.cpp
   src/wikipedia.cpp
   src/locator.cpp
+  src/quote_links.cpp
   src/native.cpp
   # Vendored Dear ImGui (MIT) — menu bar / toolbar shell
   external/imgui/imgui.cpp
@@ -813,6 +814,10 @@ add_executable(xanatoo_subscription_tests
   tests/subscription_tests.cpp src/subscriptions.cpp src/document.cpp)
 target_include_directories(xanatoo_subscription_tests PRIVATE include)
 add_test(NAME subscription_tests COMMAND xanatoo_subscription_tests)
+add_executable(xanatoo_quote_links_tests
+  tests/quote_links_tests.cpp src/quote_links.cpp src/document.cpp)
+target_include_directories(xanatoo_quote_links_tests PRIVATE include)
+add_test(NAME quote_links_tests COMMAND xanatoo_quote_links_tests)
 add_executable(xanatoo_scrollbar_geometry_tests tests/scrollbar_geometry_tests.cpp)
 target_include_directories(xanatoo_scrollbar_geometry_tests PRIVATE include)
 add_test(NAME scrollbar_geometry_tests COMMAND xanatoo_scrollbar_geometry_tests)

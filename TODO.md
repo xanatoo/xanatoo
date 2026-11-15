@@ -8,6 +8,18 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-15) — Quote links in threads (slice 1: matcher)
+
+- `find_quote_links` (`quote_links.hpp`) finds quoted text of discussion
+  messages (`BlockQuote`, Markdown `>` lines) in the thread: reply chain
+  and head first, normalized exact match with `...` pieces, quotes of quotes
+  go to the origin, fuzzy word-trigram fallback with a score. Tests:
+  `xanatoo_quote_links_tests`. Plan for the UI slices (jump, reverse marks,
+  linked highlight, split-view curves, stretchtext quotes): `docs/QUOTES.md`.
+- Noticed: Reddit / Lemmy bodies are raw Markdown in one `Paragraph`, so
+  their `>` quotes show as plain text; the matcher copes, but rendering
+  them as Markdown would help everywhere.
+
 ## Status (2026-11-15) — Services menu: Lemmy "All", video and archive
 
 - `lemmy:HOST/` opens the instance's post listing; `?listingType=All`
