@@ -13,15 +13,17 @@ plain Markdown files under `examples/directory/`.
 ## Categories
 
 - [Social and the Fediverse](directory/social.md) — Mastodon, Bluesky, Lemmy, Reddit, Tumblr, Pixelfed, Flickr, Pinterest, Telegram. And what Twitter, Instagram and TikTok do not offer.
+- [Blogs worth reading](directory/blogs.md) — personal and independent writers: software, design, science, fiction, the small web
 - [Science fiction and fantasy](directory/scifi.md) — magazines, podcasts, news, reference sites, books
 - [Tech and computing](directory/tech.md) — tech news, Linux and free software, programming, security, hardware, German tech press
-- [Science and space](directory/science.md) — journals, space agencies, astronomy, preprints
-- [Culture, design and long reads](directory/culture.md) — essays, art, design, history, music
-- [Games and comics](directory/games.md) — game news, devlogs, webcomics
-- [News](directory/news.md) — world news in English, German, French, Spanish, Italian and Japanese; text-only editions
+- [Science and space](directory/science.md) — journals, space agencies, astronomy, preprints, math, biology
+- [Culture, design and long reads](directory/culture.md) — essays, art, design, history, music, film, philosophy
+- [Games and comics](directory/games.md) — game news, devlogs, webcomics, retro, tabletop
+- [News](directory/news.md) — world news in English, German, French, Spanish, Italian and Japanese; text-only editions; independent outlets
 - [Video and podcasts](directory/media.md) — YouTube channels as feeds, audio fiction
 - [Search](directory/search.md) — engines and keywords
 - [Libraries, archives and the old web](directory/reference.md) — Internet Archive, Gutenberg, Wikimedia, RFCs, indexes of small sites
+- [The wider web](directory/web.md) — well-known domains, reference, code hosts, odd corners, small-net entry points
 
 ## Built-in services
 
@@ -34,6 +36,10 @@ Native views (no HTML scraping) — see also [Books](books.md) and
 - [Wikipedia](wikipedia:Main_Page) · [Wikipedia (Deutsch)](wikipedia:de:Wikipedia:Hauptseite) · [Science fiction](wikipedia:Science_fiction)
 - [Nostr: recent notes](nostr:recent)
 - [Gemini: geminiprotocol.net](gemini://geminiprotocol.net/)
+- [Gopher: Floodgap](gopher://gopher.floodgap.com/1/) · [SDF](gopher://sdf.org/1/)
+- [Spartan: mozz.us](spartan://spartan.mozz.us/)
+- [Nex: nightfall.city](nex://nightfall.city/)
+- [Finger: public hosts](finger.md) — [random@happynetbox](finger://random@happynetbox.com) · [plan.cat](finger://reiver@plan.cat) · [tilde.town](finger://tilde.town/)
 - [Standard Ebooks](https://standardebooks.org/ebooks) · [Project Gutenberg today](https://www.gutenberg.org/cache/epub/feeds/today.rss)
 
 ## Open any feed yourself

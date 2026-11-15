@@ -30,3 +30,15 @@
 
 - [Standard Ebooks: new releases](https://standardebooks.org/feeds/atom/new-releases) · [Project Gutenberg today](https://www.gutenberg.org/cache/epub/feeds/today.rss)
 - [Books and long reads](../books.md)
+
+## Film, stage and radio
+
+- [Roger Ebert](https://www.rogerebert.com/feed) · [Letterboxd journal](https://letterboxd.com/journal/rss/) · [Criterion](https://www.criterion.com/current/posts)
+- [This American Life](https://www.thisamericanlife.org/rss) · [Radiolab](https://feeds.wnycstudios.org/radiolab)
+- [BBC Radio 4](https://www.bbc.co.uk/programmes/b006qsq4) · [In Our Time](https://www.bbc.co.uk/programmes/b006qykl)
+
+## Philosophy and criticism
+
+- [Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/) · [Internet Encyclopedia of Philosophy](https://iep.utm.edu/)
+- [3 Quarks Daily](https://3quarksdaily.com/feed) · [Brain Pickings / Marginalian archive](https://www.themarginalian.org/feed/)
+- [The Paris Review](https://www.theparisreview.org/blog/feed/) · [n+1](https://www.nplusonemag.com/feed/)

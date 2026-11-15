@@ -31,3 +31,14 @@ Daily lists; a busy category has several hundred entries, so give it a moment.
 
 - [Standard Ebooks: science](https://standardebooks.org/subjects/science) — Darwin, Faraday, Euclid and friends
 - [Wikipedia](wikipedia:Main_Page) · [Wikisource](https://en.wikisource.org/wiki/Main_Page)
+
+## Math and computation
+
+- [Quanta: math](https://www.quantamagazine.org/tag/mathematics/feed/) · [Plus Magazine](https://plus.maths.org/content/rss.xml)
+- [Terence Tao](https://terrytao.wordpress.com/feed/) · [Gil Kalai](https://gilkalai.wordpress.com/feed/)
+- [MathOverflow](https://mathoverflow.net/feeds) · [nLab](https://ncatlab.org/nlab/show/HomePage)
+
+## Biology and medicine
+
+- [STAT News](https://www.statnews.com/feed/) · [Nature Medicine](https://www.nature.com/nm.rss) · [The Lancet](https://www.thelancet.com/rssfeed/lancet_current.xml)
+- [PubMed trending](https://pubmed.ncbi.nlm.nih.gov/trending/) · [bioRxiv](https://connect.biorxiv.org/relate/feed/181)

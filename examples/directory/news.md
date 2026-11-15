@@ -28,3 +28,13 @@ Lightweight versions of big sites, ideal for reading here:
 - [El País](https://elpais.com/rss/elpais/portada.xml)
 - [Corriere della Sera](https://www.corriere.it/rss/homepage.xml) · [ANSA](https://www.ansa.it/sito/ansait_rss.xml)
 - [NHK News](https://www.nhk.or.jp/rss/news/cat0.xml)
+
+## Wire and local
+
+- [Associated Press](https://apnews.com/) · [Reuters world](https://www.reuters.com/world/) · [AFP](https://www.afp.com/)
+- [The Local (Europe)](https://www.thelocal.com/) · [Politico Europe](https://www.politico.eu/) · [EUobserver](https://euobserver.com/)
+
+## Independent and long form
+
+- [ProPublica](https://www.propublica.org/feeds/propublica/main) · [The Intercept](https://theintercept.com/feed/?rss)
+- [Rest of World](https://restofworld.org/feed/latest/) · [404 Media](https://www.404media.co/rss/) · [The Markup](https://themarkup.org/feeds/rss)

@@ -19,3 +19,12 @@ Strips arrive as cards; the image shows as an `[image: …]` link.
 - [xkcd](https://xkcd.com/atom.xml) · [What If?](https://what-if.xkcd.com/feed.atom)
 - [SMBC](https://www.smbc-comics.com/comic/rss) · [Dinosaur Comics](feed:https://www.qwantz.com/rssfeed.php) · [Questionable Content](https://www.questionablecontent.net/QCRSS.xml)
 - [Penny Arcade](https://www.penny-arcade.com/feed) · [Cyanide & Happiness](feed:https://feeds.feedburner.com/Explosm) · [Exo](https://www.exocomics.com/feed) · [CommitStrip](https://www.commitstrip.com/en/feed/)
+
+## Retro and interactive fiction
+
+- [IFDB](https://ifdb.org/) · [Interactive Fiction Archive](https://www.ifarchive.org/) · [Adventure Classic Gaming](https://www.adventureclassicgaming.com/)
+- [GOG news](https://www.gog.com/news) · [MobyGames](https://www.mobygames.com/) · [Lemon64](https://www.lemon64.com/)
+
+## Tabletop
+
+- [BoardGameGeek](https://boardgamegeek.com/rss/blogs) · [RPGGeek](https://rpggeek.com/) · [DriveThruRPG](https://www.drivethrurpg.com/)

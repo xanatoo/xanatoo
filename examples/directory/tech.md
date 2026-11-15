@@ -50,3 +50,19 @@
 ## German-language tech press
 
 - [heise online](https://www.heise.de/rss/heise-atom.xml) · [Golem.de](feed:https://www.golem.de/rss.php?feed=RSS2.0) · [netzpolitik.org](https://netzpolitik.org/feed/)
+
+## Security and privacy
+
+- [Krebs on Security](https://krebsonsecurity.com/feed/) · [Schneier on Security](https://www.schneier.com/feed/atom/) · [Troy Hunt](https://www.troyhunt.com/rss/)
+- [The Hacker News](https://feeds.feedburner.com/TheHackersNews) · [BleepingComputer](https://www.bleepingcomputer.com/feed/)
+- [EFF Deeplinks](https://www.eff.org/rss/updates.xml) · [Privacy Guides](https://www.privacyguides.org/en/)
+
+## Hardware and makers
+
+- [Hackaday](https://hackaday.com/blog/feed/) · [EEVblog](https://www.eevblog.com/feed/) · [Adafruit](https://blog.adafruit.com/feed/)
+- [Raspberry Pi Blog](https://www.raspberrypi.com/news/feed/) · [Framework](https://frame.work/blog)
+
+## Language and compilers
+
+- [Rust Blog](https://blog.rust-lang.org/feed.xml) · [Go Blog](https://go.dev/blog/feed.atom) · [Swift Blog](https://developer.apple.com/swift/blog/)
+- [Python Insider](https://blog.python.org/feeds/posts/default) · [LLVM](https://blog.llvm.org/atom.xml)
