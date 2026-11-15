@@ -241,6 +241,9 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_can_reply =
       app.context_reply_buffer != kNoBuffer &&
       app.context_reply_node != xanatoo::INVALID_NODE;
+  ui_state.context_quote_items.clear();
+  for (const auto& q : app.context_quotes)
+    ui_state.context_quote_items.push_back(q.label);
   ui_state.reply_open = app.reply.open;
   ui_state.reply_generation = app.reply.generation;
   ui_state.reply_author = app.reply.author;
@@ -733,6 +736,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::CopyPageUrl || c == C::SelectAll || c == C::SelectBlock ||
         c == C::CopyText || c == C::OpenLinkInTab || c == C::DownloadUrl ||
         c == C::OpenReply || c == C::EditReply || c == C::SendReply ||
+        c == C::JumpQuote ||
         c == C::Find || c == C::ToggleSplit || c == C::ToggleTrail ||
         c == C::TilesIndependent || c == C::TilesTrail ||
         c == C::TilesCompare || c == C::TilesColumns || c == C::TilesRows ||
@@ -772,6 +776,14 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   }
 
   switch (cmd) {
+    case C::JumpQuote: {
+      const size_t k = static_cast<size_t>(std::atoi(arg.c_str()));
+      if (app.context_quote_buf != p.buf || k >= app.context_quotes.size())
+        break;
+      const auto item = app.context_quotes[k];
+      jump_quote(app, app.focus, item.link, item.to_source);
+      break;
+    }
     case C::OpenReply: {
       const xanatoo::NodeId id = app.context_reply_node;
       if (app.context_reply_buffer != p.buf ||
@@ -3076,6 +3088,8 @@ static void draw_pane_overlays(App& app, int i) {
           pane.layout, m, draw_scroll, app.renderer.glyph_extents());
       app.renderer.draw_selection(rects, ox, c.r, c.g, c.b, c.a);
     }
+    // Quote links: underlined originals, margin arrows, the jumped link.
+    draw_quote_marks(app, i, ox, py, draw_scroll);
     // ... and its target on the right: the same wash and a ◂ at the edge
     // towards the left pane.
     if (const xanatoo::NodeId target = split_trail_target(app, i);
@@ -4565,6 +4579,9 @@ void draw_hover_tooltip(App& app) {
         tip = "Drag to resize columns";
       } else if (app.hover.task != xanatoo::INVALID_NODE) {
         tip = "Click to toggle task";
+      } else if (app.hover.quote >= 0 && app.hover.quote_pane >= 0) {
+        tip = quote_tooltip(app, app.hover.quote_pane,
+                            static_cast<size_t>(app.hover.quote));
       } else if (!app.hover.bookmark.empty()) {
         const xanatoo::Bookmark* b = find_bookmark(app, app.hover.bookmark);
         tip = "Bookmark: " + (b ? xanatoo::bookmark_label(*b)
@@ -4701,7 +4718,7 @@ void present_frame(App& app) {
       } else if (app.hover.grip != xanatoo::INVALID_NODE) {
         pointer = app.cursor_sizeall;
       } else if (!app.hover.href.empty() || !app.hover.bookmark.empty() ||
-                 !app.hover.annotation.empty() ||
+                 !app.hover.annotation.empty() || app.hover.quote >= 0 ||
                  app.hover.stretch != xanatoo::INVALID_NODE ||
                  app.hover.image != xanatoo::INVALID_NODE ||
                  app.hover.task != xanatoo::INVALID_NODE || app.hover.chrome_notice ||

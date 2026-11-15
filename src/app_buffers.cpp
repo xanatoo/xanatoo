@@ -423,6 +423,7 @@ int alloc_view(App& app) {
 void refresh_views_of_buf(App& app, BufferId bi, int except, bool top) {
   DocBuffer* b = find_buf(app, bi);
   if (!b) return;
+  ++b->doc_gen;
   for (int pi : live_views(app)) {
     Pane& v = app.panes[pi];
     if (pi == except || v.buf != bi) continue;
@@ -474,6 +475,7 @@ void mark_dirty(App& app) {
 }
 
 void note_edit(App& app, DocBuffer& b) {
+  ++b.doc_gen;
   if (!b.draft_due) b.draft_due = xanatoo::sdl::ticks() + kDraftDelayMs;
   if (!b.dirty) {
     b.dirty = true;

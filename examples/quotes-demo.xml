@@ -1,0 +1,19 @@
+<doc title="Quote links demo">
+  <thread label="quotes-demo" summary="Quote links (docs/QUOTES.md)">
+    <message label="q-001" src="Ada" summary="Monday">
+      <p>Static typing pays off the moment a codebase outlives its first author. Refactoring without it is mostly guesswork, and the tests never cover everything.</p>
+    </message>
+    <message label="q-002" src="Grace" summary="Tuesday" alt="q-001">
+      <quote>Refactoring without it is mostly guesswork</quote>
+      <p>Only if the tests are bad. A good test suite tells you more than a type checker.</p>
+    </message>
+    <message label="q-003" src="Lin" summary="Wednesday" alt="q-002">
+      <quote>A good test suite tells you more than the type checker.</quote>
+      <p>The arrow at the right edge of a quote jumps to where it came from; right-click quoted text above for the replies.</p>
+    </message>
+    <message label="q-004" src="Ken" summary="Thursday" alt="q-001">
+      <quote>a codebase outlives its first author [...] the tests never cover everything</quote>
+      <p>Pieces around an ellipsis match in order.</p>
+    </message>
+  </thread>
+</doc>

@@ -31,6 +31,7 @@
 #include "xanatoo/nav_history.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/paginate.hpp"
+#include "xanatoo/quote_links.hpp"
 #include "xanatoo/render.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
@@ -95,9 +96,23 @@ void apply_ui_scale(App& app);
 using BufferId = uint32_t;
 constexpr BufferId kNoBuffer = 0;
 
+// Quote links of a thread document (quote_links.hpp, docs/QUOTES.md):
+// derived data, rebuilt by quote_links_of when the document changed.
+struct QuoteLinks {
+  bool valid = false;
+  uint64_t doc_gen = 0;  // DocBuffer::doc_gen the links were found in
+  size_t nodes = 0;
+  xanatoo::NodeId next_id = 0;
+  std::vector<xanatoo::QuoteLink> links;
+};
+
 struct DocBuffer {
   BufferId id = kNoBuffer;
   xanatoo::Document doc;
+  // Bumped when `doc` changes (note_edit, refresh_views_of_buf); derived
+  // per-document data compares it.
+  uint64_t doc_gen = 0;
+  QuoteLinks quotes;
   // The page's address (Location): what the user opened — a local file, a
   // URL — never a derived file under cache_dir(). Reload goes through it.
   std::string path;
@@ -235,6 +250,11 @@ struct AnnotationMarks {
 };
 struct AnnotationIcon {
   size_t item = 0;  // into AnnotationMarks::items
+  float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
+};
+// Margin arrow of a linked quote (quote_icons): click jumps to the source.
+struct QuoteIcon {
+  size_t link = 0;  // into DocBuffer::quotes.links
   float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
 };
 // Margin icon of a bookmark mark, in pane-local x / content-relative y
@@ -454,6 +474,8 @@ struct Hover {
   std::string transclude_src;
   std::string bookmark;  // address of the bookmark whose margin icon is hovered
   int bookmark_pane = -1;
+  long quote = -1;  // quote link whose margin arrow is hovered
+  int quote_pane = -1;
   std::string annotation;  // note id whose passage tab is hovered
   int annotation_pane = -1;
   bool chrome_notice = false;  // reader mode notice ("Show all")
@@ -1023,6 +1045,18 @@ struct App {
   bool context_link_web = false;
   BufferId context_reply_buffer = kNoBuffer;
   xanatoo::NodeId context_reply_node = xanatoo::INVALID_NODE;
+  // Quote links under the right-click (context menu "Go to …" items).
+  struct QuoteMenuItem {
+    std::string label;
+    size_t link = 0;
+    bool to_source = true;  // quote → original, else original → reply
+  };
+  std::vector<QuoteMenuItem> context_quotes;
+  BufferId context_quote_buf = kNoBuffer;
+  // The quote link last jumped along: both ends washed while the view
+  // that jumped keeps its `#` mark.
+  BufferId quote_focus_buf = kNoBuffer;
+  long quote_focus = -1;
   float context_reply_y = -1.f;
   Touch touch;
   std::vector<FetchJob> fetches;
@@ -1475,6 +1509,17 @@ std::vector<BookmarkIcon> bookmark_icons(App& app, Pane& p);
 // The bookmark whose margin icon is at (lx, my) (pane-local / content y),
 // or nullptr.
 const BookmarkMark* bookmark_icon_at(App& app, Pane& p, float lx, float my);
+// Quote links (app_quotes.cpp, docs/QUOTES.md).
+const std::vector<xanatoo::QuoteLink>& quote_links_of(DocBuffer& b);
+std::vector<QuoteIcon> quote_icons(App& app, Pane& p);
+long quote_icon_at(App& app, Pane& p, float lx, float my);
+// Fills App::context_quotes for a right-click at `at` in pane `p`.
+void collect_context_quotes(App& app, Pane& p, std::optional<xanatoo::Caret> at);
+// Jump view `pi` along quote link `link` (to its original or to the quote),
+// marking the target; Back returns.
+void jump_quote(App& app, int pi, size_t link, bool to_source);
+std::string quote_tooltip(App& app, int pi, size_t link);
+void draw_quote_marks(App& app, int pi, float ox, float py, float draw_scroll);
 // Select the passage of bookmark `address` in view `pi` and scroll to it.
 void select_bookmark(App& app, int pi, const std::string& address);
 // `address` with its point turned into the last pipe: the passage as a cut.

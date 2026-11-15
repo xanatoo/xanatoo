@@ -309,6 +309,16 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         return;
       }
 
+    // A linked quote's margin arrow jumps to the original.
+    if (at >= 0)
+      if (const long q = quote_icon_at(app, app.panes[at],
+                                       local_x(app, mx, at), my);
+          q >= 0) {
+        focus_view(app, at);
+        jump_quote(app, at, static_cast<size_t>(q), /*to_source=*/true);
+        return;
+      }
+
     // A bookmark's margin icon selects its passage.
     if (at >= 0)
       if (const BookmarkMark* bm = bookmark_icon_at(
@@ -774,6 +784,8 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         }
         break;
       }
+      collect_context_quotes(app, p,
+                             xanatoo::hit_test(p.layout, lx, my, p.scroll_y));
       // A bookmark's margin icon has a menu of its own.
       if (const AnnotationMark* note = annotation_icon_at(app, p, lx, my)) {
         const std::string id = note->annotation_id;
@@ -1053,6 +1065,8 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       app.hover.transclude_src.clear();
       app.hover.bookmark.clear();
       app.hover.bookmark_pane = -1;
+      app.hover.quote = quote_icon_at(app, hp, lx, my);
+      app.hover.quote_pane = app.hover.quote >= 0 ? hover_pane : -1;
       app.hover.annotation.clear();
       app.hover.annotation_pane = -1;
       app.hover.chrome_notice = on_chrome_notice(hp, lx, my);

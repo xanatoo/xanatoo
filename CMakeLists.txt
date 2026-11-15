@@ -171,6 +171,7 @@ add_executable(xanatoo
   src/app_nostr.cpp
   src/app_about.cpp
   src/app_passage.cpp
+  src/app_quotes.cpp
   src/app_report.cpp
   src/about.cpp
   src/app_images.cpp

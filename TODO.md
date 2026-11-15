@@ -8,6 +8,19 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-15) — Quote links in the app (jump, arrows, underline)
+
+- `app_quotes.cpp`: per-buffer quote links (`DocBuffer::quotes`, rebuilt on
+  `DocBuffer::doc_gen`, new, bumped by `note_edit` / `refresh_views_of_buf`).
+  Linked quotes get an up arrow at their right edge (outline = approximate),
+  click → the original with a `#text:` mark (Back returns), the quote stays
+  washed too. Quoted originals have a dotted underline; the context menu
+  jumps both ways. Demo: `examples/quotes-demo.xml`. Verified under Xvfb
+  (arrow click, both menu directions, Back). Not checked against live
+  Reddit / Lemmy / HN threads yet.
+- Next (docs/QUOTES.md): original sentence in the arrow's tooltip, "quoted
+  by N" in Backlinks, split-view curves, stretchtext quotes.
+
 ## Status (2026-11-15) — Quote links in threads (slice 1: matcher)
 
 - `find_quote_links` (`quote_links.hpp`) finds quoted text of discussion

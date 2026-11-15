@@ -2851,6 +2851,17 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       ImGui::Separator();
     }
+    if (!state.context_quote_items.empty()) {
+      for (size_t i = 0; i < state.context_quote_items.size(); ++i) {
+        const std::string label =
+            state.context_quote_items[i] + "##quote" + std::to_string(i);
+        if (ImGui::MenuItem(label.c_str())) {
+          cmd = UiCommand::JumpQuote;
+          result.arg = std::to_string(i);
+        }
+      }
+      ImGui::Separator();
+    }
     if (state.context_can_reply) {
       menu_item_cmd("Reply…", UiCommand::OpenReply, cmd);
       ImGui::Separator();

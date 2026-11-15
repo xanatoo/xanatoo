@@ -93,6 +93,7 @@ enum class UiCommand {
                    // Downloads row): open / open-tab / system / folder /
                    // copy-path / copy-url / cancel / forget
   OpenReply,       // right-clicked Message: start a mock reply draft
+  JumpQuote,       // context menu quote link; arg = index into the items
   EditReply,       // arg = Markdown currently in the reply editor
   SendReply,       // mock only: never sends to an external service
   // Tabs / MDI
@@ -421,6 +422,7 @@ struct UiState {
   std::string context_comment_native;  // passage address for a right-clicked HN comment
   std::string context_comment_web;     // external HN per-comment permalink
   bool context_can_reply = false;
+  std::vector<std::string> context_quote_items;  // "Go to Quoted Message (…)"
   std::string context_link;       // right-clicked link target, if any
   std::string context_link_href;  // … as written in the page
   bool context_link_web = false;  // … and it is http(s): can be downloaded
