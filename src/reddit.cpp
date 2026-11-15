@@ -11,6 +11,7 @@
 #include "xanatoo/https.hpp"
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/json_min.hpp"
+#include "xanatoo/markdown_body.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
 
@@ -349,8 +350,7 @@ void append_post_message(Document& doc, NodeId thread, const RedditPost& post,
   replace_all(body, "&quot;", "\"");
 
   if (!body.empty()) {
-    NodeId para = doc.create(NodeKind::Paragraph, msg);
-    doc.append_text(para, body);
+    append_foreign_markdown(doc, msg, body, "https://www.reddit.com/");
   } else if (!is_comment && !post.is_self && !post.url.empty()) {
     NodeId para = doc.create(NodeKind::Paragraph, msg);
     InlineSpan link;

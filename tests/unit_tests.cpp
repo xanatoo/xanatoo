@@ -65,6 +65,8 @@
 #include <cstdlib>
 #include <iostream>
 #include "xanatoo/transfer_meter.hpp"
+#include "xanatoo/markdown_body.hpp"
+#include "xanatoo/quote_links.hpp"
 #include <string>
 #include <algorithm>
 #include <set>
@@ -594,6 +596,76 @@ void test_lemmy_urls() {
   EXPECT(!is_lemmy_url("https://www.reddit.com/r/linux"));
   EXPECT(!is_lemmy_url("lemmy.world/c/asklemmy"));  // scheme required
   EXPECT(!is_lemmy_url(""));
+}
+
+void test_foreign_markdown() {
+  using namespace xanatoo;
+  Document doc;
+  doc.root = doc.create(NodeKind::Document);
+  NodeId msg = doc.create(NodeKind::Message, doc.root);
+  append_foreign_markdown(
+      doc, msg,
+      "---\ntitle: x\n---\n"
+      "> quoted *text*\n\nIt costs $5 or $x$ here, see [docs](/wiki/a) and "
+      "[local](file:///etc/passwd).\n\n"
+      ":::include /etc/passwd\n\n"
+      ":::note\nnote body\n:::\n\n"
+      "![pic](img/a.png)\n\n- one\n- two\n",
+      "https://lemmy.world/");
+  std::vector<NodeKind> kinds;
+  std::string text;
+  bool math = false, local = false, label = false;
+  std::string docs_href, img_src;
+  for (const Node& n : doc.nodes) {
+    if (n.id != msg && n.id != doc.root) kinds.push_back(n.kind);
+    if (n.id != msg && !n.label.empty()) label = true;
+    if (n.kind == NodeKind::Transclude || n.kind == NodeKind::Note) local = true;
+    if (n.kind == NodeKind::Image) img_src = n.src;
+    for (const InlineSpan& s : n.spans) {
+      text += s.text;
+      if (s.kind == InlineKind::Math) math = true;
+      if (s.kind == InlineKind::Link && s.text == "docs") docs_href = s.href;
+      if (s.kind == InlineKind::Link && s.text == "local") local = true;
+      if (s.kind == InlineKind::Image) img_src = s.src;
+    }
+  }
+  EXPECT(!kinds.empty() && kinds.front() == NodeKind::HorizontalRule);
+  EXPECT(std::find(kinds.begin(), kinds.end(), NodeKind::BlockQuote) !=
+         kinds.end());
+  EXPECT(std::find(kinds.begin(), kinds.end(), NodeKind::List) != kinds.end());
+  EXPECT(!math && !local && !label);
+  EXPECT(text.find("$x$") != std::string::npos);
+  EXPECT(text.find(":::include /etc/passwd") != std::string::npos);
+  EXPECT(text.find("note body") != std::string::npos);
+  EXPECT_EQ(docs_href, "https://lemmy.world/wiki/a");
+  EXPECT_EQ(img_src, "https://lemmy.world/img/a.png");
+}
+
+void test_lemmy_quote_links() {
+  using namespace xanatoo;
+  const std::string post = R"({"post_view":{"post":{"id":7,"name":"Editors",
+    "body":"Which editor do you use for large C++ projects?",
+    "published":"2024-01-15T12:34:56.789Z"},
+    "creator":{"name":"alice"},"community":{"name":"tech"},
+    "counts":{"score":1,"comments":2}}})";
+  const std::string comments = R"({"comments":[
+    {"comment":{"id":9,"post_id":7,"path":"0.9",
+     "content":"Emacs with clangd. It handles a million lines without trouble.",
+     "published":"2024-01-15T13:00:00Z"},"creator":{"name":"bob"},
+     "counts":{"score":1}},
+    {"comment":{"id":10,"post_id":7,"path":"0.9.10",
+     "content":"> It handles a million lines without trouble\n\nNot for me.",
+     "published":"2024-01-15T14:00:00Z"},"creator":{"name":"carol"},
+     "counts":{"score":1}}]})";
+  const Document doc =
+      lemmy_post_document(post, comments, "https://lemmy.world");
+  const auto links = find_quote_links(doc);
+  EXPECT(links.size() == 1);
+  if (links.size() != 1) return;
+  EXPECT_EQ(doc.get(links[0].source_msg).label, "9");
+  EXPECT_EQ(doc.get(links[0].quoting_msg).label, "10");
+  EXPECT(links[0].score == 1.f);
+  EXPECT(doc.get(links[0].quote.anchor.node).kind == NodeKind::BlockQuote);
 }
 
 void test_lemmy_post_markup() {
@@ -6182,6 +6254,8 @@ int main() {
   test_string_helpers();
   test_json_min();
   test_reddit_urls();
+  test_foreign_markdown();
+  test_lemmy_quote_links();
   test_lemmy_urls();
   test_lemmy_post_markup();
   test_gemini_urls();

@@ -63,6 +63,12 @@ read-only service clients. Every client is read-only: never post or log in.
 - `find_quote_links(doc)` links quotes in `Message` bodies (`BlockQuote`
   nodes, `>` lines in raw Markdown text) to the message they came from.
   Pure, no SDL; derived data, never stored. Design: `docs/QUOTES.md`.
+- `append_foreign_markdown(doc, msg, md, base)` (`markdown_body.hpp`) is how
+  Markdown written by others becomes blocks (Reddit and Lemmy bodies): it
+  parses with `parse_markup` and keeps only plain Markdown structure
+  (`:::` blocks unwrapped, `:::include` literal, no pages, no math, no
+  labels, links resolved against the site, no `file:` targets). Use it for
+  any new service that delivers Markdown.
 
 ## Feeds (RSS / Atom)
 
@@ -91,7 +97,8 @@ read-only service clients. Every client is read-only: never post or log in.
 - Read-only client via public `https://www.reddit.com/…/.json` (OpenSSL HTTPS).
 - Gated by `XANATOO_REDDIT` (default ON; needs OpenSSL).
 - `reddit:r/<sub>/…` refs (the reddit.com path); https links open as web pages.
-- Maps posts/comments to Thread + Message nodes.
+- Maps posts/comments to Thread + Message nodes; bodies (selftext / comment
+  Markdown) go through `append_foreign_markdown` (`markdown_body.hpp`).
 - Optional OAuth: `XANATOO_REDDIT_CLIENT_ID` + `XANATOO_REDDIT_CLIENT_SECRET` (script app) when anonymous `.json` returns 403.
 - Optional UA override: `XANATOO_REDDIT_USER_AGENT`.
 - When a native `reddit:` fetch receives HTTP 403, the error document offers a

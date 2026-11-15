@@ -16,9 +16,12 @@ Next bundle number: **348** (this delivery is **347**)
   go to the origin, fuzzy word-trigram fallback with a score. Tests:
   `xanatoo_quote_links_tests`. Plan for the UI slices (jump, reverse marks,
   linked highlight, split-view curves, stretchtext quotes): `docs/QUOTES.md`.
-- Noticed: Reddit / Lemmy bodies are raw Markdown in one `Paragraph`, so
-  their `>` quotes show as plain text; the matcher copes, but rendering
-  them as Markdown would help everywhere.
+- Reddit / Lemmy bodies were raw Markdown in one `Paragraph`; they now go
+  through `append_foreign_markdown` (`markdown_body.hpp`): parse_markup,
+  reduced to plain Markdown so foreign text cannot `:::include` local files,
+  open pages or turn `$` into math. Quotes become `BlockQuote`s, lists,
+  code, links (resolved against the site) render. Not yet: Reddit's
+  `>!spoiler!<` and `^superscript`, Lemmy links mapped to `lemmy:` refs.
 
 ## Status (2026-11-15) — Services menu: Lemmy "All", video and archive
 

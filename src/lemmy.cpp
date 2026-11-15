@@ -7,6 +7,7 @@
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/lemmy_directory.hpp"
+#include "xanatoo/markdown_body.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/util.hpp"
 
@@ -259,10 +260,9 @@ void append_message(Document& doc, NodeId thread, const LemmyPost& post,
     doc.get(title).spans.push_back(std::move(hs));
   }
 
-  if (!post.body.empty()) {
-    NodeId para = doc.create(NodeKind::Paragraph, msg);
-    doc.append_text(para, post.body);
-  }
+  if (!post.body.empty())
+    append_foreign_markdown(doc, msg, post.body,
+                            origin.empty() ? std::string() : origin + "/");
   // Link posts: show external URL (may open in browser if not Lemmy).
   if (!post.is_comment && !post.url.empty() && post.url != permalink) {
     NodeId para = doc.create(NodeKind::Paragraph, msg);
