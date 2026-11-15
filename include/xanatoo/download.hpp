@@ -29,6 +29,10 @@ struct DownloadProgress {
   std::string path;
   std::string final_name;
   std::string error;
+  std::string dest_dir;  // empty: default downloads_dir()
+  // Response was a downloadable attachment during Navigate/Tab:
+  // do not save until the user confirms (start_download dialog).
+  std::atomic<bool> offered{false};
 };
 
 // Dispatch based on the response headers, not the URL extension. A forced
@@ -48,7 +52,9 @@ public:
   DownloadFile& operator=(const DownloadFile&) = delete;
   ~DownloadFile();
 
-  bool begin(std::string filename, std::string* error);
+  // `directory` empty → downloads_dir(); otherwise that folder is used.
+  bool begin(std::string filename, std::string* error,
+             std::string_view directory = {});
   bool append(std::string_view bytes, std::string* error);
   bool finish(std::string* error);
   void abort();

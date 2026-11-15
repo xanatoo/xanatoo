@@ -3080,6 +3080,57 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::PopStyleVar();
   }
 
+  // ---- Download confirmation ----
+  if (state.download_confirm_open) {
+    bool open = true;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(440.f * scale_, 0.f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowFocus();
+    if (ImGui::Begin("Download", &open,
+                     ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoCollapse)) {
+      ImGui::TextUnformatted("Download this file?");
+      ImGui::Spacing();
+      {
+        std::string shown = state.download_confirm_url;
+        if (shown.size() > 72)
+          shown = shown.substr(0, 34) + "…" + shown.substr(shown.size() - 34);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 400.f * scale_);
+        ImGui::TextDisabled("%s", shown.c_str());
+        ImGui::PopTextWrapPos();
+      }
+      ImGui::Spacing();
+      ImGui::Separator();
+      ImGui::Spacing();
+      const float btn_w = 120.f * scale_;
+      if (ImGui::Button("Cancel", ImVec2(btn_w, 0)))
+        cmd = UiCommand::CancelDownload;
+      ImGui::SameLine();
+#if !defined(EMSCRIPTEN)
+      // Folder picker availability is decided when the command runs.
+      if (ImGui::Button("Download to…", ImVec2(btn_w + 16.f * scale_, 0)))
+        cmd = UiCommand::DownloadToFolder;
+      ImGui::SameLine();
+#endif
+      ImGui::PushStyleColor(ImGuiCol_Button,
+                            ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
+      if (ImGui::Button("Download", ImVec2(btn_w, 0)))
+        cmd = UiCommand::ConfirmDownload;
+      ImGui::PopStyleColor();
+      if (ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
+      if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+          cmd = UiCommand::CancelDownload;
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
+          cmd = UiCommand::ConfirmDownload;
+      }
+    }
+    ImGui::End();
+    if (!open) cmd = UiCommand::CancelDownload;
+  }
+
   // ---- Preferences ----
   if (state.preferences_open) {
     bool open = true;

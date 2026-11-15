@@ -89,7 +89,10 @@ enum class UiCommand {
   CopyText,        // arg = text for the clipboard (an address)
   OpenLinkInTab,   // arg = href of a link in the focused view: new tab
   OpenLinkInTrail, // arg = href of a link in the focused view: Trail tiles
-  DownloadUrl,     // arg = http(s) URL: save to Downloads, never show
+  DownloadUrl,     // arg = http(s) URL: open the download confirmation dialog
+  ConfirmDownload, // user accepted the download dialog (default folder)
+  DownloadToFolder,// user chose "Download to…" (native folder picker)
+  CancelDownload,  // user dismissed the download dialog
   DownloadAction,  // arg = action on App::download_menu (right-clicked
                    // Downloads row): open / open-tab / system / folder /
                    // copy-path / copy-url / cancel / forget
@@ -388,6 +391,9 @@ struct UiState {
   int page_columns = 0;         // ViewSettings::page_columns
   bool has_chrome = false;      // focused page has page chrome to hide
   bool preferences_open = false;
+  bool download_confirm_open = false;
+  std::string download_confirm_url;
+
   bool credentials_open = false;
   bool backlinks = false;
   bool sitemap = false;

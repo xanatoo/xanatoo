@@ -147,10 +147,12 @@ std::string download_filename(std::string_view url,
 
 DownloadFile::~DownloadFile() { abort(); }
 
-bool DownloadFile::begin(std::string filename, std::string* error) {
+bool DownloadFile::begin(std::string filename, std::string* error,
+                         std::string_view directory) {
   abort();
   filename_ = safe_name(std::move(filename));
-  const std::string dir = downloads_dir();
+  const std::string dir =
+      directory.empty() ? downloads_dir() : std::string(directory);
   if (!ensure_dir(dir)) {
     if (error) *error = "cannot create Downloads directory";
     return false;

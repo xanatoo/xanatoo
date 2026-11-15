@@ -2,6 +2,10 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/app.hpp"
+#include "imgui.h"
+#if !defined(EMSCRIPTEN)
+#include <SDL3/SDL_dialog.h>
+#endif
 #include "xanatoo/paths.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
@@ -300,6 +304,65 @@ void download_action(App& app, const std::string& action) {
     SDL_SetClipboardText(d.path.c_str());
     flash_status(app, "Copied path: " + d.path);
   }
+}
+
+// ---- Download confirmation dialog ------------------------------------------
+
+bool download_folder_dialog_available() {
+#if defined(EMSCRIPTEN)
+  return false;
+#elif defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_MACOS) || \
+    defined(SDL_PLATFORM_LINUX) || defined(__linux__) || defined(_WIN32) || \
+    defined(__APPLE__)
+  return true;
+#else
+  return false;
+#endif
+}
+
+namespace {
+
+struct FolderPickState {
+  App* app = nullptr;
+  std::string url;
+};
+
+#if !defined(EMSCRIPTEN)
+static void folder_dialog_callback(void* userdata, const char* const* filelist,
+                                   int /*filter*/) {
+  auto* st = static_cast<FolderPickState*>(userdata);
+  if (!st || !st->app) {
+    delete st;
+    return;
+  }
+  if (filelist && filelist[0] && filelist[0][0]) {
+    begin_download(*st->app, st->url, filelist[0]);
+  } else {
+    flash_status(*st->app, "Download cancelled");
+  }
+  delete st;
+}
+#endif
+
+}  // namespace
+
+void pick_download_folder(App& app, const std::string& url) {
+#if !defined(EMSCRIPTEN)
+  if (!download_folder_dialog_available()) {
+    begin_download(app, url, {});
+    return;
+  }
+  auto* st = new FolderPickState{&app, url};
+  SDL_ShowOpenFolderDialog(folder_dialog_callback, st, app.window, nullptr,
+                           false);
+#else
+  begin_download(app, url, {});
+#endif
+}
+
+void draw_download_confirm(App& /*app*/) {
+  // Dialog lives in Ui::begin_frame (Preferences-style) so it participates in
+  // the same ImGui frame as the rest of the chrome.
 }
 
 }  // namespace xanatoo::app

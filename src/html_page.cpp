@@ -400,14 +400,22 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
           if (err) *err = "preview unavailable for " + h.content_type;
           return false;
         }
-        downloading = h.status == 200 && download &&
-            (force_download ||
-             download_response(url, h.content_type, h.content_disposition));
+        // Auto-download only for explicit Download purpose (force_download).
+        // Navigate/Tab attachments are offered to the user instead.
+        if (h.status == 200 && download && !force_download &&
+            download_response(url, h.content_type, h.content_disposition)) {
+          download->name = download_filename(url, h.content_disposition);
+          download->mime = h.content_type;
+          download->offered.store(true, std::memory_order_release);
+          // Stop the body; confirm dialog will re-fetch if the user accepts.
+          return false;
+        }
+        downloading = h.status == 200 && download && force_download;
         if (!downloading) return true;
         const std::string name = download_filename(url, h.content_disposition);
         download->name = name;
         download->mime = h.content_type;
-        if (!file.begin(name, err)) return false;
+        if (!file.begin(name, err, download->dest_dir)) return false;
         download->total.store(h.content_length, std::memory_order_relaxed);
         download->phase.store(DownloadPhase::Active, std::memory_order_release);
         return true;
