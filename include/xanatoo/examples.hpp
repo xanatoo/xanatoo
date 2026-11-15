@@ -21,6 +21,7 @@ inline constexpr ExampleEntry kExamples[] = {
     {"TeX math", "math.md"},
     {nullptr, nullptr},
     {"Directory (links and feeds)", "directory.md"},
+    {"Finger (public hosts)", "finger.md"},
     {"Books and long reads", "books.md"},
     {"Feeds (RSS / Atom)", "feeds.md"},
     {"Nostr discussions", "nostr-sample.md"},
