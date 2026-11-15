@@ -101,7 +101,13 @@ read-only service clients. Every client is read-only: never post or log in.
   (often `Local`) and comments from federated users vanish.
 - Gated by `XANATOO_LEMMY` (default ON; needs OpenSSL).
 - `lemmy:<instance>/c/<community>`, `/u/<person>` and `/post/<id>` refs.
-- Maps posts/comments to Thread + Message nodes.
+- Maps posts/comments to Thread + Message nodes. Header slots: [0] author
+  profile link, [1] date (`datetime` = ISO instant; posts link it to the
+  post), then the vote score as a `role=metadata rel="score"` span, which
+  the Message layout shows as an extra header field. `summary` is the date
+  alone. Posts add a `<heading>` (title → post page), the body, the link URL
+  and a `<caption>` with community + comments links. `lemmy_post_document`
+  builds a post page from JSON without I/O (unit tested).
 - **Lemmy Explorer** in Panels is a native, dockable `FloatWindow` with an
   embedded ImGui form (not a separate ImGui window). It offers locally
   discovered Instances, Communities, People and Posts; profile/community/post

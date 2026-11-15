@@ -72,15 +72,7 @@ bool is_lemmy_url(std::string_view s) {
   return path_looks_lemmy(path);
 }
 
-#if defined(XANATOO_LEMMY) && XANATOO_LEMMY
-
 namespace {
-
-std::string lemmy_user_agent() {
-  const char* env = std::getenv("XANATOO_LEMMY_USER_AGENT");
-  if (env && env[0]) return env;
-  return user_agent("read-only Lemmy client; by grumbel");
-}
 
 std::string format_time_iso(std::string_view iso) {
   // "2024-01-15T12:34:56.789Z" → "2024-01-15 12:34 UTC"
@@ -182,12 +174,30 @@ std::string post_permalink(const LemmyPost& post, const std::string& origin) {
   return {};
 }
 
+// A Message whose header carries the semantic fields: author (slot 0, a
+// profile link), date (slot 1, with the ISO instant for hovers) and the
+// vote score as a metadata field. Posts add a heading (title linking to the
+// post page) and a caption with the community and comment links.
 void append_message(Document& doc, NodeId thread, const LemmyPost& post,
                     const std::string& origin, int64_t root_post_id = 0) {
   NodeId msg = doc.create(NodeKind::Message, thread);
   Node& n = doc.get(msg);
   n.label = std::to_string(post.id);
   n.src = post.author.empty() ? "[deleted]" : post.author;
+  n.summary = format_time_iso(post.published);
+
+  const std::string permalink = post_permalink(post, origin);
+  // Post and community links stay in the native view (lemmy: refs).
+  auto native = [](const std::string& url) {
+    std::string ref = lemmy_ref_from_url(url);
+    return ref.empty() ? url : ref;
+  };
+
+  // Slots are positional; a Strong placeholder keeps slot 1 in place when
+  // there is no profile link (an empty plain span would not survive XML).
+  InlineSpan author;
+  author.kind = InlineKind::Strong;
+  author.text = n.src;
   if (!post.author.empty()) {
     const std::string home = lemmy_instance_host(origin);
     std::string actor = lemmy_instance_host(post.author_actor);
@@ -195,20 +205,29 @@ void append_message(Document& doc, NodeId thread, const LemmyPost& post,
     if (!actor.empty() && actor != home && name.find('@') == std::string::npos)
       name += "@" + actor;
     if (!home.empty() && name.find_first_of("/?#&") == std::string::npos) {
-      InlineSpan a;
-      a.kind = InlineKind::Link;
-      a.text = post.author;
-      a.href = "lemmy:" + home + "/u/" + name;
-      n.spans.push_back(std::move(a));
+      author.kind = InlineKind::Link;
+      author.href = "lemmy:" + home + "/u/" + name;
     }
   }
-  std::string meta;
-  if (!post.published.empty()) meta = format_time_iso(post.published);
-  if (post.score != 0) {
-    if (!meta.empty()) meta += " · ";
-    meta += std::to_string(post.score) + " pts";
+  n.spans.push_back(std::move(author));
+  if (!post.published.empty()) {
+    InlineSpan date;
+    date.text = n.summary;
+    date.datetime = post.published;
+    if (!post.is_comment && !permalink.empty()) {
+      date.kind = InlineKind::Link;
+      date.href = native(permalink);
+    }
+    n.spans.push_back(std::move(date));
   }
-  n.summary = meta;
+  {
+    InlineSpan score;
+    score.role = InlineRole::Metadata;
+    score.rel = "score";
+    score.text = std::to_string(post.score) +
+                 (post.score == 1 || post.score == -1 ? " point" : " points");
+    n.spans.push_back(std::move(score));
+  }
 
   // Threading: Message layout walks alt → parent Message.label for indent.
   if (post.is_comment) {
@@ -218,42 +237,31 @@ void append_message(Document& doc, NodeId thread, const LemmyPost& post,
       n.alt = std::to_string(root_post_id);
   }
 
-  const std::string permalink = post_permalink(post, origin);
-  // Post and community links stay in the native view (lemmy: refs).
-  auto native = [](const std::string& url) {
-    std::string ref = lemmy_ref_from_url(url);
-    return ref.empty() ? url : ref;
+  auto metadata_link = [](std::string text, std::string href) {
+    InlineSpan s;
+    s.kind = InlineKind::Link;
+    s.role = InlineRole::Metadata;
+    s.text = std::move(text);
+    s.href = std::move(href);
+    return s;
+  };
+  auto separator = [&](NodeId at) {
+    if (!doc.get(at).spans.empty()) doc.append_text(at, " · ");
   };
 
   if (!post.is_comment && !post.title.empty()) {
-    NodeId title = doc.create(NodeKind::Paragraph, msg);
+    NodeId title = doc.create(NodeKind::Header, msg);
     InlineSpan hs;
     // Title is a link to the post page so a click loads comments in-pane.
-    if (!permalink.empty()) {
-      hs.kind = InlineKind::Link;
-      hs.text = post.title;
-      hs.href = native(permalink);
-    } else {
-      hs.kind = InlineKind::Strong;
-      hs.text = post.title;
-    }
+    hs.kind = permalink.empty() ? InlineKind::Strong : InlineKind::Link;
+    hs.text = post.title;
+    if (!permalink.empty()) hs.href = native(permalink);
     doc.get(title).spans.push_back(std::move(hs));
   }
 
   if (!post.body.empty()) {
     NodeId para = doc.create(NodeKind::Paragraph, msg);
     doc.append_text(para, post.body);
-  }
-  // A profile lists comments across unrelated posts, without a single root
-  // thread. Link each comment back to its discussion for context.
-  if (post.is_comment && root_post_id == 0 && post.source_post_id > 0) {
-    NodeId link_row = doc.create(NodeKind::Paragraph, msg);
-    InlineSpan link;
-    link.kind = InlineKind::Link;
-    link.text = "View discussion";
-    link.href = "lemmy:" + lemmy_instance_host(origin) + "/post/" +
-                std::to_string(post.source_post_id);
-    doc.get(link_row).spans.push_back(std::move(link));
   }
   // Link posts: show external URL (may open in browser if not Lemmy).
   if (!post.is_comment && !post.url.empty() && post.url != permalink) {
@@ -265,37 +273,41 @@ void append_message(Document& doc, NodeId thread, const LemmyPost& post,
     doc.get(para).spans.push_back(std::move(link));
   }
 
-  // Footer: community + comments links (in-app Lemmy navigation).
-  if (!post.is_comment) {
-    NodeId foot = doc.create(NodeKind::Paragraph, msg);
-    bool any = false;
+  // A profile lists comments across unrelated posts, without a single root
+  // thread. Link each comment back to its discussion for context.
+  if (post.is_comment && root_post_id == 0 && post.source_post_id > 0) {
+    NodeId foot = doc.create(NodeKind::Caption, msg);
+    doc.get(foot).spans.push_back(metadata_link(
+        "View discussion", "lemmy:" + lemmy_instance_host(origin) + "/post/" +
+                               std::to_string(post.source_post_id)));
+  }
+
+  // Caption: community + comments links (in-app Lemmy navigation).
+  if (!post.is_comment && (!post.community.empty() || !permalink.empty())) {
+    NodeId foot = doc.create(NodeKind::Caption, msg);
     if (!post.community.empty()) {
-      InlineSpan c;
-      c.kind = InlineKind::Link;
-      c.text = "c/" + post.community;
-      if (!post.community_url.empty())
-        c.href = native(post.community_url);
-      else if (!origin.empty())
-        c.href = native(origin + "/c/" + post.community);
-      else
-        c.kind = InlineKind::Emphasis;
-      doc.get(foot).spans.push_back(std::move(c));
-      any = true;
+      std::string href;
+      if (!post.community_url.empty()) href = native(post.community_url);
+      else if (!origin.empty()) href = native(origin + "/c/" + post.community);
+      if (href.empty()) {
+        InlineSpan c;
+        c.role = InlineRole::Metadata;
+        c.text = "c/" + post.community;
+        doc.get(foot).spans.push_back(std::move(c));
+      } else {
+        doc.get(foot).spans.push_back(
+            metadata_link("c/" + post.community, std::move(href)));
+      }
     }
     if (!permalink.empty()) {
-      if (any) {
-        InlineSpan sep;
-        sep.kind = InlineKind::Text;
-        sep.text = "  ·  ";
-        doc.get(foot).spans.push_back(std::move(sep));
-      }
-      InlineSpan cl;
-      cl.kind = InlineKind::Link;
-      cl.text = post.comments > 0
-                    ? (std::to_string(post.comments) + " comments")
-                    : "comments";
-      cl.href = native(permalink);
-      doc.get(foot).spans.push_back(std::move(cl));
+      separator(foot);
+      std::string text =
+          post.comments > 0
+              ? std::to_string(post.comments) +
+                    (post.comments == 1 ? " comment" : " comments")
+              : "comments";
+      doc.get(foot).spans.push_back(
+          metadata_link(std::move(text), native(permalink)));
     }
   }
 }
@@ -335,6 +347,32 @@ Document build_document(const std::string& title,
   doc.append_text(foot,
                   "Lemmy · read-only · Ctrl+L to open another community or post");
   return doc;
+}
+
+}  // namespace
+
+Document lemmy_post_document(std::string_view post_json,
+                             std::string_view comments_json,
+                             std::string_view origin) {
+  std::vector<LemmyPost> posts;
+  std::vector<LemmyPost> comments;
+  std::string_view post_view = json_object_after_key(post_json, "post_view");
+  if (!post_view.empty()) posts.push_back(parse_post_view(post_view));
+  for (const auto& cv : json_object_array_after_key(comments_json, "comments"))
+    comments.push_back(parse_comment_view(cv));
+  const std::string title = posts.empty() ? "Lemmy" : posts.front().title;
+  return build_document(title, posts, std::move(comments),
+                        std::string(origin));
+}
+
+#if defined(XANATOO_LEMMY) && XANATOO_LEMMY
+
+namespace {
+
+std::string lemmy_user_agent() {
+  const char* env = std::getenv("XANATOO_LEMMY_USER_AGENT");
+  if (env && env[0]) return env;
+  return user_agent("read-only Lemmy client; by grumbel");
 }
 
 struct ParsedUrl {

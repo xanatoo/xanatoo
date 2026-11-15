@@ -128,7 +128,10 @@ struct Node {
   // Message: label = message-id; src = from/author; summary = date (ISO);
   //          alt = in-reply-to id, or "about:#anchor" for passage comments
   //          spans (optional) = Link spans for the header: [0] author,
-  //          [1] date (e.g. profile / permalink); body blocks are children.
+  //          [1] date (e.g. profile / permalink, datetime = ISO instant),
+  //          [2] reply. Spans with role=metadata and text are extra header
+  //          fields after the date (rel="score": "42 points"), wherever
+  //          they sit. Body blocks are children.
   // Header: text title (no rank); src may hold org TODO keyword; tags for org.
   // Footnote: label = key; body blocks are children (usually Paragraphs).
   // Collection: summary = default view hint ("grid", "list", "full");

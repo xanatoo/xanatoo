@@ -595,6 +595,55 @@ void test_lemmy_urls() {
   EXPECT(!is_lemmy_url(""));
 }
 
+void test_lemmy_post_markup() {
+  using namespace xanatoo;
+  const std::string post = R"({"post_view":{"post":{"id":7,"name":"Hello",
+    "body":"Text","ap_id":"https://lemmy.world/post/7",
+    "published":"2024-01-15T12:34:56.789Z"},
+    "creator":{"name":"alice","actor_id":"https://lemmy.world/u/alice"},
+    "community":{"name":"tech","actor_id":"https://lemmy.world/c/tech"},
+    "counts":{"score":42,"comments":1}}})";
+  const std::string comments = R"({"comments":[{"comment":{"id":9,
+    "post_id":7,"content":"Reply","path":"0.9",
+    "published":"2024-01-15T13:00:00Z"},
+    "creator":{"name":"bob","actor_id":"https://feddit.org/u/bob"},
+    "counts":{"score":1}}]})";
+  const Document doc =
+      lemmy_post_document(post, comments, "https://lemmy.world");
+  std::vector<const Node*> msgs;
+  for (const Node& n : doc.nodes)
+    if (n.kind == NodeKind::Message) msgs.push_back(&n);
+  EXPECT(msgs.size() == 2);
+  if (msgs.size() != 2) return;
+  const Node& p = *msgs[0];
+  EXPECT(p.src == "alice");
+  EXPECT(p.summary == "2024-01-15 12:34 UTC");  // date only, no score
+  EXPECT(p.spans.size() == 3);
+  EXPECT(p.spans[0].kind == InlineKind::Link &&
+         p.spans[0].href == "lemmy:lemmy.world/u/alice");
+  EXPECT(p.spans[1].datetime == "2024-01-15T12:34:56.789Z");
+  EXPECT(p.spans[2].role == InlineRole::Metadata &&
+         p.spans[2].rel == "score" && p.spans[2].text == "42 points");
+  EXPECT(!p.children.empty() &&
+         doc.get(p.children.front()).kind == NodeKind::Header);
+  EXPECT(doc.get(p.children.back()).kind == NodeKind::Caption);
+  const Node& c = *msgs[1];
+  EXPECT(c.alt == "7");
+  EXPECT(c.spans.size() == 3 && c.spans[0].href == "lemmy:lemmy.world/u/bob@feddit.org");
+  EXPECT(c.spans.size() == 3 && c.spans[2].text == "1 point");
+  // The header fields survive the XML round trip in their slots.
+  const Document back = parse_xml(serialize_xml(doc));
+  for (const Node& n : back.nodes) {
+    if (n.kind != NodeKind::Message || n.label != "7") continue;
+    EXPECT(n.spans.size() == 3);
+    if (n.spans.size() == 3) {
+      EXPECT(n.spans[1].datetime == "2024-01-15T12:34:56.789Z");
+      EXPECT(n.spans[2].rel == "score" &&
+             n.spans[2].role == InlineRole::Metadata);
+    }
+  }
+}
+
 void test_gemini_urls() {
   using namespace xanatoo;
   EXPECT(is_gemini_url("gemini://geminiprotocol.net/"));
@@ -5878,6 +5927,7 @@ int main() {
   test_json_min();
   test_reddit_urls();
   test_lemmy_urls();
+  test_lemmy_post_markup();
   test_gemini_urls();
   test_nostr_refs();
   test_nostr_content();

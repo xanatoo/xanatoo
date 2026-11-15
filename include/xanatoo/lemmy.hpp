@@ -17,6 +17,12 @@ namespace xanatoo {
 // Any host is accepted when the path matches /c/, /post/, or /api/v3/.
 bool is_lemmy_url(std::string_view s);
 
+// The document for one API v3 post response ({"post_view": …}) and its
+// comment list ({"comments": […]}), without network I/O.
+Document lemmy_post_document(std::string_view post_json,
+                             std::string_view comments_json,
+                             std::string_view origin);
+
 #if defined(XANATOO_LEMMY) && XANATOO_LEMMY
 // Fetch a community listing or single post (+ comments) via Lemmy API v3.
 // Builds a Document with Thread + Message nodes (read-only).

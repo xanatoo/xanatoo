@@ -1244,8 +1244,15 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       // message-op / message-meta roles so posts separate at a glance.
       // Optional semantic spans on Message (0 = author, 1 = date, 2 = reply)
       // annotate the reconstructed header without making layout HN-specific.
+      // Spans with role=metadata and text (vote score, …) are extra fields
+      // shown after the date; they never fill the positional slots.
+      auto header_field = [&](size_t i) {
+        return node.spans[i].role == InlineRole::Metadata &&
+               !node.spans[i].text.empty();
+      };
       auto header_link = [&](size_t i) -> const InlineSpan* {
-        return i < node.spans.size() && node.spans[i].kind == InlineKind::Link
+        return i < node.spans.size() && !header_field(i) &&
+                       node.spans[i].kind == InlineKind::Link
                    ? &node.spans[i]
                    : nullptr;
       };
@@ -1281,7 +1288,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         InlineSpan d;
         d.kind = InlineKind::Text;
         d.text = node.summary;
-        if (node.spans.size() > 1) {
+        if (node.spans.size() > 1 && !header_field(1)) {
           d.datetime = node.spans[1].datetime;
         }
         if (const InlineSpan* l = header_link(1)) {
@@ -1289,6 +1296,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           d.href = l->href;
         }
         add_header(std::move(d), 1);
+      }
+      for (size_t i = 0; i < node.spans.size(); ++i) {
+        if (!header_field(i)) continue;
+        add_separator();
+        InlineSpan f = node.spans[i];
+        f.role = InlineRole::Normal;
+        add_header(std::move(f), i);
       }
       if (!node.alt.empty()) {
         add_separator();
