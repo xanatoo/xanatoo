@@ -13,7 +13,7 @@ const char* version_string() { return XANATOO_VERSION; }
 
 std::string user_agent(std::string_view purpose) {
   return "xanatoo/" + std::string(XANATOO_VERSION) + " (" +
-         std::string(purpose) + "; +https://github.com/Grumbel/xanatoo)";
+         std::string(purpose) + "; +https://github.com/xanatoo/xanatoo)";
 }
 
 }  // namespace xanatoo

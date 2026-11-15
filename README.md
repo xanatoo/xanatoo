@@ -55,9 +55,9 @@ For a guided tour of actual document elements, open
 The easiest path on Linux with Nix flakes is:
 
 ```sh
-nix run github:Grumbel/xanatoo
-nix run github:Grumbel/xanatoo -- notes.md
-nix run github:Grumbel/xanatoo -- wikipedia:Ted_Nelson
+nix run github:xanatoo/xanatoo
+nix run github:xanatoo/xanatoo -- notes.md
+nix run github:xanatoo/xanatoo -- wikipedia:Ted_Nelson
 ```
 
 From a checkout:

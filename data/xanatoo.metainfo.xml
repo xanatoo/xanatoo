@@ -22,14 +22,14 @@
     </ul>
   </description>
   <launchable type="desktop-id">xanatoo.desktop</launchable>
-  <url type="homepage">https://github.com/Grumbel/xanatoo</url>
-  <url type="bugtracker">https://github.com/Grumbel/xanatoo/issues</url>
+  <url type="homepage">https://github.com/xanatoo/xanatoo</url>
+  <url type="bugtracker">https://github.com/xanatoo/xanatoo/issues</url>
   <developer>
     <name>Ingo Ruhnke</name>
   </developer>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/Grumbel/xanatoo/master/docs/screenshot.png</image>
+      <image>https://raw.githubusercontent.com/xanatoo/xanatoo/master/docs/screenshot.png</image>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>

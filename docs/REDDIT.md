@@ -11,7 +11,7 @@ does **not** sign in to your Reddit account or access private messages.
 2. [Request Data API access](https://support.reddithelp.com/hc/en-us/requests/new?ticket_form_id=14868593862164).
    Explain that Xanatoo is an external, non-commercial, read-only desktop
    reader of public subreddit listings and comment threads. Include a link
-   to its source code, `https://github.com/Grumbel/xanatoo`, and explain
+   to its source code, `https://github.com/xanatoo/xanatoo`, and explain
    why Reddit's hosted Devvit platform cannot run a local desktop reader.
    **Approval is not guaranteed.**
 3. If your account has permission to create or use a traditional OAuth app,

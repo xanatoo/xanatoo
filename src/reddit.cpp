@@ -183,7 +183,7 @@ std::string reddit_user_agent() {
   if (env && env[0]) return env;
   // Reddit's preferred form: platform:app_id:version (by /u/name)
   return std::string("linux:xanatoo:") + version_string() +
-         " (by /u/grumbel; read-only; +https://github.com/Grumbel/xanatoo)";
+         " (by /u/grumbel; read-only; +https://github.com/xanatoo/xanatoo)";
 }
 
 // App-only OAuth token (client credentials). Empty if unset or request fails.

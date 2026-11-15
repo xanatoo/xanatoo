@@ -378,7 +378,7 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   bool force_download) {
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
-      "; +https://github.com/Grumbel/xanatoo)";
+      "; +https://github.com/xanatoo/xanatoo)";
   std::string url(url_in.substr(0, url_in.find('#')));
   std::cerr << "Web: GET " << url << "\n";
   std::string fin;

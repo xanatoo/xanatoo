@@ -1,6 +1,6 @@
 # TODO — xanatoo
 
-> **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/Grumbel/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
+> **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
 ## Current tip
 
