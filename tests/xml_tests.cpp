@@ -81,7 +81,7 @@ void test_example() {
 author: Schröder
 </front-matter>
   <section nid="22" label="intro" style="warning" tags="a:b">
-    <heading nid="57">Introduction &lt;3</heading>
+    <h nid="57">Introduction &lt;3</h>
     <p nid="68">A &amp; B <em>emphasis</em> <strong>strong</strong> <strike>strike</strike>
 <a href="#intro" target="57" rel="see-also" datetime="2026-11-07" role="metadata">go</a>
 <code>1 &lt; 2</code><cite href="ref1">[1]</cite><fnref href="f1">[f1]</fnref>
@@ -111,10 +111,11 @@ author: Schröder
   }
   check(linked, "link parsed");
   const std::string xml = serialize_xml(a);
-  check(xml.find("<heading nid=") != std::string::npos,
-        "XML writes heading for a semantic title");
-  check(xml.find("<header") == std::string::npos,
-        "XML does not write legacy title tag");
+  check(xml.find("<h nid=") != std::string::npos,
+        "XML writes h for a semantic title");
+  check(xml.find("<header") == std::string::npos &&
+        xml.find("<heading") == std::string::npos,
+        "XML does not write legacy title tags");
   const Document b = parse_xml(xml);
   check(same_tree(a, a.root, b, b.root), "semantic round trip");
   check(a.meta.title == b.meta.title && a.meta.lang == b.meta.lang &&
@@ -126,14 +127,39 @@ author: Schröder
 }
 
 void test_legacy_header_alias() {
-  const Document old = parse_xml("<doc><section><header>Old title</header></section></doc>");
-  const NodeId section = old.get(old.root).children.at(0);
-  const NodeId title = old.get(section).children.at(0);
-  check(old.get(title).kind == NodeKind::Header, "legacy header still reads as a title");
-  const std::string canonical = serialize_xml(old);
-  check(canonical.find("<heading nid=") != std::string::npos &&
-        canonical.find("<header ") == std::string::npos,
-        "legacy XML title canonicalizes to heading");
+  for (const char* tag : {"header", "heading"}) {
+    const std::string src = std::string("<doc><section><") + tag +
+        ">Old title</" + tag + "></section></doc>";
+    const Document old = parse_xml(src);
+    const NodeId section = old.get(old.root).children.at(0);
+    const NodeId title = old.get(section).children.at(0);
+    check(old.get(title).kind == NodeKind::Header,
+          "legacy title tag still reads as a title");
+    const std::string canonical = serialize_xml(old);
+    check(canonical.find("<h nid=") != std::string::npos &&
+          canonical.find("<header ") == std::string::npos &&
+          canonical.find("<heading ") == std::string::npos,
+          "legacy XML title canonicalizes to h");
+  }
+}
+
+void test_ranked_headings() {
+  const Document a = parse_xml(
+      "<doc><h2>Two</h2><h6>Six</h6><h1 level=\"0\">Zero</h1></doc>");
+  const auto& kids = a.get(a.root).children;
+  check(kids.size() == 3, "three ranked headings");
+  check(a.get(kids[0]).kind == NodeKind::Heading && a.get(kids[0]).level == 2,
+        "h2 is a ranked heading of level 2");
+  check(a.get(kids[1]).level == 6, "h6 has level 6");
+  check(a.get(kids[2]).level == 0, "level attribute overrides the tag rank");
+  const std::string xml = serialize_xml(a);
+  check(xml.find("<h2 nid=") != std::string::npos, "writes h2");
+  check(xml.find("level=\"2\"") == std::string::npos,
+        "implied rank is not repeated as a level attribute");
+  check(xml.find("level=\"0\"") != std::string::npos,
+        "unrepresentable rank keeps its level attribute");
+  const Document b = parse_xml(xml);
+  check(same_tree(a, a.root, b, b.root), "ranked heading round trip");
 }
 
 void test_all_blocks() {
@@ -288,6 +314,7 @@ void test_rejections() {
 int main() {
   test_example();
   test_legacy_header_alias();
+  test_ranked_headings();
   test_all_blocks();
   test_escapes_and_dispatch();
   test_float_scales();

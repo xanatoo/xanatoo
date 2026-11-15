@@ -105,7 +105,7 @@ read-only service clients. Every client is read-only: never post or log in.
   profile link, [1] date (`datetime` = ISO instant; posts link it to the
   post), then the vote score as a `role=metadata rel="score"` span, which
   the Message layout shows as an extra header field. `summary` is the date
-  alone. Posts add a `<heading>` (title → post page), the body, the link URL
+  alone. Posts add an `<h>` (title → post page), the body, the link URL
   and a `<caption>` with community + comments links. `lemmy_post_document`
   builds a post page from JSON without I/O (unit tested).
 - **Lemmy Explorer** in Panels is a native, dockable `FloatWindow` with an

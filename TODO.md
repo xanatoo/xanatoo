@@ -8,10 +8,19 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-15) — XML titles are `<h>` (XHTML 2 style)
+
+- The XML title tag is now `<h>` instead of `<heading>`; `<heading>` and
+  `<header>` stay import aliases. The legacy ranked heading moved from
+  `<h level="N">` to `<h1>`…`<h6>` (a level outside 1–6 keeps a `level`
+  attribute on `<h1>`). Old XML files with `<h level=N>` now read it as a
+  title with a depth hint. S-expression, Markdown and stylesheet spellings
+  (`heading`) are unchanged.
+
 ## Status (2026-11-15) — Lemmy posts get semantic markup
 
 - A Lemmy post is no longer a bare `<message>` with "date · N pts" in its
-  summary: the title is a `<heading>`, community / comments links a
+  summary: the title is a `<h>`, community / comments links a
   `<caption>`, the date slot carries `datetime`, and the score is a
   `role=metadata rel="score"` header span. Message layout generally shows
   metadata spans with text as extra header fields after the date (any

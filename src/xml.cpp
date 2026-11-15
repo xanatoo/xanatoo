@@ -152,8 +152,14 @@ std::string float_string(float value) {
 const char* block_tag(const Node& n) {
   switch (n.kind) {
     case NodeKind::Document: return "doc";
-    case NodeKind::Heading: return "h";
-    case NodeKind::Header: return "heading";
+    case NodeKind::Heading: {
+      // Ranked headings use XHTML's <h1>…<h6>; other levels keep an explicit
+      // level attribute on <h1>.
+      static constexpr const char* ranked[] = {"h1", "h2", "h3",
+                                               "h4", "h5", "h6"};
+      return n.level >= 1 && n.level <= 6 ? ranked[n.level - 1] : "h1";
+    }
+    case NodeKind::Header: return "h";
     case NodeKind::Article: return "article";
     case NodeKind::Section: return "section";
     case NodeKind::Paragraph: return "p";
@@ -192,8 +198,12 @@ const char* block_tag(const Node& n) {
 bool block_kind(std::string_view s, NodeKind& kind, int& level) {
   // Spellings are intentionally fixed; <image> is a block, <img> an inline.
   constexpr std::pair<std::string_view, NodeKind> names[] = {
-      {"doc", NodeKind::Document}, {"h", NodeKind::Heading},
+      {"doc", NodeKind::Document}, {"h", NodeKind::Header},
+      // Migration aliases for older title spellings.
       {"heading", NodeKind::Header}, {"header", NodeKind::Header},
+      {"h1", NodeKind::Heading}, {"h2", NodeKind::Heading},
+      {"h3", NodeKind::Heading}, {"h4", NodeKind::Heading},
+      {"h5", NodeKind::Heading}, {"h6", NodeKind::Heading},
       {"article", NodeKind::Article},
       {"section", NodeKind::Section}, {"p", NodeKind::Paragraph},
       {"ul", NodeKind::List}, {"ol", NodeKind::List},
@@ -214,7 +224,9 @@ bool block_kind(std::string_view s, NodeKind& kind, int& level) {
   for (auto [name, value] : names) {
     if (name != s) continue;
     kind = value;
-    level = (s == "ol" || s == "th") ? 1 : 0;
+    if (s == "ol" || s == "th") level = 1;
+    else if (value == NodeKind::Heading) level = s[1] - '0';
+    else level = 0;
     return true;
   }
   return false;
@@ -319,9 +331,10 @@ void write_node(const Document& doc, NodeId id, std::string& out,
   out += '<';
   out += tag;
   attr_num(out, "nid", node.id);
-  const std::string_view name = tag;
-  if (node.level && !(node.level == 1 &&
-                      (name == "ol" || name == "th")))
+  NodeKind tag_kind{};
+  int implied_level = 0;
+  block_kind(tag, tag_kind, implied_level);
+  if (node.level != implied_level)
     attr(out, "level", std::to_string(node.level));
   if (node.col_span != 1) attr(out, "colspan", std::to_string(node.col_span));
   if (node.row_span != 1) attr(out, "rowspan", std::to_string(node.row_span));

@@ -53,11 +53,12 @@ file to rules that apply everywhere.
 - Data-oriented / ECS-friendly: stable IDs for content, separate layout
   geometry from document identity, systems that transform data.
 - Content model is the source of truth; layout and rendering are derived.
-- User-facing semantic titles are spelled `heading`: XML `<heading>`,
-  S-expression `(heading ...)`, Markdown `:::heading`, and stylesheet
-  `(role heading ...)`. `header` is a page-layout word (alongside `footer`),
-  not the canonical title tag. Older `header` title spellings are accepted
-  only as migration aliases; serializers emit `heading`. The internal
+- User-facing semantic titles are spelled `heading`: S-expression
+  `(heading ...)`, Markdown `:::heading`, and stylesheet `(role heading ...)`;
+  XML follows XHTML 2 with `<h>` (ranked legacy headings are `<h1>`…`<h6>`).
+  `header` is a page-layout word (alongside `footer`), not the canonical
+  title tag. Older `header` (and XML `<heading>`) title spellings are accepted
+  only as migration aliases; serializers emit the canonical spelling. The internal
   `NodeKind::Header` and `BlockRole::Header` identifiers remain unchanged for
   now; `NodeKind::Heading` is the separate legacy ranked kind.
 - Immediate visual feedback after every edit.
