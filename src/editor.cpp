@@ -3304,6 +3304,44 @@ std::optional<Caret> find_next(const Document& doc, const std::string& query,
   return std::nullopt;
 }
 
+std::vector<Caret> find_all(const Document& doc, const std::string& query,
+                            size_t max) {
+  std::vector<Caret> out;
+  if (query.empty() || max == 0 || doc.root == INVALID_NODE) return out;
+  const std::string q = ascii_lower(query);
+  std::vector<NodeId> nodes;
+  collect_text_nodes(doc, doc.root, nodes);
+  struct Map { size_t span; size_t ch; };
+  std::string lower;
+  std::vector<Map> map;
+  for (NodeId nid : nodes) {
+    const Node& n = doc.get(nid);
+    lower.clear();
+    map.clear();
+    // Same folding as find_next: one byte per code point.
+    for (size_t si = 0; si < n.spans.size(); ++si) {
+      const std::string& t = n.spans[si].text;
+      size_t ci = 0;
+      for (size_t bi = 0; bi < t.size(); ++ci) {
+        auto [cp, len] = decode_cp(t, bi);
+        if (len == 0) break;
+        char ascii = cp < 128 ? static_cast<char>(cp) : '?';
+        if (ascii >= 'A' && ascii <= 'Z')
+          ascii = static_cast<char>(ascii - 'A' + 'a');
+        lower.push_back(ascii);
+        map.push_back({si, ci});
+        bi += len;
+      }
+    }
+    for (size_t pos = lower.find(q); pos != std::string::npos;
+         pos = lower.find(q, pos + q.size())) {
+      out.push_back(Caret{nid, map[pos].span, map[pos].ch});
+      if (out.size() >= max) return out;
+    }
+  }
+  return out;
+}
+
 std::optional<Caret> find_prev(const Document& doc, const std::string& query,
                                const Caret& from, size_t& match_len) {
   match_len = 0;

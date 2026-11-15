@@ -198,6 +198,17 @@ struct ScrollMarks {
   std::unordered_map<xanatoo::NodeId, float> block_y;
 };
 
+// Scrollbar ticks of the leap search: the first hits of the query, kept
+// while the query and the document stay the same (draw_pane_scrollbar).
+struct SearchTicks {
+  std::string query;
+  const xanatoo::Document* doc = nullptr;
+  BufferId buf = kNoBuffer;
+  uint64_t doc_gen = 0;
+  size_t nodes = 0;
+  std::vector<xanatoo::Caret> hits;
+};
+
 // Right-hand status panel counts of a pane (word / char totals or of the
 // selection), kept while the layout and selection stay the same.
 struct StatsCache {
@@ -347,6 +358,7 @@ struct Pane {
   FootnoteOverlay footnotes;
   ScrollMarks scroll_marks;
   StatsCache stats;
+  SearchTicks search_ticks;
 };
 
 // Placement of a floating window. Left / Right dock it into a side column

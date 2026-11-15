@@ -8,6 +8,16 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-15) — Performance: search ticks, quote matcher
+
+- Scrollbar search ticks called `find_next` up to 48 times per frame (each
+  rebuilding character maps over the document). Now one `find_all` pass,
+  cached in `Pane::search_ticks` by query / document / `doc_gen`.
+- Quote matcher: inverted word / trigram postings, compact positions built
+  only for matches. 3000 messages 1.7 s → ~70 ms (-O2). Open: defer the
+  rebuild while editing a thread document locally (every key bumps
+  `doc_gen`).
+
 ## Status (2026-11-15) — Quote links in the app (jump, arrows, underline)
 
 - `app_quotes.cpp`: per-buffer quote links (`DocBuffer::quotes`, rebuilt on

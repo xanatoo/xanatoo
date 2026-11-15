@@ -598,6 +598,27 @@ void test_lemmy_urls() {
   EXPECT(!is_lemmy_url(""));
 }
 
+void test_find_all() {
+  using namespace xanatoo;
+  Document doc;
+  doc.root = doc.create(NodeKind::Document);
+  NodeId a = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(a, "Foo bar fOO \xC3\xA4" "foo");
+  NodeId b = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(b, "foofoo");
+  const auto hits = find_all(doc, "FOO", 10);
+  EXPECT(hits.size() == 5);
+  if (hits.size() == 5) {
+    EXPECT(hits[0].node == a && hits[0].char_index == 0);
+    EXPECT(hits[1].char_index == 8);
+    EXPECT(hits[2].char_index == 13);  // after the 2-byte a-umlaut
+    EXPECT(hits[3].node == b && hits[3].char_index == 0);
+    EXPECT(hits[4].node == b && hits[4].char_index == 3);
+  }
+  EXPECT(find_all(doc, "foo", 2).size() == 2);
+  EXPECT(find_all(doc, "", 5).empty());
+}
+
 void test_foreign_markdown() {
   using namespace xanatoo;
   Document doc;
@@ -6254,6 +6275,7 @@ int main() {
   test_string_helpers();
   test_json_min();
   test_reddit_urls();
+  test_find_all();
   test_foreign_markdown();
   test_lemmy_quote_links();
   test_lemmy_urls();

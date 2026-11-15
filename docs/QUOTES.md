@@ -74,7 +74,10 @@ underlined originals, linked highlight) are implemented. Offline demo:
 
 - False positives on short common phrases: the thresholds, near-first
   order, and a visible score.
-- Cost: plain substring search over the thread, usually ending at the
-  parent; trigram tables are built only for fuzzy fallback.
+- Cost: an inverted word / trigram index (sorted flat postings) picks the
+  candidate messages; only the reply chain and head are scanned in full.
+  Positions are rebuilt only for matched messages. 3000 messages: ~70 ms
+  (-O2), ~110 ms (-Og), ~33 MB peak beyond the document. Runs once per
+  document generation (cached in `DocBuffer::quotes`).
 - Virtualized layout: geometry of an off-band end comes from the last known
   Y, as the Reply panel's scrollbar tick does.

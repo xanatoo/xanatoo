@@ -278,6 +278,10 @@ void select_word_at(Document& doc, Selection& sel);
 
 std::optional<Caret> find_next(const Document& doc, const std::string& query,
                                const Caret& from, size_t& match_len);
+// The first `max` matches of find_next from the document start, in order,
+// without overlaps: one pass over the text (find_next rescans per call).
+std::vector<Caret> find_all(const Document& doc, const std::string& query,
+                            size_t max);
 // Case-insensitive search starting before `from` (wraps around).
 std::optional<Caret> find_prev(const Document& doc, const std::string& query,
                                const Caret& from, size_t& match_len);

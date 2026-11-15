@@ -3905,18 +3905,25 @@ static void draw_pane_scrollbar(App& app, int i) {
     // Search hits (cheap capped scan while leap search is active).
     if (prompt_is_search(app) && !app.prompt.text.empty() &&
         &pane == &app.panes[app.focus]) {
-      xanatoo::Caret from{};
-      size_t mlen = 0;
-      for (int n = 0; n < 48; ++n) {
-        auto hit =
-            xanatoo::find_next(doc_of(app, pane), app.prompt.text, from, mlen);
-        if (!hit) break;
+      const xanatoo::Document& sd = doc_of(app, pane);
+      const DocBuffer* sb = find_buf(app, pane.buf);
+      const uint64_t gen = sb ? sb->doc_gen : 0;
+      SearchTicks& st = pane.search_ticks;
+      if (st.query != app.prompt.text || st.doc != &sd ||
+          st.buf != pane.buf || st.doc_gen != gen ||
+          st.nodes != sd.nodes.size()) {
+        st.query = app.prompt.text;
+        st.doc = &sd;
+        st.buf = pane.buf;
+        st.doc_gen = gen;
+        st.nodes = sd.nodes.size();
+        st.hits = xanatoo::find_all(sd, app.prompt.text, 48);
+      }
+      for (const xanatoo::Caret& hit : st.hits) {
         auto cpos = xanatoo::caret_screen_pos(
-            pane.layout, *hit, 0.f,
+            pane.layout, hit, 0.f,
             static_cast<float>(app.fonts.regular.line_height()));
         if (cpos.valid) mark_at(cpos.y, 200, 120, 40);
-        from = *hit;
-        from.char_index += (mlen > 0 ? mlen : 1);
       }
     }
     // Caret position on the focused pane.

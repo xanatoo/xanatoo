@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -67,12 +66,25 @@ uint32_t fold(uint32_t c) {
   return c;
 }
 
-// Normalized text with the caret of each character (a space carries the
-// caret of the word character after it).
+// A caret in 12 bytes (an Index keeps one per character).
+struct Pos {
+  uint32_t node, span, ch;
+  Caret caret() const { return Caret{node, span, ch}; }
+  Caret after() const { return Caret{node, span, ch + 1}; }
+};
+
+// Normalized text with the position of each character (a space carries the
+// position of the word character after it).
 struct Index {
   std::u32string s;
-  std::vector<Caret> at;
+  std::vector<Pos> at;  // empty when built without positions
   bool pending = false;
+  bool with_pos = true;
+
+  static Pos pos(const Caret& c) {
+    return {static_cast<uint32_t>(c.node), static_cast<uint32_t>(c.span_index),
+            static_cast<uint32_t>(c.char_index)};
+  }
 
   void add(uint32_t c, const Caret& where) {
     if (!is_word(c)) {
@@ -81,11 +93,11 @@ struct Index {
     }
     if (pending) {
       s.push_back(U' ');
-      at.push_back(where);
+      if (with_pos) at.push_back(pos(where));
       pending = false;
     }
     s.push_back(fold(c));
-    at.push_back(where);
+    if (with_pos) at.push_back(pos(where));
   }
   void add(const std::vector<Cp>& cps, size_t b, size_t e) {
     pending = !s.empty();
@@ -95,11 +107,6 @@ struct Index {
     return s.empty() ? 0 : 1 + std::count(s.begin(), s.end(), U' ');
   }
 };
-
-Caret after(Caret c) {
-  ++c.char_index;
-  return c;
-}
 
 // One line of a message: its characters after any '>' markers, and its
 // quote depth (0 = the author's own text).
@@ -223,14 +230,11 @@ std::vector<Quote> quotes_of(NodeId msg, const std::vector<Line>& lines) {
   return out;
 }
 
+// Normalized text of a message without positions (4 bytes a character);
+// positions are rebuilt for the few messages a quote matched in.
 struct MsgText {
-  std::vector<Line> lines;
-  Index own;  // depth-0 text only
-  Index all;  // own text and quotes
-  // Word trigram → word starts in `own`, built on demand.
-  std::unordered_map<uint64_t, std::vector<uint32_t>> trigrams;
-  std::vector<uint32_t> word_start, word_end;
-  bool has_trigrams = false;
+  std::u32string own;  // depth-0 text only
+  std::vector<Quote> quotes;
 };
 
 uint64_t word_hash(const std::u32string& s, size_t b, size_t e) {
@@ -261,18 +265,10 @@ std::vector<uint64_t> word_hashes(const std::u32string& s,
                                   const std::vector<uint32_t>& starts,
                                   const std::vector<uint32_t>& ends) {
   std::vector<uint64_t> w;
+  w.reserve(starts.size());
   for (size_t i = 0; i < starts.size(); ++i)
     w.push_back(word_hash(s, starts[i], ends[i]));
   return w;
-}
-
-void build_trigrams(MsgText& t) {
-  if (t.has_trigrams) return;
-  t.has_trigrams = true;
-  words_of(t.own.s, t.word_start, t.word_end);
-  const auto w = word_hashes(t.own.s, t.word_start, t.word_end);
-  for (size_t i = 0; i + 2 < w.size(); ++i)
-    t.trigrams[trigram(w, i)].push_back(static_cast<uint32_t>(i));
 }
 
 // Find `needle` in `hay` from `from` on, starting and ending at word edges.
@@ -287,48 +283,46 @@ size_t find_words(const std::u32string& hay, const std::u32string& needle,
   return std::u32string::npos;
 }
 
-bool match_exact(const Quote& q, const Index& hay, Selection& out) {
-  if (hay.s.empty()) return false;
-  size_t from = 0, first = 0, last = 0;
+// [first, last) of the pieces of `q` in order in `hay`.
+bool match_exact(const Quote& q, const std::u32string& hay, size_t& first,
+                 size_t& last) {
+  if (hay.empty()) return false;
+  size_t from = 0;
   for (size_t i = 0; i < q.pieces.size(); ++i) {
-    const size_t p = find_words(hay.s, q.pieces[i].s, from);
+    const size_t p = find_words(hay, q.pieces[i].s, from);
     if (p == std::u32string::npos) return false;
     if (i == 0) first = p;
     last = p + q.pieces[i].s.size();
     from = last;
   }
-  out = {hay.at[first], after(hay.at[last - 1])};
   return true;
 }
 
-// Share of the quote's word trigrams found in the best window of the
-// source, and that window's range.
-float match_fuzzy(const Quote& q, MsgText& t, Selection& out) {
-  build_trigrams(t);
-  std::vector<std::pair<uint32_t, uint32_t>> hits;  // (source word, trigram)
+// Share of the quote's word trigrams found in the best window of `hay`, and
+// that window as [first, last).
+float match_fuzzy(const Quote& q, const std::u32string& hay, size_t& first,
+                  size_t& last) {
+  // Quote trigram → its ids (a trigram may occur more than once).
+  std::unordered_map<uint64_t, std::vector<uint32_t>> ids;
   uint32_t total = 0;
   for (const Index& piece : q.pieces) {
     std::vector<uint32_t> st, en;
     words_of(piece.s, st, en);
     const auto w = word_hashes(piece.s, st, en);
-    for (size_t i = 0; i + 2 < w.size(); ++i, ++total) {
-      auto it = t.trigrams.find(trigram(w, i));
-      if (it == t.trigrams.end()) continue;
-      for (uint32_t pos : it->second) hits.push_back({pos, total});
-    }
+    for (size_t i = 0; i + 2 < w.size(); ++i) ids[trigram(w, i)].push_back(total++);
   }
-  if (total == 0 || hits.empty()) return 0.f;
-  // Cheap bound: not enough distinct trigrams at all.
-  {
-    std::vector<uint32_t> ids;
-    for (auto& h : hits) ids.push_back(h.second);
-    std::sort(ids.begin(), ids.end());
-    const size_t distinct =
-        std::unique(ids.begin(), ids.end()) - ids.begin();
-    if (static_cast<float>(distinct) / total < kFuzzyAccept) return 0.f;
+  if (total == 0) return 0.f;
+  std::vector<uint32_t> st, en;
+  words_of(hay, st, en);
+  const auto w = word_hashes(hay, st, en);
+  std::vector<std::pair<uint32_t, uint32_t>> hits;  // (source word, id)
+  for (size_t i = 0; i + 2 < w.size(); ++i) {
+    auto it = ids.find(trigram(w, i));
+    if (it == ids.end()) continue;
+    for (uint32_t id : it->second) hits.push_back({static_cast<uint32_t>(i), id});
   }
-  std::sort(hits.begin(), hits.end());
-  const uint32_t width = q.words + q.words / 2 + 2;
+  if (hits.empty()) return 0.f;
+  const uint32_t width = static_cast<uint32_t>(q.words + q.words / 2 + 2);
   std::vector<uint32_t> count(total, 0);
   uint32_t distinct = 0, best = 0;
   size_t best_b = 0, best_e = 0;
@@ -346,10 +340,28 @@ float match_fuzzy(const Quote& q, MsgText& t, Selection& out) {
   // something (a typo, a dropped word) differs.
   const float score = std::min(0.99f, static_cast<float>(best) / total);
   if (score < kFuzzyAccept) return 0.f;
-  const uint32_t w0 = hits[best_b].first, w1 = hits[best_e].first + 2;
-  out = {t.own.at[t.word_start[w0]], after(t.own.at[t.word_end[w1] - 1])};
+  first = st[hits[best_b].first];
+  last = en[hits[best_e].first + 2];
   return score;
 }
+
+// Sorted (key, message) pairs, one per message and key: an inverted index
+// in flat memory.
+struct Postings {
+  std::vector<std::pair<uint64_t, uint32_t>> v;
+  void finish() {
+    std::sort(v.begin(), v.end());
+    v.erase(std::unique(v.begin(), v.end()), v.end());
+  }
+  std::pair<size_t, size_t> find(uint64_t key) const {
+    auto lo = std::lower_bound(v.begin(), v.end(),
+                               std::pair<uint64_t, uint32_t>{key, 0});
+    auto hi = lo;
+    while (hi != v.end() && hi->first == key) ++hi;
+    return {static_cast<size_t>(lo - v.begin()),
+            static_cast<size_t>(hi - v.begin())};
+  }
+};
 
 void collect_messages(const Document& doc, NodeId id,
                       std::vector<NodeId>& out) {
@@ -415,28 +427,58 @@ std::vector<QuoteLink> find_quote_links(const Document& doc, NodeId root) {
     return -1;
   };
 
-  std::vector<std::unique_ptr<MsgText>> texts(msgs.size());
-  auto text_of = [&](size_t i) -> MsgText& {
-    if (!texts[i]) {
-      texts[i] = std::make_unique<MsgText>();
-      MsgText& t = *texts[i];
-      collect_lines(doc, msgs[i], msgs[i], t.lines);
-      for (const Line& line : t.lines) {
-        if (line.depth == 0) t.own.add(line.cps, 0, line.cps.size());
-        t.all.add(line.cps, 0, line.cps.size());
-      }
-    }
-    return *texts[i];
+  // Lines are big (a Caret per character): keep only the normalized own
+  // text and the quotes of each message.
+  std::vector<MsgText> texts(msgs.size());
+  std::vector<Line> lines;
+  auto build_index = [&](size_t i, bool own_only, bool with_pos) {
+    lines.clear();
+    collect_lines(doc, msgs[i], msgs[i], lines);
+    Index ix;
+    ix.with_pos = with_pos;
+    for (const Line& line : lines)
+      if (!own_only || line.depth == 0) ix.add(line.cps, 0, line.cps.size());
+    return ix;
+  };
+  for (size_t i = 0; i < msgs.size(); ++i) {
+    texts[i].own = build_index(i, true, false).s;
+    texts[i].quotes = quotes_of(msgs[i], lines);  // lines of that call
+  }
+  // [first, last) of a message's normalized text as a Selection.
+  auto selection = [&](size_t i, bool own_only, size_t first, size_t last) {
+    const Index ix = build_index(i, own_only, true);
+    return Selection{ix.at[first].caret(), ix.at[last - 1].after()};
   };
 
+  // Inverted index over the own text of every message: word → messages and
+  // word trigram → messages. Only the messages these name can match, so a
+  // quote never scans the whole thread.
+  Postings word_post, tri_post;
   for (size_t i = 0; i < msgs.size(); ++i) {
-    const std::vector<Quote> quotes = quotes_of(msgs[i], text_of(i).lines);
+    std::vector<uint32_t> st, en;
+    words_of(texts[i].own, st, en);
+    const auto w = word_hashes(texts[i].own, st, en);
+    const auto m = static_cast<uint32_t>(i);
+    for (uint64_t h : w) word_post.v.push_back({h, m});
+    for (size_t k = 0; k + 2 < w.size(); ++k)
+      tri_post.v.push_back({trigram(w, k), m});
+  }
+  word_post.finish();
+  tri_post.finish();
+
+  std::vector<char> cand(msgs.size(), 0);
+  std::vector<uint32_t> tri_hits(msgs.size(), 0);
+  std::vector<char> seen(msgs.size(), 0);
+  std::vector<size_t> order;
+  std::unordered_map<size_t, std::u32string> all_cache;  // text with quotes
+  for (size_t i = 0; i < msgs.size(); ++i) {
+    const std::vector<Quote>& quotes = texts[i].quotes;
     if (quotes.empty()) continue;
 
     // Candidates: ancestors, the thread's head, then by distance (earlier
     // first). `near` ones accept shorter quotes.
-    std::vector<size_t> order;
-    std::vector<char> seen(msgs.size(), 0);
+    order.clear();
+    std::fill(seen.begin(), seen.end(), 0);
     seen[i] = 1;
     for (long p = parent_of(i); p >= 0 && !seen[p]; p = parent_of(p)) {
       seen[p] = 1;
@@ -457,38 +499,99 @@ std::vector<QuoteLink> find_quote_links(const Document& doc, NodeId root) {
       const bool far_ok = q.words >= kFarWords && q.chars >= kFarChars;
       QuoteLink link;
       link.quoting_msg = msgs[i];
-      link.quote = {q.pieces.front().at.front(),
-                    after(q.pieces.back().at.back())};
-      bool found = false;
-      for (size_t k = 0; k < order.size() && !found; ++k) {
-        if (k >= near_count && !far_ok) break;
-        if (match_exact(q, text_of(order[k]).own, link.source)) {
-          link.source_msg = msgs[order[k]];
-          link.score = 1.f;
-          found = true;
+      link.quote = {q.pieces.front().at.front().caret(),
+                    q.pieces.back().at.back().after()};
+      std::vector<uint64_t> qwords, qtris;
+      for (const Index& piece : q.pieces) {
+        std::vector<uint32_t> st, en;
+        words_of(piece.s, st, en);
+        const auto w = word_hashes(piece.s, st, en);
+        qwords.insert(qwords.end(), w.begin(), w.end());
+        for (size_t k = 0; k + 2 < w.size(); ++k) qtris.push_back(trigram(w, k));
+      }
+      size_t first = 0, last = 0;
+
+      // Exact: only messages with the quote's rarest word.
+      std::pair<size_t, size_t> rare{0, 0};
+      bool possible = !qwords.empty();
+      for (uint64_t h : qwords) {
+        const auto r = word_post.find(h);
+        if (r.first == r.second) {
+          possible = false;  // a word no message has: no exact match
+          break;
         }
+        if (rare.first == rare.second ||
+            r.second - r.first < rare.second - rare.first)
+          rare = r;
+      }
+      bool found = false;
+      if (possible) {
+        for (size_t k = rare.first; k < rare.second; ++k)
+          cand[word_post.v[k].second] = 1;
+        for (size_t k = 0; k < order.size() && !found; ++k) {
+          if (k >= near_count && !far_ok) break;
+          if (!cand[order[k]]) continue;
+          if (match_exact(q, texts[order[k]].own, first, last)) {
+            link.source_msg = msgs[order[k]];
+            link.source = selection(order[k], true, first, last);
+            link.score = 1.f;
+            found = true;
+          }
+        }
+        for (size_t k = rare.first; k < rare.second; ++k)
+          cand[word_post.v[k].second] = 0;
       }
       // The original is not here, but an ancestor quoted it as well.
       for (size_t k = 0; k < near_count && !found; ++k) {
-        if (match_exact(q, text_of(order[k]).all, link.source)) {
+        auto it = all_cache.find(order[k]);
+        if (it == all_cache.end())
+          it = all_cache.emplace(order[k], build_index(order[k], false, false).s)
+                   .first;
+        if (match_exact(q, it->second, first, last)) {
           link.source_msg = msgs[order[k]];
+          link.source = selection(order[k], false, first, last);
           link.score = 1.f;
           link.via_quote = true;
           found = true;
         }
       }
-      if (!found && q.words >= kFuzzyWords) {
+      // Fuzzy: only messages that hold enough of the quote's trigrams.
+      if (!found && q.words >= kFuzzyWords && !qtris.empty()) {
+        std::vector<uint32_t> touched;
+        std::sort(qtris.begin(), qtris.end());
+        for (size_t a = 0; a < qtris.size();) {
+          size_t b = a;
+          while (b < qtris.size() && qtris[b] == qtris[a]) ++b;
+          const auto r = tri_post.find(qtris[a]);
+          for (size_t k = r.first; k < r.second; ++k) {
+            const uint32_t m = tri_post.v[k].second;
+            if (tri_hits[m] == 0) touched.push_back(m);
+            tri_hits[m] += static_cast<uint32_t>(b - a);
+          }
+          a = b;
+        }
+        const float need = kFuzzyAccept * static_cast<float>(qtris.size());
+        for (uint32_t m : touched)
+          cand[m] = static_cast<float>(tri_hits[m]) >= need ? 1 : 0;
         float best = 0.f;
+        size_t best_msg = 0, best_first = 0, best_last = 0;
         for (size_t k = 0; k < order.size(); ++k) {
-          Selection sel;
-          const float s = match_fuzzy(q, text_of(order[k]), sel);
+          if (!cand[order[k]]) continue;
+          const float s = match_fuzzy(q, texts[order[k]].own, first, last);
           if (s > best + 1e-6f) {
             best = s;
-            link.source = sel;
-            link.source_msg = msgs[order[k]];
+            best_msg = order[k];
+            best_first = first;
+            best_last = last;
           }
         }
+        for (uint32_t m : touched) {
+          cand[m] = 0;
+          tri_hits[m] = 0;
+        }
         if (best > 0.f) {
+          link.source_msg = msgs[best_msg];
+          link.source = selection(best_msg, true, best_first, best_last);
           link.score = best;
           found = true;
         }
