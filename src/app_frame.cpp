@@ -192,6 +192,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.page_columns = app.view_settings.page_columns;
   ui_state.has_chrome = focused_pane(app).chrome_parts > 0;
   ui_state.preferences_open = app.preferences_open;
+  ui_state.download_confirm_open = app.download_confirm.open;
+  ui_state.download_confirm_url = app.download_confirm.url;
   ui_state.credentials_open = app.credentials_open;
   ui_state.backlinks = app.backlinks_mode;
   ui_state.sitemap = app.sitemap.shown;
@@ -325,6 +327,10 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         {"Internet Archive (Prelinger)", "ia:prelinger", false, false},
         {"Gemini (geminiprotocol.net)", "gemini://geminiprotocol.net/", false,
          true},
+        {"Gopher (Floodgap)", "gopher://gopher.floodgap.com/1/", false, false},
+        {"Spartan (mozz.us)", "spartan://spartan.mozz.us/", false, false},
+        {"Nex (nightfall.city)", "nex://nightfall.city/", false, false},
+        {"Finger (public hosts)", "finger.md", true, false},
         {"Standard Ebooks", "https://standardebooks.org/ebooks", false, false},
         {"Directory (links and feeds)", "directory.md", true, false},
         {"Books and long reads", "books.md", true, false},
@@ -735,7 +741,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::Copy ||
         c == C::CopyPageUrl || c == C::SelectAll || c == C::SelectBlock ||
         c == C::CopyText || c == C::OpenLinkInTab || c == C::OpenLinkInTrail ||
-        c == C::DownloadUrl ||
+        c == C::DownloadUrl || c == C::ConfirmDownload ||
+        c == C::DownloadToFolder || c == C::CancelDownload ||
         c == C::OpenReply || c == C::EditReply || c == C::SendReply ||
         c == C::JumpQuote ||
         c == C::Find || c == C::ToggleSplit || c == C::ToggleTrail ||
@@ -1694,6 +1701,30 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::DownloadUrl:
       if (!arg.empty()) start_download(app, arg);
+      break;
+    case C::ConfirmDownload:
+      if (!app.download_confirm.url.empty()) {
+        const std::string url = app.download_confirm.url;
+        app.download_confirm = {};
+        begin_download(app, url, {});
+      }
+      break;
+    case C::DownloadToFolder:
+      if (!app.download_confirm.url.empty()) {
+        if (download_folder_dialog_available()) {
+          const std::string url = app.download_confirm.url;
+          app.download_confirm = {};
+          pick_download_folder(app, url);
+        } else {
+          const std::string url = app.download_confirm.url;
+          app.download_confirm = {};
+          begin_download(app, url, {});
+        }
+      }
+      break;
+    case C::CancelDownload:
+      app.download_confirm = {};
+      flash_status(app, "Download cancelled");
       break;
     case C::DownloadAction:
       download_action(app, arg);

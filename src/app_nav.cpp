@@ -18,6 +18,10 @@
 #include "xanatoo/file_url.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
+#include "xanatoo/gopher.hpp"
+#include "xanatoo/spartan.hpp"
+#include "xanatoo/nex.hpp"
+#include "xanatoo/finger.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
@@ -247,6 +251,26 @@ void remove_bookmark(App& app, const std::string& url) {
     flash_status(app, "Bookmark removed (could not persist to disk)");
 }
 
+
+static bool is_smallnet_url(std::string_view u) {
+  return xanatoo::is_gemini_url(u) || xanatoo::is_gopher_url(u) ||
+         xanatoo::is_spartan_url(u) || xanatoo::is_nex_url(u) ||
+         xanatoo::is_finger_url(u);
+}
+
+static std::string resolve_smallnet_url(std::string_view base,
+                                        std::string_view ref) {
+  if (xanatoo::is_gemini_url(base))
+    return xanatoo::resolve_gemini_url(base, ref);
+  if (xanatoo::is_gopher_url(base))
+    return xanatoo::resolve_gopher_url(base, ref);
+  if (xanatoo::is_spartan_url(base))
+    return xanatoo::resolve_spartan_url(base, ref);
+  if (xanatoo::is_nex_url(base))
+    return xanatoo::resolve_nex_url(base, ref);
+  return {};
+}
+
 bool is_inapp_doc_href(App& app, const std::string& href) {
   if (href.empty() || href[0] == '#') return false;
   if (is_in_app_remote_url(href)) return false;
@@ -265,7 +289,7 @@ std::string resolve_doc_href(App& app, const std::string& href,
   if (hp.is_absolute()) return href;
   std::string base =
       base_path.empty() ? path_of(app, focused_pane(app)) : base_path;
-  if (!base.empty() && !xanatoo::is_gemini_url(base)) {
+  if (!base.empty() && !is_smallnet_url(base)) {
     fs::path parent = fs::path(base).parent_path();
     if (!parent.empty()) {
       std::error_code ec;
@@ -282,7 +306,7 @@ std::string resolve_doc_href(App& app, const std::string& href,
 
 std::string link_base_url(App& app, int pi) {
   const std::string& page = path_of(app, app.panes[pi]);
-  if (xanatoo::is_gemini_url(page)) return page;
+  if (is_smallnet_url(page)) return page;
   if (!page.empty()) return {};  // local file / other service
   return app.gemini_current_url;
 }
@@ -298,8 +322,8 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href) {
   if (href.empty() || href[0] == '#') return t;
   std::string abs = href;
   const std::string base = link_base_url(app, pi);
-  if (!xanatoo::is_gemini_url(abs) && !base.empty()) {
-    std::string r = xanatoo::resolve_gemini_url(base, abs);
+  if (!is_smallnet_url(abs) && !base.empty()) {
+    std::string r = resolve_smallnet_url(base, abs);
     if (!r.empty()) abs = std::move(r);
   }
   if (xanatoo::is_file_url(abs)) {
@@ -945,8 +969,8 @@ void activate_at_caret(App& app) {
     } else if (!href->empty() && (*href)[0] != '#') {
       std::string abs = *href;
       const std::string base = link_base_url(app, app.focus);
-      if (!xanatoo::is_gemini_url(abs) && !base.empty()) {
-        std::string resolved = xanatoo::resolve_gemini_url(base, abs);
+      if (!is_smallnet_url(abs) && !base.empty()) {
+        std::string resolved = resolve_smallnet_url(base, abs);
         if (!resolved.empty()) abs = resolved;
       }
       if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||

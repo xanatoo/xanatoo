@@ -2,6 +2,43 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-15) — Small-net input prompts and binary downloads
+
+- Gopher type 7: navigating without `?query` sets `input_status` (URL-bar
+  prompt) before any TCP connect; with `?query` the wire request is
+  `selector\tquery`. Search results still parse as menus.
+- Gopher binary types (9/g/I/s/d/…): body saved through `DownloadFile` into
+  the user's Downloads folder; Downloads panel opens on completion.
+- Spartan `=:` prompt lines rewritten to `=> spartan://host/path? label`
+  gemtext links so the existing input flow collects the upload data.
+- Parser tests cover type-7 query extraction and `gopher_type_is_binary`.
+
+## Status (2026-11-15) — Small-net integration (Services, links, remote)
+
+- Services menu: Gopher (Floodgap), Spartan (mozz.us), Nex (nightfall.city),
+  Finger (localhost example), next to Gemini.
+- `is_in_app_remote_url` and `remote_fetch_supported` recognise the four
+  schemes so they open in-pane and grey correctly when built out.
+- Relative link resolution shared across Gemini / Gopher / Spartan / Nex
+  (`resolve_smallnet_url` in app_nav; app_events updated).
+- Pseudo-favicon: gopher/spartan/nex/finger → site-web globe.
+- `examples/directory.md` lists starter capsules.
+- Still open: type-7 / `=:` input prompts, binary download routing, dedicated
+  icons, live Xvfb verification against public servers.
+
+## Status (2026-11-15) — Small-net protocols: Gopher, Spartan, Nex, Finger
+
+- Initial clients for `gopher://` (port 70), `spartan://` (port 300),
+  `nex://` (port 1900) and `finger://` (port 79).
+- URL parsers, relative link resolution, menu/directory → Markdown conversion,
+  and plain-TCP fetch wired into `app_fetch.cpp` (same worker path as Gemini).
+- CMake options `XANATOO_GOPHER`, `XANATOO_SPARTAN`, `XANATOO_NEX`,
+  `XANATOO_FINGER` (default ON; off under `XANATOO_MINIMAL_PORT`).
+- Unit tests for parsers/menu conversion: `tests/smallnet_url_tests.cpp`.
+- Open: Services menu entries, pseudo-favicons, search integration, Gopher
+  type-7 search prompts, Spartan `=:` input prompts, binary download routing,
+  and live verification against floodgap / mozz.us / nightfall.city.
+
 ## Current tip
 
 Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)

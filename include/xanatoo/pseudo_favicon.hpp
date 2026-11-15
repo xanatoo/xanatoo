@@ -32,6 +32,10 @@ inline std::string_view pseudo_favicon(std::string_view address,
   if (has("sitemap:")) return "sitemap";
   if (has("feed:") || has("atom:")) return "site-feed";
   if (has("gemini://")) return "gemini";
+  // Small-net siblings share the globe until dedicated icons exist.
+  if (has("gopher://") || has("spartan://") || has("nex://") ||
+      has("finger://"))
+    return "site-web";
   if (has("nostr:") || has("npub1") || has("nprofile1") || has("note1") ||
       has("nevent1") || has("naddr1"))
     return "site-nostr";

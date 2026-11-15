@@ -26,6 +26,10 @@
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/gemini.hpp"
+#include "xanatoo/gopher.hpp"
+#include "xanatoo/spartan.hpp"
+#include "xanatoo/nex.hpp"
+#include "xanatoo/finger.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/wayback.hpp"
@@ -176,7 +180,9 @@ static bool web_in_app(std::string_view s) {
 }
 
 bool is_in_app_remote_url(std::string_view s) {
-  return xanatoo::is_gemini_url(s) || xanatoo::is_reddit_ref(s) ||
+  return xanatoo::is_gemini_url(s) || xanatoo::is_gopher_url(s) ||
+         xanatoo::is_spartan_url(s) || xanatoo::is_nex_url(s) ||
+         xanatoo::is_finger_url(s) || xanatoo::is_reddit_ref(s) ||
          xanatoo::is_lemmy_ref(s) || xanatoo::is_nostr_ref(s) ||
          xanatoo::is_hn_ref(s) || xanatoo::is_youtube_ref(s) ||
          xanatoo::is_video_site_ref(s) || xanatoo::is_ia_ref(s) ||

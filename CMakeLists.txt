@@ -41,7 +41,7 @@ option(XANATOO_MINIMAL_PORT "Offline, dependency-light cross-platform build" ${_
 # so the page must be cross-origin isolated (docs/PORTS.md).
 set(XANATOO_WASM_DEPS_ROOT "" CACHE PATH "Emscripten prefix with thumtoo's libraries")
 if(XANATOO_MINIMAL_PORT)
-  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI NOSTR REDDIT LEMMY HN YOUTUBE VIDEO
+  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI GOPHER SPARTAN NEX FINGER NOSTR REDDIT LEMMY HN YOUTUBE VIDEO
                    EBOOKS FEEDS WEB WIKIPEDIA)
   # Browser fetch (src/https_wasm.cpp) replaces sockets + TLS. Synchronous
   # fetches must run on worker threads, so this needs the pthreads build.
@@ -123,6 +123,10 @@ endif()
 
 # Gemini protocol (TLS client). Parser for .gmi is always built.
 option(XANATOO_GEMINI "Enable gemini:// network client (TLS)" ON)
+option(XANATOO_GOPHER "Enable gopher:// network client (plain TCP)" ON)
+option(XANATOO_SPARTAN "Enable spartan:// network client (plain TCP)" ON)
+option(XANATOO_NEX "Enable nex:// network client (plain TCP)" ON)
+option(XANATOO_FINGER "Enable finger:// network client (plain TCP)" ON)
 # Nostr read-only client (WSS + OpenSSL). Maps notes to Thread/Message nodes.
 option(XANATOO_NOSTR "Enable Nostr note/thread fetch (TLS WebSocket)" ON)
 option(XANATOO_REDDIT "Enable Reddit .json fetch (TLS HTTPS)" ON)
@@ -207,6 +211,10 @@ add_executable(xanatoo
   src/http_url.cpp
   src/version.cpp
   src/gemini.cpp
+  src/gopher.cpp
+  src/spartan.cpp
+  src/nex.cpp
+  src/finger.cpp
   src/gemini_tofu.cpp
   src/nostr.cpp
   src/nostr_verify.cpp
@@ -377,6 +385,34 @@ if(XANATOO_GEMINI)
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_GEMINI=0)
   message(STATUS "Gemini protocol client: OFF")
+endif()
+if(XANATOO_GOPHER)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_GOPHER=1)
+  message(STATUS "Gopher protocol client: ON")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_GOPHER=0)
+  message(STATUS "Gopher protocol client: OFF")
+endif()
+if(XANATOO_SPARTAN)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_SPARTAN=1)
+  message(STATUS "Spartan protocol client: ON")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_SPARTAN=0)
+  message(STATUS "Spartan protocol client: OFF")
+endif()
+if(XANATOO_NEX)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_NEX=1)
+  message(STATUS "Nex protocol client: ON")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_NEX=0)
+  message(STATUS "Nex protocol client: OFF")
+endif()
+if(XANATOO_FINGER)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FINGER=1)
+  message(STATUS "Finger protocol client: ON")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FINGER=0)
+  message(STATUS "Finger protocol client: OFF")
 endif()
 
 if(XANATOO_NOSTR)
@@ -799,6 +835,17 @@ add_test(NAME drop_url_tests COMMAND xanatoo_drop_url_tests)
 add_executable(xanatoo_file_url_tests tests/file_url_tests.cpp)
 target_include_directories(xanatoo_file_url_tests PRIVATE include)
 add_test(NAME file_url_tests COMMAND xanatoo_file_url_tests)
+add_executable(xanatoo_smallnet_url_tests
+  tests/smallnet_url_tests.cpp
+  src/gopher.cpp
+  src/spartan.cpp
+  src/nex.cpp
+  src/finger.cpp)
+target_include_directories(xanatoo_smallnet_url_tests PRIVATE include)
+# Network fetch is compiled out; only parsers + menu converters are tested.
+target_compile_definitions(xanatoo_smallnet_url_tests PRIVATE
+  XANATOO_GOPHER=0 XANATOO_SPARTAN=0 XANATOO_NEX=0 XANATOO_FINGER=0)
+add_test(NAME smallnet_url_tests COMMAND xanatoo_smallnet_url_tests)
 add_executable(xanatoo_pseudo_favicon_tests tests/pseudo_favicon_tests.cpp)
 target_include_directories(xanatoo_pseudo_favicon_tests PRIVATE include)
 add_test(NAME pseudo_favicon_tests COMMAND xanatoo_pseudo_favicon_tests)

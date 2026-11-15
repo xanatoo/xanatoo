@@ -17,6 +17,11 @@
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
 #include "xanatoo/gemini.hpp"
+#include "xanatoo/download.hpp"
+#include "xanatoo/gopher.hpp"
+#include "xanatoo/spartan.hpp"
+#include "xanatoo/nex.hpp"
+#include "xanatoo/finger.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/sitemap.hpp"
@@ -85,6 +90,179 @@ void fetch_gemini(const std::string& url, FetchShared& out) {
 }
 #endif
 
+#if defined(XANATOO_GOPHER) && XANATOO_GOPHER
+void fetch_gopher(const std::string& url, FetchShared& out) {
+  out.service = "Gopher";
+  auto resp = xanatoo::gopher_fetch(url, &out.error);
+  if (!resp) return;
+  out.final_url = resp->final_url;
+  if (resp->needs_input) {
+    out.input_status = 10;
+    out.input_meta = resp->input_prompt.empty() ? "Gopher search"
+                                                : resp->input_prompt;
+    return;
+  }
+  if (resp->is_binary) {
+    if (!out.download)
+      out.download = std::make_shared<xanatoo::DownloadProgress>();
+    out.download->url = resp->final_url;
+    out.download->mime = resp->mime_hint;
+    std::string name = xanatoo::download_filename(resp->final_url, {});
+    if (name.empty() || name == "download") {
+      size_t slash = resp->final_url.rfind('/');
+      name = (slash == std::string::npos)
+                 ? "gopher-item"
+                 : resp->final_url.substr(slash + 1);
+      if (name.empty() || name.size() < 2) name = "gopher-item";
+      if (name.size() > 1 &&
+          (name[0] == '9' || name[0] == 'g' || name[0] == 'I' ||
+           name[0] == 's' || name[0] == 'd'))
+        name = name.substr(1);
+      if (name.empty()) name = "gopher-item";
+    }
+    out.download->name = name;
+    if (!out.force_download) {
+      // Navigate/Tab: offer, do not save until the user confirms.
+      out.download->offered.store(true, std::memory_order_release);
+      out.final_url = resp->final_url;
+      return;
+    }
+    xanatoo::DownloadFile file;
+    std::string err;
+    if (!file.begin(name, &err, out.download->dest_dir) ||
+        !file.append(resp->body, &err) ||
+        !file.finish(&err)) {
+      out.download->phase.store(xanatoo::DownloadPhase::Failed);
+      out.download->error = err.empty() ? "gopher binary save failed" : err;
+      out.error = out.download->error;
+      return;
+    }
+    out.download->path = file.path();
+    out.download->final_name = file.filename();
+    out.download->received.store(resp->body.size());
+    out.download->total.store(static_cast<int64_t>(resp->body.size()));
+    out.download->phase.store(xanatoo::DownloadPhase::Complete);
+    out.raw_source.reset();
+    return;
+  }
+  out.raw_source = resp->body;
+  if (resp->is_menu || resp->mime_hint.find("gopher-menu") != std::string::npos) {
+    out.doc = xanatoo::parse_document(resp->body, "remote.md");
+  } else if (resp->mime_hint.find("html") != std::string::npos) {
+    out.doc = xanatoo::parse_document(resp->body, "remote.html");
+  } else {
+    out.doc = xanatoo::parse_document(resp->body, "remote.txt");
+  }
+}
+#endif
+
+#if defined(XANATOO_SPARTAN) && XANATOO_SPARTAN
+// Turn Spartan "=:" prompt lines into gemtext links ending with '?' so the
+// existing input flow (URL bar) can collect the query / upload data.
+static std::string spartan_rewrite_prompts(std::string_view body,
+                                           std::string_view final_url) {
+  std::string out;
+  out.reserve(body.size() + 64);
+  size_t pos = 0;
+  auto base = xanatoo::parse_spartan_url(final_url);
+  while (pos < body.size()) {
+    size_t eol = body.find('\n', pos);
+    std::string_view line =
+        (eol == std::string_view::npos) ? body.substr(pos)
+                                        : body.substr(pos, eol - pos);
+    pos = (eol == std::string_view::npos) ? body.size() : eol + 1;
+    bool cr = !line.empty() && line.back() == '\r';
+    if (cr) line.remove_suffix(1);
+    if (line.size() >= 2 && line[0] == '=' && line[1] == ':') {
+      std::string_view rest = line.substr(2);
+      while (!rest.empty() && rest.front() == ' ') rest.remove_prefix(1);
+      size_t sp = rest.find(' ');
+      std::string_view path =
+          (sp == std::string_view::npos) ? rest : rest.substr(0, sp);
+      std::string_view label =
+          (sp == std::string_view::npos) ? std::string_view{"Input"}
+                                         : rest.substr(sp + 1);
+      while (!label.empty() && label.front() == ' ') label.remove_prefix(1);
+      std::string href;
+      if (base && !path.empty() && path.front() == '/') {
+        href = "spartan://" + base->host;
+        if (base->port != 300) href += ":" + std::to_string(base->port);
+        href += std::string(path) + "?";
+      } else if (base) {
+        href = std::string(final_url);
+        if (href.back() != '?') href.push_back('?');
+      } else {
+        href = std::string(path) + "?";
+      }
+      out += "=> ";
+      out += href;
+      out += ' ';
+      out += label.empty() ? "Input" : std::string(label);
+      out += '\n';
+    } else {
+      out.append(line.begin(), line.end());
+      out += '\n';
+    }
+  }
+  return out;
+}
+
+void fetch_spartan(const std::string& url, FetchShared& out) {
+  out.service = "Spartan";
+  auto resp = xanatoo::spartan_fetch(url, &out.error);
+  if (!resp) return;
+  out.final_url = resp->final_url;
+  if (resp->status != 2) {
+    out.error = "status " + std::to_string(resp->status) + " " + resp->meta;
+    return;
+  }
+  std::string body = spartan_rewrite_prompts(resp->body, resp->final_url);
+  out.raw_source = body;
+  std::string mime = resp->meta;
+  for (char& c : mime)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  if (size_t semi = mime.find(';'); semi != std::string::npos) mime.resize(semi);
+  while (!mime.empty() && mime.back() == ' ') mime.pop_back();
+  if (mime.find("text/markdown") != std::string::npos) {
+    out.doc = xanatoo::parse_document(body, "remote.md");
+  } else if (mime.empty() || mime.find("text/gemini") != std::string::npos ||
+             mime.find("text/plain") != std::string::npos) {
+    out.doc = xanatoo::parse_gemtext(body);
+  } else {
+    out.doc = xanatoo::parse_gemtext(
+        "# Unsupported media\n\nSpartan returned MIME type `" + resp->meta +
+        "` (" + std::to_string(resp->body.size()) + " bytes).\n");
+  }
+}
+#endif
+
+#if defined(XANATOO_NEX) && XANATOO_NEX
+void fetch_nex(const std::string& url, FetchShared& out) {
+  out.service = "Nex";
+  auto resp = xanatoo::nex_fetch(url, &out.error);
+  if (!resp) return;
+  out.final_url = resp->final_url;
+  out.raw_source = resp->body;
+  if (resp->is_directory) {
+    out.doc = xanatoo::parse_document(resp->body, "remote.md");
+  } else {
+    out.doc = xanatoo::parse_document(resp->body, "remote.txt");
+  }
+}
+#endif
+
+#if defined(XANATOO_FINGER) && XANATOO_FINGER
+void fetch_finger(const std::string& url, FetchShared& out) {
+  out.service = "Finger";
+  auto resp = xanatoo::finger_fetch(url, &out.error);
+  if (!resp) return;
+  out.final_url = resp->final_url;
+  out.raw_source = resp->body;
+  out.doc = xanatoo::parse_document(resp->body, "remote.md");
+}
+#endif
+
+
 // Worker thread body: everything here must stay off App.
 void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
                 bool allow_download) {
@@ -144,6 +322,22 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   } else if (xanatoo::is_gemini_url(url)) {
 #if defined(XANATOO_GEMINI) && XANATOO_GEMINI
     fetch_gemini(url, *out);
+#endif
+  } else if (xanatoo::is_gopher_url(url)) {
+#if defined(XANATOO_GOPHER) && XANATOO_GOPHER
+    fetch_gopher(url, *out);
+#endif
+  } else if (xanatoo::is_spartan_url(url)) {
+#if defined(XANATOO_SPARTAN) && XANATOO_SPARTAN
+    fetch_spartan(url, *out);
+#endif
+  } else if (xanatoo::is_nex_url(url)) {
+#if defined(XANATOO_NEX) && XANATOO_NEX
+    fetch_nex(url, *out);
+#endif
+  } else if (xanatoo::is_finger_url(url)) {
+#if defined(XANATOO_FINGER) && XANATOO_FINGER
+    fetch_finger(url, *out);
 #endif
   } else if (xanatoo::is_nostr_ref(url)) {
 #if defined(XANATOO_NOSTR) && XANATOO_NOSTR
@@ -401,6 +595,15 @@ void finish_tab(App& app, const FetchJob& job) {
   FetchShared& r = *job.shared;
   DocBuffer* b = find_buf(app, job.buf);
   if (!b || !b->placeholder) return;
+  if (r.download && r.download->offered.load(std::memory_order_acquire)) {
+    remove_buffer(app, job.buf);
+    const std::string url =
+        !r.final_url.empty() ? r.final_url : job.url;
+    start_download(app, url);
+    flash_status(app, "Download available: " +
+                          (r.download->name.empty() ? url : r.download->name));
+    return;
+  }
   if (r.download && r.download->phase.load() != xanatoo::DownloadPhase::Skipped) {
     remove_buffer(app, job.buf);
     app.downloads_panel_open = true;
@@ -434,6 +637,16 @@ void finish_tab(App& app, const FetchJob& job) {
 void finish_navigate(App& app, const FetchJob& job) {
   FetchShared& r = *job.shared;
   const std::string service = r.service;
+  if (r.download && r.download->offered.load(std::memory_order_acquire)) {
+    app.panes[job.pane].nav.pending_link = {};
+    app.panes[job.pane].nav.restoring = -1;
+    const std::string url =
+        !r.final_url.empty() ? r.final_url : job.url;
+    start_download(app, url);
+    flash_status(app, "Download available: " +
+                          (r.download->name.empty() ? url : r.download->name));
+    return;  // keep the previous page; user confirms in the dialog
+  }
   if (r.download && r.download->phase.load() != xanatoo::DownloadPhase::Skipped) {
     app.panes[job.pane].nav.pending_link = {};
     app.panes[job.pane].nav.restoring = -1;
@@ -533,6 +746,34 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     return true;
 #else
     return no("gemini:// needs TLS (build with -DXANATOO_GEMINI=ON)");
+#endif
+  }
+  if (xanatoo::is_gopher_url(url)) {
+#if defined(XANATOO_GOPHER) && XANATOO_GOPHER
+    return true;
+#else
+    return no("gopher:// needs build with -DXANATOO_GOPHER=ON");
+#endif
+  }
+  if (xanatoo::is_spartan_url(url)) {
+#if defined(XANATOO_SPARTAN) && XANATOO_SPARTAN
+    return true;
+#else
+    return no("spartan:// needs build with -DXANATOO_SPARTAN=ON");
+#endif
+  }
+  if (xanatoo::is_nex_url(url)) {
+#if defined(XANATOO_NEX) && XANATOO_NEX
+    return true;
+#else
+    return no("nex:// needs build with -DXANATOO_NEX=ON");
+#endif
+  }
+  if (xanatoo::is_finger_url(url)) {
+#if defined(XANATOO_FINGER) && XANATOO_FINGER
+    return true;
+#else
+    return no("finger:// needs build with -DXANATOO_FINGER=ON");
 #endif
   }
   if (xanatoo::is_nostr_ref(url)) {
@@ -642,6 +883,10 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   if (purpose != FetchPurpose::Preview && purpose != FetchPurpose::Subscription) {
     job.shared->download = std::make_shared<xanatoo::DownloadProgress>();
     job.shared->download->url = url;
+    if (purpose == FetchPurpose::Download && !app.pending_download_dir.empty()) {
+      job.shared->download->dest_dir = std::move(app.pending_download_dir);
+      app.pending_download_dir.clear();
+    }
     app.downloads.push_back(job.shared->download);
   }
   // The browser build without pthreads has no network services, so
@@ -668,11 +913,25 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
 
 void start_download(App& app, const std::string& url) {
   if (!xanatoo::starts_with_ci(url, "https://") &&
-      !xanatoo::starts_with_ci(url, "http://")) {
-    flash_status(app, "Only web links can be downloaded: " + url);
+      !xanatoo::starts_with_ci(url, "http://") &&
+      !xanatoo::is_gopher_url(url)) {
+    flash_status(app, "Only web or gopher links can be downloaded: " + url);
     return;
   }
+  app.download_confirm.open = true;
+  app.download_confirm.url = url;
+}
+
+void begin_download(App& app, const std::string& url, std::string dest_dir) {
+  if (!xanatoo::starts_with_ci(url, "https://") &&
+      !xanatoo::starts_with_ci(url, "http://") &&
+      !xanatoo::is_gopher_url(url)) {
+    flash_status(app, "Only web or gopher links can be downloaded: " + url);
+    return;
+  }
+  app.pending_download_dir = std::move(dest_dir);
   start_fetch(app, FetchPurpose::Download, -1, url, false);
+  app.pending_download_dir.clear();  // in case start_fetch did not consume it
   flash_status(app, "Downloading " + url);
 }
 

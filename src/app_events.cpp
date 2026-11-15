@@ -21,6 +21,10 @@
 #include "xanatoo/platform.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/gemini.hpp"
+#include "xanatoo/gopher.hpp"
+#include "xanatoo/spartan.hpp"
+#include "xanatoo/nex.hpp"
+#include "xanatoo/finger.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
@@ -517,8 +521,18 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       } else if (!href->empty() && (*href)[0] != '#') {
         std::string abs = *href;
         const std::string base = link_base_url(app, app.focus);
-        if (!xanatoo::is_gemini_url(abs) && !base.empty()) {
-          std::string resolved = xanatoo::resolve_gemini_url(base, abs);
+        if (!(xanatoo::is_gemini_url(abs) || xanatoo::is_gopher_url(abs) ||
+              xanatoo::is_spartan_url(abs) || xanatoo::is_nex_url(abs) ||
+              xanatoo::is_finger_url(abs)) && !base.empty()) {
+          std::string resolved;
+          if (xanatoo::is_gemini_url(base))
+            resolved = xanatoo::resolve_gemini_url(base, abs);
+          else if (xanatoo::is_gopher_url(base))
+            resolved = xanatoo::resolve_gopher_url(base, abs);
+          else if (xanatoo::is_spartan_url(base))
+            resolved = xanatoo::resolve_spartan_url(base, abs);
+          else if (xanatoo::is_nex_url(base))
+            resolved = xanatoo::resolve_nex_url(base, abs);
           if (!resolved.empty()) abs = resolved;
         }
         if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||

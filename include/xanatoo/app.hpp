@@ -1073,6 +1073,14 @@ struct App {
   Touch touch;
   std::vector<FetchJob> fetches;
   std::vector<std::shared_ptr<xanatoo::DownloadProgress>> downloads;
+  // Confirmation before an explicit download starts (Cancel | Download [to…]).
+  struct DownloadConfirm {
+    bool open = false;
+    std::string url;
+  } download_confirm;
+  // Consumed by the next Download-purpose fetch (folder from "Download to…").
+  std::string pending_download_dir;
+
   // The row of the open Downloads right-click menu.
   std::shared_ptr<xanatoo::DownloadProgress> download_menu;
   uint64_t next_fetch_id = 1;
@@ -1588,7 +1596,20 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
                      BufferId tab_buf = kNoBuffer);
 // "Download Link": save the http(s) answer to Downloads whatever its type
 // (a PDF that would otherwise open as pages, or even an HTML page).
+// Open the download confirmation dialog for an http(s) URL.
 void start_download(App& app, const std::string& url);
+// Actually start the transfer (after the user confirms). `dest_dir` empty
+// uses the default Downloads folder.
+void begin_download(App& app, const std::string& url,
+                    std::string dest_dir = {});
+// Draw the pending-download modal (Cancel | Download [to…] | Download).
+// Legacy no-op (dialog is drawn inside Ui::begin_frame).
+void draw_download_confirm(App& app);
+// True when SDL can show a native folder picker (enables "Download to…").
+bool download_folder_dialog_available();
+// Open the native folder picker; on success, begin_download into that dir.
+void pick_download_folder(App& app, const std::string& url);
+
 // Apply finished jobs (once per frame).
 void poll_fetches(App& app);
 // Subscriptions use the same read-only fetch workers, never a pane or tab.
