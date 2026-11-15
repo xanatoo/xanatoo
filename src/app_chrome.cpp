@@ -497,7 +497,13 @@ StatusLine compute_status(App& app) {
   // (idle status only).
   if (!prompt_active(app) && !app.help_mode && !app.outline_mode) {
     Pane& fp = focused_pane(app);
-    if (!fp.sel.empty()) {
+    StatsCache& sc = fp.stats;
+    // Both counts walk the selection / whole document: once per layout.
+    if (sc.layout_gen != 0 && sc.layout_gen == fp.layout.generation &&
+        sc.buf == fp.buf && sc.sel.anchor == fp.sel.anchor &&
+        sc.sel.focus == fp.sel.focus) {
+      st.stats = sc.text;
+    } else if (!fp.sel.empty()) {
       const std::string t = xanatoo::selected_text(doc_of(app, fp), fp.sel);
       size_t words = 0, chars = 0;
       bool in_word = false;
@@ -521,6 +527,10 @@ StatusLine compute_status(App& app) {
       if (ds.headings > 0)
         st.stats += " · " + std::to_string(ds.headings) + " headings";
     }
+    sc.layout_gen = fp.layout.generation;
+    sc.buf = fp.buf;
+    sc.sel = fp.sel;
+    sc.text = st.stats;
   }
   return st;
 }

@@ -168,6 +168,30 @@ struct ViewAnchor {
   float view_y = 0.f;
 };
 
+// Scrollbar ticks of a pane: section / heading positions and, on demand,
+// the (estimated) top of every block (app_frame.cpp section_marks). Both
+// walk the whole document, so they are kept until the layout changes.
+struct SectionMark {
+  float y = 0.f;  // document space
+  int level = 1;
+};
+struct ScrollMarks {
+  uint64_t layout_gen = 0;  // 0 = not built
+  BufferId buf = kNoBuffer;
+  std::vector<SectionMark> sections;
+  bool has_block_y = false;
+  std::unordered_map<xanatoo::NodeId, float> block_y;
+};
+
+// Right-hand status panel counts of a pane (word / char totals or of the
+// selection), kept while the layout and selection stay the same.
+struct StatsCache {
+  uint64_t layout_gen = 0;  // 0 = not built
+  BufferId buf = kNoBuffer;
+  xanatoo::Selection sel{};
+  std::string text;
+};
+
 // A bookmark found in the page a view shows.
 struct BookmarkMark {
   std::string address;      // the bookmark's, as stored
@@ -300,6 +324,8 @@ struct Pane {
   float materialised_bottom = 0.f;
   PaneRaster raster;
   FootnoteOverlay footnotes;
+  ScrollMarks scroll_marks;
+  StatsCache stats;
 };
 
 // Placement of a floating window. Left / Right dock it into a side column

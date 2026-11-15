@@ -31,6 +31,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `glyphs_in_band` for the lines near the pointer instead of scanning every
   glyph. Code that moves glyphs afterwards must call `index_glyphs` again
   (a size mismatch falls back to a full scan).
+- Per-frame chrome must not walk the whole document: scrollbar section /
+  block ticks (`Pane::scroll_marks`) and the status-bar word counts
+  (`Pane::stats`) are cached per `layout.generation`.
 - Preferences (`ViewSettings` / `view.conf`): line spacing, margins, measure, plus behaviour switches (footnote overlay, justify, hover preview) shown in Edit → Preferences (ImGui window, `UiCommand::TogglePreferences`); never document format
 - Section Focus mode: `LayoutEngine::layout(..., focus_section)` filters body to one Section/Article (outline still full tree); scroll outside the materialised band
   triggers re-layout. Width changes clear the cache.

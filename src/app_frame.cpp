@@ -3705,19 +3705,14 @@ static void draw_pane_overlays(App& app, int i) {
   }
 }
 
-struct SectionMark {
-  float y = 0.f;  // document space
-  int level = 1;
-};
-
 // Section / heading positions of a pane's document for the scrollbar.
 // Every block the layout skipped still has a stub box, so only the inside
 // of a stub is estimated (from height hints); nodes with no box outside a
 // stub were not laid out at all (section focus) and get no mark.
 // `block_y`, when given, gets the (estimated) top of every block on the way.
-static std::vector<SectionMark> section_marks(
+static std::vector<SectionMark> build_section_marks(
     App& app, Pane& pane,
-    std::unordered_map<xanatoo::NodeId, float>* block_y = nullptr) {
+    std::unordered_map<xanatoo::NodeId, float>* block_y) {
   std::vector<SectionMark> marks;
   const auto& d = doc_of(app, pane);
   if (d.root == xanatoo::INVALID_NODE || d.root >= d.next_id) return marks;
@@ -3798,6 +3793,26 @@ static std::vector<SectionMark> section_marks(
   return marks;
 }
 
+// The pane's ScrollMarks, rebuilt only for a new layout (or buffer); with
+// `block_y` also the block tops.
+static const ScrollMarks& section_marks(App& app, Pane& pane,
+                                        bool block_y = false) {
+  ScrollMarks& sm = pane.scroll_marks;
+  if (sm.layout_gen != pane.layout.generation || sm.buf != pane.buf ||
+      sm.layout_gen == 0) {
+    sm.layout_gen = pane.layout.generation;
+    sm.buf = pane.buf;
+    sm.has_block_y = false;
+    sm.block_y.clear();
+    sm.sections = build_section_marks(app, pane, nullptr);
+  }
+  if (block_y && !sm.has_block_y) {
+    build_section_marks(app, pane, &sm.block_y);
+    sm.has_block_y = true;
+  }
+  return sm;
+}
+
 // Classic scrollbar in the strip excluded from the content clip.
 static void draw_pane_scrollbar(App& app, int i) {
   [[maybe_unused]] const float lh =
@@ -3835,7 +3850,7 @@ static void draw_pane_scrollbar(App& app, int i) {
       xanatoo::sdl::fill_rect(app.sdl, &tick);
     };
     // Chapter / section breaks, from this pane's own document and layout.
-    for (const SectionMark& m : section_marks(app, pane)) {
+    for (const SectionMark& m : section_marks(app, pane).sections) {
       if (m.level <= 1)
         mark_at(m.y, 25, 90, 170);
       else
@@ -3844,8 +3859,7 @@ static void draw_pane_scrollbar(App& app, int i) {
     // Bookmarks inside the page: from the layout where it holds the text,
     // else from the estimated position of the block.
     if (bookmark_marks_fresh(pane) && !pane.bookmark_marks.items.empty()) {
-      std::unordered_map<xanatoo::NodeId, float> block_y;
-      section_marks(app, pane, &block_y);
+      const auto& block_y = section_marks(app, pane, true).block_y;
       const xanatoo::Document& bd = doc_of(app, pane);
       const xanatoo::Rgba& c = app.style.bookmark;
       for (const BookmarkMark& bm : pane.bookmark_marks.items) {
@@ -3860,8 +3874,7 @@ static void draw_pane_scrollbar(App& app, int i) {
       }
     }
     if (annotation_marks_fresh(pane) && !pane.annotation_marks.items.empty()) {
-      std::unordered_map<xanatoo::NodeId, float> block_y;
-      section_marks(app, pane, &block_y);
+      const auto& block_y = section_marks(app, pane, true).block_y;
       const xanatoo::Document& ad = doc_of(app, pane);
       const xanatoo::Rgba& c = app.style.bookmark;
       for (const AnnotationMark& mark : pane.annotation_marks.items) {
@@ -3923,8 +3936,7 @@ static void draw_pane_scrollbar(App& app, int i) {
       if (const auto* box = reply_card_box(app, pane))
         y = app.reply.anchor_y = box->y;
       if (y < 0.f) {
-        std::unordered_map<xanatoo::NodeId, float> block_y;
-        section_marks(app, pane, &block_y);
+        const auto& block_y = section_marks(app, pane, true).block_y;
         if (auto it = block_y.find(app.reply.node); it != block_y.end())
           y = it->second;
       }
