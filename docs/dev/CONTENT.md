@@ -34,10 +34,6 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Per-frame chrome must not walk the whole document: scrollbar section /
   block ticks (`Pane::scroll_marks`) and the status-bar word counts
   (`Pane::stats`) are cached per `layout.generation`.
-- Virtualization skips whole blocks only: one huge block is laid out in
-  full on every relayout (~150 bytes per character). Generated text
-  (source views, plain-text pages) goes through `append_code_blocks`
-  (`source_view.hpp`), which cuts it into blocks of ≤ 200 lines / 16 KiB.
 - Preferences (`ViewSettings` / `view.conf`): line spacing, margins, measure, plus behaviour switches (footnote overlay, justify, hover preview) shown in Edit → Preferences (ImGui window, `UiCommand::TogglePreferences`); never document format
 - Section Focus mode: `LayoutEngine::layout(..., focus_section)` filters body to one Section/Article (outline still full tree); scroll outside the materialised band
   triggers re-layout. Width changes clear the cache.

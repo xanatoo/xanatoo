@@ -7,7 +7,6 @@
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/parse.hpp"
-#include "xanatoo/source_view.hpp"
 #include "xanatoo/util.hpp"
 
 #if defined(XANATOO_WEB) && XANATOO_WEB
@@ -248,7 +247,10 @@ Document plain_text_document(std::string_view text) {
   std::string chunk;
   auto flush = [&] {
     while (!chunk.empty() && chunk.back() == '\n') chunk.pop_back();
-    if (!chunk.empty()) append_code_blocks(doc, root, chunk);
+    if (!chunk.empty()) {
+      NodeId n = doc.create(NodeKind::CodeBlock, root);
+      doc.get(n).spans.push_back(span(InlineKind::Text, std::move(chunk)));
+    }
     chunk.clear();
   };
   size_t i = 0;

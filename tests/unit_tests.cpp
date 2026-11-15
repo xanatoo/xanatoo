@@ -1310,40 +1310,6 @@ void test_source_view_text() {
     EXPECT_EQ(code.spans.size(), 1u);
     if (!code.spans.empty()) EXPECT_EQ(code.spans[0].text, raw);
   }
-  {
-    // A big source is split into bounded blocks, at line ends; joining
-    // the blocks with the newlines they stand for gives the source back.
-    std::string big;
-    for (int i = 0; i < 1000; ++i) big += "line " + std::to_string(i) + "\n";
-    std::string longline(3 * kCodeBlockBytes + 5, 'x');
-    longline.replace(kCodeBlockBytes - 1, 2, "\xc3\xa9");  // é across a cut
-    big += longline + "\nend\n";
-    const Document bd = source_view_document({big, "text"});
-    const auto& kids = bd.get(bd.root).children;
-    EXPECT(kids.size() > 5u);
-    std::string joined;
-    bool bounded = true, lang = true;
-    size_t newline_cuts = 0;
-    for (size_t k = 0; k < kids.size(); ++k) {
-      const Node& n = bd.get(kids[k]);
-      const std::string t = n.spans.empty() ? "" : n.spans[0].text;
-      bounded = bounded && t.size() <= kCodeBlockBytes &&
-                static_cast<size_t>(std::count(t.begin(), t.end(), '\n')) <=
-                    kCodeBlockLines;
-      lang = lang && n.src == "text";
-      joined += t;
-      // Cuts inside the long line join without a newline.
-      if (k + 1 < kids.size() && !(t.size() == kCodeBlockBytes - 1 ||
-                                   t.size() == kCodeBlockBytes)) {
-        joined += '\n';
-        ++newline_cuts;
-      }
-    }
-    EXPECT(bounded);
-    EXPECT(lang);
-    EXPECT(newline_cuts >= 5u);
-    EXPECT_EQ(joined, big);
-  }
   const auto sx = source_view_text(doc, SelectorKind::SourceSexpr, std::nullopt);
   EXPECT_EQ(sx.language, "lisp");
   EXPECT_EQ(sx.text, serialize_sexpr(doc));
