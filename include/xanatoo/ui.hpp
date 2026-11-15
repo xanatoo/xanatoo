@@ -395,7 +395,7 @@ struct UiState {
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service
   bool has_nav = false;  // focused page has navigation for the panel
-  bool has_site = false; // focused address has a site to search for a sitemap
+  bool has_site = false; // focused site is known to have a sitemap (or panel open)
   bool diff = false;
   bool can_diff = false;  // two independent documents loaded
   bool structure = false;

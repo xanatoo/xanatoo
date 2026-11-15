@@ -2586,6 +2586,14 @@ Next bundle number: **348** (this delivery is **347**)
 - ImGui UI font now loads General Punctuation, Arrows and Geometric
   Shapes, so "…", "→", "▸" in menus no longer draw as "?".
 
+## Status (2026-11-15) — Site map button only where there is one
+
+- The URL-bar Site map button shows only when the host is known to have a
+  sitemap: background `sitemap_probe` (robots.txt, first 4 KiB of the
+  sitemap), cached per host in `cache_dir()/sitemap-probes` (yes 30 days,
+  no 7 days). Not yet tested live against many sites; soft-404 pages that
+  serve XML other than urlset / sitemapindex read as "no".
+
 ## Status (2026-10-29) — site maps
 
 - `sitemap.hpp` / `src/sitemap.cpp`: robots.txt `Sitemap:` lines (else

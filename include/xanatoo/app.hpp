@@ -577,8 +577,23 @@ struct SearchBar {
   std::vector<xanatoo::SearchEngine> active;
 };
 
+// Background "has a sitemap?" check of one host (URL-bar button).
+struct SitemapProbeLoad {
+  std::atomic<bool> done{false};
+  xanatoo::SitemapProbe result = xanatoo::SitemapProbe::Unknown;
+};
+
+struct SitemapProbeState {
+  xanatoo::SitemapProbeRecord rec;  // Unknown until checked (or net failure)
+  std::shared_ptr<SitemapProbeLoad> pending;
+  bool tried = false;  // asked this session (failures are not retried)
+};
+
 struct SitemapPanel {
   bool shown = false;
+  // Per host, loaded from / saved to cache_dir()/sitemap-probes.
+  std::unordered_map<std::string, SitemapProbeState> probes;
+  bool probes_loaded = false;
   std::vector<SiteCache> sites;
   std::string host;       // site of the focused page; "" = not a web page
   std::string page;       // page URL the selection was last moved to
@@ -1728,6 +1743,9 @@ void click_sitemap(App& app, int mx, int my);
 bool sitemap_key(App& app, SDL_Keycode sym);
 // `sitemap:host` of the panel's site in the focused pane.
 void open_sitemap_page(App& app);
+// URL-bar Site map button: the focused page's site is known to have a
+// sitemap (probed in the background, cached per host), or the panel is open.
+bool sitemap_button_shown(App& app);
 // Records a shown web page (title for the panel, coverage counts).
 void note_page_seen(App& app, const std::string& url,
                     const xanatoo::Document& doc);

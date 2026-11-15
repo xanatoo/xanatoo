@@ -1566,7 +1566,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         extra("url_nav", "outline", "N", state.page_panel ? "Close page navigation" : "Open page navigation",
               UiCommand::TogglePage, state.page_panel);
       if (state.has_site)
-        extra("url_sitemap", "sitemap", "S", state.sitemap ? "Close site map" : "Find and open site map",
+        extra("url_sitemap", "sitemap", "S", state.sitemap ? "Close site map" : "Open site map",
               UiCommand::ToggleSitemap, state.sitemap);
     };
     // Search box right of the location, like the old Firefox search box.

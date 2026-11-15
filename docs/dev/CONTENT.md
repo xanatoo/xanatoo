@@ -155,6 +155,15 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Shown pages land in `SitemapPanel::seen` (`note_page_seen`, called by
   `show_doc_in_pane`): titles and per-node coverage (`SiteCache::
   seen_count`, recomputed on `seen_gen`). `sitemap_step` = Alt+PgUp/PgDn.
+- URL-bar Site map button (`sitemap_button_shown`): only for hosts known
+  to have a sitemap, or while the panel is open. `update_sitemap` starts a
+  detached `sitemap_probe(host)` once per host per session (robots.txt
+  `Sitemap:` lines, else the well-known paths; only the first 4 KiB of a
+  candidate are read, `looks_like_sitemap`). Results go to
+  `SitemapPanel::probes` and `cache_dir()/sitemap-probes` ("host yes|no
+  unix-seconds"; yes kept 30 days, no 7 days, network failures not stored);
+  a finished full read updates the record too. Menu / Ctrl+Alt+M still
+  open the panel on any site.
 
 ## Pandoc import (`epub_import.hpp`)
 

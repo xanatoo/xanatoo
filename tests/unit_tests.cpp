@@ -5673,6 +5673,40 @@ void test_sitemap() {
   EXPECT(items >= 6);
 }
 
+void test_sitemap_probe() {
+  using namespace xanatoo;
+  EXPECT(looks_like_sitemap(R"(<?xml version="1.0"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">)"));
+  EXPECT(looks_like_sitemap("<?xml version='1.0'?><SitemapIndex>"));
+  EXPECT(looks_like_sitemap("<s:urlset xmlns:s=\"x\">"));
+  EXPECT(looks_like_sitemap(std::string("\x1f\x8b\x08", 3)));
+  EXPECT(!looks_like_sitemap("<!doctype html><html><p>urlset</p>"));
+  EXPECT(!looks_like_sitemap("Not found"));
+  EXPECT(!looks_like_sitemap(""));
+
+  const auto rows = parse_sitemap_probes(
+      "# comment\nExample.org yes 1700000000\nfoo.net no 5\n"
+      "bad line\nx.org maybe 3\ny.org yes 12a\n");
+  EXPECT_EQ(rows.size(), size_t(2));
+  EXPECT_EQ(rows[0].first, std::string("example.org"));
+  EXPECT(rows[0].second.result == SitemapProbe::Yes);
+  EXPECT_EQ(rows[0].second.checked, int64_t(1700000000));
+  EXPECT(rows[1].second.result == SitemapProbe::No);
+  const auto again = parse_sitemap_probes(format_sitemap_probes(rows));
+  EXPECT_EQ(again.size(), size_t(2));
+  EXPECT_EQ(again[1].first, std::string("foo.net"));
+  EXPECT_EQ(again[1].second.checked, int64_t(5));
+
+  const int64_t day = 86400;
+  SitemapProbeRecord yes{SitemapProbe::Yes, 1000};
+  SitemapProbeRecord no{SitemapProbe::No, 1000};
+  EXPECT(sitemap_probe_fresh(yes, 1000 + 20 * day));
+  EXPECT(!sitemap_probe_fresh(yes, 1000 + 31 * day));
+  EXPECT(sitemap_probe_fresh(no, 1000 + 6 * day));
+  EXPECT(!sitemap_probe_fresh(no, 1000 + 8 * day));
+  EXPECT(!sitemap_probe_fresh(SitemapProbeRecord{}, 1000));
+}
+
 
 // A face with one size for every glyph: enough to test the structure of a
 // layout without a font file.
@@ -5908,6 +5942,7 @@ int main() {
   test_sdl_time_bridge();
   test_about_markdown();
   test_sitemap();
+  test_sitemap_probe();
   test_nearest_caret();
   test_paginate();
   test_fixed_layout();

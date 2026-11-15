@@ -8,10 +8,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
+#include <fstream>
+#include <sstream>
 #include <thread>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/native.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
@@ -62,6 +66,87 @@ void start_load(SiteCache& c) {
 #endif
 }
 
+// ---- "has a sitemap?" probes (URL-bar button) ----
+
+int64_t now_seconds() { return static_cast<int64_t>(std::time(nullptr)); }
+
+std::string probes_path() {
+  const std::string dir = xanatoo::cache_dir();
+  return dir.empty() ? std::string{} : dir + "/sitemap-probes";
+}
+
+void load_probes(App& app) {
+  if (app.sitemap.probes_loaded) return;
+  app.sitemap.probes_loaded = true;
+  const std::string path = probes_path();
+  if (path.empty()) return;
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return;
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  for (auto& [host, rec] : xanatoo::parse_sitemap_probes(ss.str()))
+    app.sitemap.probes[host].rec = rec;
+}
+
+void save_probes(App& app) {
+  if (xanatoo::no_save()) return;
+  const std::string path = probes_path();
+  if (path.empty() || !xanatoo::ensure_dir(xanatoo::cache_dir())) return;
+  // Stale records are dropped: they would be asked again anyway.
+  const int64_t now = now_seconds();
+  std::vector<std::pair<std::string, xanatoo::SitemapProbeRecord>> rows;
+  for (const auto& [host, st] : app.sitemap.probes)
+    if (xanatoo::sitemap_probe_fresh(st.rec, now))
+      rows.emplace_back(host, st.rec);
+  std::sort(rows.begin(), rows.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+  xanatoo::write_file_atomic(path, xanatoo::format_sitemap_probes(rows));
+}
+
+void set_probe(App& app, const std::string& host, xanatoo::SitemapProbe r) {
+  SitemapProbeState& st = app.sitemap.probes[host];
+  st.tried = true;
+  if (r == xanatoo::SitemapProbe::Unknown) return;
+  st.rec.result = r;
+  st.rec.checked = now_seconds();
+  save_probes(app);
+}
+
+void poll_probes(App& app) {
+  for (auto& [host, st] : app.sitemap.probes) {
+    if (!st.pending || !st.pending->done.load(std::memory_order_acquire))
+      continue;
+    const xanatoo::SitemapProbe r = st.pending->result;
+    st.pending.reset();
+    if (r == xanatoo::SitemapProbe::Unknown) continue;
+    st.rec.result = r;
+    st.rec.checked = now_seconds();
+    save_probes(app);
+  }
+}
+
+void ensure_probe(App& app, const std::string& host) {
+#if defined(XANATOO_WEB) && XANATOO_WEB
+  load_probes(app);
+  SitemapProbeState& st = app.sitemap.probes[host];
+  if (st.pending || st.tried ||
+      xanatoo::sitemap_probe_fresh(st.rec, now_seconds()))
+    return;
+  st.tried = true;
+  st.pending = std::make_shared<SitemapProbeLoad>();
+  std::thread(
+      [host](std::shared_ptr<SitemapProbeLoad> out) {
+        out->result = xanatoo::sitemap_probe(host);
+        out->done.store(true, std::memory_order_release);
+      },
+      st.pending)
+      .detach();
+#else
+  (void)app;
+  (void)host;
+#endif
+}
+
 void poll_loads(App& app) {
   for (SiteCache& c : app.sitemap.sites) {
     if (!c.pending || !c.pending->done.load(std::memory_order_acquire))
@@ -69,6 +154,12 @@ void poll_loads(App& app) {
     c.tree = std::move(c.pending->tree);
     c.error = c.pending->error;
     c.pending.reset();
+    // The whole sitemap read settles the probe, too ("no sitemap found"
+    // only when every place was asked; network errors leave it alone).
+    if (c.tree)
+      set_probe(app, c.host, xanatoo::SitemapProbe::Yes);
+    else if (xanatoo::starts_with(c.error, "no sitemap found"))
+      set_probe(app, c.host, xanatoo::SitemapProbe::No);
     if (c.tree) {
       c.open.assign(c.tree->nodes.size(), 0);
       c.open[0] = 1;
@@ -200,12 +291,24 @@ void toggle_sitemap(App& app) {
   app.sitemap.page.clear();
 }
 
+bool sitemap_button_shown(App& app) {
+  if (app.sitemap.shown) return true;
+  const std::string host = xanatoo::url_host(focused_web_url(app));
+  if (host.empty()) return false;
+  if (const SiteCache* c = find_site(app, host); c && c->tree) return true;
+  auto it = app.sitemap.probes.find(host);
+  return it != app.sitemap.probes.end() &&
+         it->second.rec.result == xanatoo::SitemapProbe::Yes;
+}
+
 void update_sitemap(App& app) {
   // Loads started by sitemap_step finish with the panel closed, too.
   poll_loads(app);
-  if (!app.sitemap.shown) return;
+  poll_probes(app);
   const std::string url = focused_web_url(app);
   const std::string host = xanatoo::url_host(url);
+  if (!host.empty()) ensure_probe(app, host);
+  if (!app.sitemap.shown) return;
   if (host != app.sitemap.host) {
     app.sitemap.host = host;
     app.sitemap.page.clear();

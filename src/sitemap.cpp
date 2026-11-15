@@ -424,6 +424,81 @@ Document site_tree_document(const SiteTree& t) {
   return doc;
 }
 
+bool looks_like_sitemap(std::string_view head) {
+  if (head.size() >= 2 && static_cast<unsigned char>(head[0]) == 0x1f &&
+      static_cast<unsigned char>(head[1]) == 0x8b)
+    return true;
+  const std::string low = ascii_lower(head);
+  if (low.find("<html") != std::string::npos) return false;
+  // Root element, with or without a namespace prefix ("<s:urlset").
+  for (std::string_view root : {"urlset", "sitemapindex"}) {
+    for (size_t i = low.find(root); i != std::string::npos;
+         i = low.find(root, i + 1)) {
+      size_t j = i;
+      while (j > 0 && (std::isalnum(static_cast<unsigned char>(low[j - 1])) ||
+                       low[j - 1] == ':' || low[j - 1] == '_' ||
+                       low[j - 1] == '-'))
+        --j;
+      if (j > 0 && low[j - 1] == '<') return true;
+    }
+  }
+  return false;
+}
+
+std::vector<std::pair<std::string, SitemapProbeRecord>> parse_sitemap_probes(
+    std::string_view text) {
+  std::vector<std::pair<std::string, SitemapProbeRecord>> out;
+  while (!text.empty()) {
+    const size_t nl = text.find('\n');
+    std::string_view line = text.substr(0, nl);
+    text = nl == std::string_view::npos ? std::string_view{} : text.substr(nl + 1);
+    trim_ascii(line);
+    if (line.empty() || line[0] == '#') continue;
+    const size_t a = line.find(' ');
+    const size_t b = a == std::string_view::npos ? a : line.find(' ', a + 1);
+    if (b == std::string_view::npos) continue;
+    const std::string_view host = line.substr(0, a);
+    const std::string_view val = line.substr(a + 1, b - a - 1);
+    const std::string_view when = line.substr(b + 1);
+    SitemapProbeRecord r;
+    if (val == "yes") r.result = SitemapProbe::Yes;
+    else if (val == "no") r.result = SitemapProbe::No;
+    else continue;
+    int64_t t = 0;
+    bool ok = !when.empty();
+    for (char c : when) {
+      if (c < '0' || c > '9') { ok = false; break; }
+      t = t * 10 + (c - '0');
+    }
+    if (!ok) continue;
+    r.checked = t;
+    out.emplace_back(ascii_lower(host), r);
+  }
+  return out;
+}
+
+std::string format_sitemap_probes(
+    const std::vector<std::pair<std::string, SitemapProbeRecord>>& rows) {
+  std::string out = "# xanatoo: hosts with / without a sitemap\n";
+  for (const auto& [host, r] : rows) {
+    if (r.result == SitemapProbe::Unknown || host.empty() ||
+        host.find_first_of(" \n") != std::string::npos)
+      continue;
+    out += host;
+    out += r.result == SitemapProbe::Yes ? " yes " : " no ";
+    out += std::to_string(r.checked);
+    out += '\n';
+  }
+  return out;
+}
+
+bool sitemap_probe_fresh(const SitemapProbeRecord& r, int64_t now) {
+  constexpr int64_t kDay = 86400;
+  if (r.result == SitemapProbe::Unknown) return false;
+  const int64_t ttl = r.result == SitemapProbe::Yes ? 30 * kDay : 7 * kDay;
+  return now >= r.checked && now - r.checked < ttl;
+}
+
 #if defined(XANATOO_WEB) && XANATOO_WEB
 
 namespace {
@@ -434,6 +509,56 @@ constexpr size_t kMaxUrls = 50000;
 constexpr size_t kMaxXmlBytes = 52428800;
 
 }  // namespace
+
+namespace {
+
+// Reads the first few KiB of `url`: Yes / No by looks_like_sitemap,
+// Unknown when the request failed outright.
+SitemapProbe probe_file(const std::string& url) {
+  constexpr size_t kHead = 4096;
+  std::string head;
+  int status = 0;
+  std::string e;
+  const bool ok = https_get_follow_stream(
+      url, kUserAgent,
+      [&](const HttpStreamHeaders& h) {
+        status = h.status;
+        return h.status == 200;
+      },
+      [&](std::string_view chunk) {
+        head.append(chunk.substr(0, kHead - std::min(kHead, head.size())));
+        return head.size() < kHead;
+      },
+      &e);
+  if (status == 0 && !ok) return SitemapProbe::Unknown;
+  if (status != 200) return SitemapProbe::No;
+  return looks_like_sitemap(head) ? SitemapProbe::Yes : SitemapProbe::No;
+}
+
+}  // namespace
+
+SitemapProbe sitemap_probe(std::string_view host_in) {
+  const std::string host = ascii_lower(host_in);
+  if (host.empty()) return SitemapProbe::No;
+  const std::string base = "https://" + host;
+  std::vector<std::string> candidates;
+  std::string e;
+  auto r = https_get_follow(base + "/robots.txt", kUserAgent, &e);
+  if (!r) return SitemapProbe::Unknown;
+  if (r->status == 200) candidates = robots_sitemaps(r->body);
+  if (candidates.size() > 3) candidates.resize(3);
+  if (candidates.empty())
+    for (const char* p : {"/sitemap.xml", "/sitemap_index.xml",
+                          "/wp-sitemap.xml"})
+      candidates.push_back(base + p);
+  bool failed = false;
+  for (const std::string& url : candidates) {
+    const SitemapProbe p = probe_file(url);
+    if (p == SitemapProbe::Yes) return p;
+    if (p == SitemapProbe::Unknown) failed = true;
+  }
+  return failed ? SitemapProbe::Unknown : SitemapProbe::No;
+}
 
 std::optional<SiteTree> sitemap_fetch_tree(std::string_view host_in,
                                            std::string* err) {

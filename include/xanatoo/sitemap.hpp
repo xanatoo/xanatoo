@@ -9,6 +9,7 @@
 
 #include "xanatoo/types.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -74,7 +75,30 @@ int site_tree_find(const SiteTree& t, std::string_view url);
 // dates), then one Section per directory with its pages as a List.
 Document site_tree_document(const SiteTree& t);
 
+// Does the host have a sitemap at all? Probed cheaply (robots.txt, the
+// first bytes of the sitemap) so the URL-bar button only shows on sites
+// that have one; remembered per host in cache_dir()/sitemap-probes.
+enum class SitemapProbe : uint8_t { Unknown, Yes, No };
+
+// First bytes of a candidate sitemap file: a <urlset> / <sitemapindex>
+// root, or gzip data (*.xml.gz). An HTML "not found" page says no.
+bool looks_like_sitemap(std::string_view head);
+
+struct SitemapProbeRecord {
+  SitemapProbe result = SitemapProbe::Unknown;  // Yes or No once known
+  int64_t checked = 0;                          // unix seconds
+};
+// Cache file lines "host yes|no unix-seconds"; bad lines are skipped.
+std::vector<std::pair<std::string, SitemapProbeRecord>> parse_sitemap_probes(
+    std::string_view text);
+std::string format_sitemap_probes(
+    const std::vector<std::pair<std::string, SitemapProbeRecord>>& rows);
+// A record older than this is asked again (Yes lives longer than No).
+bool sitemap_probe_fresh(const SitemapProbeRecord& r, int64_t now);
+
 #if defined(XANATOO_WEB) && XANATOO_WEB
+// Yes / No for the host; Unknown when the network failed (not cached).
+SitemapProbe sitemap_probe(std::string_view host);
 // Locate and read the host's sitemaps (robots.txt, then /sitemap.xml,
 // /sitemap_index.xml, /wp-sitemap.xml), following indexes up to a cap.
 std::optional<SiteTree> sitemap_fetch_tree(std::string_view host,
