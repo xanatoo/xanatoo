@@ -1,0 +1,185 @@
+# App structure and view rules
+
+Developer notes split out of `AGENTS.md` (which keeps the short list of
+rules). Read this before touching views, panes, tabs, windows, docks,
+navigation, buffers, prompts or drafts.
+
+## Source layout (app = world + systems)
+
+`main()` only creates the SDL window/renderer and loops `run_frame`.
+All state is the plain-data `xanatoo::app::App` (`include/xanatoo/app.hpp`);
+behaviour is free functions ("systems") taking `App&`:
+
+| File | System |
+|------|--------|
+| `app_init.cpp` | build initial world, shutdown |
+| `app_events.cpp` | `handle_event` → one `on_<sdl_event>` per event type |
+| `app_frame.cpp` | frame stages: sync size, relayout, `run_chrome` (UiState + `execute_command`), draw panes, overlays |
+| `app_passage.cpp` | the passage a view shows (`docs/PASSAGES.md`): selectors of the address are view state on `Pane`, `pane_address` / `pane_cut` / `apply_locator`; pure address parsing in `locator.hpp` |
+| `app_chrome.cpp` | status line (`compute_status` is pure data → `draw_status_bar`), floating window frame, client scrollbar |
+| `app_windows.cpp` | floating windows (`FloatWindow`, role = Help/Outline/Backlinks/Sitemap/Page/History/Styles/Document): one z-stack, shared hit-test / drag / resize / scroll / draw |
+| `app_softwin.cpp` / `dock_slices.hpp` | docked panel geometry: adjacent panels in a side column or top/bottom band have persisted relative `dock_share` sizes; drag the separator between them to resize, independently of the dock's outer width/height handle |
+| `search.cpp` | search engines (built-in table + user `search.sexp`), the `search:<engine>:<query>` address, query encoding, Ctrl+L keywords — pure, `search.hpp`, `docs/SEARCH.md` |
+| `search_results.cpp` | JSON search engines → Markdown result documents (`search_results_markdown`, pure; `search_fetch` needs HTTPS): wikipedia / hn / archive / gutendex / lemmy / bluesky mappers; link text is literal in our parser, only brackets are changed |
+| `app_search.cpp` | search bar state (`App::search`, engine = `ViewSettings::search_engine`): show / toggle / select engine / `run_search`; the ImGui row is in `ui.cpp` |
+| `app_softwin.cpp` | window placement: `Dock` (None / Left / Right / Max) for every role — `dock_window` / `undock_window` / `toggle_maximize`, `place_windows` derives docked geometry, `dock_column_w` is what `layout_panes` leaves out |
+| `app_touch.cpp` | touchscreen gestures: tap → click, drag/fling scroll, long-press select, pane text zoom; on a single gallery image pan, swipe to step, pinch zoom |
+| `app_buffers.cpp` / `app_view.cpp` / `app_nav.cpp` / `app_softwin.cpp` / `app_prompts.cpp` / `app_pointer.cpp` | document buffers, scroll/fold/outline, URL history + bookmarks, floating windows, minibuffer, cursor/gamepad |
+| `app_fetch.cpp` | background page fetches (`FetchJob` on a worker thread → `poll_fetches`), page cache, loading indicator |
+| `app_images.cpp` | remote (http/https) images: worker downloads of what `ImageCache` queued → `cache_dir()/images/`, relayout on completion and on finished thumbnails (`poll_images`); cache pruning at startup |
+| `images_thumtoo.cpp` | `image_backend.hpp` over vendored thumtoo (`XANATOO_THUMTOO`): libvips decode, thumbnails composed from the shared tile cache |
+| `app_collection.cpp` | collection view state (layout / size / sort), card and image-link clicks → the page's `//gallery//item:N` |
+| `app_gallery.cpp` / `gallery.cpp` | gallery views (`docs/PASSAGES.md` "Gallery"): `//gallery` grid is a derived Collection in `Pane::source_doc` (built by `apply_gallery_locator` in `app_passage.cpp`, items by pure `gallery_items`); `//gallery//item:N` draws one image into the pane rect with view-local zoom / pan (`Pane::gallery`, `pane_image_view`). Stepping replaces the history entry. No window-wide overlay |
+| `app_drafts.cpp` | unsaved edits → drafts in the revision store (`revstore.hpp`): autosave, restore on load (`attach_draft`), save / revert, `drafts:` page |
+| `app_about.cpp` | `about:` page (Help → About): services, document formats, images (thumtoo / libvips loaders, MuPDF / DjVu) and libraries of this build, gathered from the feature switches and runtime versions; `about_markdown` (`about.hpp`) formats it. New services and user-visible optional deps get an entry there |
+| `app_report.cpp` | startup report on stderr (gamepkgstd `LOGGING.md`): version / build / compiler, features, system, SDL / loader env, each library's runtime vs built-against version and the mapped file, video, renderer + GL strings, controllers with the mapping SDL applies, directories. New libraries get a line there too; choices made while loading (fonts, icons, style, ImGui render path) are logged where they are made, as `topic: details` on stderr |
+| `app_footnotes.cpp` | footnote overlay: notes of on-screen `FootnoteRef` marks laid out in a strip at the pane bottom (`FootnoteOverlay` per pane), click jumps to the note |
+| `app_page.cpp` | Page panel (`WindowRole::Page`, `PagePanel`, Ctrl+Alt+P): navigation / sidebar Chrome (`margin_chrome`, found at any depth) of the focused page as link rows in a dockable tool window; while it is open the panes leave those regions out (`LayoutEngine::set_hide_panel_chrome`, set by `update_page_panel`) |
+| `app_events.cpp` / `app_windows.cpp` / `ui.cpp` | Reply panel (`WindowRole::Reply`): right-click a semantic Message card → Reply…; `App::reply` holds the target and Markdown draft, the ImGui multiline editor overlays the custom dockable frame, and `app_frame.cpp` paints an amber card wash/scrollbar mark. Mock only; never posts or handles accounts (`docs/REPLIES.md`) |
+| `app_revisions.cpp` / `revstore.cpp` | Document Revisions panel (`WindowRole::Revisions`): native dockable panel shows separate working/published histories with snapshot preview, bounded line diff and conflict-checked restore. Restoring appends a new working child, never mutates the original/import source or publication pointer (`docs/REVISIONS.md`) |
+| `app_windows.cpp` / `ui.cpp` | Annotations panel (`WindowRole::Annotations`): **native** dockable `FloatWindow`, not a standalone ImGui window. ImGui only supplies the rich editing widgets clipped to its client area, as with Reply; annotation revisions remain independent of document history |
+| `app_windows.cpp` / `ui.cpp` | Bookmarks panel (`WindowRole::Bookmarks`): native dockable `FloatWindow`, not a standalone ImGui window; the bookmark list and actions are ImGui widgets inside its client. Preferences remains a separate settings dialog, not a dockable work panel |
+| `app_subscriptions.cpp` / `subscriptions.cpp` | Subscriptions panel (`WindowRole::Subscriptions`): a dockable persistent read-only watchlist for changing Lemmy, Nostr, RSS/Atom, HN and Reddit collections. Reuses `FetchPurpose::Subscription` workers with two concurrent checks and staggered automatic requests; compares stable Message IDs for unread counts. `state_dir()/subscriptions.txt` stores the rolling snapshot, counts, intervals and check times. See `docs/SUBSCRIPTIONS.md` |
+| `ui_panel_layers.hpp` / `src/ui_panel_imgui_order.hpp` / `ui.cpp` | Embedded ImGui panels are classified by exact root/child names, drawn after their native FloatWindow, and reordered for ImGui hit-testing in `float_stack` order. Native foreground frames mask obscured editor mouse events; popups/menus/dialogs remain foreground. Old SDL2 fallback renderer keeps one full UI pass. See `docs/UI.md` |
+| `app_certs.cpp` | Gemini certificates: `GeminiSiteCert` per server met this session (`App::gemini_certs`), address-bar site icon (`cert_ui_state`), dockable Certificates panel (`WindowRole::Certificates`; ImGui body in `ui.cpp`) to view, accept / keep a changed certificate, or forget a pin (`gemini_tofu_list` / `gemini_tofu_forget`) |
+| `app_sitemap.cpp` | Sitemap panel (`WindowRole::Sitemap`, `SitemapPanel`): site tree of the focused page's host, one `SiteCache` per host loaded on a worker thread; "Page" opens `sitemap:host` |
+| `app_downloads.cpp` / `download.cpp` | Downloads panel (`WindowRole::Downloads`): MIME/attachment routing, streaming files, live progress/cancel, and persisted completed-file history; `https_get_follow_stream` decodes HTTP transfer chunks without buffering binaries |
+| `http_url.cpp` / `https.cpp` | Scheme-preserving URL parsing/redirect resolution plus HTTP/1.1 over plain TCP (`http://`) or TLS (`https://`); historical `https_*` entry points accept both; parser is tested without network dependencies |
+| `catalog_credentials.cpp` | `catalog-credentials.conf` in `config_dir()` holds the optional IGDB/RAWG/TMDB/Discogs keys; private 0600 Unix writes, environment overrides, loaded per fetch; Edit → Credentials is the unified editor for catalog keys and Reddit OAuth (see `docs/SEARCH.md`) |
+| `reddit_credentials.cpp` | `reddit.conf` in `config_dir()` holds optional app-only OAuth credentials with private Unix permissions; `XANATOO_REDDIT_CLIENT_ID` and `XANATOO_REDDIT_CLIENT_SECRET` override only as a complete pair, read on each fetch; Edit → Credentials provides masked editing, save, clear and official signup links (see `docs/REDDIT.md`) |
+| `app_pages.cpp` | paged reading (`docs/PAGED.md`): `Pane::paged` / `PageView`, `paginate_pane` (called by `layout_panes`, cuts the layout with `paginate.hpp`), `page_turn`, page bar + edge zones + column rules (`draw_page_chrome`, `page_pointer_*`); while `pages.on`, `scroll_y` is a multiple of `stride`, `Pane::h` leaves out the bar, `sb_reserve` is 0 — use `pane_max_scroll`, `spread_at`, `page_goto_spread`, never pixel scrolling |
+| `fixed_layout.cpp` / `fixed_layout_thumtoo.cpp` / `app_pagetiles.cpp` | PDF / DjVu / CBZ / CBR (`docs/FIXED_LAYOUT.md`): `read_fixed_layout` (thumtoo page list, sizes, outline; worker) → `fixed_layout_document` (pure: `NodeKind::Page` nodes in outline Sections). Page sizes come only from thumtoo, never guessed. `app_pagetiles.cpp` draws thumtoo LOD tiles over the raster each frame (`PositionedImage::page_w > 0`); paginate breaks before every page |
+| `math_parse.cpp` / `math_layout.cpp` / `math_font.cpp` | TeX math (`docs/MATH.md`): `parse_math` (TeX subset → `MathNode`), `layout_math` (TeXbook App. G on a `MathFace`, em units, y up) and the FreeType `MathFont` (MATH table, glyph rasters by glyph id, `draw_math`); `FontSet::math_font()` finds the font on first use. A formula is an `InlineKind::Math` span (`src` = TeX, `display`) laid out as an atom by `layout_paragraph` (`PositionedMath`); never draw math through `Font`. Pure parts are unit-tested with a fake `MathFace` |
+| `app_split.cpp` | Trail-mode linked navigation: first-tile links open the second, second-tile links advance the trail; hover previews (`SplitPreview`, only with `ViewSettings::hover_preview`, off by default) |
+| `theme.cpp` / `ui.cpp` | GTK2 Clearlooks-inspired grey and shared native/ImGui palette; yellow BeOS title bars and consistently sized window controls. **Regular panel buttons stay raised; toolbar actions are flat until hover.** Edit Mode (opt-in) and toggles without alternate graphics stay sunken while active (`tool_button(..., latched)` supplies the state *inside* the style stack); Split/Join and empty/filled Bookmark use alternate SVGs under `icons/svg/` and remain flat, including when active. Reload uses opposed green arrows. Native scrollbar thumbs use `theme::draw_scroll_thumb` (separate from button faces) for strong contrast; ImGui uses matching grab colours. `scrollbar_geometry.hpp` shares full-height, arrowless scrollbar thumb mathematics between paint and mouse paths |
+| `style.cpp` | document style sheets (`styles/*.xss`, S-expressions): `DocStyle` roles → layout spacing/fonts/glyph colours + renderer decoration colours; `apply_style` in `app_view.cpp` |
+
+## Views, navigation, buffers, prompts, windows
+
+Document views: `App::panes[kMaxViews]` — slots 0 / 1 are the centre
+(split), document windows own a slot from `kCentreViews` up
+(`FloatWindow::view`, `alloc_view` / `release_view` / `close_doc_window`).
+Every view has its own rect (`Pane::x/y/w/h`, centre rows from
+`place_centre_rows`, windows from `place_windows`), so the whole pane path
+(layout, raster, caret, editing, overlays, footnotes) serves windows too.
+Centre tiling currently has two slots: `App::tile_axis` chooses columns or
+rows; `App::tile_mode` chooses independent or linked Trail. Compare is a
+diff-marked independent pair (`App::diff_mode`), with a wider mode-coloured
+divider and clickable badge. The divider's right-click menu and badge are
+handled by `open_tile_menu`; `tile_divider_rect` and `tile_mode_button_rect`
+are shared by hit-testing and drawing. This is the two-leaf foundation for
+the planned arbitrary tiling tree (`docs/TILING.md`). Session save/restore
+persists axis and relation, with old split sessions mapped to Trail.
+The pure recursive geometry/split/close model is `tile_tree.hpp`: it is
+unit-tested without SDL, and `place_centre_rows` uses its two-leaf adapter.
+Do not equate its capacity for N leaves with N-view application support:
+navigation, hit-testing, windows and sessions still assume centre slots 0/1.
+Compare dividers draw the two-lane overview from `App::diff_overview`;
+`diff_overview_positions` (`diff_overview.hpp`, pure C++20) derives markers
+from document-tree order rather than the virtualized visible layout.
+`tile_diff_track_rect` is the common hit/draw geometry; dragging the track
+scrolls both panes to a normalized position, not an exact aligned hunk.
+`app.focus` may be any live slot; tabs act on `app.centre_focus`. Use
+`focus_view`, `live_views` (never `pi < 2`), `other_pane` (never
+`1 - app.focus`), `pane_at(app, x, y)` and `content_y(app, y, pi)`;
+after replacing a buffer's document call `refresh_views_of_buf`.
+The tab right-click menu allows targeted tear-off; the native document-window
+title context menu moves a specific window back (only `WindowRole::Document`).
+View source projections (`//source-raw`, `//source-sexpr`, `//source-xml`) are
+pane-local and switch in View → View Source; see `docs/UI.md`.
+SDL `DropText` and URL-shaped `DropFile` events navigate the specific view at
+the drop location via `drop_view_at` / `navigate_pane` (`app_events.cpp`), not
+the linked Trail click handler. `drop_url.hpp` parses plain text/URI lists;
+test URL parsing without SDL in `tests/drop_url_tests.cpp`.
+To change a page without moving the view, call `keep_views(app)` before the
+change (it needs the old layout): the top line of each view stays on its
+spot through the next `layout_panes`. To hold another spot, set
+`Pane::view_anchor` from `view_anchor_at` first (pinch: the text between the
+fingers). Pane width changes do this by themselves.
+An address is `base//selector#selector` (`locator.hpp`, `docs/PASSAGES.md`):
+pipes cut the view to a passage, `#` marks one in the whole page. Only the base
+reaches buffers, caches and fetches. Use `pane_address` for what a view shows,
+never `path_of`, where the address is shown or stored.
+Back / Forward are per view (`Pane::nav`): `NavHistoryEntry` keeps the address,
+caret, scroll offset, and source link. Record a shown page with
+`push_nav_history(app, pi, url)`, step with `nav_step`; `sync_nav_history`
+captures the current position and completes deferred restores after fetching.
+`forward_nav_link` feeds the non-document link wash in `draw_pane_overlays`;
+link clicks pass their `NavLink` through `navigate_to_url`; same-document
+anchors use `navigate_anchor_link` so Back can return to the source. `App::visited`
+is only the session log for the History panel. `push_nav_history` additionally
+adds normal visits to the persistent `minibuf_hist_url` ring, shared with the
+location bar's local suggestions (`urlbar_suggestions.hpp`, also matches open
+tabs and bookmarks). Only in Trail mode do the
+centre panes share one trail instead (`App::split_history`, levels = left
+page + pages opened from it on the right): `push_nav_history` forwards to
+it and `nav_step` / `can_nav_step` walk it (`app_split.cpp`). The split trail
+already tracks scroll/selection; `split_history_forward_href` identifies its
+next link for the same wash.
+
+Buffers are addressed by stable `BufferId` (`DocBuffer::id`, never reused,
+`kNoBuffer` = 0): use `buf(app, id)` / `find_buf` / `add_buffer` /
+`remove_buffer` / `close_tab` (`app_buffers.cpp`); never index
+`app.buffers` directly and never hold a `DocBuffer&` across add/remove.
+
+Status-bar prompts are one `Prompt` record (`App::prompt`: `PromptKind`,
+`text`, `text2` for Replace, `node`/`span` for Edit*): open with
+`open_prompt` / `open_search`, close with `close_prompt`, Enter dispatches
+through `commit_prompt` (`app_prompts.cpp`). At most one prompt is active;
+path/URL kinds edit through `App::minibuf` (`prompt_uses_minibuf`), and
+`last_search`/`last_replace` keep a displaced find for F3 / Replace All.
+
+Unsaved edits are never discarded behind a confirmation: before a buffer
+is replaced or dropped call `stash_draft` / `stash_or_confirm` (the latter
+only asks when no store is available). After putting a local file into a
+buffer call `attach_draft` (`add_buffer` / `show_doc_in_pane` do); after
+writing it, `note_saved`. Mark edits with `mark_dirty` / `note_edit`, not
+`dirty = true`. Design and roadmap: `docs/REVISIONS.md`.
+
+Keyboard focus: `App::key_focus` (`KeyFocus::Document/Outline/Backlinks/Sitemap/Page/Styles/Panel`).
+Panels handle plain keys only while `panel_has_keys(app, …)`; opening or
+clicking a panel focuses it, a pane click / jump / unused plain key returns
+focus to the document. Never let a panel consume keys just because it is open.
+Panels without native keys (embedded ImGui panels, Help, Revisions,
+Downloads) share `KeyFocus::Panel` + `App::panel_focus` (`focus_panel`,
+`focus_float`). The lit (yellow) title bar is `float_active(app, w)` for
+every role — never pass a constant `active` to `draw_floating_frame`.
+
+Context menus: `ui.cpp` keeps page-content actions separate from View/Panels
+controls. The location `InputText` has clipboard/address/bookmark actions;
+Back/Forward buttons show nearest-first targets derived from the focused
+pane's `NavHistory`, or `SplitHistory` when split browsing. `NavJump` uses a
+signed offset and must preserve the destination's caret/scroll state.
+
+Windows place one way regardless of role: Left / Right docks are side
+columns that take width from the panes (stacked by `dock_seq`), Top /
+Bottom docks are bands between the columns that take height (side by side
+by `dock_seq`; `dock_band_h`, used by `place_centre_rows`). Dock neighbours
+are sized by `FloatWindow::dock_share`, not forced equal; shared separator
+dragging updates only the adjacent pair. The size per
+side is `App::dock_w[4]` (L, R, T, B). Max overlays the client area; every
+frame has the close box at the title's left edge and the maximize /
+restore box at its right edge, the shade box just left of it
+(`title_close_zone` / `title_max_zone` / `title_shade_zone`). Shade
+(`toggle_shade`, `FloatWindow::shaded`) rolls a *docked* window up to its
+title strip so its neighbours get the room (a band whose panels are all
+shaded shrinks to one strip and the panes get the height); it is greyed out
+for free / maximized windows and cleared when the window leaves its dock.
+Test `float_shaded(w)`, never the raw flag; `draw_floating_frame` returns
+false for a shaded window — draw no client content then.
+Tabs ↔ windows: dragging a tab past the strip (ImGui, `UiCommand::TearTab`
+→ `tear_tab`) opens its buffer in a window (docked at a zone), dragging a
+window title onto the strip (`over_tab_strip`) runs `pop_in_soft`; tab
+reorder is ImGui's own (ids = buffer ids, `ReorderTabs` copies the order
+into `tab_order`). Never add a per-panel
+"docked" flag; set `FloatWindow::dock` through the helpers above.
+See `docs/BRAINSTORM.md` "Views, arrangement, documents" for where tabs /
+split / windows are heading.
+
+Rules: no behaviour on data types; new modal state goes in `App` (group
+related fields into small records like `FloatPanel` / `Hover`); menus,
+toolbar and shortcuts should route through `execute_command`.
+Mouse cursor feedback must use the same hit-test as the action it advertises:
+`float_resize_at` for native panel edges, `dock_split_at` for neighbours,
+and `tile_divider_rect` for centre tiles. ImGui handles its own controls;
+the SDL2 backend must detect external cursor changes to restore its I-beam.

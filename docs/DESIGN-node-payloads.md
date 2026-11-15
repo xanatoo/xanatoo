@@ -94,7 +94,7 @@ now, and it complicates `History` (whole-document snapshots).
   re-assigning payload on `set_kind`.
 - `level` is used both as legacy depth and as a flag; the migration must
   split it into `depth` / `ordered` / `header_cell` explicitly and keep the
-  "soft interop" export behaviour (AGENTS.md "Section tree").
+  "soft interop" export behaviour (`docs/dev/CONTENT.md` "Section tree").
 - Sidestore keys (`section_stable_key`) hash node content; changing which
   fields hold what must not change keys, or saved fold state is lost.
 

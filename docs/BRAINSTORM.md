@@ -344,6 +344,7 @@ From `TODO.md` / recent tips — not repeated in full:
 | `PROPOSAL.md` | Vision: live workspace, stretchtext, relationships |
 | `FORMAT.md` | Concrete markup, sectioning, sexpr, typed links notes |
 | `AGENTS.md` | Agent conventions, feature gates, continuity |
+| `docs/dev/` | Developer notes per area (app structure, content, services, platforms) |
 | `TODO.md` | Tip, status, bundle history, open checklist |
 | `docs/ENVIRONMENT.md` | Build / `nix develop` |
 

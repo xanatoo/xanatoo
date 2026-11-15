@@ -5,7 +5,7 @@ Each page of the file is one `Page` node. Bookmarks, history, sessions,
 the outline, passages and paged reading all work as they do on any other
 page, so a PDF needs no viewer mode of its own.
 
-thumtoo (`external/thumtoo`, see AGENTS.md "Images through thumtoo") does
+thumtoo (`external/thumtoo`, see `docs/dev/CONTENT.md` "Images through thumtoo") does
 all the file work: page lists, page sizes, outlines and rendered tiles. Its
 cache (`$XDG_CACHE_HOME/thumtoo`) is shared with galapix and biltoo, so a
 book opened in one of them is already tiled for the others.
