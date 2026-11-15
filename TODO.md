@@ -8,6 +8,18 @@ Base commit of this work line: `568a91b` (Initial checkin of PROPOSAL.md)
 
 Next bundle number: **348** (this delivery is **347**)
 
+## Status (2026-11-15) — Services menu: Lemmy "All", video and archive
+
+- `lemmy:HOST/` opens the instance's post listing; `?listingType=All`
+  (Lemmy UI's spelling) maps to the API's `type_=All`. The Services entry
+  is now `lemmy:lemmy.world/?listingType=All` (federated, Lemmy's /r/all)
+  instead of `/c/technology`.
+- Services menu gains YouTube (`youtube:@GoogleDevelopers`), PeerTube
+  (`peertube:video.blender.org`) and the Internet Archive (`ia:prelinger`),
+  in their own group before Gemini / Standard Ebooks.
+- Open: "up" from a Lemmy community still leaves for the instance's web
+  page; it could now go to the native `lemmy:HOST/` listing.
+
 ## Status (2026-11-15) — XML titles are `<h>` (XHTML 2 style)
 
 - The XML title tag is now `<h>` instead of `<heading>`; `<heading>` and

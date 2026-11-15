@@ -381,6 +381,8 @@ struct ParsedUrl {
   std::string person;       // from /u/name[@remote.host]
   int64_t post_id = 0;      // from /post/id
   std::string api_path;     // if already /api/v3/...
+  bool front_page = false;  // "/" alone: the instance's post listing
+  std::string listing_type; // ?listingType=All|Local|Subscribed (Lemmy UI)
 };
 
 ParsedUrl parse_lemmy_url(std::string_view s) {
@@ -436,6 +438,23 @@ ParsedUrl parse_lemmy_url(std::string_view s) {
     size_t s0 = ppos + 6;
     out.post_id = std::strtoll(path.c_str() + s0, nullptr, 10);
   }
+
+  out.front_page = path == "/" || path.empty();
+  // Lemmy UI spells the feed choice ?listingType=All; the API calls it type_.
+  for (size_t i = 0; i < query.size();) {
+    size_t amp = query.find('&', i + 1);
+    std::string_view kv = std::string_view(query).substr(
+        i + 1, (amp == std::string::npos ? query.size() : amp) - i - 1);
+    if (starts_with_ci(kv, "listingType=")) {
+      std::string v(kv.substr(12));
+      const std::string lv = ascii_lower(v);
+      if (lv == "all") out.listing_type = "All";
+      else if (lv == "local") out.listing_type = "Local";
+      else if (lv == "subscribed") out.listing_type = "Subscribed";
+    }
+    if (amp == std::string::npos) break;
+    i = amp;
+  }
   return out;
 }
 
@@ -443,7 +462,10 @@ ParsedUrl parse_lemmy_url(std::string_view s) {
 
 std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
   ParsedUrl pu = parse_lemmy_url(url_in);
-  if (pu.origin.empty() || (!is_lemmy_url(url_in) && pu.person.empty())) {
+  // The bare instance ("/") is accepted here but not by is_lemmy_url: only
+  // an explicit lemmy: ref reaches this, never an arbitrary site's root.
+  if (pu.origin.empty() ||
+      (!is_lemmy_url(url_in) && pu.person.empty() && !pu.front_page)) {
     if (err) *err = "not a Lemmy community/post/profile/API URL";
     return std::nullopt;
   }
@@ -462,6 +484,7 @@ std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
               lemmy_query_escape(pu.person) + "&limit=25&sort=New";
   } else {
     api_url = pu.origin + "/api/v3/post/list?limit=25&sort=Hot";
+    if (!pu.listing_type.empty()) api_url += "&type_=" + pu.listing_type;
   }
 
   std::string current = api_url;
@@ -585,6 +608,9 @@ std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
       title = "c/" + pu.community;
     else if (!pu.api_path.empty())
       title = "Lemmy · " + instance;
+    else if (pu.front_page)
+      title = "Lemmy · " + instance +
+              (pu.listing_type.empty() ? "" : " · " + pu.listing_type);
     else if (!posts.empty() && !posts.front().community.empty())
       title = "c/" + posts.front().community;
     else

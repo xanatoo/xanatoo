@@ -5028,6 +5028,12 @@ void test_wikipedia() {
   EXPECT_EQ(native_url_for("https://lemmy.world/c/technology"),
             "lemmy:lemmy.world/c/technology");
   EXPECT_EQ(native_url_for("https://lemmy.world/api/v3/post/list"), "");
+  // The instance front page is native only as an explicit ref; a bare
+  // https:// root stays a web page.
+  EXPECT(is_lemmy_ref("lemmy:lemmy.world/?listingType=All"));
+  EXPECT_EQ(web_url_for("lemmy:lemmy.world/?listingType=All"),
+            "https://lemmy.world/?listingType=All");
+  EXPECT_EQ(native_url_for("https://lemmy.world/?listingType=All"), "");
   EXPECT_EQ(web_url_for("lemmy:programming.dev/post/7"),
             "https://programming.dev/post/7");
   EXPECT_EQ(web_url_for("lemmy:lemmy.world/u/alice@programming.dev"),

@@ -101,6 +101,11 @@ read-only service clients. Every client is read-only: never post or log in.
   (often `Local`) and comments from federated users vanish.
 - Gated by `XANATOO_LEMMY` (default ON; needs OpenSSL).
 - `lemmy:<instance>/c/<community>`, `/u/<person>` and `/post/<id>` refs.
+- `lemmy:<instance>/` is the instance's post listing (the explicit ref only;
+  `is_lemmy_url` keeps rejecting bare site roots). Lemmy UI's
+  `?listingType=All|Local|Subscribed` becomes the API's `type_`;
+  `lemmy:lemmy.world/?listingType=All` is the federated feed (Lemmy's
+  `/r/all`) behind the Services menu entry.
 - Maps posts/comments to Thread + Message nodes. Header slots: [0] author
   profile link, [1] date (`datetime` = ISO instant; posts link it to the
   post), then the vote score as a `role=metadata rel="score"` span, which
