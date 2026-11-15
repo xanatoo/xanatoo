@@ -26,12 +26,56 @@ SourceViewText source_view_text(const Document& doc, SelectorKind kind,
   }
 }
 
+std::vector<NodeId> append_code_blocks(Document& doc, NodeId parent,
+                                       std::string_view text) {
+  std::vector<NodeId> out;
+  auto emit = [&](size_t b, size_t e) {
+    const NodeId n = doc.create(NodeKind::CodeBlock, parent);
+    doc.append_text(n, std::string(text.substr(b, e - b)));
+    out.push_back(n);
+  };
+  size_t start = 0;
+  do {
+    size_t pos = start;  // start of the next line not yet in this block
+    size_t lines = 0;
+    size_t end = text.size();  // block [start, end)
+    size_t next = text.size();  // where the following block begins
+    for (;;) {
+      const size_t eol = text.find('\n', pos);
+      const size_t line_end = eol == std::string_view::npos ? text.size() : eol;
+      if (line_end - start > kCodeBlockBytes) {
+        if (pos > start) {
+          end = pos - 1;  // up to the newline before this line
+          next = pos;
+        } else {
+          // One overlong line: cut it, not inside a UTF-8 sequence.
+          size_t cut = start + kCodeBlockBytes;
+          while (cut > start + 1 &&
+                 (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80)
+            --cut;
+          end = next = cut;
+        }
+        break;
+      }
+      if (eol == std::string_view::npos) break;  // rest fits: last block
+      pos = eol + 1;
+      if (++lines >= kCodeBlockLines && pos < text.size()) {
+        end = eol;
+        next = pos;
+        break;
+      }
+    }
+    emit(start, end);
+    start = next;
+  } while (start < text.size());
+  return out;
+}
+
 Document source_view_document(const SourceViewText& source) {
   Document doc;
   const NodeId root = doc.create(NodeKind::Document);
-  const NodeId code = doc.create(NodeKind::CodeBlock, root);
-  doc.get(code).src = source.language;
-  doc.append_text(code, source.text);
+  for (NodeId code : append_code_blocks(doc, root, source.text))
+    doc.get(code).src = source.language;
   return doc;
 }
 
