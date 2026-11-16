@@ -284,9 +284,10 @@ std::vector<SearchEngine> builtin_table() {
        "https://freeserp.ai/api.php?index=web&q=%s&size=30", "freeserp", "+",
        {"freeserp.ai"}},
       // Firecrawl Keyless: POST JSON, free per-IP daily quota, no signup.
-      // URL template is unused; catalog_get special-cases the kind for POST.
+      // search_plan requires a %s in the template (same pattern as igdb/anilist);
+      // catalog_get overwrites the URL and sends the query in the POST body.
       {"firecrawl", "Firecrawl (keyless)", "fc", "FC",
-       "https://api.firecrawl.dev/v2/search", "firecrawl", "+",
+       "https://api.firecrawl.dev/v2/search?q=%s", "firecrawl", "+",
        {"firecrawl.dev", "api.firecrawl.dev"}},
   };
 }
