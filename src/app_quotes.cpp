@@ -7,7 +7,9 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/ebooks.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/util.hpp"
@@ -355,6 +357,33 @@ void refresh_context_panel(App& app) {
     app.context_jump_link = -1;
   };
   auto load_remote = [&](const std::string& url) {
+    // Remote images never go through fetch_page as HTML — same as navigate.
+    if (xanatoo::is_image_address(url) ||
+        (xanatoo::is_image_url(url) &&
+         (xanatoo::starts_with_ci(url, "http://") ||
+          xanatoo::starts_with_ci(url, "https://")))) {
+      app.context_kind = "Image";
+      app.context_title = url;
+      app.context_meta.clear();
+      app.context_body.clear();
+      app.context_can_jump = false;
+      app.context_jump_pane = -1;
+      app.context_jump_link = -1;
+      set_doc(xanatoo::image_url_document(url), "image:" + url);
+      return;
+    }
+    // Local PDF / DjVu / comic path (rare as "remote" but shared helper).
+    if (xanatoo::is_fixed_layout_path(url)) {
+      app.context_kind = "Page";
+      app.context_title = url;
+      app.context_meta.clear();
+      app.context_body.clear();
+      app.context_can_jump = false;
+      app.context_jump_pane = -1;
+      app.context_jump_link = -1;
+      set_doc(load_doc(app, url), "fixed:" + url);
+      return;
+    }
     if (const CachedPage* c = find_cached_page(app, url)) {
       app.context_kind = "Page";
       app.context_title = c->final_url.empty() ? c->url : c->final_url;
@@ -447,6 +476,18 @@ void refresh_context_panel(App& app) {
             "This format needs an import step and is not previewed in Context.";
         app.context_meta.clear();
         app.context_pending_url.clear();
+        return;
+      }
+      // Local image file: one-image document (ImageCache loads the pixels).
+      if (xanatoo::is_image_url(t.url) || xanatoo::is_image_address(t.url)) {
+        app.context_kind = "Image";
+        app.context_title = t.url;
+        app.context_meta.clear();
+        app.context_body.clear();
+        app.context_can_jump = false;
+        app.context_jump_pane = -1;
+        app.context_jump_link = -1;
+        set_doc(xanatoo::image_url_document(t.url), "image:" + t.url);
         return;
       }
       BufferId bi = find_buffer(app, t.url);

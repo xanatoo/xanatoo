@@ -412,10 +412,12 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     std::string body;
     xanatoo::WebPagesFile pages;
     pages.stop = &out->abandoned;
+    // Always pass `pages` so Preview (Context panel) can open PDF / DjVu /
+    // comics the same way Navigate does. Downloads UI still needs allow_download.
     out->doc = xanatoo::web_fetch(url, &out->error, &out->final_url,
                                   &out->http_status, &body,
                                   allow_download ? out->download.get() : nullptr,
-                                  allow_download ? &pages : nullptr,
+                                  &pages,
                                   out->force_download);
     if (out->doc) out->raw_source = std::move(body);
     // PDF / DjVu / comic answer: open the cached copy as pages; the
