@@ -757,6 +757,30 @@ void layout_help(App& app) {
   app.help_needs_layout = false;
 }
 
+void layout_context(App& app) {
+  if (!app.context_has_doc) return;
+  auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+  (void)cx; (void)cy; (void)ch;
+  float mw = static_cast<float>(std::max(120, cw));
+  app.context_layout = app.layout_engine.layout(app.context_doc, mw);
+  app.context_needs_layout = false;
+  // Scroll so the target node is in view once we have a layout.
+  if (app.context_scroll_to != xanatoo::INVALID_NODE) {
+    xanatoo::Caret caret{app.context_scroll_to, 0, 0};
+    auto cpos = xanatoo::caret_screen_pos(
+        app.context_layout, caret, 0.f,
+        static_cast<float>(app.fonts.regular.line_height()));
+    if (cpos.valid) {
+      auto [cx2, cy2, cw2, ch2] = float_client_rect(app, app.context_win);
+      (void)cx2; (void)cw2;
+      const float view_h = static_cast<float>(std::max(1, ch2));
+      app.context_win.scroll =
+          std::max(0.f, cpos.y - view_h * 0.25f);
+    }
+    app.context_scroll_to = xanatoo::INVALID_NODE;
+  }
+}
+
 std::tuple<int, int, int, int> help_client_rect(App& app) {
   return window_client_rect(app.help.x, app.help.y, app.help.w, app.help.h);
 }

@@ -981,6 +981,9 @@ struct App {
   bool bookmarks_panel_open = false;
   bool context_panel_open = false;
   // Live body of the Context panel (refresh_context_panel).
+  // When context_has_doc is set, the panel draws context_doc with the real
+  // layout engine (same path as Help); otherwise it falls back to the
+  // ImGui text body below.
   std::string context_kind;
   std::string context_title;
   std::string context_body;
@@ -989,6 +992,12 @@ struct App {
   int context_jump_pane = -1;
   long context_jump_link = -1;
   bool context_jump_to_source = true;
+  bool context_has_doc = false;
+  std::string context_source_key;  // identity of what is loaded; skip reload if same
+  xanatoo::Document context_doc;
+  xanatoo::LayoutResult context_layout;
+  bool context_needs_layout = true;
+  xanatoo::NodeId context_scroll_to = xanatoo::INVALID_NODE;
   std::string status_notice;
   Uint32 status_notice_until = 0;
   bool discard_armed = false;  // only without a revision store (no SQLite)
@@ -1252,6 +1261,8 @@ void pop_in_soft(App& app, size_t si);
 void open_browse(App& app, const std::string& path, const std::string& title);
 void ensure_help_doc(App& app);
 void layout_help(App& app);
+void layout_context(App& app);
+void draw_context_window(App& app);
 std::tuple<int, int, int, int> help_client_rect(App& app);
 
 // ---- view ----

@@ -573,7 +573,9 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::Subscriptions:
       return 0.f;  // ImGui list manages its own vertical scrolling.
     case WindowRole::Context:
-      return 0.f;
+      if (app.context_has_doc)
+        return std::max(0.f, app.context_layout.content_height - view_h + 40.f);
+      return 0.f;  // ImGui text fallback
     case WindowRole::Reply:
     case WindowRole::Annotations:
     case WindowRole::NostrExplorer:
@@ -843,8 +845,7 @@ void draw_floats(App& app) {
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Bookmarks);
         break;
       case WindowRole::Context:
-        if (draw_floating_frame(app, *w, "Context", float_active(app, *w)))
-          app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Context);
+        draw_context_window(app);
         break;
       case WindowRole::Subscriptions:
         if (draw_floating_frame(app, *w, "Subscriptions", float_active(app, *w)))

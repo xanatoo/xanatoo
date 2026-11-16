@@ -496,6 +496,7 @@ struct UiState {
   int bookmarks_x = 0, bookmarks_y = 0;
   int bookmarks_w = 0, bookmarks_h = 0;
   bool context_open = false;
+  bool context_has_doc = false;  // real Document+layout; skip ImGui body
   int context_x = 0, context_y = 0, context_w = 0, context_h = 0;
   std::string context_kind;
   std::string context_title;

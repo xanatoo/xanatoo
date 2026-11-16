@@ -419,6 +419,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.context_w = w;
     ui_state.context_h = h;
     refresh_context_panel(app);
+    ui_state.context_has_doc = app.context_has_doc;
     ui_state.context_kind = app.context_kind;
     ui_state.context_title = app.context_title;
     ui_state.context_body = app.context_body;
@@ -724,6 +725,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::NavJump ||
         c == C::GoHome || c == C::GoUp ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleBookmarks ||
+        c == C::ToggleContextPanel ||
         c == C::DownloadAction ||
         c == C::ToggleSubscriptions || c == C::Subscribe ||
         c == C::Unsubscribe || c == C::SubscriptionOpen ||
@@ -1172,8 +1174,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ToggleContextPanel:
       app.context_panel_open = !app.context_panel_open;
       if (app.context_panel_open) {
-        app.key_focus = KeyFocus::Context;
-        
+        focus_float(app, app.context_win);
       } else if (app.key_focus == KeyFocus::Context) {
         app.key_focus = KeyFocus::Document;
       }
@@ -4588,6 +4589,160 @@ void draw_help_window(App& app) {
       const float max_s = std::max(
           0.f, app.help_layout.content_height - static_cast<float>(ch) + 40.f);
       draw_client_scrollbar(app, cx, cy, cw, ch, app.help.scroll, max_s);
+    }
+  }
+}
+
+void draw_context_window(App& app) {
+  if (!app.context_panel_open) return;
+  if (app.context_win.dock == Dock::None) {
+    app.context_win.w = std::max(app.context_win.w, 280);
+    app.context_win.h = std::max(app.context_win.h, 200);
+  }
+  // Title reflects what is being previewed.
+  std::string title = "Context";
+  if (!app.context_kind.empty() && app.context_kind != "Context")
+    title = app.context_kind;
+  if (!app.context_title.empty()) {
+    title += " — ";
+    title += app.context_title.size() > 48
+                 ? app.context_title.substr(0, 45) + "…"
+                 : app.context_title;
+  }
+
+  if (!app.context_has_doc) {
+    // Fall back to the ImGui text body (empty state / external link note).
+    if (draw_floating_frame(app, app.context_win, title,
+                            float_active(app, app.context_win)))
+      app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Context);
+    return;
+  }
+
+  if (app.context_needs_layout) layout_context(app);
+
+  {
+    auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+    float max_s = std::max(
+        0.f, app.context_layout.content_height - static_cast<float>(ch) + 40.f);
+    if (app.context_win.scroll > max_s) app.context_win.scroll = max_s;
+    if (app.context_win.scroll < 0.f) app.context_win.scroll = 0.f;
+  }
+
+  if (!draw_floating_frame(app, app.context_win, title,
+                           float_active(app, app.context_win)))
+    return;
+
+  auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+  SDL_Rect clip{cx, cy, cw, ch};
+  xanatoo::sdl::set_clip_rect(app.sdl, &clip);
+  const float draw_scroll =
+      app.context_win.scroll - static_cast<float>(cy);
+  app.renderer.draw_backdrop(app.context_layout, clip, draw_scroll,
+                             static_cast<float>(cx));
+  app.renderer.draw(app.context_layout, draw_scroll, static_cast<float>(cx));
+
+  // Highlight the source span of the quote currently shown in Context.
+  std::vector<xanatoo::SelRect> source_rects;
+  if (app.context_jump_pane >= 0 && app.context_jump_pane < kMaxViews &&
+      app.context_jump_link >= 0) {
+    Pane& qp = app.panes[app.context_jump_pane];
+    if (DocBuffer* b = find_buf(app, qp.buf)) {
+      const auto& links = quote_links_of(*b);
+      if (static_cast<size_t>(app.context_jump_link) < links.size()) {
+        const xanatoo::QuoteLink& l =
+            links[static_cast<size_t>(app.context_jump_link)];
+        source_rects = xanatoo::selection_rects(
+            app.context_layout, l.source, draw_scroll,
+            app.renderer.glyph_extents());
+        app.renderer.draw_selection(source_rects, static_cast<float>(cx),
+                                    220, 140, 40, 110);
+      }
+    }
+  }
+  xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+
+  {
+    const float max_s = std::max(
+        0.f, app.context_layout.content_height - static_cast<float>(ch) + 40.f);
+    draw_client_scrollbar(app, cx, cy, cw, ch, app.context_win.scroll, max_s);
+  }
+
+  // Connector line between the quote in the main pane and its source in
+  // the Context panel. Soft orange curve so the relation is obvious without
+  // fighting the text.
+  if (!source_rects.empty() && app.context_jump_pane >= 0 &&
+      app.context_jump_pane < kMaxViews && app.context_jump_link >= 0) {
+    Pane& qp = app.panes[app.context_jump_pane];
+    if (DocBuffer* b = find_buf(app, qp.buf)) {
+      const auto& links = quote_links_of(*b);
+      if (static_cast<size_t>(app.context_jump_link) < links.size()) {
+        const xanatoo::QuoteLink& l =
+            links[static_cast<size_t>(app.context_jump_link)];
+        const float py = static_cast<float>(qp.y);
+        const float ox = static_cast<float>(qp.x);
+        const float q_draw_scroll = qp.scroll_y - py;
+        const auto quote_rects = xanatoo::selection_rects(
+            qp.layout, l.quote, q_draw_scroll, app.renderer.glyph_extents());
+        if (!quote_rects.empty()) {
+          // Representative points: mid-right of the first quote rect,
+          // mid-left of the first source rect (already in screen space for y;
+          // x needs the origin applied).
+          const auto& qr = quote_rects.front();
+          const auto& sr = source_rects.front();
+          const float x0 = qr.x + ox + qr.w;
+          const float y0 = qr.y + qr.h * 0.5f;
+          const float x1 = sr.x + static_cast<float>(cx);
+          const float y1 = sr.y + sr.h * 0.5f;
+          // Clip-ish: only draw when both ends look on-screen.
+          const bool ok0 = y0 >= py && y0 <= py + static_cast<float>(qp.h) &&
+                           x0 >= ox && x0 <= ox + static_cast<float>(qp.w);
+          const bool ok1 = y1 >= static_cast<float>(cy) &&
+                           y1 <= static_cast<float>(cy + ch) &&
+                           x1 >= static_cast<float>(cx) &&
+                           x1 <= static_cast<float>(cx + cw);
+          if (ok0 && ok1) {
+            SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 160);
+            // Cubic-ish polyline: control points pull toward a mid gutter.
+            const float mx = (x0 + x1) * 0.5f;
+            const float c0x = x0 + (mx - x0) * 0.55f;
+            const float c1x = x1 - (x1 - mx) * 0.55f;
+            const int steps = 24;
+            float px = x0, pyy = y0;
+            for (int i = 1; i <= steps; ++i) {
+              const float t = static_cast<float>(i) / static_cast<float>(steps);
+              const float u = 1.f - t;
+              // Bezier through (x0,y0), (c0x,y0), (c1x,y1), (x1,y1)
+              const float bx =
+                  u * u * u * x0 + 3.f * u * u * t * c0x +
+                  3.f * u * t * t * c1x + t * t * t * x1;
+              const float by =
+                  u * u * u * y0 + 3.f * u * u * t * y0 +
+                  3.f * u * t * t * y1 + t * t * t * y1;
+              xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
+                                      static_cast<int>(pyy),
+                                      static_cast<int>(bx),
+                                      static_cast<int>(by));
+              // Slight thickness: a parallel stroke.
+              xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
+                                      static_cast<int>(pyy) + 1,
+                                      static_cast<int>(bx),
+                                      static_cast<int>(by) + 1);
+              px = bx;
+              pyy = by;
+            }
+            // End caps: small dots at each anchor.
+            auto dot = [&](float x, float y) {
+              SDL_Rect r{static_cast<int>(x) - 2, static_cast<int>(y) - 2, 5, 5};
+              xanatoo::sdl::fill_rect(app.sdl, &r);
+            };
+            SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 200);
+            dot(x0, y0);
+            dot(x1, y1);
+            SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
+          }
+        }
+      }
     }
   }
 }

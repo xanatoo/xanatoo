@@ -3765,7 +3765,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
 
 
   // ---- Context / transclusion source ----
-  if (state.context_open &&
+  // When a real Document is loaded, draw_context_window renders it natively.
+  if (state.context_open && !state.context_has_doc &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Context))) {
     ImGui::SetNextWindowPos(ImVec2(float(state.context_x + 3),
                                   float(state.context_y + 3)));

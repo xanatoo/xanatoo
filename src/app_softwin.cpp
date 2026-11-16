@@ -138,6 +138,7 @@ std::vector<FloatWindow*> dock_column(App& app, Dock side) {
 // Move / resize; a new width lays the window's content out again.
 void set_geom(App& app, FloatWindow& w, int x, int y, int ww, int hh) {
   if (w.w != ww && w.role == WindowRole::Help) app.help_needs_layout = true;
+  if (w.w != ww && w.role == WindowRole::Context) app.context_needs_layout = true;
   w.x = x;
   w.y = y;
   w.w = ww;
