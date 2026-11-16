@@ -2508,6 +2508,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleStylesPanel;
       if (ImGui::MenuItem("Annotations", nullptr, state.annotations_panel_open))
         cmd = UiCommand::ToggleAnnotationsPanel;
+      if (ImGui::MenuItem("Context", nullptr, state.context_open))
+        cmd = UiCommand::ToggleContextPanel;
       if (ImGui::MenuItem("Document revisions", nullptr,
                           state.revisions_panel_open,
                           state.can_show_revisions || state.revisions_panel_open))
