@@ -45,6 +45,7 @@ enum class UiCommand {
   BookmarkPosition,  // bookmark the caret position in the page
   RemoveBookmark,  // remove current (or arg) from bookmarks
   ToggleBookmarks, // Bookmarks manager panel
+  ToggleContextPanel, // Panels → Context (quote / transclusion source)
   ToggleSubscriptions, // watched feeds / communities / accounts
   Subscribe, // add a source by address (empty = current page)
   Unsubscribe, // remove subscription by address
@@ -99,6 +100,7 @@ enum class UiCommand {
                    // copy-path / copy-url / cancel / forget
   OpenReply,       // right-clicked Message: start a mock reply draft
   JumpQuote,       // context menu quote link; arg = index into the items
+  ContextJump,     // Context panel: jump to hovered quote source
   EditReply,       // arg = Markdown currently in the reply editor
   SendReply,       // mock only: never sends to an external service
   // Tabs / MDI
@@ -493,6 +495,16 @@ struct UiState {
   bool bookmarks_open = false;
   int bookmarks_x = 0, bookmarks_y = 0;
   int bookmarks_w = 0, bookmarks_h = 0;
+  bool context_open = false;
+  int context_x = 0, context_y = 0, context_w = 0, context_h = 0;
+  std::string context_kind;
+  std::string context_title;
+  std::string context_body;
+  std::string context_meta;
+  bool context_can_jump = false;
+  int context_jump_pane = -1;
+  long context_jump_link = -1;
+  bool context_jump_to_source = true;
   bool current_bookmarked = false;
   bool page_bookmarked = false;
   int page_bookmarks = 0;  // bookmarks of passages inside the focused page

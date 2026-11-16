@@ -38,6 +38,8 @@ std::pair<int, int> min_size(const FloatWindow& w) {
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
       return {240, 180};
+    case WindowRole::Context:
+      return {280, 200};
     case WindowRole::Reply:
       return {300, 240};
     case WindowRole::Annotations:
@@ -117,6 +119,11 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Bookmarks:
       app.bookmarks_panel_open = false;
+      break;
+    case WindowRole::Context:
+      app.context_panel_open = false;
+      if (app.key_focus == KeyFocus::Context)
+        app.key_focus = KeyFocus::Document;
       break;
     case WindowRole::Subscriptions:
       app.subscriptions_panel_open = false;
@@ -310,6 +317,7 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
       mx >= cx + cw - sb_w && mx <= cx + cw + 2 && my >= cy && my <= cy + ch;
   if (in_sb && w.role != WindowRole::Styles &&
       w.role != WindowRole::Bookmarks &&
+      w.role != WindowRole::Context &&
       w.role != WindowRole::Subscriptions &&
       w.role != WindowRole::Reply &&
       w.role != WindowRole::Annotations &&
@@ -351,6 +359,8 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
       break;  // ImGui owns the form widgets inside the native panel.
     case WindowRole::Bookmarks:
       break;  // ImGui owns the bookmark list inside the native panel.
+    case WindowRole::Context:
+      break;  // ImGui owns the context body inside the native panel.
     case WindowRole::Subscriptions:
       break;  // ImGui owns subscription controls in its native window.
     case WindowRole::NostrExplorer:
@@ -389,6 +399,7 @@ KeyFocus float_key_focus(const FloatWindow& w) {
     case WindowRole::History: return KeyFocus::History;
     case WindowRole::Styles: return KeyFocus::Styles;
     case WindowRole::StyleManager: return KeyFocus::StyleManager;
+    case WindowRole::Context: return KeyFocus::Context;
     case WindowRole::Document: return KeyFocus::Document;
     default: return KeyFocus::Panel;
   }
@@ -428,6 +439,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.styles_panel_open) st.push_back(&app.styles_win);
   if (app.styles_manager_panel_open) st.push_back(&app.styles_manager_win);
   if (app.bookmarks_panel_open) st.push_back(&app.bookmarks_win);
+  if (app.context_panel_open) st.push_back(&app.context_win);
   if (app.subscriptions_panel_open) st.push_back(&app.subscriptions_win);
   if (app.help_mode) st.push_back(&app.help);
   for (auto& sw : app.soft_wins) st.push_back(&sw);
@@ -516,6 +528,8 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
       return window_client_rect(w.x, w.y, w.w, w.h);
+    case WindowRole::Context:
+      return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Downloads:
     case WindowRole::Reply:
     case WindowRole::Annotations:
@@ -558,6 +572,8 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
       return 0.f;  // ImGui list manages its own vertical scrolling.
+    case WindowRole::Context:
+      return 0.f;
     case WindowRole::Reply:
     case WindowRole::Annotations:
     case WindowRole::NostrExplorer:
@@ -734,6 +750,7 @@ bool float_wheel(App& app, int mx, int my, int wheel_y) {
       w->role == WindowRole::Styles ||
       w->role == WindowRole::StyleManager ||
       w->role == WindowRole::Bookmarks ||
+      w->role == WindowRole::Context ||
       w->role == WindowRole::Subscriptions ||
       w->role == WindowRole::NostrExplorer ||
       w->role == WindowRole::LemmyExplorer ||
@@ -824,6 +841,10 @@ void draw_floats(App& app) {
       case WindowRole::Bookmarks:
         if (draw_floating_frame(app, *w, "Bookmarks", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Bookmarks);
+        break;
+      case WindowRole::Context:
+        if (draw_floating_frame(app, *w, "Context", float_active(app, *w)))
+          app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Context);
         break;
       case WindowRole::Subscriptions:
         if (draw_floating_frame(app, *w, "Subscriptions", float_active(app, *w)))

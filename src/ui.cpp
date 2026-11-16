@@ -3761,6 +3761,47 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::End();
   }
 
+
+  // ---- Context / transclusion source ----
+  if (state.context_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Context))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.context_x + 3),
+                                  float(state.context_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.context_w - 6)),
+                                   float(std::max(1, state.context_h - 6))));
+    constexpr ImGuiWindowFlags ctx_flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
+    if (ImGui::Begin("##context_panel_body", nullptr, ctx_flags)) {
+      if (!state.context_kind.empty())
+        ImGui::TextUnformatted(state.context_kind.c_str());
+      else
+        ImGui::TextDisabled("Context");
+      if (!state.context_title.empty()) {
+        ImGui::Spacing();
+        ImGui::TextWrapped("%s", state.context_title.c_str());
+      }
+      ImGui::Separator();
+      ImGui::BeginChild("##context_body", ImVec2(0, -28), false,
+                        ImGuiWindowFlags_HorizontalScrollbar);
+      if (!state.context_body.empty())
+        ImGui::TextWrapped("%s", state.context_body.c_str());
+      else
+        ImGui::TextDisabled("Nothing under the pointer.");
+      if (!state.context_meta.empty()) {
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s", state.context_meta.c_str());
+      }
+      ImGui::EndChild();
+      if (state.context_can_jump) {
+        if (ImGui::Button("Jump to source"))
+          cmd = UiCommand::ContextJump;
+      }
+    }
+    ImGui::End();
+  }
+
   // ---- Subscriptions: changing remote feeds (distinct from static bookmarks) ----
   if (state.subscriptions_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Subscriptions))) {

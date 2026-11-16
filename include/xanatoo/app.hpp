@@ -370,7 +370,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
-  Annotations, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
+  Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
   Subscriptions, Certificates, Document
 };
 
@@ -382,6 +382,7 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::Bookmarks: return UiPanelLayer::Bookmarks;
     case WindowRole::Subscriptions: return UiPanelLayer::Subscriptions;
     case WindowRole::Annotations: return UiPanelLayer::Annotations;
+    case WindowRole::Context: return UiPanelLayer::Context;
     case WindowRole::NostrExplorer: return UiPanelLayer::NostrExplorer;
     case WindowRole::NostrAccounts: return UiPanelLayer::NostrAccounts;
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
@@ -748,7 +749,7 @@ struct StatusLine {
 // Panel: a panel without native keys of its own (embedded ImGui panels, Help,
 // Revisions, Downloads) is the active window; which one is App::panel_focus.
 enum class KeyFocus : uint8_t {
-  Document, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Panel
+  Document, Outline, Backlinks, Sitemap, Page, History, Styles, Context, StyleManager, Panel
 };
 
 // The single active status-bar prompt (at most one at a time).
@@ -978,6 +979,16 @@ struct App {
   bool preferences_open = false;  // Edit → Preferences (ImGui window)
   bool credentials_open = false;  // Edit → Credentials (ImGui window)
   bool bookmarks_panel_open = false;
+  bool context_panel_open = false;
+  // Live body of the Context panel (refresh_context_panel).
+  std::string context_kind;
+  std::string context_title;
+  std::string context_body;
+  std::string context_meta;
+  bool context_can_jump = false;
+  int context_jump_pane = -1;
+  long context_jump_link = -1;
+  bool context_jump_to_source = true;
   std::string status_notice;
   Uint32 status_notice_until = 0;
   bool discard_armed = false;  // only without a revision store (no SQLite)
@@ -1036,6 +1047,7 @@ struct App {
   FloatWindow styles_manager_win =
       make_float_panel(WindowRole::StyleManager, 200, 120, 560, 560);
   FloatWindow bookmarks_win = make_float_panel(WindowRole::Bookmarks, 130, 145, 460, 400);
+  FloatWindow context_win = make_float_panel(WindowRole::Context, 160, 180, 420, 360);
   FloatWindow subscriptions_win = make_float_panel(WindowRole::Subscriptions, 170, 155, 590, 480);
   FloatWindow downloads_win = make_float_panel(WindowRole::Downloads, 120, 160, 520, 380);
   FloatWindow reply_win = make_float_panel(WindowRole::Reply, 170, 170, 490, 350);
@@ -1392,6 +1404,8 @@ inline bool panel_has_keys(const App& app, KeyFocus panel) {
       return app.styles_panel_open;
     case KeyFocus::StyleManager:
       return app.styles_manager_panel_open;
+    case KeyFocus::Context:
+      return app.context_panel_open;
     default:
       return true;
   }
@@ -1544,6 +1558,8 @@ void collect_context_quotes(App& app, Pane& p, std::optional<xanatoo::Caret> at)
 // Jump view `pi` along quote link `link` (to its original or to the quote),
 // marking the target; Back returns.
 void jump_quote(App& app, int pi, size_t link, bool to_source);
+// Context panel: fill UiState from hover (quote / transclusion source).
+void refresh_context_panel(App& app);
 std::string quote_tooltip(App& app, int pi, size_t link);
 void draw_quote_marks(App& app, int pi, float ox, float py, float draw_scroll);
 // Select the passage of bookmark `address` in view `pi` and scroll to it.

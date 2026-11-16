@@ -269,4 +269,93 @@ void draw_quote_marks(App& app, int pi, float ox, float py,
   }
 }
 
+void refresh_context_panel(App& app) {
+  app.context_kind.clear();
+  app.context_title.clear();
+  app.context_body.clear();
+  app.context_meta.clear();
+  app.context_can_jump = false;
+  app.context_jump_pane = -1;
+  app.context_jump_link = -1;
+  app.context_jump_to_source = true;
+
+  // Prefer an explicit quote-link hover (margin arrow or quote text).
+  if (app.hover.quote >= 0 && app.hover.quote_pane >= 0 &&
+      app.hover.quote_pane < static_cast<int>(app.panes.size())) {
+    const int pi = app.hover.quote_pane;
+    Pane& p = app.panes[pi];
+    DocBuffer* b = quote_buffer(app, p);
+    if (!b) return;
+    const auto& links = quote_links_of(*b);
+    if (static_cast<size_t>(app.hover.quote) >= links.size()) return;
+    const xanatoo::QuoteLink& l = links[static_cast<size_t>(app.hover.quote)];
+    const xanatoo::Document& d = b->doc;
+    app.context_kind = "Quote source";
+    app.context_title = "Quoted from " + author_of(d, l.source_msg);
+    if (l.via_quote)
+      app.context_title += " (who also quoted it)";
+    // Source message body with the matched span emphasized as plain text.
+    std::string source = xanatoo::selected_text(d, l.source);
+    std::string quote = xanatoo::selected_text(d, l.quote);
+    // Surrounding message context: plain_text of the whole source message.
+    std::string message = xanatoo::plain_text(d, l.source_msg);
+    if (message.size() > 1200) {
+      // Prefer a window around the match inside the message.
+      size_t at = message.find(source.substr(0, std::min<size_t>(source.size(), 40)));
+      if (at == std::string::npos) at = 0;
+      size_t begin = at > 180 ? at - 180 : 0;
+      size_t end = std::min(message.size(), at + source.size() + 220);
+      app.context_body = (begin ? "…" : "") +
+                         message.substr(begin, end - begin) +
+                         (end < message.size() ? "…" : "");
+    } else {
+      app.context_body = message.empty() ? source : message;
+    }
+    if (app.context_body.empty()) app.context_body = source;
+    if (l.score < 1.f)
+      app.context_meta = "Approximate match — the quote wording differs";
+    else if (l.via_quote)
+      app.context_meta = "Original is outside this thread";
+    else
+      app.context_meta = "Exact match in this thread";
+    if (!quote.empty() && quote.size() < 200) {
+      app.context_meta += "\nQuote: “" + quote + "”";
+    }
+    app.context_can_jump = true;
+    app.context_jump_pane = pi;
+    app.context_jump_link = app.hover.quote;
+    app.context_jump_to_source = true;
+    return;
+  }
+
+  // Transclude node under the pointer: show its target label and embedded text.
+  if (app.hover.transclude != xanatoo::INVALID_NODE &&
+      app.hover.transclude_pane >= 0 &&
+      app.hover.transclude_pane < static_cast<int>(app.panes.size())) {
+    Pane& p = app.panes[app.hover.transclude_pane];
+    const xanatoo::Document& d = doc_of(app, p);
+    const xanatoo::Node& n = d.get(app.hover.transclude);
+    app.context_kind = "Transclusion";
+    app.context_title = n.src.empty() ? std::string("(unnamed target)") : n.src;
+    if (!n.summary.empty())
+      app.context_meta = "Excerpt: " + n.summary;
+    // Prefer laid-out transclude children / resolved text node.
+    std::string body = xanatoo::plain_text(d, app.hover.transclude);
+    if (body.empty() && !app.hover.transclude_src.empty())
+      body = app.hover.transclude_src;
+    if (body.size() > 1500)
+      body = body.substr(0, 1500) + "…";
+    app.context_body = body.empty()
+                           ? "No resolved text for this transclusion yet."
+                           : body;
+    return;
+  }
+
+  app.context_kind = "Context";
+  app.context_body =
+      "Hover a quote arrow or a quoted passage in a thread to see its "
+      "source message here. Transclusions show their target text.";
+}
+
+
 }  // namespace xanatoo::app

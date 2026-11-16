@@ -1081,6 +1081,29 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       app.hover.bookmark_pane = -1;
       app.hover.quote = quote_icon_at(app, hp, lx, my);
       app.hover.quote_pane = app.hover.quote >= 0 ? hover_pane : -1;
+      // Also treat the pointer over quoted text (or its source underline) as
+      // a quote hover so the Context panel can follow without the margin arrow.
+      if (app.hover.quote < 0) {
+        if (auto hit = xanatoo::hit_test(hp.layout, lx, my, hp.scroll_y)) {
+          DocBuffer* qb = find_buf(app, hp.buf);
+          if (qb && !hp.source_doc && hp.layout_buf == hp.buf) {
+            const auto& links = quote_links_of(*qb);
+            const xanatoo::Document& qd = qb->doc;
+            for (size_t qi = 0; qi < links.size(); ++qi) {
+              const auto& ql = links[qi];
+              auto in = [&](const xanatoo::Selection& s) {
+                return xanatoo::caret_cmp(qd, s.anchor, *hit) <= 0 &&
+                       xanatoo::caret_cmp(qd, *hit, s.focus) <= 0;
+              };
+              if (in(ql.quote) || in(ql.source)) {
+                app.hover.quote = static_cast<long>(qi);
+                app.hover.quote_pane = hover_pane;
+                break;
+              }
+            }
+          }
+        }
+      }
       app.hover.annotation.clear();
       app.hover.annotation_pane = -1;
       app.hover.chrome_notice = on_chrome_notice(hp, lx, my);
@@ -1546,6 +1569,19 @@ static bool handle_page_key(App& app, const SDL_Event& ev, bool ctrl,
 
 // The embedded ImGui editor owns selection, arrows and Enter; only the
 // native-panel Escape close shortcut remains here.
+static bool handle_context_key(App& app, const SDL_Event& ev, bool ctrl,
+                               bool alt) {
+  (void)ctrl;
+  (void)alt;
+  if (!panel_has_keys(app, KeyFocus::Context)) return false;
+  if (xanatoo::sdl::keycode(ev) == SDLK_ESCAPE) {
+    app.context_panel_open = false;
+    app.key_focus = KeyFocus::Document;
+    return true;
+  }
+  return false;
+}
+
 static bool handle_styles_key(App& app, const SDL_Event& ev, bool ctrl,
                               bool alt) {
   (void)ctrl;
@@ -1993,6 +2029,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (!status_prompt && handle_page_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;
+  if (!status_prompt && handle_context_key(app, ev, ctrl, alt)) return;
   // A panel whose keys ImGui did not take: the key goes to the document.
   if (!status_prompt && app.key_focus == KeyFocus::Panel)
     panel_key_unused(app, ev, ctrl, alt);

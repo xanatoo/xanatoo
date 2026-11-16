@@ -11,7 +11,7 @@ namespace xanatoo {
 // FloatWindows. Children use ImGui's "parent/child_ID" window naming scheme.
 // Menus, tooltips and popups have their own windows and must remain foreground.
 enum class UiPanelLayer { Chrome, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
-                          Annotations,
+                          Annotations, Context,
                           NostrExplorer, NostrAccounts, LemmyExplorer, Certificates };
 
 // Bit of `layer` in a set of embedded panels (UiState::shaded_panels).
@@ -27,6 +27,7 @@ inline const char* ui_panel_root(UiPanelLayer layer) {
     case UiPanelLayer::Styles: return "##styles_panel_body";
     case UiPanelLayer::StyleManager: return "##style_manager_body";
     case UiPanelLayer::Annotations: return "##annotation_panel_body";
+    case UiPanelLayer::Context: return "##context_panel_body";
     case UiPanelLayer::NostrExplorer: return "##nostr_explorer_body";
     case UiPanelLayer::NostrAccounts: return "##nostr_accounts_body";
     case UiPanelLayer::LemmyExplorer: return "##lemmy_explorer_body";
@@ -48,7 +49,7 @@ inline bool ui_panel_obscured(UiPanelLayer hovered,
 inline UiPanelLayer ui_panel_layer(std::string_view owner) {
   constexpr UiPanelLayer panels[] = {
     UiPanelLayer::Reply, UiPanelLayer::Bookmarks, UiPanelLayer::Subscriptions, UiPanelLayer::Styles,
-    UiPanelLayer::StyleManager, UiPanelLayer::Annotations,
+    UiPanelLayer::StyleManager, UiPanelLayer::Annotations, UiPanelLayer::Context,
     UiPanelLayer::NostrExplorer, UiPanelLayer::NostrAccounts,
     UiPanelLayer::LemmyExplorer, UiPanelLayer::Certificates,
   };

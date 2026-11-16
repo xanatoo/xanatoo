@@ -11,6 +11,7 @@ int main() {
   assert(ui_panel_layer("##reply_editor") == UiPanelLayer::Reply);
   assert(ui_panel_layer("##bookmarks_panel_body") == UiPanelLayer::Bookmarks);
   assert(ui_panel_layer("##styles_panel_body") == UiPanelLayer::Styles);
+  assert(ui_panel_layer("##context_panel_body") == UiPanelLayer::Context);
   assert(ui_panel_layer("##styles_panel_body/##styles_list_12345678") == UiPanelLayer::Styles);
   assert(ui_panel_layer("##style_manager_body") == UiPanelLayer::StyleManager);
   assert(ui_panel_layer("##style_manager_body/##style_manager_list") == UiPanelLayer::StyleManager);

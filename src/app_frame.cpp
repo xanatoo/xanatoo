@@ -404,12 +404,29 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.styles_manager_h = h;
   }
   ui_state.bookmarks_open = app.bookmarks_panel_open;
+  ui_state.context_open = app.context_panel_open;
   if (app.bookmarks_panel_open) {
     auto [x, y, w, h] = float_client_rect(app, app.bookmarks_win);
     ui_state.bookmarks_x = x;
     ui_state.bookmarks_y = y;
     ui_state.bookmarks_w = w;
     ui_state.bookmarks_h = h;
+  }
+  if (app.context_panel_open) {
+    auto [x, y, w, h] = float_client_rect(app, app.context_win);
+    ui_state.context_x = x;
+    ui_state.context_y = y;
+    ui_state.context_w = w;
+    ui_state.context_h = h;
+    refresh_context_panel(app);
+    ui_state.context_kind = app.context_kind;
+    ui_state.context_title = app.context_title;
+    ui_state.context_body = app.context_body;
+    ui_state.context_meta = app.context_meta;
+    ui_state.context_can_jump = app.context_can_jump;
+    ui_state.context_jump_pane = app.context_jump_pane;
+    ui_state.context_jump_link = app.context_jump_link;
+    ui_state.context_jump_to_source = app.context_jump_to_source;
   }
   ui_state.bookmarks = app.bookmarks;
   ui_state.subscriptions_open = app.subscriptions_panel_open;
@@ -752,7 +769,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::DownloadUrl || c == C::ConfirmDownload ||
         c == C::DownloadToFolder || c == C::CancelDownload ||
         c == C::OpenReply || c == C::EditReply || c == C::SendReply ||
-        c == C::JumpQuote ||
+        c == C::JumpQuote || c == C::ContextJump ||
         c == C::Find || c == C::ToggleSplit || c == C::ToggleTrail ||
         c == C::TilesIndependent || c == C::TilesTrail ||
         c == C::TilesCompare || c == C::TilesColumns || c == C::TilesRows ||
@@ -800,6 +817,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       jump_quote(app, app.focus, item.link, item.to_source);
       break;
     }
+    case C::ContextJump:
+      if (app.context_can_jump && app.context_jump_pane >= 0 &&
+          app.context_jump_link >= 0)
+        jump_quote(app, app.context_jump_pane,
+                   static_cast<size_t>(app.context_jump_link),
+                   app.context_jump_to_source);
+      break;
     case C::OpenReply: {
       const xanatoo::NodeId id = app.context_reply_node;
       if (app.context_reply_buffer != p.buf ||
@@ -1144,6 +1168,15 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ToggleBookmarks:
       app.bookmarks_panel_open = !app.bookmarks_panel_open;
       if (app.bookmarks_panel_open) focus_panel(app, WindowRole::Bookmarks);
+      break;
+    case C::ToggleContextPanel:
+      app.context_panel_open = !app.context_panel_open;
+      if (app.context_panel_open) {
+        app.key_focus = KeyFocus::Context;
+        
+      } else if (app.key_focus == KeyFocus::Context) {
+        app.key_focus = KeyFocus::Document;
+      }
       break;
     case C::ToggleSubscriptions:
       app.subscriptions_panel_open = !app.subscriptions_panel_open;

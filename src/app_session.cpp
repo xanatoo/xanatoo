@@ -38,7 +38,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 17> panels(App& app) {
+std::array<PanelRef, 18> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -49,6 +49,7 @@ std::array<PanelRef, 17> panels(App& app) {
            {"style-manager", &app.styles_manager_win,
             app.styles_manager_panel_open},
            {"bookmarks", &app.bookmarks_win, app.bookmarks_panel_open},
+           {"context", &app.context_win, app.context_panel_open},
            {"subscriptions", &app.subscriptions_win, app.subscriptions_panel_open},
            {"downloads", &app.downloads_win, app.downloads_panel_open},
            {"annotations", &app.annotation_win, app.annotation_panel_open},
@@ -347,6 +348,8 @@ void restore_session(App& app) {
       app.styles_manager_panel_open = true;
     if (get("bookmarks.open") && *get("bookmarks.open") == "1")
       app.bookmarks_panel_open = true;
+    if (get("context.open") && *get("context.open") == "1")
+      app.context_panel_open = true;
     if (get("subscriptions.open") && *get("subscriptions.open") == "1")
       app.subscriptions_panel_open = true;
     if (get("downloads.open") && *get("downloads.open") == "1")
