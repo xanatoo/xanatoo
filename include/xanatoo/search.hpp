@@ -113,9 +113,11 @@ std::string search_target(std::string_view ref,
                           const std::vector<SearchEngine>& engines);
 
 // "w electron" with keyword w → the search address. Empty unless the first
-// word is an engine keyword and a query follows.
+// word is an engine keyword and a query follows. The special keyword "?" uses
+// default_engine (the Preferences / search-bar default) when it is non-empty.
 std::string search_from_keyword(std::string_view text,
-                                const std::vector<SearchEngine>& engines);
+                                const std::vector<SearchEngine>& engines,
+                                std::string_view default_engine = {});
 
 // The engine that searches the service an address belongs to: the engine of
 // a search: address, else the longest matching `sites` entry. Empty when no

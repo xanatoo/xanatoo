@@ -4680,6 +4680,14 @@ void test_search() {
   EXPECT_EQ(search_from_keyword("zz xanadu", eng), "");  // no such keyword
   EXPECT_EQ(search_from_keyword("ia prelinger", eng), "search:archive:prelinger");
   EXPECT_EQ(search_from_keyword("https://x.org/a b", eng), "");
+  // "?" is an alias for the default engine (Preferences / search bar).
+  EXPECT_EQ(search_from_keyword("? xanadu", eng, "wikipedia"),
+            "search:wikipedia:xanadu");
+  EXPECT_EQ(search_from_keyword("?xanadu", eng, "arxiv"),
+            "search:arxiv:xanadu");
+  EXPECT_EQ(search_from_keyword("?", eng, "wikipedia"), "");  // no query
+  EXPECT_EQ(search_from_keyword("? xanadu", eng, ""), "");     // no default
+  EXPECT_EQ(search_from_keyword("? xanadu", eng, "nope"), ""); // unknown default
 
   // The user's file: replaces by id, adds new ones, skips bad entries.
   std::vector<std::string> warn;

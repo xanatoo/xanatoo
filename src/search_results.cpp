@@ -660,6 +660,26 @@ std::string map_freeserp(const SearchPlan& plan, std::string_view json) {
   return md;
 }
 
+// Firecrawl Keyless: free per-IP daily quota, no API key
+// (https://www.firecrawl.dev/blog/firecrawl-keyless-launch).
+std::string map_firecrawl(const SearchPlan& plan, std::string_view json) {
+  std::string md = header("Firecrawl", plan);
+  const std::string data = std::string(json_object_after_key(json, "data"));
+  const auto hits = json_object_array_after_key(data, "web");
+  if (hits.empty()) return no_results("Firecrawl", plan);
+  for (const auto& hit : hits) {
+    const std::string top = json_top_level(hit);
+    const std::string url = json_str_field(top, "url");
+    const std::string title = json_str_field(top, "title");
+    if (url.empty() || title.empty()) continue;
+    md += "- " + link(title, url);
+    const std::string desc = one_line(json_str_field(top, "description"), 160);
+    if (!desc.empty()) md += " — " + search_md_escape(desc);
+    md += "\n";
+  }
+  return md;
+}
+
 }  // namespace
 
 std::string search_md_escape(std::string_view text) {
@@ -925,6 +945,7 @@ std::string search_results_markdown(const SearchPlan& plan, std::string_view jso
   if (plan.kind == "gcd") return map_gcd(plan, json);
   if (plan.kind == "discogs") return map_discogs(plan, json);
   if (plan.kind == "freeserp") return map_freeserp(plan, json);
+  if (plan.kind == "firecrawl") return map_firecrawl(plan, json);
   return "# " + search_md_escape(plan.query) + "\n\nNo reader for the engine kind " +
          search_md_escape(plan.kind) + ".\n";
 }
@@ -966,7 +987,8 @@ std::optional<HttpResult> catalog_get(const SearchPlan& plan, bool record,
                     plan.kind == "tmdb-movie";
   const bool rawg = plan.kind == "rawg";
   const bool discogs = plan.kind == "discogs";
-  if (!igdb && !anilist && !tmdb && !rawg && !discogs)
+  const bool firecrawl = plan.kind == "firecrawl";
+  if (!igdb && !anilist && !tmdb && !rawg && !discogs && !firecrawl)
     return https_get_follow(url, ua, err);
   if ((anilist && (host != "graphql.anilist.co" ||
                     !starts_with(url, "https://graphql.anilist.co/"))) ||
@@ -977,8 +999,10 @@ std::optional<HttpResult> catalog_get(const SearchPlan& plan, bool record,
       (rawg && (host != "api.rawg.io" ||
                 !starts_with(url, "https://api.rawg.io/api/games"))) ||
       (discogs && (host != "api.discogs.com" ||
-                   !starts_with(url, "https://api.discogs.com/")))) {
-    if (err) *err = "Credentialed catalog URL is not on the provider host";
+                   !starts_with(url, "https://api.discogs.com/"))) ||
+      (firecrawl && (host != "api.firecrawl.dev" ||
+                     !starts_with(url, "https://api.firecrawl.dev/v2/search")))) {
+    if (err) *err = "Catalog URL is not on the provider host";
     return std::nullopt;
   }
   if (igdb) {
@@ -1041,6 +1065,18 @@ std::optional<HttpResult> catalog_get(const SearchPlan& plan, bool record,
       return std::nullopt;
     }
     headers = "Authorization: Discogs token=" + secret + "\r\n";
+  } else if (firecrawl) {
+    // Keyless: omit Authorization. Free daily per-IP quota.
+    headers = "Content-Type: application/json\r\nAccept: application/json\r\n";
+    method = "POST";
+    std::string q;
+    for (unsigned char c : plan.query) {
+      if (c == '"' || c == '\\') q += '\\';
+      if (c < 32) q += ' ';
+      else q += static_cast<char>(c);
+    }
+    body = "{\"query\":\"" + q + "\",\"limit\":15}";
+    url = "https://api.firecrawl.dev/v2/search";
   }
   // No redirects while credentials are attached: a malicious Location header
   // must never move an Authorization header or query key to another host.

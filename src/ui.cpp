@@ -3198,6 +3198,39 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       ImGui::TextDisabled("32 px icons at the platform default; text scales too.");
       ImGui::SeparatorText("Search engines");
+      {
+        // Default engine for the search bar and the "?" location-bar alias.
+        const UiSearchEngine* cur = nullptr;
+        for (const UiSearchEngine& e : state.search_engines)
+          if (e.id == state.search_engine && e.on) {
+            cur = &e;
+            break;
+          }
+        if (!cur) {
+          for (const UiSearchEngine& e : state.search_engines)
+            if (e.on) {
+              cur = &e;
+              break;
+            }
+        }
+        const char* preview =
+            cur ? cur->name.c_str()
+                : (state.search_engines.empty() ? "(none)" : "(first on)");
+        if (ImGui::BeginCombo("Default search engine", preview)) {
+          for (const UiSearchEngine& e : state.search_engines) {
+            if (!e.on) continue;
+            const bool selected = cur && e.id == cur->id;
+            if (ImGui::Selectable(e.name.c_str(), selected)) {
+              cmd = UiCommand::SelectSearchEngine;
+              result.arg = e.id;
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndCombo();
+        }
+        ImGui::TextDisabled("Used by the search bar and by \"? query\" in the "
+                            "location bar (Ctrl+L).");
+      }
       if (ImGui::TreeNode("Engines in the search menu")) {
         search_engine_checkboxes(state, cmd, result.arg);
         ImGui::TreePop();

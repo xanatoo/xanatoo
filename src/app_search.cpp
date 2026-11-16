@@ -105,7 +105,8 @@ void run_search(App& app, const std::string& text) {
 }
 
 std::string search_from_location(const App& app, const std::string& text) {
-  std::string ref = xanatoo::search_from_keyword(text, app.search.active);
+  std::string ref = xanatoo::search_from_keyword(text, app.search.active,
+                                                 search_engine_id(app));
   if (ref.empty()) return {};
   // "w notes.md" must still open a file of that name.
   std::error_code ec;

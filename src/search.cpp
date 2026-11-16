@@ -283,6 +283,11 @@ std::vector<SearchEngine> builtin_table() {
       {"freeserp", "FreeSerp", "fs", "FS",
        "https://freeserp.ai/api.php?index=web&q=%s&size=30", "freeserp", "+",
        {"freeserp.ai"}},
+      // Firecrawl Keyless: POST JSON, free per-IP daily quota, no signup.
+      // URL template is unused; catalog_get special-cases the kind for POST.
+      {"firecrawl", "Firecrawl (keyless)", "fc", "FC",
+       "https://api.firecrawl.dev/v2/search", "firecrawl", "+",
+       {"firecrawl.dev", "api.firecrawl.dev"}},
   };
 }
 
@@ -330,6 +335,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"youtube", 0xff0000},    {"peertube", 0xf1680d},
       {"odysee", 0xe50054},     {"dailymotion", 0x0066dc},
       {"duckduckgo", 0xde5833}, {"freeserp", 0x5b21b6},
+      {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)
     if (e.id == id) return c;
@@ -383,7 +389,8 @@ bool is_json_search_kind(std::string_view kind) {
          kind == "anilist-anime" || kind == "anilist-manga" ||
          kind == "googlebooks" || kind == "loc" || kind == "zdb" ||
          kind == "ifdb" || kind == "bookbrainz" ||
-         kind == "gcd" || kind == "discogs" || kind == "freeserp";
+         kind == "gcd" || kind == "discogs" || kind == "freeserp" ||
+         kind == "firecrawl";
 }
 
 bool is_search_kind(std::string_view kind) {
@@ -543,8 +550,18 @@ std::string search_target(std::string_view ref,
 }
 
 std::string search_from_keyword(std::string_view text,
-                                const std::vector<SearchEngine>& engines) {
+                                const std::vector<SearchEngine>& engines,
+                                std::string_view default_engine) {
   trim_ascii(text);
+  // "?" is an alias for the default search engine (Preferences / search bar).
+  // Accept both "? query" and "?query".
+  if (!default_engine.empty() && !text.empty() && text[0] == '?') {
+    std::string_view q = text.substr(1);
+    while (!q.empty() && (q[0] == ' ' || q[0] == '\t')) q.remove_prefix(1);
+    if (!q.empty() && find_engine(engines, default_engine))
+      return search_ref(default_engine, q);
+    return {};
+  }
   const size_t sp = text.find(' ');
   if (sp == std::string_view::npos) return {};
   const std::string_view word = text.substr(0, sp);

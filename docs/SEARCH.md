@@ -29,7 +29,10 @@ Search is an address, not a widget in the document and not a panel.
   `search_site` shows the bar with that engine (and makes it the engine in
   use); while the bar shows that engine it is latched and a click hides it.
 - **Keywords:** Ctrl+L text `<keyword> <words>` becomes the same address
-  (`search_from_location`), unless a file of that name exists.
+  (`search_from_location`), unless a file of that name exists. The special
+  keyword `?` uses the default search engine (`ViewSettings::search_engine`,
+  Edit → Preferences → Default search engine; also the search-bar choice).
+  Both `? query` and `?query` work.
 - **Engines:** the table in `search.cpp` plus `user_data_dir()/search.sexp`
   (`(engine "id" (name …) (keyword …) (badge …) (url "…%s…") (kind feed)
   (space "+") (site "host" "ref:") (color "#rrggbb"))`; without `color`

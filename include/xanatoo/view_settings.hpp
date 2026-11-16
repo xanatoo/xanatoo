@@ -46,7 +46,9 @@ struct ViewSettings {
   int page_columns = 0;
   // Document style sheet (styles/<name>.xss); "default" = built in.
   std::string style = "default";
-  // Engine of the search bar (search.hpp id).
+  // Default search engine (search.hpp id): search bar choice, and the target
+  // of the "?" location-bar keyword. Saved in view.conf; Preferences has a
+  // dropdown to pick one of the engines that are switched on.
   std::string search_engine = "wikipedia";
   // Engines the user switched on / off against their default
   // (SearchEngine::enabled); view.conf keeps comma-separated ids.

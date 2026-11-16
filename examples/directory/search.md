@@ -4,10 +4,13 @@
 
 **Ctrl+K** (View → Search Bar) opens the search bar under the toolbar,
 **Esc** closes it. The button at its left picks the engine; the choice is
-remembered. **Ctrl+L** accepts `<keyword> <words>` as well.
+remembered as the **default search engine** (Edit → Preferences). **Ctrl+L**
+accepts `<keyword> <words>` as well; `?` is an alias for the default engine
+(`? xanadu` or `?xanadu`).
 
 | Keyword | Engine | Results |
 |---------|--------|---------|
+| `?` | *(default)* | whatever is set under Preferences → Default search engine |
 | `w` · `wd` | Wikipedia · Wikipedia (Deutsch) | article list with the matched words in bold; a click opens the native `wikipedia:` article |
 | `hn` | Hacker News | stories with points, link to the story and to the `hn:` comment thread |
 | `ia` | Internet Archive | items and collections, most downloaded first |
@@ -21,14 +24,16 @@ remembered. **Ctrl+L** accepts `<keyword> <words>` as well.
 | `fl` | Flickr tags | a feed; words become tags |
 | `mg` | Marginalia | small-web results |
 | `wb` | Wiby | old-web results |
-| `dd` | DuckDuckGo | web results, no JavaScript needed |
+| `dd` | DuckDuckGo | web results (HTML; may be rate-limited or challenged) |
 | `fs` | FreeSerp | free keyless web index (JSON) |
+| `fc` | Firecrawl (keyless) | free keyless web search (JSON, daily per-IP quota) |
 
 A search is an address, `search:arxiv:electron+spin`, so it can be a link
 in any document: [arXiv: electron spin](search:arxiv:electron+spin) ·
 [Wikipedia: Xanadu](search:wikipedia:xanadu) ·
 [Standard Ebooks: Wells](search:standard-ebooks:wells) ·
-[FreeSerp: Xanadu](search:freeserp:xanadu).
+[FreeSerp: Xanadu](search:freeserp:xanadu) ·
+[Firecrawl: Xanadu](search:firecrawl:xanadu).
 
 ## Your own engines
 
@@ -38,7 +43,7 @@ Create `search.sexp` in the user data directory (next to your `styles/`):
 (engine "my-wiki" (name "My Wiki") (keyword "mw") (badge "MW")
         (url "https://wiki.example.org/search?q=%s")
         (kind feed)      ; page (default) | feed | wikipedia | hn | archive
-                         ; | lemmy | bluesky | gutendex | freeserp
+                         ; | lemmy | bluesky | gutendex | freeserp | firecrawl
         (space "+"))     ; what a blank becomes in the URL
 ```
 
@@ -47,3 +52,4 @@ site that answers a URL with a page or a feed works; sites that only answer
 through JavaScript do not. The JSON kinds read the API of that service, so
 `(kind lemmy)` with another instance's `/api/v3/search?q=%s&type_=Posts` URL
 searches that instance, `(kind wikipedia)` another language edition.
+Firecrawl is special-cased as a POST with no Authorization header (keyless).
