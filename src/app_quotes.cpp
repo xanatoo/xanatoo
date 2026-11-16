@@ -6,10 +6,14 @@
 // under quoted text in the original, context menu jumps both ways.
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/ebooks.hpp"
+#include "xanatoo/epub_import.hpp"
+#include "xanatoo/gemini.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 
@@ -283,127 +287,208 @@ void draw_quote_marks(App& app, int pi, float ox, float py,
 }
 
 void refresh_context_panel(App& app) {
-  app.context_kind.clear();
-  app.context_title.clear();
-  app.context_body.clear();
-  app.context_meta.clear();
-  app.context_can_jump = false;
-  app.context_jump_pane = -1;
-  app.context_jump_link = -1;
-  app.context_jump_to_source = true;
-  app.context_scroll_to = xanatoo::INVALID_NODE;
+  // Live update from hover. When the pointer is not over a quote / link /
+  // transclusion, keep whatever page is already loaded so Context can be
+  // used as a stable preview surface.
 
   auto set_doc = [&](const xanatoo::Document& src, const std::string& key,
                      xanatoo::NodeId scroll_to = xanatoo::INVALID_NODE) {
+    app.context_pending_url.clear();
     if (app.context_source_key == key && app.context_has_doc) {
-      app.context_scroll_to = scroll_to;
+      if (scroll_to != xanatoo::INVALID_NODE &&
+          app.context_scroll_to != scroll_to) {
+        app.context_scroll_to = scroll_to;
+        app.context_needs_layout = true;  // re-apply scroll target
+      }
       return;
     }
-    app.context_doc = src;  // copy
+    app.context_doc = src;
     app.context_source_key = key;
     app.context_has_doc = true;
     app.context_needs_layout = true;
     app.context_scroll_to = scroll_to;
     app.context_win.scroll = 0.f;
   };
-  auto clear_doc = [&]() {
-    if (!app.context_has_doc) return;
-    app.context_has_doc = false;
-    app.context_source_key.clear();
-    app.context_doc = {};
-    app.context_layout = {};
-    app.context_needs_layout = true;
-    app.context_scroll_to = xanatoo::INVALID_NODE;
+  auto set_loading = [&](const std::string& url) {
+    app.context_kind = "Loading";
+    app.context_title = url;
+    app.context_body = "Fetching page…";
+    app.context_meta.clear();
+    app.context_can_jump = false;
+    app.context_jump_pane = -1;
+    app.context_jump_link = -1;
+  };
+  auto load_remote = [&](const std::string& url) {
+    if (const CachedPage* c = find_cached_page(app, url)) {
+      app.context_kind = "Page";
+      app.context_title = c->final_url.empty() ? c->url : c->final_url;
+      app.context_meta.clear();
+      app.context_body.clear();
+      app.context_can_jump = false;
+      app.context_jump_pane = -1;
+      app.context_jump_link = -1;
+      set_doc(c->doc, "page:" + c->url);
+      return;
+    }
+    if (app.context_pending_url != url) {
+      start_fetch(app, FetchPurpose::Preview, -1, url);
+      app.context_pending_url = url;
+    }
+    set_loading(url);
   };
 
-  // Quote source: load the thread document and scroll to the source message.
+  // Quote source: full thread document, scrolled to the source message.
   if (app.hover.quote >= 0 && app.hover.quote_pane >= 0 &&
       app.hover.quote_pane < kMaxViews) {
     const int pi = app.hover.quote_pane;
     Pane& p = app.panes[pi];
     DocBuffer* b = quote_buffer(app, p);
-    if (!b) { clear_doc(); return; }
-    const auto& links = quote_links_of(*b);
-    if (static_cast<size_t>(app.hover.quote) >= links.size()) {
-      clear_doc();
-      return;
+    if (b) {
+      const auto& links = quote_links_of(*b);
+      if (static_cast<size_t>(app.hover.quote) < links.size()) {
+        const xanatoo::QuoteLink& l =
+            links[static_cast<size_t>(app.hover.quote)];
+        const xanatoo::Document& d = b->doc;
+        app.context_kind = "Quote source";
+        app.context_title = "Quoted from " + author_of(d, l.source_msg);
+        if (l.via_quote)
+          app.context_title += " (who also quoted it)";
+        std::string quote = xanatoo::selected_text(d, l.quote);
+        if (l.score < 1.f)
+          app.context_meta = "Approximate match — the quote wording differs";
+        else if (l.via_quote)
+          app.context_meta = "Original is outside this thread";
+        else
+          app.context_meta = "Exact match in this thread";
+        if (!quote.empty() && quote.size() < 240)
+          app.context_meta += "\nQuote: “" + quote + "”";
+        std::string key = "quote:" + std::to_string(b->id) + ":" +
+                          std::to_string(static_cast<unsigned>(l.source_msg));
+        set_doc(d, key, l.source_msg);
+        app.context_can_jump = true;
+        app.context_jump_pane = pi;
+        app.context_jump_link = app.hover.quote;
+        app.context_jump_to_source = true;
+        app.context_body = xanatoo::plain_text(d, l.source_msg);
+        return;
+      }
     }
-    const xanatoo::QuoteLink& l = links[static_cast<size_t>(app.hover.quote)];
-    const xanatoo::Document& d = b->doc;
-    app.context_kind = "Quote source";
-    app.context_title = "Quoted from " + author_of(d, l.source_msg);
-    if (l.via_quote)
-      app.context_title += " (who also quoted it)";
-    std::string quote = xanatoo::selected_text(d, l.quote);
-    if (l.score < 1.f)
-      app.context_meta = "Approximate match — the quote wording differs";
-    else if (l.via_quote)
-      app.context_meta = "Original is outside this thread";
-    else
-      app.context_meta = "Exact match in this thread";
-    if (!quote.empty() && quote.size() < 240)
-      app.context_meta += "\nQuote: “" + quote + "”";
-    // Full document of the thread; scroll to the source message node.
-    std::string key = "quote:" + std::to_string(b->id) + ":" +
-                      std::to_string(static_cast<unsigned>(l.source_msg));
-    set_doc(d, key, l.source_msg);
-    app.context_can_jump = true;
-    app.context_jump_pane = pi;
-    app.context_jump_link = app.hover.quote;
-    app.context_jump_to_source = true;
-    // Also keep a plain-text fallback for the ImGui path / title strip.
-    app.context_body = xanatoo::plain_text(d, l.source_msg);
-    return;
   }
 
-  // Link under the pointer: for internal targets, show the current document
-  // scrolled to the destination; otherwise keep a text preview.
+  // Link under the pointer: anchors stay in-document; local and remote
+  // targets load as full pages into the Context panel.
   if (!app.hover.href.empty() && app.hover.link_pane >= 0 &&
       app.hover.link_pane < kMaxViews) {
     const int pi = app.hover.link_pane;
-    DocBuffer* b = find_buf(app, app.panes[pi].buf);
-    const xanatoo::Document& d = doc_of(app, app.panes[pi]);
-    app.context_kind = "Link";
-    app.context_title = app.hover.href;
-    if (!app.hover.rel.empty())
-      app.context_meta = "rel: " + app.hover.rel;
-    if (app.hover.is_cite)
-      app.context_meta += (app.context_meta.empty() ? "" : " · ") +
-                          std::string("citation");
+    const LinkTarget t = resolve_link(app, pi, app.hover.href);
+    app.context_can_jump = false;
+    app.context_jump_pane = -1;
+    app.context_jump_link = -1;
 
-    if (app.hover.href[0] == '#') {
-      xanatoo::NodeId dest_node = xanatoo::INVALID_NODE;
-      if (auto dest = xanatoo::jump_to_href(d, app.hover.href)) {
-        dest_node = dest->node;
-        const auto& n = d.get(dest_node);
-        if (!n.label.empty())
-          app.context_title = n.label;
-      }
+    if (t.kind == LinkKind::Anchor) {
+      DocBuffer* b = find_buf(app, app.panes[pi].buf);
+      const xanatoo::Document& d = doc_of(app, app.panes[pi]);
+      app.context_kind = "Link";
+      app.context_title = app.hover.href;
+      if (!app.hover.rel.empty())
+        app.context_meta = "rel: " + app.hover.rel;
+      xanatoo::NodeId dest_node = t.dest.node;
+      const auto& n = d.get(dest_node);
+      if (!n.label.empty())
+        app.context_title = n.label;
       std::string key = "link:" + (b ? std::to_string(b->id) : "?") + ":" +
                         app.hover.href;
       set_doc(d, key, dest_node);
-      app.context_body = dest_node != xanatoo::INVALID_NODE
-                             ? xanatoo::plain_text(d, dest_node)
-                             : app.hover.preview;
-      if (app.context_body.empty() && !app.hover.preview.empty())
-        app.context_body = app.hover.preview;
+      app.context_body = xanatoo::plain_text(d, dest_node);
       return;
     }
 
-    // External / non-fragment link: text preview only.
-    clear_doc();
-    if (!app.hover.preview.empty()) {
+    if (t.kind == LinkKind::Doc && !t.url.empty()) {
+      if (xanatoo::is_pandoc_path(t.url)) {
+        app.context_kind = "Link";
+        app.context_title = t.url;
+        app.context_body =
+            "This format needs an import step and is not previewed in Context.";
+        app.context_meta.clear();
+        app.context_pending_url.clear();
+        return;
+      }
+      BufferId bi = find_buffer(app, t.url);
+      xanatoo::Document doc;
+      std::string key;
+      if (bi != kNoBuffer) {
+        doc = buf(app, bi).doc;
+        key = "page-buf:" + std::to_string(bi);
+      } else {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(t.url, ec)) {
+          app.context_kind = "Link";
+          app.context_title = t.url;
+          app.context_body = "File not found.";
+          app.context_meta.clear();
+          app.context_pending_url.clear();
+          return;
+        }
+        doc = load_doc(app, t.url);
+        key = "page-file:" + t.url;
+      }
+      app.context_kind = "Page";
+      app.context_title = t.url;
+      app.context_meta.clear();
+      xanatoo::NodeId scroll = xanatoo::INVALID_NODE;
+      if (!t.fragment.empty()) {
+        if (auto d = xanatoo::jump_to_href(doc, t.fragment))
+          scroll = d->node;
+      }
+      set_doc(doc, key, scroll);
+      app.context_body.clear();
+      return;
+    }
+
+    if (t.kind == LinkKind::Remote && !t.url.empty()) {
+      if (!xanatoo::ebook_download_url(t.url).empty()) {
+        app.context_kind = "Link";
+        app.context_title = t.url;
+        app.context_body =
+            "Book downloads are not opened in the Context panel.";
+        app.context_meta.clear();
+        app.context_pending_url.clear();
+        return;
+      }
+      load_remote(t.url);
+      return;
+    }
+
+    // External or unresolved: try as a navigable URL, else explain.
+    if (!app.hover.href.empty() &&
+        (is_in_app_remote_url(app.hover.href) ||
+         xanatoo::is_gemini_url(app.hover.href) ||
+         xanatoo::starts_with_ci(app.hover.href, "http"))) {
+      load_remote(app.hover.href);
+      return;
+    }
+
+    app.context_kind = "Link";
+    app.context_title = app.hover.href;
+    app.context_meta.clear();
+    app.context_pending_url.clear();
+    if (!app.hover.preview.empty())
       app.context_body = app.hover.preview;
-    } else {
+    else
       app.context_body =
-          "No in-document preview for this link.\n\n"
+          "No in-app preview for this link.\n\n"
           "Open it with the usual click, or use “Open Link in Trail View” "
           "from the context menu.";
+    if (app.context_has_doc) {
+      // Keep the last full page; only update the text fallback fields above
+      // when we have no document.
+    } else {
+      app.context_has_doc = false;
     }
     return;
   }
 
-  // Transclusion: show the host document (resolved embed is already in-tree).
+  // Transclusion: host document focused on the embed.
   if (app.hover.transclude != xanatoo::INVALID_NODE &&
       app.hover.transclude_pane >= 0 &&
       app.hover.transclude_pane < kMaxViews) {
@@ -424,15 +509,30 @@ void refresh_context_panel(App& app) {
     app.context_body = body.empty()
                            ? "No resolved text for this transclusion yet."
                            : body;
+    app.context_can_jump = false;
+    app.context_jump_pane = -1;
+    app.context_jump_link = -1;
     return;
   }
 
-  clear_doc();
+  // Still fetching a page the user hovered: keep the loading state.
+  if (!app.context_pending_url.empty()) {
+    set_loading(app.context_pending_url);
+    return;
+  }
+
+  // Nothing under the pointer: keep the last loaded page, or show a hint.
+  if (app.context_has_doc) return;
   app.context_kind = "Context";
+  app.context_title.clear();
+  app.context_meta.clear();
+  app.context_can_jump = false;
+  app.context_jump_pane = -1;
+  app.context_jump_link = -1;
   app.context_body =
       "Hover a link, a quote arrow / quoted passage, or a transclusion "
       "to preview its target here.\n\n"
-      "• Links — section or document preview when available\n"
+      "• Links — loads the page (local or remote) into this panel\n"
       "• Quotes — the full source message in the thread\n"
       "• Transclusions — the resolved target text";
 }

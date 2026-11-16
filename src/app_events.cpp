@@ -1576,6 +1576,7 @@ static bool handle_context_key(App& app, const SDL_Event& ev, bool ctrl,
   if (!panel_has_keys(app, KeyFocus::Context)) return false;
   if (xanatoo::sdl::keycode(ev) == SDLK_ESCAPE) {
     app.context_panel_open = false;
+    app.context_pending_url.clear();
     app.key_focus = KeyFocus::Document;
     return true;
   }

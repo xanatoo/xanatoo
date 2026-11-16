@@ -1175,8 +1175,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.context_panel_open = !app.context_panel_open;
       if (app.context_panel_open) {
         focus_float(app, app.context_win);
-      } else if (app.key_focus == KeyFocus::Context) {
-        app.key_focus = KeyFocus::Document;
+      } else {
+        app.context_pending_url.clear();
+        if (app.key_focus == KeyFocus::Context)
+          app.key_focus = KeyFocus::Document;
       }
       break;
     case C::ToggleSubscriptions:

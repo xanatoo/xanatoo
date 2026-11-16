@@ -986,6 +986,36 @@ void poll_fetches(App& app) {
           flash_status(app, std::string("Preview failed: ") +
                                 job.shared->error);
       }
+      // Context panel: load the fetched page when this was its pending URL.
+      if (!app.context_pending_url.empty() &&
+          (job.url == app.context_pending_url ||
+           job.shared->final_url == app.context_pending_url)) {
+        app.context_pending_url.clear();
+        if (job.shared->doc) {
+          app.context_doc = *job.shared->doc;
+          app.context_source_key =
+              "page:" + (job.shared->final_url.empty() ? job.url
+                                                       : job.shared->final_url);
+          app.context_has_doc = true;
+          app.context_needs_layout = true;
+          app.context_scroll_to = xanatoo::INVALID_NODE;
+          app.context_win.scroll = 0.f;
+          app.context_kind = "Page";
+          app.context_title = job.shared->final_url.empty()
+                                  ? job.url
+                                  : job.shared->final_url;
+          app.context_body.clear();
+          app.context_meta.clear();
+        } else {
+          app.context_kind = "Page";
+          app.context_title = job.url;
+          app.context_body =
+              "Could not load page.\n\n" +
+              (job.shared->error.empty() ? job.url : job.shared->error);
+          app.context_has_doc = false;
+          app.context_source_key.clear();
+        }
+      }
     }
   }
   app.downloads.erase(std::remove_if(app.downloads.begin(), app.downloads.end(),

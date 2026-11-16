@@ -994,6 +994,7 @@ struct App {
   bool context_jump_to_source = true;
   bool context_has_doc = false;
   std::string context_source_key;  // identity of what is loaded; skip reload if same
+  std::string context_pending_url;  // remote/local page fetch in flight for Context
   xanatoo::Document context_doc;
   xanatoo::LayoutResult context_layout;
   bool context_needs_layout = true;

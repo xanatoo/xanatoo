@@ -122,6 +122,7 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Context:
       app.context_panel_open = false;
+      app.context_pending_url.clear();
       if (app.key_focus == KeyFocus::Context)
         app.key_focus = KeyFocus::Document;
       break;
