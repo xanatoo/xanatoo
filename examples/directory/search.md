@@ -22,11 +22,13 @@ remembered. **Ctrl+L** accepts `<keyword> <words>` as well.
 | `mg` | Marginalia | small-web results |
 | `wb` | Wiby | old-web results |
 | `dd` | DuckDuckGo | web results, no JavaScript needed |
+| `fs` | FreeSerp | free keyless web index (JSON) |
 
 A search is an address, `search:arxiv:electron+spin`, so it can be a link
 in any document: [arXiv: electron spin](search:arxiv:electron+spin) ·
 [Wikipedia: Xanadu](search:wikipedia:xanadu) ·
-[Standard Ebooks: Wells](search:standard-ebooks:wells).
+[Standard Ebooks: Wells](search:standard-ebooks:wells) ·
+[FreeSerp: Xanadu](search:freeserp:xanadu).
 
 ## Your own engines
 
@@ -36,7 +38,7 @@ Create `search.sexp` in the user data directory (next to your `styles/`):
 (engine "my-wiki" (name "My Wiki") (keyword "mw") (badge "MW")
         (url "https://wiki.example.org/search?q=%s")
         (kind feed)      ; page (default) | feed | wikipedia | hn | archive
-                         ; | lemmy | bluesky | gutendex
+                         ; | lemmy | bluesky | gutendex | freeserp
         (space "+"))     ; what a blank becomes in the URL
 ```
 

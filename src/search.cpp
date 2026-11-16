@@ -279,6 +279,10 @@ std::vector<SearchEngine> builtin_table() {
       {"duckduckgo", "DuckDuckGo", "dd", "DDG",
        "https://html.duckduckgo.com/html/?q=%s", "page", "+",
        {"duckduckgo.com"}},
+      // Free, no-key web search APIs (JSON result mappers).
+      {"freeserp", "FreeSerp", "fs", "FS",
+       "https://freeserp.ai/api.php?index=web&q=%s&size=30", "freeserp", "+",
+       {"freeserp.ai"}},
   };
 }
 
@@ -325,7 +329,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"marginalia", 0x9c7d4a}, {"wiby", 0x000080},
       {"youtube", 0xff0000},    {"peertube", 0xf1680d},
       {"odysee", 0xe50054},     {"dailymotion", 0x0066dc},
-      {"duckduckgo", 0xde5833},
+      {"duckduckgo", 0xde5833}, {"freeserp", 0x5b21b6},
   };
   for (const auto& [id, c] : kColors)
     if (e.id == id) return c;
@@ -379,7 +383,7 @@ bool is_json_search_kind(std::string_view kind) {
          kind == "anilist-anime" || kind == "anilist-manga" ||
          kind == "googlebooks" || kind == "loc" || kind == "zdb" ||
          kind == "ifdb" || kind == "bookbrainz" ||
-         kind == "gcd" || kind == "discogs";
+         kind == "gcd" || kind == "discogs" || kind == "freeserp";
 }
 
 bool is_search_kind(std::string_view kind) {

@@ -641,6 +641,25 @@ std::string map_discogs(const SearchPlan& plan, std::string_view json) {
   return md;
 }
 
+// FreeSerp: free keyless web index (https://freeserp.ai/). Results are ordinary
+// web pages, so we emit title → url links plus a short snippet.
+std::string map_freeserp(const SearchPlan& plan, std::string_view json) {
+  std::string md = header("FreeSerp", plan);
+  const auto hits = json_object_array_after_key(json, "results");
+  if (hits.empty()) return no_results("FreeSerp", plan);
+  for (const auto& hit : hits) {
+    const std::string top = json_top_level(hit);
+    const std::string url = json_str_field(top, "url");
+    const std::string title = json_str_field(top, "title");
+    if (url.empty() || title.empty()) continue;
+    md += "- " + link(title, url);
+    const std::string snippet = one_line(json_str_field(top, "snippet"), 160);
+    if (!snippet.empty()) md += " — " + search_md_escape(snippet);
+    md += "\n";
+  }
+  return md;
+}
+
 }  // namespace
 
 std::string search_md_escape(std::string_view text) {
@@ -905,6 +924,7 @@ std::string search_results_markdown(const SearchPlan& plan, std::string_view jso
   if (plan.kind == "zdb") return map_zdb(plan, json);
   if (plan.kind == "gcd") return map_gcd(plan, json);
   if (plan.kind == "discogs") return map_discogs(plan, json);
+  if (plan.kind == "freeserp") return map_freeserp(plan, json);
   return "# " + search_md_escape(plan.query) + "\n\nNo reader for the engine kind " +
          search_md_escape(plan.kind) + ".\n";
 }
