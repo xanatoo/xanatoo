@@ -46,6 +46,7 @@
 #include "xanatoo/org.hpp"
 #include "xanatoo/types.hpp"
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/office_import.hpp"
 #include "xanatoo/layout.hpp"
 #include "xanatoo/math.hpp"
 #include "xanatoo/paginate.hpp"
@@ -3056,6 +3057,52 @@ void test_epub_native() {
 
   EXPECT(!xanatoo::epub_to_markdown("not a zip at all, sorry about that", &err));
   EXPECT(!xanatoo::epub_to_markdown(zip.substr(0, zip.size() / 2), &err));
+}
+
+
+void test_office_import() {
+  EXPECT(xanatoo::is_docx_path("x.DOCX"));
+  EXPECT(xanatoo::is_odt_path("y.odt"));
+  EXPECT(xanatoo::is_office_path("a.docx"));
+
+  const std::string docx = test_zip({
+      {"word/document.xml",
+       "<?xml version=\"1.0\"?>"
+       "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+       "<w:body>"
+       "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>"
+       "<w:r><w:t>Hello DOCX</w:t></w:r></w:p>"
+       "<w:p><w:r><w:t>Paragraph with </w:t></w:r>"
+       "<w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r>"
+       "<w:r><w:t> text.</w:t></w:r></w:p>"
+       "</w:body></w:document>"}});
+  std::string err;
+  auto md = xanatoo::docx_to_markdown(docx, &err);
+  EXPECT(md.has_value());
+  EXPECT(err.empty());
+  EXPECT(md->find("Hello DOCX") != std::string::npos);
+  EXPECT(md->find("bold") != std::string::npos);
+
+  const std::string odt = test_zip({
+      {"content.xml",
+       "<?xml version=\"1.0\"?>"
+       "<office:document-content xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\""
+       " xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\">"
+       "<office:body><office:text>"
+       "<text:h text:outline-level=\"1\">Hello ODT</text:h>"
+       "<text:p>A simple paragraph.</text:p>"
+       "<text:list>"
+       "<text:list-item><text:p>One</text:p></text:list-item>"
+       "<text:list-item><text:p>Two</text:p></text:list-item>"
+       "</text:list>"
+       "</office:text></office:body></office:document-content>"}});
+  err.clear();
+  auto md2 = xanatoo::odt_to_markdown(odt, &err);
+  EXPECT(md2.has_value());
+  EXPECT(err.empty());
+  EXPECT(md2->find("Hello ODT") != std::string::npos);
+  EXPECT(md2->find("One") != std::string::npos);
+  EXPECT(md2->find("Two") != std::string::npos);
 }
 
 void test_sanitize_epub_markdown() {

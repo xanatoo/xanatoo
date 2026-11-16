@@ -203,6 +203,7 @@ add_executable(xanatoo
   src/annotations.cpp
   src/epub_import.cpp
   src/epub_native.cpp
+  src/office_import.cpp
   src/view_settings.cpp
   src/style.cpp
   src/platform.cpp
@@ -678,6 +679,7 @@ add_executable(xanatoo_tests
   src/gemini_tofu.cpp
   src/epub_import.cpp
   src/epub_native.cpp
+  src/office_import.cpp
   src/view_settings.cpp
   src/style.cpp
   src/layout.cpp

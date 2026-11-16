@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/office_import.hpp"
 
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
@@ -402,7 +403,9 @@ ImportResult import_via_pandoc(const std::string& epub_path) {
     out.error = "File not found: " + epub_path;
     return out;
   }
-  const bool native = !pandoc_available() && is_epub_path(epub_path);
+  const bool native_epub = !pandoc_available() && is_epub_path(epub_path);
+  const bool native_office = !pandoc_available() && is_office_path(epub_path);
+  const bool native = native_epub || native_office;
   if (!native && !pandoc_available()) {
     out.error = "pandoc not found on PATH (install pandoc to import " +
                 reader + " → Markdown)";
@@ -427,7 +430,10 @@ ImportResult import_via_pandoc(const std::string& epub_path) {
   // Reuse derived Markdown when it is at least as new as the EPUB and was
   // made by the current conversion (bump kFormat when the pandoc call
   // changes; the stamp file holds it).
-  const char* const kFormat = native ? "native 1" : "3 strip-raw-html";
+  const char* const kFormat =
+      native_epub ? "native 1"
+                  : native_office ? "office-native 1"
+                                  : "3 strip-raw-html";
   const fs::path stamp = dir / ".format";
   bool reuse = false;
   try {
@@ -446,7 +452,7 @@ ImportResult import_via_pandoc(const std::string& epub_path) {
     } catch (...) {
     }
 
-    if (native) {
+    if (native_epub) {
       std::string zip = read_text_file(epub_path);
       std::string err;
       auto book = epub_to_markdown(zip, &err);
@@ -463,6 +469,19 @@ ImportResult import_via_pandoc(const std::string& epub_path) {
         }
       }
       if (!write_text_file(md, book->markdown)) {
+        out.error = "Cannot write " + md.string();
+        return out;
+      }
+      write_text_file(stamp, kFormat);
+    } else if (native_office) {
+      std::string zip = read_text_file(epub_path);
+      std::string err;
+      auto md_body = office_to_markdown(epub_path, zip, &err);
+      if (!md_body) {
+        out.error = "Office import failed: " + err;
+        return out;
+      }
+      if (!write_text_file(md, *md_body)) {
         out.error = "Cannot write " + md.string();
         return out;
       }
