@@ -1565,6 +1565,10 @@ const BookmarkMark* bookmark_icon_at(App& app, Pane& p, float lx, float my);
 const std::vector<xanatoo::QuoteLink>& quote_links_of(DocBuffer& b);
 std::vector<QuoteIcon> quote_icons(App& app, Pane& p);
 long quote_icon_at(App& app, Pane& p, float lx, float my);
+// Margin arrow, or a hit inside a linked quote / source span.
+long quote_at(App& app, Pane& p, float lx, float my);
+// Open the Context panel on quote link `link` of view `pi` (touch-friendly).
+void show_quote_in_context(App& app, int pi, size_t link);
 // Fills App::context_quotes for a right-click at `at` in pane `p`.
 void collect_context_quotes(App& app, Pane& p, std::optional<xanatoo::Caret> at);
 // Jump view `pi` along quote link `link` (to its original or to the quote),

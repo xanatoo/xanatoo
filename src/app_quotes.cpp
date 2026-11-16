@@ -126,6 +126,42 @@ long quote_icon_at(App& app, Pane& p, float lx, float my) {
   return -1;
 }
 
+// Margin arrow, or caret inside a linked quote / its source span.
+long quote_at(App& app, Pane& p, float lx, float my) {
+  if (const long q = quote_icon_at(app, p, lx, my); q >= 0) return q;
+  auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y);
+  if (!hit) return -1;
+  DocBuffer* b = quote_buffer(app, p);
+  if (!b) return -1;
+  const auto& links = quote_links_of(*b);
+  const xanatoo::Document& d = b->doc;
+  for (size_t qi = 0; qi < links.size(); ++qi) {
+    const auto& ql = links[qi];
+    auto in = [&](const xanatoo::Selection& s) {
+      return xanatoo::caret_cmp(d, s.anchor, *hit) <= 0 &&
+             xanatoo::caret_cmp(d, *hit, s.focus) <= 0;
+    };
+    // Prefer the quote body; source underline is also clickable.
+    if (in(ql.quote) || in(ql.source)) return static_cast<long>(qi);
+  }
+  return -1;
+}
+
+void show_quote_in_context(App& app, int pi, size_t link) {
+  if (pi < 0 || pi >= kMaxViews) return;
+  Pane& p = app.panes[pi];
+  DocBuffer* b = quote_buffer(app, p);
+  if (!b) return;
+  const auto& links = quote_links_of(*b);
+  if (link >= links.size()) return;
+  // Pin via hover so refresh_context_panel fills the panel every frame.
+  app.hover.quote = static_cast<long>(link);
+  app.hover.quote_pane = pi;
+  app.context_panel_open = true;
+  focus_float(app, app.context_win);
+  refresh_context_panel(app);
+}
+
 void collect_context_quotes(App& app, Pane& p,
                             std::optional<xanatoo::Caret> at) {
   app.context_quotes.clear();
@@ -184,7 +220,7 @@ std::string quote_tooltip(App& app, int pi, size_t link) {
   std::string tip = "Quoted from " + author_of(b->doc, l.source_msg);
   if (l.via_quote) tip += " (who quoted it too)";
   if (l.score < 1.f) tip += " \xC2\xB7 approximate match";
-  return tip + " \xC2\xB7 click to jump";
+  return tip + " \xC2\xB7 click to show source";
 }
 
 void draw_quote_marks(App& app, int pi, float ox, float py,

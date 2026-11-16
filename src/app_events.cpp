@@ -313,13 +313,14 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         return;
       }
 
-    // A linked quote's margin arrow jumps to the original.
+    // Linked quote: margin arrow or the quoted text opens Context (not a
+    // navigation link — safe on touch without hover).
     if (at >= 0)
-      if (const long q = quote_icon_at(app, app.panes[at],
-                                       local_x(app, mx, at), my);
+      if (const long q = quote_at(app, app.panes[at],
+                                  local_x(app, mx, at), my);
           q >= 0) {
         focus_view(app, at);
-        jump_quote(app, at, static_cast<size_t>(q), /*to_source=*/true);
+        show_quote_in_context(app, at, static_cast<size_t>(q));
         return;
       }
 
