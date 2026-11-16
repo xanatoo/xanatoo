@@ -281,7 +281,7 @@ void refresh_context_panel(App& app) {
 
   // Prefer an explicit quote-link hover (margin arrow or quote text).
   if (app.hover.quote >= 0 && app.hover.quote_pane >= 0 &&
-      app.hover.quote_pane < static_cast<int>(app.panes.size())) {
+      app.hover.quote_pane < kMaxViews) {
     const int pi = app.hover.quote_pane;
     Pane& p = app.panes[pi];
     DocBuffer* b = quote_buffer(app, p);
@@ -331,7 +331,7 @@ void refresh_context_panel(App& app) {
   // Transclude node under the pointer: show its target label and embedded text.
   if (app.hover.transclude != xanatoo::INVALID_NODE &&
       app.hover.transclude_pane >= 0 &&
-      app.hover.transclude_pane < static_cast<int>(app.panes.size())) {
+      app.hover.transclude_pane < kMaxViews) {
     Pane& p = app.panes[app.hover.transclude_pane];
     const xanatoo::Document& d = doc_of(app, p);
     const xanatoo::Node& n = d.get(app.hover.transclude);
