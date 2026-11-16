@@ -265,6 +265,9 @@ std::vector<SearchEngine> builtin_table() {
       {"wiby", "Wiby (old web)", "wb", "Wb", "https://wiby.me/?q=%s", "page",
        "+",
        {"wiby.me"}},
+      {"curlie", "Curlie", "cu", "Cu",
+       "https://curlie.org/search?q=%s", "page", "+",
+       {"curlie.org"}},
       {"youtube", "YouTube", "yt", "YT",
        "youtube:results?search_query=%s", "page", "+",
        {"youtube:", "youtube.com", "youtu.be"}},
@@ -333,10 +336,10 @@ uint32_t engine_color(const SearchEngine& e) {
       {"lemmy", 0x00a37a},      {"bluesky", 0x1185fe},
       {"mastodon-tag", 0x6364ff}, {"flickr", 0xff0084},
       {"marginalia", 0x9c7d4a}, {"wiby", 0x000080},
-      {"youtube", 0xff0000},    {"peertube", 0xf1680d},
-      {"odysee", 0xe50054},     {"dailymotion", 0x0066dc},
-      {"duckduckgo", 0xde5833}, {"freeserp", 0x5b21b6},
-      {"firecrawl", 0xf97316},
+      {"curlie", 0xc2410c},     {"youtube", 0xff0000},
+      {"peertube", 0xf1680d},  {"odysee", 0xe50054},
+      {"dailymotion", 0x0066dc}, {"duckduckgo", 0xde5833},
+      {"freeserp", 0x5b21b6},  {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)
     if (e.id == id) return c;
