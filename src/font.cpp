@@ -140,8 +140,10 @@ Glyph Font::load_glyph(uint32_t codepoint) {
         rgba.data(), g.width, g.height, g.width * 4);
     if (surf) {
       g.texture = SDL_CreateTextureFromSurface(renderer_, surf);
-      if (g.texture)
+      if (g.texture) {
         SDL_SetTextureBlendMode(g.texture, SDL_BLENDMODE_BLEND);
+        xanatoo::sdl::set_nearest(g.texture);
+      }
       xanatoo::sdl::destroy_surface(surf);
     }
   }

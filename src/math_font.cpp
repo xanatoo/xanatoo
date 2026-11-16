@@ -282,7 +282,10 @@ const MathRaster& MathFont::raster(uint32_t gid, int px) {
             rgba.data(), out.w, out.h, out.w * 4);
         if (surf) {
           out.texture = SDL_CreateTextureFromSurface(renderer_, surf);
-          if (out.texture) SDL_SetTextureBlendMode(out.texture, SDL_BLENDMODE_BLEND);
+          if (out.texture) {
+            SDL_SetTextureBlendMode(out.texture, SDL_BLENDMODE_BLEND);
+            xanatoo::sdl::set_nearest(out.texture);
+          }
           xanatoo::sdl::destroy_surface(surf);
         }
       }

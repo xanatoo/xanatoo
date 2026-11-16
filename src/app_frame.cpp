@@ -4101,6 +4101,8 @@ static bool ensure_raster_textures(App& app, PaneRaster& r, int w, int h) {
       return false;
     }
     SDL_SetTextureBlendMode(t, SDL_BLENDMODE_NONE);
+    // Nearest: scroll-blit must not re-filter the cached text (LINEAR does).
+    xanatoo::sdl::set_nearest(t);
   }
   r.w = w;
   r.h = h;

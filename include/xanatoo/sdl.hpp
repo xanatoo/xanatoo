@@ -610,6 +610,18 @@ inline void copy(SDL_Renderer* renderer, SDL_Texture* texture,
 #endif
 }
 
+// Document glyphs and the pane scroll-blit cache are 1:1 pixel textures.
+// SDL's default scale mode is LINEAR; on GLES (Android) that re-filters
+// every texture→texture copy and softens text after a few scrolls.
+inline void set_nearest(SDL_Texture* texture) {
+  if (!texture) return;
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+#else
+  SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+#endif
+}
+
 inline void set_clip_rect(SDL_Renderer* renderer, const SDL_Rect* rect) {
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
   SDL_SetRenderClipRect(renderer, rect);
