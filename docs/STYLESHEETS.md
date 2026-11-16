@@ -6,7 +6,7 @@ from the markup. A sheet styles **semantic roles** (paragraph, heading, note,
 link, …), never markup structure, and there are no selectors or specificity.
 
 Pick one from the toolbar's style button (next to *Text width*) or
-**Layout → Style sheet**. Open **Panels → Style Sheets** (or **Layout →
+**Layout → Style sheet**. Open **Panels → Style Sheets** (theme list) or **Manage Style Sheets…** (or **Layout →
 Style sheet → Manage / edit style sheets**) for the native, dockable
 theme manager. The choice is a reader preference stored as
 `style=<name>` in `~/.config/xanatoo/view.conf`. Editing a sheet takes effect

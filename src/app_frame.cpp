@@ -388,12 +388,20 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     if (float_shaded(*w))
       ui_state.shaded_panels |= xanatoo::ui_panel_bit(embedded_panel_layer(w->role));
   ui_state.styles_open = app.styles_panel_open;
+  ui_state.styles_manager_open = app.styles_manager_panel_open;
   if (app.styles_panel_open) {
     auto [x, y, w, h] = float_client_rect(app, app.styles_win);
     ui_state.styles_x = x;
     ui_state.styles_y = y;
     ui_state.styles_w = w;
     ui_state.styles_h = h;
+  }
+  if (app.styles_manager_panel_open) {
+    auto [x, y, w, h] = float_client_rect(app, app.styles_manager_win);
+    ui_state.styles_manager_x = x;
+    ui_state.styles_manager_y = y;
+    ui_state.styles_manager_w = w;
+    ui_state.styles_manager_h = h;
   }
   ui_state.bookmarks_open = app.bookmarks_panel_open;
   if (app.bookmarks_panel_open) {
@@ -722,7 +730,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::AddAnnotationHighlight || c == C::AddAnnotationNote ||
         c == C::SelectAnnotation || c == C::UpdateAnnotationNote ||
         c == C::RemoveAnnotation || c == C::RestoreAnnotationLayerVersion ||
-        c == C::ToggleStylesPanel ||
+        c == C::ToggleStylesPanel || c == C::ToggleStyleManagerPanel ||
         c == C::StyleCreate || c == C::StyleSave ||
         c == C::StyleDelete || c == C::StylePin || c == C::StyleUnpin ||
         c == C::AddBookmark || c == C::BookmarkPage || c == C::RemoveBookmark ||
@@ -1122,6 +1130,14 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       if (app.styles_panel_open) {
         app.key_focus = KeyFocus::Styles;
       } else if (app.key_focus == KeyFocus::Styles) {
+        app.key_focus = KeyFocus::Document;
+      }
+      break;
+    case C::ToggleStyleManagerPanel:
+      app.styles_manager_panel_open = !app.styles_manager_panel_open;
+      if (app.styles_manager_panel_open) {
+        app.key_focus = KeyFocus::StyleManager;
+      } else if (app.key_focus == KeyFocus::StyleManager) {
         app.key_focus = KeyFocus::Document;
       }
       break;

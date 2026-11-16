@@ -1560,6 +1560,20 @@ static bool handle_styles_key(App& app, const SDL_Event& ev, bool ctrl,
   return false;
 }
 
+static bool handle_style_manager_key(App& app, const SDL_Event& ev, bool ctrl,
+                                    bool alt) {
+  (void)ctrl;
+  (void)alt;
+  if (!panel_has_keys(app, KeyFocus::StyleManager)) return false;
+  const SDL_Keycode k = xanatoo::sdl::keycode(ev);
+  if (k == SDLK_ESCAPE) {
+    app.styles_manager_panel_open = false;
+    app.key_focus = KeyFocus::Document;
+    return true;
+  }
+  return false;
+}
+
 // Outline panel (when it has keyboard focus): Esc/toggle close; arrows,
 // 1-9, Enter navigate; Enter / 1-9 jump and hand focus to the document.
 // Other plain keys hand focus back and fall through. True = consumed.
@@ -1978,6 +1992,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (!status_prompt && handle_sitemap_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_page_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
+  if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;
   // A panel whose keys ImGui did not take: the key goes to the document.
   if (!status_prompt && app.key_focus == KeyFocus::Panel)
     panel_key_unused(app, ev, ctrl, alt);

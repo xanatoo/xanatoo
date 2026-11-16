@@ -3374,14 +3374,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     for (bool& shown : catalog_credential_shown_) shown = false;
   }
 
-  // ---- Style sheet manager / editor, embedded in its native FloatWindow ----
+  // ---- Style sheet picker (simple list) ----
   if (state.styles_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Styles))) {
-    if (state.style_save_generation != style_save_seen_) {
-      style_save_seen_ = state.style_save_generation;
-      style_editor_dirty_ = false;
-      style_editor_loaded_.clear();
-    }
     ImGui::SetNextWindowPos(ImVec2(float(state.styles_x + 3),
                                   float(state.styles_y + 3)));
     ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.styles_w - 6)),
@@ -3391,33 +3386,75 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
     if (ImGui::Begin("##styles_panel_body", nullptr, style_flags)) {
-      ImGui::TextWrapped("Reader themes / personal .xss files / automatic assignments");
+      ImGui::TextDisabled("Applied theme");
+      ImGui::Separator();
+      for (const StyleEntry& entry : state.style_entries) {
+        ImGui::PushID(entry.name.c_str());
+        const bool active = state.style == entry.name;
+        std::string label = (active ? "● " : "  ") + entry.title;
+        if (ImGui::Selectable(label.c_str(), active)) {
+          if (!active) {
+            cmd = UiCommand::SelectStyle;
+            result.arg = entry.name;
+          }
+          style_editor_sheet_ = entry.name;
+        }
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip("%s%s", entry.name.c_str(),
+                            active ? " (currently applied)" : "");
+        ImGui::PopID();
+      }
+      ImGui::Separator();
+      if (classic_button("Reload")) cmd = UiCommand::ReloadStyles;
+      ImGui::TextDisabled("Default: %s", state.default_style.c_str());
+      ImGui::Spacing();
+      if (classic_button("Manage style sheets…"))
+        cmd = UiCommand::ToggleStyleManagerPanel;
+    }
+    ImGui::End();
+  }
+
+  // ---- Style sheet manager (create / edit / fonts / pins) ----
+  if (state.styles_manager_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::StyleManager))) {
+    if (state.style_save_generation != style_save_seen_) {
+      style_save_seen_ = state.style_save_generation;
+      style_editor_dirty_ = false;
+      style_editor_loaded_.clear();
+    }
+    ImGui::SetNextWindowPos(ImVec2(float(state.styles_manager_x + 3),
+                                  float(state.styles_manager_y + 3)));
+    ImGui::SetNextWindowSize(
+        ImVec2(float(std::max(1, state.styles_manager_w - 6)),
+               float(std::max(1, state.styles_manager_h - 6))));
+    constexpr ImGuiWindowFlags mgr_flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
+    if (ImGui::Begin("##style_manager_body", nullptr, mgr_flags)) {
+      ImGui::TextWrapped(
+          "Create personal themes, edit source, fonts, and automatic assignments");
       ImGui::Separator();
       const float available_width = ImGui::GetContentRegionAvail().x;
-      const bool narrow_panel = available_width < 520.f;
+      const bool narrow_panel = available_width < 480.f;
       const float list_width = narrow_panel
           ? available_width
-          : std::clamp(available_width * 0.31f, 145.f, 260.f);
-      // A side-docked panel may not have room for two columns. Put the
-      // theme list above the editor instead of squeezing the font controls.
-      ImGui::BeginChild("##styles_list", ImVec2(list_width, narrow_panel ? 145.f : 0), true);
-      ImGui::TextDisabled("Themes");
+          : std::clamp(available_width * 0.28f, 130.f, 220.f);
+      ImGui::BeginChild("##style_manager_list",
+                        ImVec2(list_width, narrow_panel ? 120.f : 0), true);
+      ImGui::TextDisabled("Edit theme");
       ImGui::Separator();
       if (style_editor_sheet_.empty()) style_editor_sheet_ = state.style;
       for (const StyleEntry& entry : state.style_entries) {
-        ImGui::PushID(entry.name.c_str());
+        ImGui::PushID(("mgr_" + entry.name).c_str());
         const bool selected = style_editor_sheet_ == entry.name;
         const bool active = state.style == entry.name;
         std::string label = (active ? "● " : "  ") + entry.title;
         if (ImGui::Selectable(label.c_str(), selected)) {
           if (!style_editor_dirty_) {
             style_editor_sheet_ = entry.name;
-            style_editor_[0] = '\0';  // file contents loaded below
+            style_editor_[0] = '\0';
             style_delete_confirm_ = false;
-            if (!active) {
-              cmd = UiCommand::SelectStyle;
-              result.arg = entry.name;
-            }
           }
         }
         if (ImGui::IsItemHovered())
@@ -3427,9 +3464,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       if (style_editor_dirty_)
         ImGui::TextWrapped("Save or discard edits before switching themes.");
-      ImGui::Separator();
-      if (classic_button("Reload")) cmd = UiCommand::ReloadStyles;
-      ImGui::TextDisabled("Default: %s", state.default_style.c_str());
       ImGui::EndChild();
       if (!narrow_panel) ImGui::SameLine();
       ImGui::BeginGroup();
@@ -3437,8 +3471,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       for (const StyleEntry& entry : state.style_entries)
         if (entry.name == style_editor_sheet_) { chosen = &entry; break; }
       if (!chosen && !state.style_entries.empty()) {
-        // A failed Create command must not strand the editor on a missing
-        // name. On success the newly created sheet appears in this list.
         style_editor_sheet_ = state.style;
         for (const StyleEntry& entry : state.style_entries)
           if (entry.name == style_editor_sheet_) { chosen = &entry; break; }
@@ -3645,7 +3677,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndGroup();
     }
     ImGui::End();
-  } else {
+  }
+  if (!state.styles_open && !state.styles_manager_open) {
     style_editor_sheet_.clear();
     style_editor_loaded_.clear();
     style_editor_dirty_ = false;

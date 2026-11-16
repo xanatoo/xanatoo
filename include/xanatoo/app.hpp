@@ -369,7 +369,7 @@ struct Pane {
 enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 
 enum class WindowRole : uint8_t {
-  Help, Outline, Backlinks, Sitemap, Page, History, Styles, Bookmarks, Downloads, Reply,
+  Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
   Subscriptions, Certificates, Document
 };
@@ -377,6 +377,7 @@ enum class WindowRole : uint8_t {
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
   switch (role) {
     case WindowRole::Styles: return UiPanelLayer::Styles;
+    case WindowRole::StyleManager: return UiPanelLayer::StyleManager;
     case WindowRole::Reply: return UiPanelLayer::Reply;
     case WindowRole::Bookmarks: return UiPanelLayer::Bookmarks;
     case WindowRole::Subscriptions: return UiPanelLayer::Subscriptions;
@@ -747,7 +748,7 @@ struct StatusLine {
 // Panel: a panel without native keys of its own (embedded ImGui panels, Help,
 // Revisions, Downloads) is the active window; which one is App::panel_focus.
 enum class KeyFocus : uint8_t {
-  Document, Outline, Backlinks, Sitemap, Page, History, Styles, Panel
+  Document, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Panel
 };
 
 // The single active status-bar prompt (at most one at a time).
@@ -970,6 +971,7 @@ struct App {
   std::string bookmark_menu;   // bookmark of the open margin-icon menu
   bool history_panel_open = false;
   bool styles_panel_open = false;
+  bool styles_manager_panel_open = false;
   xanatoo::StylePins style_pins;
   uint64_t style_save_generation = 0;
   bool downloads_panel_open = false;
@@ -1030,7 +1032,9 @@ struct App {
   FloatWindow ol = make_float_panel(WindowRole::Outline, 40, 100, 320, 420);
   FloatWindow sm = make_float_panel(WindowRole::Sitemap, 140, 110, 340, 460);
   FloatWindow history_win = make_float_panel(WindowRole::History, 100, 130, 440, 360);
-  FloatWindow styles_win = make_float_panel(WindowRole::Styles, 140, 100, 700, 560);
+  FloatWindow styles_win = make_float_panel(WindowRole::Styles, 140, 100, 320, 420);
+  FloatWindow styles_manager_win =
+      make_float_panel(WindowRole::StyleManager, 200, 120, 560, 560);
   FloatWindow bookmarks_win = make_float_panel(WindowRole::Bookmarks, 130, 145, 460, 400);
   FloatWindow subscriptions_win = make_float_panel(WindowRole::Subscriptions, 170, 155, 590, 480);
   FloatWindow downloads_win = make_float_panel(WindowRole::Downloads, 120, 160, 520, 380);
@@ -1386,6 +1390,8 @@ inline bool panel_has_keys(const App& app, KeyFocus panel) {
       return app.history_panel_open;
     case KeyFocus::Styles:
       return app.styles_panel_open;
+    case KeyFocus::StyleManager:
+      return app.styles_manager_panel_open;
     default:
       return true;
   }

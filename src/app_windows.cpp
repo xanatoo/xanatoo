@@ -32,6 +32,8 @@ std::pair<int, int> min_size(const FloatWindow& w) {
     case WindowRole::Backlinks:
       return {200, 120};
     case WindowRole::Styles:
+      return {220, 240};
+    case WindowRole::StyleManager:
       return {420, 310};
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
@@ -106,6 +108,11 @@ void close_window(App& app, FloatWindow& w) {
     case WindowRole::Styles:
       app.styles_panel_open = false;
       if (app.key_focus == KeyFocus::Styles)
+        app.key_focus = KeyFocus::Document;
+      break;
+    case WindowRole::StyleManager:
+      app.styles_manager_panel_open = false;
+      if (app.key_focus == KeyFocus::StyleManager)
         app.key_focus = KeyFocus::Document;
       break;
     case WindowRole::Bookmarks:
@@ -330,8 +337,9 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
       }
       break;
     }
-    case WindowRole::Styles: {
-      // ImGui owns the manager's selection and editor.
+    case WindowRole::Styles:
+    case WindowRole::StyleManager: {
+      // ImGui owns the list / editor.
       break;
     }
     case WindowRole::Downloads:
@@ -380,6 +388,7 @@ KeyFocus float_key_focus(const FloatWindow& w) {
     case WindowRole::Page: return KeyFocus::Page;
     case WindowRole::History: return KeyFocus::History;
     case WindowRole::Styles: return KeyFocus::Styles;
+    case WindowRole::StyleManager: return KeyFocus::StyleManager;
     case WindowRole::Document: return KeyFocus::Document;
     default: return KeyFocus::Panel;
   }
@@ -417,6 +426,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.nostr_accounts_open) st.push_back(&app.nostr_accounts_win);
   if (app.certs.open) st.push_back(&app.certs_win);
   if (app.styles_panel_open) st.push_back(&app.styles_win);
+  if (app.styles_manager_panel_open) st.push_back(&app.styles_manager_win);
   if (app.bookmarks_panel_open) st.push_back(&app.bookmarks_win);
   if (app.subscriptions_panel_open) st.push_back(&app.subscriptions_win);
   if (app.help_mode) st.push_back(&app.help);
@@ -501,6 +511,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::History:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Styles:
+    case WindowRole::StyleManager:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
@@ -542,6 +553,7 @@ float float_max_scroll(App& app, const FloatWindow& w) {
                                    std::max(18, app.ui_font.line_height() + 7) +
                                8.f - view_h);
     case WindowRole::Styles:
+    case WindowRole::StyleManager:
       return 0.f;  // ImGui handles scrolling.
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
@@ -720,6 +732,7 @@ bool float_wheel(App& app, int mx, int my, int wheel_y) {
   if (!w || w->role == WindowRole::Document) return false;  // pane scrolls
   if (w->role == WindowRole::Annotations || w->role == WindowRole::Reply ||
       w->role == WindowRole::Styles ||
+      w->role == WindowRole::StyleManager ||
       w->role == WindowRole::Bookmarks ||
       w->role == WindowRole::Subscriptions ||
       w->role == WindowRole::NostrExplorer ||
@@ -801,6 +814,12 @@ void draw_floats(App& app) {
       case WindowRole::Styles:
         if (draw_floating_frame(app, *w, "Style Sheets", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Styles);
+        break;
+      case WindowRole::StyleManager:
+        if (draw_floating_frame(app, *w, "Manage Style Sheets",
+                                float_active(app, *w)))
+          app.ui.render_embedded_panel(app.sdl,
+                                       xanatoo::UiPanelLayer::StyleManager);
         break;
       case WindowRole::Bookmarks:
         if (draw_floating_frame(app, *w, "Bookmarks", float_active(app, *w)))

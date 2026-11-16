@@ -38,7 +38,8 @@ enum class UiCommand {
   StopLoading, // cancel running page fetches (toolbar Stop, Esc)
   ToggleHistory,   // View → History panel
   ToggleDownloads, // Panels → Downloads
-  ToggleStylesPanel, // Panels → Style sheets
+  ToggleStylesPanel, // Panels → Style sheets (pick applied theme)
+  ToggleStyleManagerPanel, // Panels → Manage style sheets (edit / create)
   AddBookmark,     // bookmark the selection, else the current page
   BookmarkPage,    // always bookmark the page, ignoring text selection
   BookmarkPosition,  // bookmark the caret position in the page
@@ -480,6 +481,9 @@ struct UiState {
     bool complete = false;  // finished and the file still exists
   } download_menu;
   bool styles_open = false;
+  bool styles_manager_open = false;
+  int styles_manager_x = 0, styles_manager_y = 0, styles_manager_w = 0,
+      styles_manager_h = 0;
   int styles_x = 0, styles_y = 0, styles_w = 0, styles_h = 0;
   std::vector<StyleEntry> style_entries;
   StylePins style_pins;
