@@ -206,7 +206,7 @@ enum class UiCommand {
   Search,             // search bar committed (arg = what was typed)
   SelectSearchEngine, // arg = engine id (search.hpp)
   ToggleSearchEngine, // arg = engine id: switch it on / off in the menu
-  SearchSite,         // location bar button: search bar with engine arg
+  SearchSite,         // location bar: open search bar on the site engine (not a toggle)
   TogglePage,     // navigation / side bars of the focused page, as a panel
   SitemapPrev,    // previous / next page in the site map's order
   SitemapNext,

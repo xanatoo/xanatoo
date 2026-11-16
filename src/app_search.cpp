@@ -85,12 +85,13 @@ void select_search_engine(App& app, const std::string& id) {
 }
 
 void search_site(App& app, const std::string& id) {
-  if (app.search.open && search_engine_id(app) == id) {
-    toggle_search_bar(app);
-    return;
-  }
+  // Regular button (not a toggle): always open the search bar and select
+  // the site-specific engine. Never hide the bar.
   show_search_bar(app);
-  if (search_engine_id(app) != id) select_search_engine(app, id);
+  if (!id.empty() && search_engine_id(app) != id)
+    select_search_engine(app, id);
+  else
+    app.ui.focus_search();
 }
 
 void run_search(App& app, const std::string& text) {

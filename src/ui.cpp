@@ -1553,10 +1553,10 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         std::string name = state.site_search;
         for (const UiSearchEngine& e : state.search_engines)
           if (e.id == state.site_search) name = e.name;
-        const bool on = state.searchbar && state.search_engine == state.site_search;
-        const std::string tip = on ? "Close the search bar"
-                                   : "Search " + name + " in the search bar";
-        extra("url_search", "find", "?", tip.c_str(), UiCommand::SearchSite, on);
+        // Regular button, not a toggle: never drawn pressed, never hides the bar.
+        const std::string tip = "Search " + name;
+        extra("url_search", "find", "?", tip.c_str(), UiCommand::SearchSite,
+              /*on=*/false);
         if (cmd == UiCommand::SearchSite) result.arg = state.site_search;
       }
       if (state.has_chrome)

@@ -1869,8 +1869,8 @@ void toggle_search_bar(App& app);
 void select_search_engine(App& app, const std::string& id);
 // Switch an engine on / off in the menu (saved in view.conf).
 void toggle_search_engine(App& app, const std::string& id);
-// Location bar search button: show the bar with this engine, or hide it
-// when it is already showing that engine.
+// Location bar search button: open the search bar on the site engine.
+// Not a toggle — never hides the bar.
 void search_site(App& app, const std::string& id);
 void run_search(App& app, const std::string& text);  // → search: address
 // Ctrl+L text "w xanadu" → search address ("" when it is no keyword search).
