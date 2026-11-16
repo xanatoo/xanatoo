@@ -24,7 +24,7 @@ The personal source stays yours across app upgrades.
 
 The **Font selection** section lists all families reported by FontConfig,
 with a search filter, rather than presenting unavailable face names. On
-systems without FontConfig it offers generic serif/sans/mono families. You
+systems without FontConfig (Android) it scans /system/fonts and similar directories with FreeType and lists the real family names found there, plus the three CSS generics. You
 can also type a family name for body, headings and code. **Insert font
 overrides** adds a `(fonts …)` rule to your editor buffer;
 save to apply it. Font families are tried in order (fall back to the system

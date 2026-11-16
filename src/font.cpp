@@ -15,7 +15,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <string_view>
 #include <filesystem>
+#include <unordered_set>
 #include <mutex>
 #include <vector>
 #if XANATOO_FONTCONFIG
@@ -290,98 +292,210 @@ std::string fontconfig_family_from_file(const std::string& path) {
 
 #else  // !XANATOO_FONTCONFIG
 
-// Without FontConfig (Android): family names map onto three generic groups,
-// each a list of font files in the usual font directories.
+// Without FontConfig (Android and other ports): scan the usual font
+// directories with FreeType and expose real family names. Style sheets can
+// then pick "Roboto", "Noto Serif", … instead of only the three CSS generics.
+
 namespace {
 
-enum class FontGroup { Sans, Serif, Mono };
-
-FontGroup font_group(const std::string& family) {
-  std::string f;
-  for (char c : family) f.push_back(static_cast<char>(std::tolower(
-                            static_cast<unsigned char>(c))));
-  if (f.find("mono") != std::string::npos ||
-      f.find("courier") != std::string::npos ||
-      f.find("typewriter") != std::string::npos)
-    return FontGroup::Mono;
-  if (f.find("serif") != std::string::npos &&
-      f.find("sans") == std::string::npos)
-    return FontGroup::Serif;
-  return FontGroup::Sans;
-}
+struct ScannedFace {
+  std::string path;
+  int face_index = 0;
+  std::string family;
+  bool bold = false;
+  bool italic = false;
+};
 
 std::vector<std::filesystem::path> font_dirs() {
   std::vector<std::filesystem::path> dirs;
   if (const std::string data = data_dir(); !data.empty())
     dirs.push_back(std::filesystem::path(data) / "fonts");
-  dirs.emplace_back("/system/fonts");                    // Android
-  dirs.emplace_back("/usr/share/fonts/truetype/dejavu");  // Debian
-  dirs.emplace_back("/usr/share/fonts/TTF");              // Arch
+  // Android product partitions + the classic system tree.
+  dirs.emplace_back("/system/fonts");
+  dirs.emplace_back("/system/product/fonts");
+  dirs.emplace_back("/product/fonts");
+  dirs.emplace_back("/system/system_ext/fonts");
+  // Desktop fallbacks when FontConfig is compiled out.
+  dirs.emplace_back("/usr/share/fonts/truetype/dejavu");
+  dirs.emplace_back("/usr/share/fonts/TTF");
+  dirs.emplace_back("/usr/share/fonts");
   return dirs;
 }
 
-// Candidate file stems per group and style (index: weight*2 + slant).
-const std::vector<std::vector<const char*>>& group_files(FontGroup g) {
-  static const std::vector<std::vector<const char*>> sans = {
-      {"Roboto-Regular.ttf", "DroidSans.ttf", "DejaVuSans.ttf"},
-      {"Roboto-Italic.ttf", "DejaVuSans-Oblique.ttf"},
-      {"Roboto-Bold.ttf", "DroidSans-Bold.ttf", "DejaVuSans-Bold.ttf"},
-      {"Roboto-BoldItalic.ttf", "DejaVuSans-BoldOblique.ttf"},
-  };
-  static const std::vector<std::vector<const char*>> serif = {
-      {"NotoSerif-Regular.ttf", "DroidSerif-Regular.ttf", "DejaVuSerif.ttf"},
-      {"NotoSerif-Italic.ttf", "DroidSerif-Italic.ttf", "DejaVuSerif-Italic.ttf"},
-      {"NotoSerif-Bold.ttf", "DroidSerif-Bold.ttf", "DejaVuSerif-Bold.ttf"},
-      {"NotoSerif-BoldItalic.ttf", "DroidSerif-BoldItalic.ttf",
-       "DejaVuSerif-BoldItalic.ttf"},
-  };
-  static const std::vector<std::vector<const char*>> mono = {
-      {"DroidSansMono.ttf", "CutiveMono.ttf", "DejaVuSansMono.ttf"},
-      {"DejaVuSansMono-Oblique.ttf"},
-      {"DejaVuSansMono-Bold.ttf"},
-      {"DejaVuSansMono-BoldOblique.ttf"},
-  };
-  return g == FontGroup::Serif ? serif : g == FontGroup::Mono ? mono : sans;
+bool is_font_file(const std::filesystem::path& p) {
+  const std::string e = p.extension().string();
+  std::string lower;
+  for (char c : e) lower.push_back(static_cast<char>(std::tolower(
+                       static_cast<unsigned char>(c))));
+  return lower == ".ttf" || lower == ".otf" || lower == ".ttc" ||
+         lower == ".otc";
+}
+
+const std::vector<ScannedFace>& scanned_faces() {
+  static const std::vector<ScannedFace> faces = [] {
+    std::vector<ScannedFace> out;
+    FT_Library lib = nullptr;
+    if (FT_Init_FreeType(&lib)) return out;
+    std::error_code ec;
+    for (const auto& dir : font_dirs()) {
+      if (!std::filesystem::is_directory(dir, ec)) continue;
+      for (const auto& entry :
+           std::filesystem::directory_iterator(dir, ec)) {
+        if (ec || !entry.is_regular_file(ec)) continue;
+        const auto path = entry.path();
+        if (!is_font_file(path)) continue;
+        FT_Face face = nullptr;
+        if (FT_New_Face(lib, path.string().c_str(), -1, &face)) continue;
+        const long nfaces = face->num_faces > 0 ? face->num_faces : 1;
+        FT_Done_Face(face);
+        for (long i = 0; i < nfaces; ++i) {
+          if (FT_New_Face(lib, path.string().c_str(), i, &face)) continue;
+          if (!face->family_name || !face->family_name[0] ||
+              !FT_IS_SCALABLE(face)) {
+            FT_Done_Face(face);
+            continue;
+          }
+          ScannedFace s;
+          s.path = path.string();
+          s.face_index = static_cast<int>(i);
+          s.family = face->family_name;
+          s.bold = (face->style_flags & FT_STYLE_FLAG_BOLD) != 0;
+          s.italic = (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+          // Filename hints when the face flags are blank (common on Android).
+          if (!s.bold || !s.italic) {
+            std::string stem = path.stem().string();
+            for (char& c : stem)
+              c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (!s.bold &&
+                (stem.find("bold") != std::string::npos ||
+                 stem.find("-b.") != std::string::npos ||
+                 stem.ends_with("-b") || stem.ends_with("_bold")))
+              s.bold = true;
+            if (!s.italic &&
+                (stem.find("italic") != std::string::npos ||
+                 stem.find("oblique") != std::string::npos ||
+                 stem.find("-i.") != std::string::npos ||
+                 stem.ends_with("-i") || stem.ends_with("_italic")))
+              s.italic = true;
+          }
+          out.push_back(std::move(s));
+          FT_Done_Face(face);
+        }
+      }
+    }
+    FT_Done_FreeType(lib);
+    return out;
+  }();
+  return faces;
+}
+
+bool family_equal(std::string_view a, std::string_view b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); ++i) {
+    const auto ca = static_cast<unsigned char>(a[i]);
+    const auto cb = static_cast<unsigned char>(b[i]);
+    if (std::tolower(ca) != std::tolower(cb)) return false;
+  }
+  return true;
+}
+
+// Map CSS generics onto families actually present on the device.
+const char* generic_prefer(std::string_view generic) {
+  static const char* sans[] = {"Roboto", "Noto Sans", "Droid Sans",
+                               "DejaVu Sans", "Liberation Sans", nullptr};
+  static const char* serif[] = {"Noto Serif", "Droid Serif", "DejaVu Serif",
+                                "Liberation Serif", "NotoSerif", nullptr};
+  static const char* mono[] = {"Droid Sans Mono", "Cutive Mono",
+                               "Roboto Mono", "DejaVu Sans Mono",
+                               "Noto Sans Mono", nullptr};
+  const char** list = sans;
+  if (generic == "serif") list = serif;
+  else if (generic == "monospace" || generic == "mono") list = mono;
+  for (const char** p = list; *p; ++p) {
+    for (const ScannedFace& f : scanned_faces())
+      if (family_equal(f.family, *p)) return *p;
+  }
+  return nullptr;
 }
 
 }  // namespace
 
 std::string fontconfig_find(const std::string& family, int weight, int slant) {
-  const auto& files = group_files(font_group(family));
-  const size_t style = static_cast<size_t>((weight ? 2 : 0) + (slant ? 1 : 0));
-  for (const auto& dir : font_dirs()) {
-    for (const char* f : files[style]) {
-      std::error_code ec;
-      if (std::filesystem::exists(dir / f, ec)) return (dir / f).string();
+  if (family.empty()) return {};
+  std::string want = family;
+  if (want == "serif" || want == "sans-serif" || want == "sans" ||
+      want == "monospace" || want == "mono") {
+    if (const char* mapped = generic_prefer(want)) want = mapped;
+  }
+  const bool need_bold = weight != 0;
+  const bool need_italic = slant != 0;
+  const ScannedFace* best = nullptr;
+  int best_score = -1;
+  for (const ScannedFace& f : scanned_faces()) {
+    if (!family_equal(f.family, want)) continue;
+    // Prefer exact style; allow regular as a last resort for bold/italic.
+    int score = 0;
+    if (f.bold == need_bold) score += 2;
+    else if (!f.bold && need_bold) score += 0;
+    else if (f.bold && !need_bold) score -= 1;
+    if (f.italic == need_italic) score += 2;
+    else if (!f.italic && need_italic) score += 0;
+    else if (f.italic && !need_italic) score -= 1;
+    // Prefer face index 0 when scores tie (main face of a collection).
+    if (score > best_score ||
+        (score == best_score && best && f.face_index < best->face_index)) {
+      best_score = score;
+      best = &f;
     }
   }
-  // No bold / italic file: the caller falls back to the regular face.
-  return {};
+  if (!best) return {};
+  // Font::load uses path only (face index 0). For .ttc multi-face files the
+  // primary face is usually the Regular we want; non-zero indices still
+  // return the collection path (same as FontConfig often does for the
+  // regular member). Callers that need a specific index would need FT face
+  // index support in Font::load — out of scope here.
+  return best->path;
 }
 
 std::vector<std::string> fallback_font_paths(uint32_t, const std::string&,
                                              int, int) {
-  // Broad-coverage faces; Font opens them lazily and checks the codepoint.
   static const std::vector<std::string> paths = [] {
     std::vector<std::string> found;
-    for (const auto& dir : font_dirs()) {
-      for (const char* f : {"DejaVuSans.ttf", "Roboto-Regular.ttf",
-                            "NotoSans-Regular.ttf", "NotoSansSymbols-Regular-Subsetted.ttf",
-                            "NotoSansSymbols-Regular.ttf", "NotoSansSymbols2-Regular.ttf",
-                            "NotoSansMath-Regular.ttf", "DroidSansFallback.ttf",
-                            "DroidSansFallbackFull.ttf"}) {
+    std::unordered_set<std::string> seen;
+    for (const char* f : {"DejaVuSans.ttf", "Roboto-Regular.ttf",
+                          "NotoSans-Regular.ttf",
+                          "NotoSansSymbols-Regular-Subsetted.ttf",
+                          "NotoSansSymbols-Regular.ttf",
+                          "NotoSansSymbols2-Regular.ttf",
+                          "NotoSansMath-Regular.ttf", "DroidSansFallback.ttf",
+                          "DroidSansFallbackFull.ttf"}) {
+      for (const auto& dir : font_dirs()) {
         std::error_code ec;
-        if (std::filesystem::exists(dir / f, ec)) found.push_back((dir / f).string());
+        const auto p = dir / f;
+        if (std::filesystem::exists(p, ec)) {
+          const std::string s = p.string();
+          if (seen.insert(s).second) found.push_back(s);
+        }
       }
+    }
+    // Any other scanned Regular face as late coverage.
+    for (const ScannedFace& face : scanned_faces()) {
+      if (face.bold || face.italic) continue;
+      if (seen.insert(face.path).second) found.push_back(face.path);
     }
     return found;
   }();
   return paths;
 }
 
-std::string fontconfig_family_from_file(const std::string&) { return {}; }
+std::string fontconfig_family_from_file(const std::string& path) {
+  for (const ScannedFace& f : scanned_faces())
+    if (f.path == path) return f.family;
+  return {};
+}
 
 #endif  // XANATOO_FONTCONFIG
+
 
 static bool try_load(Font& font, const std::string& path, int px,
                      SDL_Renderer* r, const char* label) {
@@ -436,10 +550,13 @@ static bool is_generic_family(const std::string& name) {
 
 std::string fontconfig_pick_family(const std::vector<std::string>& names) {
 #if !XANATOO_FONTCONFIG
-  // Only the generic names resolve without FontConfig, so style sheets fall
-  // through their family lists to "serif" / "monospace" / "sans-serif".
-  for (const std::string& name : names)
+  // Prefer a name that is either a CSS generic or a family scanned from disk.
+  for (const std::string& name : names) {
+    if (name.empty()) continue;
     if (is_generic_family(name)) return name;
+    for (const ScannedFace& f : scanned_faces())
+      if (family_equal(f.family, name)) return f.family;
+  }
   return {};
 #else
   if (!FcInit()) return {};
@@ -471,9 +588,25 @@ std::string fontconfig_pick_family(const std::vector<std::string>& names) {
 
 const std::vector<std::string>& fontconfig_list_families() {
 #if !XANATOO_FONTCONFIG
-  static const std::vector<std::string> generic = {
-      "serif", "sans-serif", "monospace"};
-  return generic;
+  static const std::vector<std::string> installed = [] {
+    std::vector<std::string> out{"serif", "sans-serif", "monospace"};
+    std::unordered_set<std::string> seen;
+    for (const std::string& g : out) seen.insert(g);
+    for (const ScannedFace& f : scanned_faces()) {
+      if (seen.insert(f.family).second) out.push_back(f.family);
+    }
+    std::sort(out.begin() + 3, out.end(),
+              [](const std::string& a, const std::string& b) {
+                return std::lexicographical_compare(
+                    a.begin(), a.end(), b.begin(), b.end(),
+                    [](char ca, char cb) {
+                      return std::tolower(static_cast<unsigned char>(ca)) <
+                             std::tolower(static_cast<unsigned char>(cb));
+                    });
+              });
+    return out;
+  }();
+  return installed;
 #else
   static const std::vector<std::string> installed = [] {
     std::vector<std::string> out{"serif", "sans-serif", "monospace"};
