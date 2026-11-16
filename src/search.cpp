@@ -266,7 +266,7 @@ std::vector<SearchEngine> builtin_table() {
        "+",
        {"wiby.me"}},
       {"curlie", "Curlie", "cu", "Cu",
-       "https://curlie.org/search?q=%s", "page", "+",
+       "https://curlie.org/search?q=%s&stime=92452189", "page", "+",
        {"curlie.org"}},
       {"youtube", "YouTube", "yt", "YT",
        "youtube:results?search_query=%s", "page", "+",
