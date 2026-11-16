@@ -488,9 +488,14 @@ xanatoo::Document load_error_doc(const FetchJob& job) {
          job.shared->error + "\n";
   }
   if (xanatoo::starts_with(job.url, "http://") ||
-      xanatoo::starts_with(job.url, "https://"))
+      xanatoo::starts_with(job.url, "https://")) {
     md += "\n[Open in browser](" + std::string(xanatoo::kExternalPrefix) +
-          job.url + ")\n";
+          job.url + ")";
+    if (const std::string native = xanatoo::native_url_for(job.url);
+        !native.empty())
+      md += " · [Open as native view](" + native + ")";
+    md += "\n";
+  }
   xanatoo::Document doc = xanatoo::parse_document(md, "error.md");
   if (certificate_review) {
     auto field = [&](const char* label, std::string value) {

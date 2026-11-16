@@ -5312,6 +5312,31 @@ void test_html_page() {
   EXPECT_EQ(d4.get(p4).spans[0].href, "https://w.org/wiki/X");
   EXPECT_EQ(d4.get(p4).spans[1].href, "#n1");
 
+  // JS-only YouTube page: host line has Open as native view → youtube: ref,
+  // and the empty-content note links the same way.
+  {
+    Document yt = parse_html_page(
+        "<html><head><title>Watch</title></head><body>"
+        "<div id=\"player\"></div></body></html>",
+        "https://www.youtube.com/watch?v=v_DgEwNJwkQ");
+    auto yt_top = kids_of(yt, yt.root);
+    EXPECT(!yt_top.empty());
+    const auto& host_spans = yt.get(yt_top[0]).spans;
+    EXPECT_EQ(host_spans.size(), 4u);  // host · Open in browser · Open as native view
+    EXPECT_EQ(host_spans[1].href, "external:https://www.youtube.com/watch?v=v_DgEwNJwkQ");
+    EXPECT_EQ(host_spans[3].text, "Open as native view");
+    EXPECT_EQ(host_spans[3].href, "youtube:watch?v=v_DgEwNJwkQ");
+    // Empty body → the "No readable content" paragraph also links native.
+    bool found_native_in_empty = false;
+    for (NodeId id : yt_top) {
+      for (const auto& s : yt.get(id).spans)
+        if (s.href == "youtube:watch?v=v_DgEwNJwkQ" &&
+            s.text == "Open as native view")
+          found_native_in_empty = true;
+    }
+    EXPECT(found_native_in_empty);
+  }
+
   EXPECT_EQ(http_status_line(404), "HTTP 404 Not Found");
   EXPECT_EQ(http_status_line(599), "HTTP 599");
 

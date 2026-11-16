@@ -6,6 +6,7 @@
 #include "xanatoo/feed.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/html_min.hpp"
+#include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/util.hpp"
 
@@ -192,12 +193,19 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
   opt.chrome_nodes = keep_chrome;
   opt.images = true;
 
+  const std::string native_ref =
+      is_remote(page_url) ? native_url_for(page_url) : std::string();
   if (is_remote(page_url)) {
     NodeId p = doc.create(NodeKind::Paragraph, root);
     auto& spans = doc.get(p).spans;
     spans.push_back(span(InlineKind::Emphasis, url_host(page_url) + " · "));
     spans.push_back(span(InlineKind::Link, "Open in browser",
                          std::string(kExternalPrefix) + std::string(page_url)));
+    // Same mapping as the URL-bar Native view toggle (native.hpp).
+    if (!native_ref.empty()) {
+      spans.push_back(span(InlineKind::Text, " · "));
+      spans.push_back(span(InlineKind::Link, "Open as native view", native_ref));
+    }
   }
 
   std::string_view body = main_content(html);
@@ -232,9 +240,15 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
   html_append_blocks(doc, parent, body, body_opt);
   if (doc.nodes.size() == before_nodes) {
     NodeId p = doc.create(NodeKind::Paragraph, parent);
-    doc.get(p).spans.push_back(span(
+    auto& spans = doc.get(p).spans;
+    spans.push_back(span(
         InlineKind::Emphasis,
         "No readable content (the page may need JavaScript)."));
+    if (!native_ref.empty()) {
+      spans.push_back(span(InlineKind::Text, " "));
+      spans.push_back(span(InlineKind::Link, "Open as native view", native_ref));
+      spans.push_back(span(InlineKind::Text, " instead."));
+    }
   }
   if (!after.empty()) html_append_chrome(doc, root, "page footer", after, opt);
   return doc;
