@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/https.hpp"
+#include "xanatoo/tcp.hpp"
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/net_address.hpp"
 #include "xanatoo/tls.hpp"
@@ -28,63 +29,6 @@
 namespace xanatoo {
 namespace {
 
-int tcp_connect(const std::string& host, int port, std::string* err,
-                bool public_only = false) {
-  addrinfo hints {};
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_family = AF_UNSPEC;
-  addrinfo* res = nullptr;
-  std::string port_s = std::to_string(port);
-  if (const int gai = getaddrinfo(host.c_str(), port_s.c_str(), &hints, &res)) {
-    if (err) *err = "DNS lookup failed for " + host + " (" + gai_strerror(gai) + ")";
-    return -1;
-  }
-  int fd = -1;
-  int last_errno = 0;
-  bool attempted = false;
-  for (addrinfo* p = res; p; p = p->ai_next) {
-    if (public_only && !public_ip_address(p->ai_addr)) continue;
-    attempted = true;
-    fd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (fd < 0) continue;
-    timeval tv;
-    tv.tv_sec = 15;
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-    if (public_only) {
-      // Untrusted auto-discovery must not block on an unresponsive host for
-      // the default OS TCP connect timeout (sometimes many minutes).
-      const int flags = fcntl(fd, F_GETFL, 0);
-      if (flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0) {
-        int result = ::connect(fd, p->ai_addr, p->ai_addrlen);
-        if (result < 0 && errno == EINPROGRESS) {
-          pollfd wait{fd, POLLOUT, 0};
-          if (::poll(&wait, 1, 4000) > 0) {
-            socklen_t len = sizeof(result);
-            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &result, &len) == 0 &&
-                result == 0) result = 0;
-            else result = -1;
-          } else result = -1;
-        }
-        fcntl(fd, F_SETFL, flags);
-        if (result == 0) break;
-      }
-    } else if (::connect(fd, p->ai_addr, p->ai_addrlen) == 0) {
-      break;
-    }
-    last_errno = errno;
-    ::close(fd);
-    fd = -1;
-  }
-  freeaddrinfo(res);
-  if (fd < 0 && err) *err = attempted ? "connect failed to " + host + ":" +
-                                            port_s + " (" +
-                                            std::strerror(last_errno) + ")" :
-                          "private/local address excluded for " + host;
-  return fd;
-}
-
 // A single HTTP/1.1 connection. The TLS layer owns secure sockets; the raw
 // layer owns plain sockets. No TLS handshake is attempted for http://.
 class HttpConnection {
@@ -100,7 +44,7 @@ public:
       if (err) *err = "authenticated request requires HTTPS";
       return false;
     }
-    const int fd = tcp_connect(url.host, url.port, err, security.public_only);
+    const int fd = xanatoo::tcp_connect(url.host, url.port, err, security.public_only);
     if (fd < 0) return false;
     secure_ = url.secure;
     if (secure_) return tls_.connect(fd, url.host, err, security.verify_tls);
@@ -164,11 +108,6 @@ std::string header_value(const std::string& headers, const char* key) {
 }
 
 }  // namespace
-
-int tcp_connect_host(const std::string& host, int port, std::string* err) {
-  return tcp_connect(host, port, err);
-}
-
 namespace {
 
 // Decode a "Transfer-Encoding: chunked" body (hex size line, data, CRLF).

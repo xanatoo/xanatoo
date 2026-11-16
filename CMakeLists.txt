@@ -41,8 +41,10 @@ option(XANATOO_MINIMAL_PORT "Offline, dependency-light cross-platform build" ${_
 # so the page must be cross-origin isolated (docs/PORTS.md).
 set(XANATOO_WASM_DEPS_ROOT "" CACHE PATH "Emscripten prefix with thumtoo's libraries")
 if(XANATOO_MINIMAL_PORT)
-  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI GOPHER SPARTAN NEX FINGER NOSTR REDDIT LEMMY HN YOUTUBE VIDEO
+  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI NOSTR REDDIT LEMMY HN YOUTUBE VIDEO
                    EBOOKS FEEDS WEB WIKIPEDIA)
+  # Gopher/Spartan/Nex/Finger use plain TCP only (no TLS library). Keep them
+  # available under MINIMAL_PORT except on Emscripten (no raw sockets).
   # Browser fetch (src/https_wasm.cpp) replaces sockets + TLS. Synchronous
   # fetches must run on worker threads, so this needs the pthreads build.
   # Only services whose APIs are CORS-open can work: Gemini / Nostr / Reddit /
@@ -66,6 +68,14 @@ if(XANATOO_MINIMAL_PORT)
   foreach(_feature ${_minimal_off})
     set(XANATOO_${_feature} OFF CACHE BOOL "Disabled by XANATOO_MINIMAL_PORT" FORCE)
   endforeach()
+  # Plain TCP (BSD sockets) is available on Unix-like hosts. Windows
+  # minimal builds stay offline; Emscripten has no raw TCP.
+  if(EMSCRIPTEN OR WIN32)
+    foreach(_feature GOPHER SPARTAN NEX FINGER)
+      set(XANATOO_${_feature} OFF CACHE BOOL
+          "Small-net TCP not enabled on this minimal target" FORCE)
+    endforeach()
+  endif()
 endif()
 
 if(EMSCRIPTEN)
@@ -350,6 +360,14 @@ if(XANATOO_GEMINI OR XANATOO_NOSTR OR XANATOO_REDDIT OR XANATOO_LEMMY OR
    XANATOO_HN OR XANATOO_YOUTUBE OR XANATOO_VIDEO OR XANATOO_EBOOKS OR XANATOO_FEEDS OR XANATOO_WEB OR
    XANATOO_WIKIPEDIA)
   set(XANATOO_NEED_OPENSSL ON)
+endif()
+set(XANATOO_NEED_TCP OFF)
+if(XANATOO_NEED_OPENSSL OR XANATOO_GOPHER OR XANATOO_SPARTAN OR XANATOO_NEX OR
+   XANATOO_FINGER)
+  set(XANATOO_NEED_TCP ON)
+endif()
+if(XANATOO_NEED_TCP AND NOT EMSCRIPTEN)
+  target_sources(xanatoo PRIVATE src/tcp.cpp)
 endif()
 
 # TLS backend for the network clients (tls.hpp): OpenSSL, or the lighter

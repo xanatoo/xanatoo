@@ -9,6 +9,8 @@
 #include <string>
 #include <string_view>
 
+#include "xanatoo/tcp.hpp"  // tcp_connect_host (Gemini, small-net, …)
+
 namespace xanatoo {
 
 // Minimal HTTP/1.1 client. http:// uses plain TCP (port 80); https:// uses
@@ -76,10 +78,5 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
                                            std::string_view user_agent,
                                            std::string* err = nullptr,
                                            std::string* final_url = nullptr);
-
-// Shared TCP helper (Gemini, Nostr WSS); wrap the fd in a TlsStream.
-// Returns a connected socket fd, or -1. Caller owns the fd.
-int tcp_connect_host(const std::string& host, int port,
-                     std::string* err = nullptr);
 
 }  // namespace xanatoo
