@@ -66,7 +66,7 @@ let
     # The browser edition is a directory; the release keeps it as one file.
     wasm = release "wasm" ''
       tar -C ${packages.xanatoo-wasm} --sort=name --mtime=@${toString lastModified} \
-        --owner=0 --group=0 --numeric-owner -ch . | gzip -9n > "$file"
+        --owner=0 --group=0 --numeric-owner --mode=u+w -ch . | gzip -9n > "$file"
     '';
   };
 

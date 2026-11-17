@@ -44,8 +44,14 @@ from_release() {
   get "$release/$asset" "$tmp/$asset" || { rm -rf "$tmp"; return 1; }
   if [ "$target" = wasm ]; then
     mkdir "$tmp/wasm"
-    tar -C "$tmp/wasm" -xzf "$tmp/$asset" || { rm -rf "$tmp"; return 1; }
-    rm -rf "$dir/wasm"; mv "$tmp/wasm" "$dir/wasm"
+    # Older tarballs carry the Nix store's read-only modes, and a read-only
+    # directory can neither be moved to another parent nor removed.
+    if ! tar -C "$tmp/wasm" -xzf "$tmp/$asset"; then
+      chmod -R u+w "$tmp"; rm -rf "$tmp"; return 1
+    fi
+    chmod -R u+w "$tmp/wasm"
+    if [ -d "$dir/wasm" ]; then chmod -R u+w "$dir/wasm"; rm -rf "$dir/wasm"; fi
+    mv "$tmp/wasm" "$dir/wasm"
   else
     mv "$tmp/$asset" "$dir/$asset"
   fi
