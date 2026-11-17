@@ -19,7 +19,7 @@ let
         pname = "xanatoo-${arch}-build";
         inherit version;
         src = lib.cleanSource ../.;
-        nativeBuildInputs = [ pkgs.cmake pkgs.python3 ];
+        nativeBuildInputs = [ pkgs.cmake pkgs.python3 pkgs.librsvg ];
         buildInputs = [ sdl3 crossPkgs.freetype crossPkgs.windows.mcfgthreads ];
         cmakeFlags = [
           "-DCMAKE_BUILD_TYPE=Release"

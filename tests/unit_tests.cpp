@@ -3539,6 +3539,16 @@ void test_locator() {
   EXPECT_EQ(l.base, "file:///a/b%23c.md");
   EXPECT(l.pipes.size() == 1 && l.point);
   EXPECT_EQ(parse_locator("file:///").base, "file:///");
+  // A directory keeps its trailing '/': three slashes before the selector.
+  l = parse_locator("file:///a/pics///gallery//item:2");
+  EXPECT_EQ(l.base, "file:///a/pics/");
+  EXPECT(l.pipes.size() == 2 && l.pipes[0].kind == SelectorKind::Gallery);
+  EXPECT_EQ(format_locator(l), "file:///a/pics///gallery//item:2");
+  l = parse_locator("/a/pics///gallery");
+  EXPECT_EQ(l.base, "/a/pics/");
+  EXPECT(l.pipes.size() == 1 && l.pipes[0].kind == SelectorKind::Gallery);
+  EXPECT_EQ(parse_locator("file:////gallery").base, "file:////gallery");
+  EXPECT_EQ(parse_locator("https:///gallery").base, "https:///gallery");
 
   l = parse_locator("map.png//rect:0.2,0.1,0.3,0.3#at:0.5,0.5");
   EXPECT_EQ(l.base, "map.png");

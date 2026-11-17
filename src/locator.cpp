@@ -373,12 +373,15 @@ Locator parse_locator(std::string_view address) {
     rest = rest.substr(0, hash);
   }
   // Right to left: plain URLs have `//` of their own, the first thing that
-  // is no selector ends the chain.
+  // is no selector ends the chain. A longer run of slashes is a base that
+  // ends in '/' (a directory, `file:///pics/` + `//gallery`), unless the run
+  // follows the scheme (`file:///`, `https://`).
   while (true) {
     const size_t at = rest.rfind("//");
-    if (at == std::string_view::npos || at == 0 ||
-        rest[at - 1] == ':' || rest[at - 1] == '/')
-      break;
+    if (at == std::string_view::npos || at == 0) break;
+    size_t run = at;
+    while (run > 0 && rest[run - 1] == '/') --run;
+    if (run == 0 || rest[run - 1] == ':') break;
     auto sel = parse_selector(rest.substr(at + 2));
     if (!sel) break;
     loc.pipes.insert(loc.pipes.begin(), std::move(*sel));

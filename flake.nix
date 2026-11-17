@@ -86,6 +86,7 @@
               pkg-config
               # CMake custom command runs scripts/rasterize_icons.py (SVG→PNG).
               python3
+              librsvg # rsvg-convert; without it the icons are crude fallbacks
             ];
 
             buildInputs = with pkgs; [

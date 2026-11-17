@@ -163,7 +163,9 @@ let
     src = pkgs.lib.cleanSource ../.;
     dontConfigure = true;
     dontUseCmakeConfigure = true;
-    nativeBuildInputs = commonTools ++ [ pkgs.pkg-config ];
+    # librsvg: rasterize_icons.py needs rsvg-convert, else it draws its
+    # crude built-in fallback icons.
+    nativeBuildInputs = commonTools ++ [ pkgs.pkg-config pkgs.librsvg ];
     buildPhase = ''
       runHook preBuild
       ${setupEmCache "xanatoo"}

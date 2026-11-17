@@ -216,7 +216,7 @@ let
     pname = if withSDL3 then "xanatoo-r36s-sdl3" else "xanatoo-r36s";
     inherit version;
     src = lib.cleanSource ../.;
-    nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config pkgs.python3 ];
+    nativeBuildInputs = [ pkgs.cmake pkgs.pkg-config pkgs.python3 pkgs.librsvg ];
     PKG_CONFIG_PATH = "${sysroot}/usr/lib/${multiarch}/pkgconfig";
     PKG_CONFIG_SYSROOT_DIR = "${sysroot}";
     cmakeFlags = [

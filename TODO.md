@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Real toolbar icons in Nix builds; `dir///gallery`
+
+- WASM (and the Nix native / Windows / R36S packages) showed the crude
+  drawn fallback icons: `rasterize_icons.py` found neither ImageMagick nor
+  `rsvg-convert` in the build sandbox. `librsvg` added to their
+  nativeBuildInputs (Android already had it). Verified: `.#xanatoo-wasm`
+  log shows 67 × convert, 0 × fallback; not looked at in a browser.
+- A directory's address keeps its trailing '/', so its gallery is
+  `file:///pics///gallery`; `parse_locator` refused a `//` preceded by '/'
+  and the path collapsed to `/pics/gallery` (reload, Back, re-entering the
+  shown address). Now a slash run counts as base-'/' + `//`, unless it
+  follows the scheme. Unit tests; checked in Xvfb (before / after).
+
 ## Status (2026-11-17) — Nested inline styles (marks); Nelson bibliography example
 
 - `examples/ted-nelson-bibliography.md` (was an untracked `DOC.md`).
