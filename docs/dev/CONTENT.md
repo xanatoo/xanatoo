@@ -214,12 +214,18 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 
 ## Remote images
 
-- An Image whose `src` is http(s) is remote: `ImageCache` never fetches,
+- An Image whose `src` is http(s) or nex:// is remote: `ImageCache` never fetches,
   it queues the URL (`take_requests`) and returns a `pending` placeholder;
-  `poll_images` (app_images.cpp) downloads it and calls `remote_done`.
+  `poll_images` (app_images.cpp) downloads it (`https_get_follow`, or
+  `nex_fetch` for nex://), stores it with `store_remote_image` and calls
+  `remote_done`.
+- Nex sends no MIME type: `fetch_nex` sniffs a non-directory answer with
+  `looks_like_image` and, for a picture, stores it in the remote image cache
+  and shows `image_url_document` (so extension-less image URLs work too).
 - Layout draws remote images from their `kRemoteThumbEdge` thumbnail
   (`layout_remote_image`); a click shows it in the page's `//gallery`.
-- Links to images (`is_image_url`: http(s) or local path by extension)
+- Links to images (`is_image_url`: http(s), nex:// or local path by
+  extension)
   show that image in the page's `//gallery` (`open_link_image`, checked
   before split / external handling), never the system browser; one not
   among the page's images opens as `URL//gallery//item:1`

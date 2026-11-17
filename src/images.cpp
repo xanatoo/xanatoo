@@ -251,7 +251,47 @@ Image ImageCache::load_thumb(const std::string& resolved, int edge) {
 }
 
 bool is_remote_image(std::string_view src) {
-  return starts_with_ci(src, "https://") || starts_with_ci(src, "http://");
+  return starts_with_ci(src, "https://") || starts_with_ci(src, "http://") ||
+         starts_with_ci(src, "nex://");
+}
+
+bool looks_like_image(std::string_view b) {
+  auto has = [&](size_t at, std::string_view magic) {
+    return b.size() >= at + magic.size() && b.substr(at, magic.size()) == magic;
+  };
+  if (has(0, "\x89PNG\r\n\x1a\n") || has(0, "\xff\xd8\xff") ||
+      has(0, "GIF87a") || has(0, "GIF89a") || has(0, "BM") ||
+      has(0, "II*\0") || has(0, "MM\0*") || has(0, "\xff\x0a") ||
+      has(0, std::string_view("\0\0\0\x0cJXL \r\n\x87\n", 12)))
+    return true;
+  if (has(0, "RIFF") && has(8, "WEBP")) return true;
+  if (has(4, "ftypavif") || has(4, "ftypavis")) return true;
+  // SVG: an XML / <svg prologue near the start.
+  std::string_view head = b.substr(0, std::min<size_t>(b.size(), 512));
+  while (!head.empty() && (head.front() == ' ' || head.front() == '\n' ||
+                           head.front() == '\r' || head.front() == '\t'))
+    head.remove_prefix(1);
+  if (starts_with(head, "<svg")) return true;
+  return starts_with(head, "<?xml") &&
+         head.find("<svg") != std::string_view::npos;
+}
+
+bool store_remote_image(std::string_view url, std::string_view bytes) {
+  const std::string path = remote_image_path(url);
+  if (path.empty()) return false;  // no cache directory
+  const std::string tmp = path + ".part";
+  std::error_code ec;
+  fs::create_directories(fs::path(path).parent_path(), ec);
+  {
+    std::ofstream out(tmp, std::ios::binary);
+    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!out) {
+      std::cerr << "image: cannot write " << tmp << "\n";
+      return false;
+    }
+  }
+  fs::rename(tmp, path, ec);
+  return !ec;
 }
 
 std::string remote_image_path(std::string_view url) {

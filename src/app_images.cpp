@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Remote images: ImageCache queues the http(s) sources layout asks for;
+// Remote images: ImageCache queues the http(s) / nex sources layout asks for;
 // a few detached workers download each one into cache_dir()/images/ and
 // prebuild its inline thumbnail (stb builds; thumtoo makes it on request),
 // then the main thread marks it done and relayouts (the image's size
@@ -15,6 +15,7 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/http_status.hpp"
+#include "xanatoo/nex.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
@@ -37,42 +38,46 @@ constexpr uint64_t kDocumentCacheBytes = 1024ull * 1024 * 1024;
 
 // Download `url` to its cache file and build the inline thumbnail.
 bool download_image(const std::string& url) {
-#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
-  std::string err;
-  auto r = xanatoo::https_get_follow(url, xanatoo::user_agent("image fetch"), &err);
-  if (!r || r->status != 200 || r->body.empty()) {
-    std::cerr << "image: " << url << ": "
-              << (r ? http_status_error(r->status) : err) << "\n";
-    return false;
-  }
-  // https_request stops reading at 12 MiB: anything that size is cut off.
-  if (r->body.size() >= 12 * 1024 * 1024) {
-    std::cerr << "image: " << url << ": too large\n";
-    return false;
-  }
-  const std::string path = xanatoo::remote_image_path(url);
-  if (path.empty()) return false;  // no cache directory
-  const std::string tmp = path + ".part";
-  std::error_code ec;
-  fs::create_directories(fs::path(path).parent_path(), ec);
-  {
-    std::ofstream out(tmp, std::ios::binary);
-    out.write(r->body.data(), static_cast<std::streamsize>(r->body.size()));
-    if (!out) {
-      std::cerr << "image: cannot write " << tmp << "\n";
+  std::string body;
+  if (xanatoo::is_nex_url(url)) {
+#if defined(XANATOO_NEX) && XANATOO_NEX
+    std::string err;
+    auto r = xanatoo::nex_fetch(url, &err);
+    if (!r || r->is_directory || r->body.empty()) {
+      std::cerr << "image: " << url << ": "
+                << (err.empty() ? "no image" : err) << "\n";
       return false;
     }
+    body = std::move(r->body);
+#else
+    return false;
+#endif
+  } else {
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+    std::string err;
+    auto r = xanatoo::https_get_follow(url, xanatoo::user_agent("image fetch"),
+                                       &err);
+    if (!r || r->status != 200 || r->body.empty()) {
+      std::cerr << "image: " << url << ": "
+                << (r ? http_status_error(r->status) : err) << "\n";
+      return false;
+    }
+    // https_request stops reading at 12 MiB: anything that size is cut off.
+    if (r->body.size() >= 12 * 1024 * 1024) {
+      std::cerr << "image: " << url << ": too large\n";
+      return false;
+    }
+    body = std::move(r->body);
+#else
+    return false;
+#endif
   }
-  fs::rename(tmp, path, ec);
-  if (ec) return false;
+  if (!xanatoo::store_remote_image(url, body)) return false;
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   return true;  // thumtoo builds the thumbnail when layout asks for it
 #else
-  return xanatoo::build_thumb_file(path, xanatoo::kRemoteThumbEdge);
-#endif
-#else
-  (void)url;
-  return false;
+  return xanatoo::build_thumb_file(xanatoo::remote_image_path(url),
+                                   xanatoo::kRemoteThumbEdge);
 #endif
 }
 

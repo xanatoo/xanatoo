@@ -251,6 +251,16 @@ void fetch_nex(const std::string& url, FetchShared& out) {
   auto resp = xanatoo::nex_fetch(url, &out.error);
   if (!resp) return;
   out.final_url = resp->final_url;
+  // Nex sends no MIME type: a picture is known by its bytes. It goes into
+  // the remote image cache, so the page is that image like an http one.
+  if (!resp->is_directory && xanatoo::looks_like_image(resp->body)) {
+    if (xanatoo::store_remote_image(resp->final_url, resp->body)) {
+      out.doc = xanatoo::image_url_document(resp->final_url);
+    } else {
+      out.error = "cannot cache image " + resp->final_url;
+    }
+    return;
+  }
   out.raw_source = resp->body;
   if (resp->is_directory) {
     out.doc = xanatoo::parse_document(resp->body, "remote.md");

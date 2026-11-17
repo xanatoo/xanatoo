@@ -23,7 +23,7 @@ struct Image {
   bool pending = false;  // remote source downloading / thumbnail building
 };
 
-// Remote (http / https) image sources are downloaded by the app's image
+// Remote (http / https / nex) image sources are downloaded by the app's image
 // fetcher (app_images.cpp) into cache_dir()/images/ and then served like
 // local files. ImageCache itself never touches the network: it queues the
 // URLs it is asked for (take_requests) and reports them pending until the
@@ -31,6 +31,12 @@ struct Image {
 bool is_remote_image(std::string_view src);
 // Download target of a remote image (cache_dir()/images/<hash>).
 std::string remote_image_path(std::string_view url);
+// Write the downloaded `bytes` of `url` to its cache file (atomically, via
+// "<path>.part"); false without a cache directory or on a write error.
+bool store_remote_image(std::string_view url, std::string_view bytes);
+// File signature of a picture format we decode (PNG, JPEG, GIF, WebP, BMP,
+// TIFF, AVIF, JPEG XL, SVG): for answers without a MIME type (Nex).
+bool looks_like_image(std::string_view bytes);
 // Thumbnail edge used for inline remote images; the fetcher prebuilds it.
 constexpr int kRemoteThumbEdge = 512;
 

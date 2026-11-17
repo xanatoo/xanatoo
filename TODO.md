@@ -159,6 +159,17 @@
 - Still open: type-7 / `=:` input prompts, binary download routing, dedicated
   icons, live Xvfb verification against public servers.
 
+## Status (2026-11-17) — Nex images
+
+- nex:// images were shown as raw bytes. Now nex:// counts as a remote
+  image source (`is_remote_image`, `is_image_url`, `is_image_address`):
+  image links open in the one-image gallery and the image fetcher downloads
+  them with `nex_fetch`. Answers without an image extension are sniffed
+  (`looks_like_image`) and shown as an image page. Verified under Xvfb
+  against a local Nex server (both cases).
+- Open: Gemini / Spartan image MIME types and Gopher `I` / `g` items still
+  go to "Unsupported media" / download offers instead of the image viewer.
+
 ## Status (2026-11-15) — Small-net protocols: Gopher, Spartan, Nex, Finger
 
 - Initial clients for `gopher://` (port 70), `spartan://` (port 300),

@@ -1259,6 +1259,7 @@ void test_path_helpers() {
   EXPECT(!is_image_url("https://example.org/?img=a.png"));
   EXPECT(!is_image_url("gemini://host/a.png"));
   EXPECT(!is_image_url("mailto:a.png"));
+  EXPECT(is_image_url("nex://host/pics/a.png"));
 }
 
 void test_parse_org() {
@@ -3398,6 +3399,16 @@ void test_image_address() {
   EXPECT(!xanatoo::is_image_address("https://x.org/page.html"));
   EXPECT(!xanatoo::is_image_address("photos/a.jpg"));
   EXPECT(!xanatoo::is_image_address("gemini://x.org/a.png"));
+  EXPECT(xanatoo::is_image_address("nex://x.org/a.jpg"));
+  EXPECT(!xanatoo::is_image_address("nex://x.org/a.txt"));
+  EXPECT(xanatoo::is_remote_image("nex://x.org/a.jpg"));
+  EXPECT(xanatoo::looks_like_image(std::string_view("\x89PNG\r\n\x1a\n\0\0", 10)));
+  EXPECT(xanatoo::looks_like_image("\xff\xd8\xff\xe0rest"));
+  EXPECT(xanatoo::looks_like_image("GIF89a..."));
+  EXPECT(xanatoo::looks_like_image(std::string_view("RIFF\x10\0\0\0WEBPVP8 ", 16)));
+  EXPECT(xanatoo::looks_like_image("  <?xml version=\"1.0\"?>\n<svg x=\"1\">"));
+  EXPECT(!xanatoo::looks_like_image("Hello nex\n=> foo.png"));
+  EXPECT(!xanatoo::looks_like_image(""));
   const auto d = xanatoo::image_url_document("https://x.org/c/a_1200.jpg?x=1");
   EXPECT_EQ(d.meta.title, "a_1200.jpg");
   const auto items = xanatoo::gallery_items(d, xanatoo::INVALID_NODE);

@@ -176,7 +176,8 @@ int gallery_item_index(std::string_view value, size_t count) {
 std::string gallery_item_value(int index) { return std::to_string(index + 1); }
 
 bool is_image_address(std::string_view url) {
-  return (starts_with_ci(url, "https://") || starts_with_ci(url, "http://")) &&
+  return (starts_with_ci(url, "https://") || starts_with_ci(url, "http://") ||
+          starts_with_ci(url, "nex://")) &&
          is_image_url(url);
 }
 

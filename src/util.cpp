@@ -129,14 +129,15 @@ bool is_raster_image_path(std::string_view path) {
 }
 
 bool is_image_url(std::string_view url) {
-  // Scheme-relative or relative paths are fine; other schemes are not
-  // images we can load ("gemini://…/a.png", "mailto:").
+  // Scheme-relative or relative paths are fine; nex:// is fetched by the
+  // image fetcher too; other schemes are not images we can load
+  // ("gemini://…/a.png", "mailto:").
   const size_t colon = url.find(':');
   const size_t slash = url.find('/');
   if (colon != std::string_view::npos &&
       (slash == std::string_view::npos || colon < slash) &&
       !starts_with_ci(url, "http://") && !starts_with_ci(url, "https://") &&
-      !(colon == 1 && slash == 2))  // C:/path
+      !starts_with_ci(url, "nex://") && !(colon == 1 && slash == 2))  // C:/path
     return false;
   std::string_view path = url.substr(0, url.find_first_of("?#"));
   static constexpr std::string_view kExts[] = {
