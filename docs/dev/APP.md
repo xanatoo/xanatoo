@@ -161,7 +161,8 @@ desktop, SDL3 or SDL2 >= 2.26):
   (`App::primary_sel_input`, set in `handle_event`) in the same view and
   buffer. Program-set selections (history restore, passage addresses, undo,
   find) and switching to a view that has one are only recorded in
-  `App::primary_sel`. Read-only pages publish too.
+  `App::primary_sel`; find matches are set from key presses, so they call
+  `note_program_selection`. Read-only pages publish too.
 - Middle-click paste in edit mode reads `sdl::primary_selection()` (the
   clipboard where the platform has no primary selection).
 - ImGui text fields (`Ui::publish_text_field_selection`, `prepare_render`):

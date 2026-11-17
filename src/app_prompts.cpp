@@ -155,6 +155,7 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
         p.sel.anchor = *hit;
         p.sel.focus = *hit;
         xanatoo::advance_caret(d, p.sel.focus, mlen);
+        note_program_selection(app);
         scroll_caret_into_view(app, p);
       }
       reset_blink(app);

@@ -5087,6 +5087,12 @@ static void publish_primary_selection(App& app) {
   if (!text.empty()) xanatoo::sdl::set_primary_selection(text);
 }
 
+void note_program_selection(App& app) {
+  if (app.focus < 0 || app.focus >= kMaxViews) return;
+  const Pane& p = app.panes[app.focus];
+  app.primary_sel = {app.focus, p.buf, p.sel};
+}
+
 void run_frame(App& app) {
   SDL_Event ev;
   while (SDL_PollEvent(&ev)) handle_event(app, ev);

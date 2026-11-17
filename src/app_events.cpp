@@ -1300,6 +1300,7 @@ static void on_textinput(App& app, SDL_Event& ev, bool imgui_mouse,
       p.sel.anchor = *hit;
       p.sel.focus = *hit;
       xanatoo::advance_caret(doc_of(app, p), p.sel.focus, mlen);
+      note_program_selection(app);
       scroll_caret_into_view(app, p);
     }
     reset_blink(app);
@@ -2361,6 +2362,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
           pp.sel.anchor = *hit;
           pp.sel.focus = *hit;
           xanatoo::advance_caret(doc_of(app, pp), pp.sel.focus, mlen);
+          note_program_selection(app);
           scroll_caret_into_view(app, pp);
           reset_blink(app);
         }

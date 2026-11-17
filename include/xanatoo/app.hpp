@@ -1529,6 +1529,9 @@ void note_stick_use(App& app);
 bool stick_cursor_visible(const App& app);
 void set_cursor(App& app, SDL_Cursor* c);
 void reset_blink(App& app);
+// The focused view's selection was set by the program (find match): keep
+// it out of the X11 / Wayland primary selection.
+void note_program_selection(App& app);
 
 // Left-button press / drag / release at window point (x, y); the mouse
 // handlers and touch taps share these (app_events.cpp).
