@@ -115,6 +115,52 @@ int main() {
     CHECK(u->selector == "search" || u->selector == "/search");
     CHECK(u->query == "widgets");
   }
+  {
+    // '?' is part of non-search selectors; selectors are percent-coded.
+    auto u = parse_gopher_url("gopher://example.com/0/cgi?x=1%20y");
+    CHECK(u && u->type == '0' && u->selector == "/cgi?x=1 y" && u->query.empty());
+    CHECK(u->canonical == "gopher://example.com/0/cgi%3Fx=1%20y");
+    auto again = parse_gopher_url(u->canonical);
+    CHECK(again && again->selector == u->selector);
+    // RFC 4266 search form: %09 between selector and search.
+    auto s = parse_gopher_url("gopher://example.com/7/find%09two%20words");
+    CHECK(s && s->selector == "/find" && s->query == "two words");
+    // A query on a search keeps the selector's encoded '?'.
+    auto q = parse_gopher_url("gopher://example.com/7/a%3Fb?c d");
+    CHECK(q && q->selector == "/a?b" && q->query == "c d");
+    CHECK(q->canonical == "gopher://example.com/7/a%3Fb?c%20d");
+  }
+  {
+    // Relative references.
+    const std::string base = "gopher://example.com/h/site/index.html";
+    CHECK(resolve_gopher_url(base, "about.html") ==
+          "gopher://example.com/h/site/about.html");
+    CHECK(resolve_gopher_url(base, "/0readme.txt") ==
+          "gopher://example.com/0readme.txt");
+    CHECK(resolve_gopher_url("gopher://example.com/7/find", "?x") ==
+          "gopher://example.com/7/find?x");
+    CHECK(resolve_gopher_url(base, "https://example.org/") ==
+          "https://example.org/");
+  }
+  {
+    // Info lines stay preformatted (one block per run, backticks safe),
+    // labels are escaped, selectors encoded, h "URL:" items are web links.
+    auto items = parse_gopher_menu(
+        "i  /\\_/\\   ```cat```\t\terror.host\t1\r\n"
+        "i ( o.o )\t\terror.host\t1\r\n"
+        "0My *notes* [draft](x)\t/notes/my file.txt\texample.com\t70\r\n"
+        "hWeb site\tURL:https://example.org/a b\texample.com\t70\r\n"
+        "1Local\t/sub\t\t\r\n");
+    auto md = gopher_menu_to_markdown(items, "gopher://example.com:7070/1/");
+    CHECK(md.find("````\n  /\\_/\\   ```cat```\n ( o.o )\n````\n") !=
+          std::string::npos);
+    CHECK(md.find("[My *notes* [draft] (x) [text]]"
+                  "(gopher://example.com/0/notes/my%20file.txt)") !=
+          std::string::npos);
+    CHECK(md.find("[Web site [html]](https://example.org/a%20b)") !=
+          std::string::npos);
+    CHECK(md.find("(gopher://example.com:7070/1/sub)") != std::string::npos);
+  }
   CHECK(gopher_type_is_binary('9'));
   CHECK(gopher_type_is_binary('g'));
   CHECK(!gopher_type_is_binary('0'));

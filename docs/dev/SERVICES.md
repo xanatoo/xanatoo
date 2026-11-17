@@ -194,6 +194,25 @@ read-only service clients. Every client is read-only: never post or log in.
   `--no-save` approvals stay in memory. See `docs/TLS.md` and the pure
   `gemini_tofu_tests.cpp` suite; do not bypass this with another fetch path.
 
+## Gopher (`gopher.hpp`) and Finger (`finger.hpp`)
+
+- `src/gopher.cpp` / `src/finger.cpp`, gated by `XANATOO_GOPHER` /
+  `XANATOO_FINGER` (default ON; plain TCP). Pure parsers are tested in
+  `tests/smallnet_url_tests.cpp` (network compiled out).
+- URLs follow RFC 4266: `gopher://host[:port]/<type><selector>`, the
+  selector percent-encoded in the URL and decoded on the wire. Only type 7
+  (search) takes a `?query` (or `%09query`); for other types `?` is part of
+  the selector. Type 7 without a query asks for input before connecting.
+- Menus become Markdown: each run of info lines (`i`, `3`) is one
+  preformatted block (ASCII art keeps its spacing), items are list links
+  built by `gopher_item_url`; `h` items with a `URL:<url>` selector link to
+  that URL. Link labels are verbatim up to the first `](` in `parse.cpp`,
+  so only that sequence is broken up.
+- Relative references: `/<type><selector>` and `?query` per the URL form,
+  anything else relative to the selector's directory with the same type.
+- Finger replies are one code block; `markdown_code_fence`
+  (`text_escape.hpp`) picks a fence longer than any backtick run inside.
+
 ## Spartan (`spartan.hpp`)
 
 - `src/spartan.cpp`, gated by `XANATOO_SPARTAN` (default ON; plain TCP,

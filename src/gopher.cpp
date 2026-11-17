@@ -4,6 +4,7 @@
 #include "xanatoo/gopher.hpp"
 
 #include "xanatoo/https.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/transfer_meter.hpp"
 
 #include <algorithm>
@@ -45,6 +46,30 @@ bool gopher_type_is_binary(char type) {
   }
 }
 
+namespace {
+
+// gopher://host[:port]/<type><selector>[?query], selector percent-encoded.
+std::string gopher_url_string(std::string_view host, int port, char type,
+                              std::string_view selector,
+                              std::string_view query) {
+  std::string o = "gopher://";
+  if (host.find(':') != std::string_view::npos) {
+    o += '[';
+    o += host;
+    o += ']';
+  } else {
+    o += host;
+  }
+  if (port != 70) o += ':' + std::to_string(port);
+  o += '/';
+  o += type;
+  o += percent_encode_path(selector);
+  if (!query.empty()) o += '?' + percent_encode_path(query);
+  return o;
+}
+
+}  // namespace
+
 std::optional<GopherUrl> parse_gopher_url(std::string_view url) {
   if (!is_gopher_url(url)) return std::nullopt;
   std::string_view rest = url.substr(9);  // after gopher://
@@ -52,25 +77,16 @@ std::optional<GopherUrl> parse_gopher_url(std::string_view url) {
   size_t hash = rest.find('#');
   if (hash != std::string_view::npos) rest = rest.substr(0, hash);
 
-  // query (type-7 search) — not part of the Gopher selector on the wire
-  std::string_view query;
-  size_t qmark = rest.find('?');
-  if (qmark != std::string_view::npos) {
-    query = rest.substr(qmark + 1);
-    rest = rest.substr(0, qmark);
-  }
-
-  size_t slash = rest.find('/');
-  std::string_view authority =
-      (slash == std::string_view::npos) ? rest : rest.substr(0, slash);
+  const size_t auth_end = rest.find_first_of("/?");
+  std::string_view authority = rest.substr(0, auth_end);
   std::string_view path =
-      (slash == std::string_view::npos) ? std::string_view{} : rest.substr(slash);
+      auth_end == std::string_view::npos ? std::string_view{}
+                                         : rest.substr(auth_end);
 
   if (authority.empty()) return std::nullopt;
 
   GopherUrl out;
   out.port = 70;
-  out.query = std::string(query);
   if (!authority.empty() && authority.front() == '[') {
     size_t br = authority.find(']');
     if (br == std::string_view::npos) return std::nullopt;
@@ -102,65 +118,83 @@ std::optional<GopherUrl> parse_gopher_url(std::string_view url) {
   }
   if (out.host.empty()) return std::nullopt;
 
-  // Path: /[type][selector]  or empty → type '1', selector ""
+  // Path: /<type><selector>, empty → type '1', selector "". A '?' only
+  // starts a query for type 7 (search); elsewhere it belongs to the
+  // selector. RFC 4266 also allows the search after an encoded TAB (%09).
   out.type = '1';
-  out.selector.clear();
+  std::string_view query;
   if (!path.empty() && path.front() == '/') {
     path.remove_prefix(1);
     if (!path.empty()) {
       out.type = path.front();
       path.remove_prefix(1);
-      out.selector = std::string(path);
+    }
+  } else if (!path.empty() && path.front() == '?') {
+    path = {};  // "gopher://host?x": nothing to search on the root menu
+  }
+  if (out.type == '7') {
+    if (size_t q = path.find('?'); q != std::string_view::npos) {
+      query = path.substr(q + 1);
+      path = path.substr(0, q);
     }
   }
+  out.selector = percent_decode(path);
+  out.query = percent_decode(query);
+  if (size_t tab = out.selector.find('\t'); tab != std::string::npos) {
+    if (out.type == '7' && out.query.empty()) {
+      out.query = out.selector.substr(tab + 1);
+      if (size_t t2 = out.query.find('\t'); t2 != std::string::npos)
+        out.query.resize(t2);  // a third field is Gopher+; ignored
+    }
+    out.selector.resize(tab);
+  }
 
-  std::ostringstream o;
-  o << "gopher://" << out.host;
-  if (out.port != 70) o << ':' << out.port;
-  o << '/' << out.type << out.selector;
-  if (!out.query.empty()) o << '?' << out.query;
-  out.canonical = o.str();
+  out.canonical = gopher_url_string(out.host, out.port, out.type,
+                                    out.selector, out.query);
   return out;
+}
+
+std::string gopher_item_url(const GopherMenuItem& it) {
+  // "URL:" selectors on type h items point to another protocol (common
+  // convention: gopher://host/hURL:https://…).
+  if (it.type == 'h' && it.selector.rfind("URL:", 0) == 0)
+    return it.selector.substr(4);
+  return gopher_url_string(it.host, it.port, it.type, it.selector, {});
 }
 
 std::string resolve_gopher_url(std::string_view base, std::string_view ref) {
   if (ref.empty()) return std::string(base);
   if (is_gopher_url(ref)) return std::string(ref);
   if (ref.find("://") != std::string_view::npos) return std::string(ref);
+  if (ref.rfind("mailto:", 0) == 0) return std::string(ref);
 
   auto b = parse_gopher_url(base);
   if (!b) return {};
+  const std::string authority =
+      gopher_url_string(b->host, b->port, '1', {}, {});  // ends in "/1"
+  const std::string root = authority.substr(0, authority.size() - 1);
 
-  GopherUrl out = *b;
-  out.query.clear();
-  if (!ref.empty() && ref.front() == '/') {
-    std::string_view p = ref.substr(1);
-    if (!p.empty()) {
-      out.type = p.front();
-      p.remove_prefix(1);
-      out.selector = std::string(p);
-    } else {
-      out.type = '1';
-      out.selector.clear();
-    }
-  } else if (ref.size() >= 1 &&
-             (std::isalnum(static_cast<unsigned char>(ref[0])) ||
-              ref[0] == 'i' || ref[0] == 'h' || ref[0] == 'g' ||
-              ref[0] == 'I' || ref[0] == 's' || ref[0] == '7' ||
-              ref[0] == '9' || ref[0] == 'd')) {
-    out.type = ref[0];
-    out.selector = std::string(ref.substr(1));
-  } else {
-    if (!out.selector.empty() && out.selector.back() != '/')
-      out.selector.push_back('/');
-    out.selector += std::string(ref);
+  // "/<type><selector>": a gopher path on the same server.
+  if (ref.front() == '/') {
+    auto u = parse_gopher_url(root + std::string(ref.substr(1)));
+    return u ? u->canonical : std::string{};
   }
-
-  std::ostringstream o;
-  o << "gopher://" << out.host;
-  if (out.port != 70) o << ':' << out.port;
-  o << '/' << out.type << out.selector;
-  return o.str();
+  // "?query": search again on the same item.
+  if (ref.front() == '?') {
+    auto u = parse_gopher_url(gopher_url_string(b->host, b->port, b->type,
+                                                b->selector, {}) +
+                              std::string(ref));
+    return u ? u->canonical : std::string{};
+  }
+  // Anything else is relative to the selector's directory with the same
+  // item type (e.g. links inside an HTML item served over Gopher).
+  std::string sel = b->selector;
+  size_t slash = sel.rfind('/');
+  sel.resize(slash == std::string::npos ? 0 : slash + 1);
+  std::string_view r = ref;
+  if (size_t h = r.find('#'); h != std::string_view::npos) r = r.substr(0, h);
+  sel += percent_decode(r);
+  return gopher_url_string(b->host, b->port, b->type, sel, {});
 }
 
 std::vector<GopherMenuItem> parse_gopher_menu(std::string_view data) {
@@ -205,23 +239,42 @@ std::vector<GopherMenuItem> parse_gopher_menu(std::string_view data) {
 
 std::string gopher_menu_to_markdown(const std::vector<GopherMenuItem>& items,
                                     std::string_view base_url) {
-  std::ostringstream o;
-  o << "# Gopher menu\n\n";
+  auto base = parse_gopher_url(base_url);
+  std::string o = "# Gopher menu\n\n";
+  // Info lines ('i', and errors '3') keep their spacing: a run of them is
+  // one preformatted block (menus are often laid out or drawn in ASCII).
+  std::string info;
+  auto flush_info = [&] {
+    while (!info.empty() && info.back() == '\n') info.pop_back();
+    size_t lead = 0;
+    while (lead < info.size() && info[lead] == '\n') ++lead;
+    if (lead < info.size()) {
+      const std::string body = info.substr(lead);
+      const std::string fence = markdown_code_fence(body);
+      o += fence + '\n' + body + '\n' + fence + "\n\n";
+    }
+    info.clear();
+  };
+  bool in_list = false;
   for (const auto& it : items) {
     if (it.type == 'i' || it.type == '3') {
-      if (!it.label.empty()) o << it.label << "\n\n";
+      if (in_list) {
+        o += '\n';
+        in_list = false;
+      }
+      info += it.label;
+      info += '\n';
       continue;
     }
-    std::string href;
-    if (!it.host.empty()) {
-      std::ostringstream h;
-      h << "gopher://" << it.host;
-      if (it.port != 70) h << ':' << it.port;
-      h << '/' << it.type << it.selector;
-      href = h.str();
-    } else {
-      href = resolve_gopher_url(base_url, std::string(1, it.type) + it.selector);
+    flush_info();
+    GopherMenuItem target = it;
+    if (target.host.empty() && base) {
+      target.host = base->host;
+      target.port = base->port;
     }
+    std::string href = gopher_item_url(target);
+    if (href.find_first_of(" ()<>") != std::string::npos)
+      href = percent_encode_path(percent_decode(href));
     const char* kind = "";
     switch (it.type) {
       case '0': kind = " [text]"; break;
@@ -237,9 +290,17 @@ std::string gopher_menu_to_markdown(const std::vector<GopherMenuItem>& items,
       case 'h': kind = " [html]"; break;
       default: break;
     }
-    o << "- [" << it.label << kind << "](" << href << ")\n";
+    // Link labels are taken verbatim up to the first "](" (parse.cpp), so
+    // that sequence is the only one a label must not contain.
+    std::string label = it.label;
+    for (size_t k = label.find("]("); k != std::string::npos;
+         k = label.find("](", k + 2))
+      label.insert(k + 1, " ");
+    o += "- [" + label + kind + "](" + href + ")\n";
+    in_list = true;
   }
-  return o.str();
+  flush_info();
+  return o;
 }
 
 #if defined(XANATOO_GOPHER) && XANATOO_GOPHER

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/finger.hpp"
+#include "xanatoo/text_escape.hpp"
 
 #include "xanatoo/https.hpp"
 #include "xanatoo/transfer_meter.hpp"
@@ -122,7 +123,10 @@ std::optional<FingerResponse> finger_fetch(std::string_view url,
   FingerResponse resp;
   resp.final_url = u->canonical;
   // Present as a simple document
-  resp.body = "# Finger: " + u->canonical + "\n\n```\n" + data + "\n```\n";
+  // A fence longer than any backtick run in the reply, so it stays verbatim.
+  const std::string fence = markdown_code_fence(data);
+  resp.body = "# Finger: " + markdown_escape_inline(u->canonical) + "\n\n" +
+              fence + "\n" + data + "\n" + fence + "\n";
   return resp;
 }
 

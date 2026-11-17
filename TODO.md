@@ -27,10 +27,12 @@
   on the main loop.
 - Layout → Style sheet → "Manage / edit style sheets…" opens the manager;
   Panels has "Manage Style Sheets" (as `docs/STYLESHEETS.md` says).
-- Still open from the review: Gopher (`?` always a query, selectors not
-  percent-coded, info lines reflowed as Markdown, labels unescaped, `h`
-  `URL:` items, relative refs), Finger replies containing a code fence,
-  Curlie `stime` token, artifacts workflow always green, FontConfig-less
+- Gopher: RFC 4266 URLs (selectors percent-coded, `?` only queries type
+  7, `%09` search), info-line runs as preformatted blocks, `h` `URL:`
+  items link to the web, relative refs resolve against the selector's
+  directory. Finger replies can contain fences. Shared helpers in
+  `text_escape.hpp`. Verified under Xvfb against a local Gopher server.
+- Still open from the review: Curlie `stime` token, artifacts workflow always green, FontConfig-less
   font scan cost / `.ttc` face 0, Context panel UTF-8 cuts.
 
 ## Status (2026-11-15) — Small-net input prompts and binary downloads

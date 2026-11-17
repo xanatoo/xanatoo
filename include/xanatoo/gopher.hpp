@@ -13,15 +13,16 @@ namespace xanatoo {
 // True for gopher:// URLs (scheme case-insensitive).
 bool is_gopher_url(std::string_view url);
 
-// Split gopher://host[:port][/[type][selector]][?query]
+// Split gopher://host[:port][/[type][selector]][?query] (RFC 4266).
 // Classic form: gopher://host:70/1/path  or  gopher://host/0selector
-// Type 7 (search): query becomes the TAB-separated search string on the wire.
+// The selector is percent-decoded. Only type 7 (search) takes a ?query (or
+// an encoded TAB, %09); it becomes the TAB-separated search on the wire.
 struct GopherUrl {
   std::string host;
   int port = 70;
   char type = '1';          // item type (1 = menu by default)
-  std::string selector;     // path after type, may be empty
-  std::string query;        // type-7 search string (from ?query)
+  std::string selector;     // path after type (decoded), may be empty
+  std::string query;        // type-7 search string (decoded)
   std::string canonical;    // reconstructed URL (includes ?query when set)
 };
 std::optional<GopherUrl> parse_gopher_url(std::string_view url);
@@ -55,6 +56,10 @@ struct GopherResponse {
 std::optional<GopherResponse> gopher_fetch(std::string_view url,
                                            std::string* err = nullptr);
 #endif
+
+// The URL a menu item links to: gopher://… (selector percent-encoded), or
+// the target of an `h` item whose selector is "URL:<url>".
+std::string gopher_item_url(const GopherMenuItem& it);
 
 // Pure helpers (always available for tests / offline conversion).
 std::vector<GopherMenuItem> parse_gopher_menu(std::string_view data);

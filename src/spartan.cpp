@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/spartan.hpp"
+#include "xanatoo/text_escape.hpp"
 
 #include "xanatoo/https.hpp"
 #include "xanatoo/transfer_meter.hpp"
@@ -26,33 +27,6 @@ bool is_spartan_url(std::string_view url) {
          lower(url[3]) == 'r' && lower(url[4]) == 't' && lower(url[5]) == 'a' &&
          lower(url[6]) == 'n' && url[7] == ':' && url[8] == '/' && url[9] == '/';
 }
-
-namespace {
-int hex_value(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-  return -1;
-}
-
-// %XX → byte; everything else (including '+') stays as it is.
-std::string percent_decode(std::string_view s) {
-  std::string out;
-  out.reserve(s.size());
-  for (size_t i = 0; i < s.size(); ++i) {
-    if (s[i] == '%' && i + 2 < s.size()) {
-      const int hi = hex_value(s[i + 1]), lo = hex_value(s[i + 2]);
-      if (hi >= 0 && lo >= 0) {
-        out.push_back(static_cast<char>(hi * 16 + lo));
-        i += 2;
-        continue;
-      }
-    }
-    out.push_back(s[i]);
-  }
-  return out;
-}
-}  // namespace
 
 std::optional<SpartanUrl> parse_spartan_url(std::string_view url) {
   if (!is_spartan_url(url)) return std::nullopt;
