@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
+#
+# Build each portable flake package independently and upload whatever succeeds.
+# Individual targets are allowed to fail without blocking the others
+# (continue-on-error on the matrix job). Artifacts stay available for download
+# from the Actions run summary.
+
+name: artifacts
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  # Optional: rebuild artifacts nightly even without commits
+  # schedule:
+  #   - cron: "17 3 * * *"
+
+jobs:
+  package:
+    name: ${{ matrix.attr }}
+    runs-on: ubuntu-latest
+    # One target failing must not cancel the rest of the matrix.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - attr: xanatoo-wasm
+            kind: dir          # result/ is a directory tree
+          - attr: xanatoo-win32-zip
+            kind: zip
+          - attr: xanatoo-win64-zip
+            kind: zip
+          - attr: xanatoo-android
+            kind: apk          # single .apk (or dir containing it)
+          - attr: xanatoo-r36s-portmaster-zip
+            kind: zip
+          # Optional SDL3 PortMaster variant (heavier; keep if you want it)
+          # - attr: xanatoo-r36s-sdl3-portmaster-zip
+          #   kind: zip
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # self.revCount / shortRev for the version string
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          # Enough space for Android SDK / cross toolchains
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Build ${{ matrix.attr }}
+        id: build
+        run: |
+          set -euo pipefail
+          echo "Building .#${{ matrix.attr }} …"
+          if nix build -L ".#${{ matrix.attr }}" --out-link "result-${{ matrix.attr }}"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Stage artifact
+        if: steps.build.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          ATTR="${{ matrix.attr }}"
+          KIND="${{ matrix.kind }}"
+          SRC="result-${ATTR}"
+          DEST="dist/${ATTR}"
+          mkdir -p "$DEST"
+
+          case "$KIND" in
+            zip)
+              # zip derivations usually put a single .zip in the store path
+              find -L "$SRC" -name '*.zip' -exec cp -v {} "$DEST/" \;
+              # fallback: copy everything if no .zip found
+              if ! ls "$DEST"/*.zip >/dev/null 2>&1; then
+                cp -rL "$SRC"/. "$DEST/"
+              fi
+              ;;
+            apk)
+              find -L "$SRC" -name '*.apk' -exec cp -v {} "$DEST/" \;
+              if ! ls "$DEST"/*.apk >/dev/null 2>&1; then
+                cp -rL "$SRC"/. "$DEST/"
+              fi
+              ;;
+            dir)
+              cp -rL "$SRC"/. "$DEST/"
+              ;;
+            *)
+              cp -rL "$SRC"/. "$DEST/"
+              ;;
+          esac
+
+          echo "Staged contents of $DEST:"
+          find "$DEST" -type f | head -40
+
+      - name: Upload ${{ matrix.attr }}
+        if: steps.build.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.attr }}
+          path: dist/${{ matrix.attr }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Optional summary job so the workflow overall status is visible.
+  # It never fails the run; it only reports what landed.
+  summary:
+    name: summary
+    needs: package
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        run: |
+          echo "Individual package jobs finished (some may have failed)."
+          echo "Successful builds appear as downloadable artifacts on this run."
+          echo "Check the matrix jobs above for per-target logs."
