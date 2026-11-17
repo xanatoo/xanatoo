@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #
-# Build each downloadable flake package independently. A failing target
+# Build each target's release assets (`.#release-<target>`, nix/site.nix)
+# independently. A failing target
 # does not cancel the others (fail-fast: false), but it does turn the run red.
 #
 # Every run uploads its successful builds as Actions artifacts. On master
 # (push or manual run) each successful target also replaces its own assets
-# on the rolling `continuous` release (tools/ci/publish-build.sh) and asks the
+# on the rolling `continuous` release (`nix run .#publish-build`) and asks the
 # website to redeploy, so a download goes live minutes after its build.
 # A failed target leaves its previous release assets, and so its previous
 # download on the website, in place.
@@ -21,7 +22,9 @@ name: artifacts
 on:
   push:
     branches: [master]
+    paths-ignore: ["website/**"]   # page-only edits: website.yml
   pull_request:
+    paths-ignore: ["website/**"]
   workflow_dispatch:
 
 env:
@@ -37,18 +40,8 @@ jobs:
       # One target failing must not cancel the rest of the matrix.
       fail-fast: false
       matrix:
-        include:
-          # target: the name on the release and the website
-          - target: android
-            attr: xanatoo-android
-          - target: r36s
-            attr: xanatoo-r36s-portmaster-zip
-          - target: win64
-            attr: xanatoo-win64-zip
-          - target: win32
-            attr: xanatoo-win32-zip
-          - target: wasm
-            attr: xanatoo-wasm
+        # The name on the release and the website; built as .#release-<target>.
+        target: [android, r36s, win64, win32, wasm]
 
     steps:
       - uses: actions/checkout@v4
@@ -66,25 +59,10 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.attr }}
-        run: nix build -L ".#${{ matrix.attr }}" --out-link result
-
-      # Fixed asset names, one or more per target (release assets are flat).
-      - name: Stage
+      - name: Build release-${{ matrix.target }}
         run: |
-          set -euo pipefail
-          mkdir dist
-          case "${{ matrix.target }}" in
-            android) cp -v result/*.apk dist/xanatoo.apk ;;
-            r36s)    cp -v result/xanatoo.zip dist/xanatoo-r36s.zip ;;
-            win32|win64) cp -v result/*.zip "dist/xanatoo-${{ matrix.target }}.zip" ;;
-            wasm)
-              for f in index.html xanatoo.js xanatoo.wasm xanatoo.data; do
-                test -s "result/$f"
-              done
-              tar -C result -czhf dist/xanatoo-wasm.tar.gz --owner=0 --group=0 .
-              ;;
-          esac
+          nix build -L ".#release-${{ matrix.target }}" --out-link result
+          cp -rL result dist
           ls -l dist
 
       - name: Upload ${{ matrix.target }}
@@ -99,7 +77,7 @@ jobs:
         if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: tools/ci/publish-build.sh "$RELEASE_TAG" "${{ matrix.target }}" dist/*
+        run: nix run .#publish-build -- "$RELEASE_TAG" "${{ matrix.target }}" dist
 
       - name: Redeploy the website
         if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'

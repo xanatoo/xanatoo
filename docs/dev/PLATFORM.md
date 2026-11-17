@@ -53,3 +53,36 @@ ports, the SDL3 transition and Android.
   set (NDK 27, plain C, so they link into the NDK 29 build) and merges into
   one `libimagedeps.a`; `nix build .#imagedeps-android`.
 - Test on the device: `adb logcat -s xanatoo` shows std::cout / std::cerr.
+
+## Website and downloads
+
+The website <https://xanatoo.github.io/> is built from `website/`
+(`index.html`, `images/`, scripts) by `nix/site.nix`; the
+`xanatoo/xanatoo.github.io` repository only holds the deploy workflow.
+
+- `.#release-<target>` (android, r36s, win64, win32, wasm): the exact
+  release assets with fixed names (`xanatoo.apk`, `xanatoo-r36s.zip`,
+  `xanatoo-win{32,64}.zip`, `xanatoo-wasm.tar.gz`) plus `<target>.json`
+  (version, rev, revCount, lastModified from the flake's `self`).
+- CI (`artifacts.yml`) builds each target as its own matrix job. On master a
+  success runs `nix run .#publish-build -- continuous <target> dist`, which
+  swaps that target's assets on the `continuous` prerelease (temporary
+  upload, then delete + rename; skips if the release already holds a newer
+  revCount), then triggers the site's `pages.yml` with the secret
+  `SITE_DISPATCH_TOKEN` (fine-grained, xanatoo.github.io, Actions read and
+  write). A failed target keeps its previous assets and download.
+- `pages.yml` runs `nix run github:xanatoo/xanatoo#site-from-release -- site`:
+  `website/fetch-builds.sh` takes each target from the release, or from the
+  live site when the release lacks it, then `website/assemble.sh` fills in
+  the page. Page-only pushes (`website/**`) skip check / artifacts and only
+  trigger a deploy (`website.yml`); the site also redeploys nightly.
+- The page shows every download's version; `android-update.json` (the
+  app's update check, `XanatooActivity.java`) is derived from
+  `android.json`, so its versionCode matches the APK actually served.
+- Local: `nix build .#site` builds every target from this tree (slow, all
+  cross builds); `nix run .#site-from-release -- out && nix run .#site-serve -- out`
+  previews page edits against the published builds.
+- Page text: feature claims follow `README.md` and `TODO.md`; do not
+  describe planned passage or revision features as available. The page
+  warns that the OpenSSL / Mbed TLS clients do not verify peer
+  certificates yet; update it when they do.

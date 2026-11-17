@@ -64,6 +64,13 @@
           # local test builds install over committed ones; < 2^31 until 2036.
           versionCode = self.lastModified or 1;
         };
+
+      # Website and release assets (x86_64-linux hosts the cross builds).
+      siteFor = system: import ./nix/site.nix {
+        pkgs = import nixpkgs { inherit system; };
+        packages = self.packages.${system};
+        inherit self version;
+      };
     in
     {
       packages = forAllSystems (system:
@@ -195,7 +202,7 @@
               sdl3-wasm = wasm.sdl3Wasm;
               freetype-wasm = wasm.freetypeWasm;
               imagelibs-wasm = wasm.imageLibsWasm;
-            }
+            } // (siteFor system).packages
           else { }
         ));
 
@@ -298,7 +305,7 @@
             pkgs = import nixpkgs { inherit system; };
             inherit version;
           }).serveApp;
-        });
+        } // (siteFor system).apps);
 
       # Develop shell: deps + env + PATH scripts for out-of-tree CMake.
       # Helpers are writeShellScriptBin so `nix develop -c xanatoo-run` works.

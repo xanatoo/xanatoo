@@ -23,6 +23,7 @@ path = [
   "mk/android/app/res/**",
   "mk/android/keystore/debug.keystore",
   "mk/r36s/port.json",
+  "website/images/**",
 ]
 SPDX-FileCopyrightText = "2026 Ingo Ruhnke <grumbel@gmail.com>"
 SPDX-License-Identifier = "GPL-3.0-or-later"

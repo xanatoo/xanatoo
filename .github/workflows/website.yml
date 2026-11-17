@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
+#
+# Page-only edits (website/): redeploy xanatoo.github.io without rebuilding
+# any download. Its workflow runs `nix run github:xanatoo/xanatoo#site-from-release`,
+# so it uses this push's website/ and the builds on the `continuous` release.
+# Pushes that also touch code run artifacts.yml, which triggers it per target.
+
+name: website
+
+on:
+  push:
+    branches: [master]
+    paths: ["website/**"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redeploy the website
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::SITE_DISPATCH_TOKEN not set; the website updates nightly."
+            exit 0
+          fi
+          gh workflow run pages.yml -R xanatoo/xanatoo.github.io --ref master
