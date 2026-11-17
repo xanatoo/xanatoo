@@ -698,28 +698,27 @@ static void mouse_middle_down(App& app, SDL_Event& ev, bool imgui_mouse) {
         return;
       }
     }
-    // Middle-click paste at caret (common on Linux).
-    if (browsing(app)) return;
-    if (!over_soft && SDL_HasClipboardText()) {
-      float mx = static_cast<float>(mxw);
-      focus_view(app, pane_at(app, mx, static_cast<float>(myw)));
-      float my = content_y(app, static_cast<float>(myw), app.focus);
-      Pane& pp = focused_pane(app);
-      float lx = local_x(app, mx, app.focus);
-      if (auto hit = xanatoo::hit_test(pp.layout, lx, my, pp.scroll_y)) {
-        pp.sel.focus = *hit;
-        pp.sel.anchor = pp.sel.focus;
-      }
-      char* clip = SDL_GetClipboardText();
-      if (clip && clip[0]) {
-        edit(app);
-        xanatoo::paste_plain_text(doc_of(app, pp), pp.sel.focus, clip);
-        pp.sel.anchor = pp.sel.focus;
-        app.needs_layout = true;
-        reset_blink(app);
-      }
-      if (clip) SDL_free(clip);
+    // Middle-click paste at the click point: the primary selection on X11 /
+    // Wayland, the clipboard elsewhere.
+    if (browsing(app) || over_soft) return;
+    const std::string clip = xanatoo::sdl::kMiddleClickPastesPrimary
+                                 ? xanatoo::sdl::primary_selection()
+                                 : xanatoo::sdl::clipboard();
+    if (clip.empty()) return;
+    float mx = static_cast<float>(mxw);
+    focus_view(app, pane_at(app, mx, static_cast<float>(myw)));
+    float my = content_y(app, static_cast<float>(myw), app.focus);
+    Pane& pp = focused_pane(app);
+    float lx = local_x(app, mx, app.focus);
+    if (auto hit = xanatoo::hit_test(pp.layout, lx, my, pp.scroll_y)) {
+      pp.sel.focus = *hit;
+      pp.sel.anchor = pp.sel.focus;
     }
+    edit(app);
+    xanatoo::paste_plain_text(doc_of(app, pp), pp.sel.focus, clip);
+    pp.sel.anchor = pp.sel.focus;
+    app.needs_layout = true;
+    reset_blink(app);
 }
 
 // Right press (or a touch long press): floats absorb it; otherwise open

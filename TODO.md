@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — X11 / Wayland primary selection
+
+- Selecting text in a document view now sets the primary selection (on
+  release of a drag, or whenever a keyboard / double-click selection
+  changes); middle-click in edit mode pastes the primary selection instead
+  of the clipboard on Linux (clipboard elsewhere, as before). Uses
+  `SDL_{Set,Get}PrimarySelectionText` (SDL3; SDL2 >= 2.26). Checked in
+  Xvfb with xclip in both directions. Not covered: ImGui inputs (address
+  bar, prompts) neither publish nor paste the primary selection; Wayland
+  only by SDL's contract, not tried.
+
 ## Status (2026-11-17) — Stop ends every service's transfer
 
 - `TransferMeter::cancel` points at the job's `abandoned` flag; the read

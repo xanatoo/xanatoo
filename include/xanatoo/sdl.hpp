@@ -140,6 +140,51 @@ inline constexpr Uint8 DpadRight = SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
 }
 #endif
 
+// X11 / Wayland primary selection: what is selected is pasted by a middle
+// click elsewhere. SDL3 and SDL2 >= 2.26 bridge it; other platforms (and
+// older SDL2) have none, so the setters do nothing and the getter is empty.
+#if (defined(XANATOO_SDL3) && XANATOO_SDL3) || SDL_VERSION_ATLEAST(2, 26, 0)
+#define XANATOO_HAVE_PRIMARY_SELECTION 1
+#endif
+
+// Middle click pastes the primary selection where the desktop has one (X11
+// and Wayland), otherwise the clipboard as before.
+inline constexpr bool kMiddleClickPastesPrimary =
+#if defined(XANATOO_HAVE_PRIMARY_SELECTION) && defined(__linux__) && \
+    !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    true;
+#else
+    false;
+#endif
+
+inline void set_primary_selection(const std::string& text) {
+#if defined(XANATOO_HAVE_PRIMARY_SELECTION)
+  SDL_SetPrimarySelectionText(text.c_str());
+#else
+  (void)text;
+#endif
+}
+
+inline std::string primary_selection() {
+  std::string out;
+#if defined(XANATOO_HAVE_PRIMARY_SELECTION)
+  if (char* s = SDL_GetPrimarySelectionText()) {
+    out = s;
+    SDL_free(s);
+  }
+#endif
+  return out;
+}
+
+inline std::string clipboard() {
+  std::string out;
+  if (char* s = SDL_GetClipboardText()) {
+    out = s;
+    SDL_free(s);
+  }
+  return out;
+}
+
 inline Gamepad* open_first_gamepad() {
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
   int count = 0;

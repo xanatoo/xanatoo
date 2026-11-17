@@ -895,6 +895,13 @@ struct App {
   TileAxis tile_axis = TileAxis::Columns;
   TileMode tile_mode = TileMode::Independent;
   bool dragging_sel = false;
+  // The selection last handed to the X11 / Wayland primary selection
+  // (publish_primary_selection); it is re-sent only when it changes.
+  struct PrimarySel {
+    int pane = -1;
+    BufferId buf = kNoBuffer;
+    xanatoo::Selection sel{};
+  } primary_sel;
   bool click_new_tab = false;  // middle-click in progress: panels open in a new tab
   bool dragging_split = false;
   bool dragging_diff_overview = false;

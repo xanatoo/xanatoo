@@ -5066,9 +5066,27 @@ void present_frame(App& app) {
   apply_ui_scale(app);
 }
 
+// Offer a finished, non-empty selection of the focused view as the primary
+// selection (middle-click paste in other programs). An emptied selection
+// leaves the last text in place, as X11 programs do; a selection being
+// dragged is sent once the button is released.
+static void publish_primary_selection(App& app) {
+  if (app.dragging_sel || app.focus < 0 || app.focus >= kMaxViews) return;
+  Pane& p = app.panes[app.focus];
+  if (p.sel.empty() || !find_buf(app, p.buf)) return;
+  App::PrimarySel& last = app.primary_sel;
+  if (last.pane == app.focus && last.buf == p.buf &&
+      last.sel.anchor == p.sel.anchor && last.sel.focus == p.sel.focus)
+    return;
+  last = {app.focus, p.buf, p.sel};
+  const std::string text = xanatoo::selected_text(doc_of(app, p), p.sel);
+  if (!text.empty()) xanatoo::sdl::set_primary_selection(text);
+}
+
 void run_frame(App& app) {
   SDL_Event ev;
   while (SDL_PollEvent(&ev)) handle_event(app, ev);
+  publish_primary_selection(app);
   update_touch(app);
   sync_nav_history(app);  // capture scroll before a completed fetch swaps pages
   poll_fetches(app);

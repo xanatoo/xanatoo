@@ -153,6 +153,14 @@ Back/Forward buttons show nearest-first targets derived from the focused
 pane's `NavHistory`, or `SplitHistory` when split browsing. `NavJump` uses a
 signed offset and must preserve the destination's caret/scroll state.
 
+Primary selection (X11 / Wayland): `publish_primary_selection` (start of
+`run_frame`) sends the focused view's non-empty selection through
+`sdl::set_primary_selection` whenever it changes (not while a drag is in
+progress; `App::primary_sel` remembers what was sent; read-only pages too).
+Middle-click paste in edit mode reads `sdl::primary_selection()` where
+`sdl::kMiddleClickPastesPrimary` (Linux desktop, SDL3 or SDL2 >= 2.26),
+the clipboard elsewhere. ImGui text fields do not take part.
+
 Windows place one way regardless of role: Left / Right docks are side
 columns that take width from the panes (stacked by `dock_seq`), Top /
 Bottom docks are bands between the columns that take height (side by side
