@@ -27,6 +27,8 @@
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/lemmy_directory.hpp"
+#include "xanatoo/matrix_directory.hpp"
+#include "xanatoo/catalog_credentials.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/pseudo_favicon.hpp"
@@ -319,6 +321,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         {"Reddit (r/popular)", "reddit:r/popular/", false, false},
         {"Lemmy (lemmy.world, all)", "lemmy:lemmy.world/?listingType=All",
          false, false},
+        {"Matrix (matrix.org rooms)", "matrix:directory/matrix.org", false, false},
         {"Nostr (recent notes)", "nostr:recent", false, false},
         {"YouTube (Google for Developers)", "youtube:@GoogleDevelopers", false,
          true},
@@ -468,6 +471,28 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.lemmy_explorer_w = w;
     ui_state.lemmy_explorer_h = h;
     ui_state.lemmy_entries = xanatoo::lemmy_directory_list();
+  }
+  ui_state.matrix_explorer_open = app.matrix_explorer_open;
+  ui_state.matrix_tab = app.matrix_tab;
+  ui_state.matrix_search = app.matrix_search;
+  ui_state.matrix_server = app.matrix_server;
+  ui_state.matrix_supported = remote_fetch_supported("matrix:directory/matrix.org", nullptr);
+  if (app.matrix_explorer_open) {
+    auto [x, y, w, h] = float_client_rect(app, app.matrix_explorer_win);
+    ui_state.matrix_explorer_x = x;
+    ui_state.matrix_explorer_y = y;
+    ui_state.matrix_explorer_w = w;
+    ui_state.matrix_explorer_h = h;
+    ui_state.matrix_entries = xanatoo::matrix_directory_list();
+    // Credentials live in a file read on demand: check about once a second.
+    const uint64_t now = xanatoo::sdl::ticks();
+    if (app.matrix_token_checked == 0 || now - app.matrix_token_checked > 1000) {
+      app.matrix_token_checked = now == 0 ? 1 : now;
+      app.matrix_has_token =
+          !xanatoo::effective_catalog_credential(xanatoo::CatalogKey::MatrixAccessToken).empty() &&
+          !xanatoo::effective_catalog_credential(xanatoo::CatalogKey::MatrixHomeserver).empty();
+    }
+    ui_state.matrix_has_token = app.matrix_has_token;
   }
   ui_state.nostr_accounts_open = app.nostr_accounts_open;
   ui_state.nostr_tab = app.nostr_tab;
@@ -743,6 +768,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::LemmySetSearch || c == C::LemmySetInstance ||
         c == C::LemmyAddInstance || c == C::LemmySetSort ||
         c == C::LemmyToggleInstanceOnly ||
+        c == C::ToggleMatrixExplorer || c == C::MatrixSetTab ||
+        c == C::MatrixSetSearch || c == C::MatrixSetServer ||
+        c == C::MatrixAddServer ||
         c == C::NostrSearchLocal || c == C::NostrShowPeople ||
         c == C::NostrShowEvents || c == C::NostrShowGroups ||
         c == C::NostrRefreshLocal ||
@@ -1279,6 +1307,35 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::LemmyToggleInstanceOnly:
       app.lemmy_instance_only = !app.lemmy_instance_only;
       break;
+    case C::ToggleMatrixExplorer:
+      app.matrix_explorer_open = !app.matrix_explorer_open;
+      app.matrix_token_checked = 0;
+      if (app.matrix_explorer_open) focus_panel(app, WindowRole::MatrixExplorer);
+      break;
+    case C::MatrixSetTab:
+      if (arg.size() == 1 && arg[0] >= '0' && arg[0] <= '3')
+        app.matrix_tab = arg[0] - '0';
+      break;
+    case C::MatrixSetSearch:
+      app.matrix_search = arg.substr(0, 200);
+      break;
+    case C::MatrixSetServer:
+    case C::MatrixAddServer: {
+      std::string_view in = arg;
+      xanatoo::trim_ascii(in);
+      if (xanatoo::starts_with_ci(in, "https://")) in.remove_prefix(8);
+      const std::string server = xanatoo::matrix_server_name(in.substr(0, in.find('/')));
+      if (server.empty()) {
+        flash_status(app, "Enter a valid Matrix server name");
+      } else {
+        if (cmd == C::MatrixAddServer) {
+          xanatoo::matrix_directory_add_server(server);
+          flash_status(app, "Added Matrix server " + server);
+        }
+        app.matrix_server = server;
+      }
+      break;
+    }
     case C::ToggleCertificates:
       // From the address bar's site icon (arg = its server): show that row;
       // a second click closes the panel again, like a browser's popover.
@@ -2814,6 +2871,7 @@ void run_chrome(App& app) {
       ui_frame.cmd != xanatoo::UiCommand::ReorderTabs &&
       ui_frame.cmd != xanatoo::UiCommand::EditReply &&
       ui_frame.cmd != xanatoo::UiCommand::LemmySetSearch &&
+      ui_frame.cmd != xanatoo::UiCommand::MatrixSetSearch &&
       ui_frame.cmd != xanatoo::UiCommand::NostrSearchLocal &&
       // Engine checkboxes: the menu stays open to tick several.
       ui_frame.cmd != xanatoo::UiCommand::ToggleSearchEngine)

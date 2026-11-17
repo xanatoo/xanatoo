@@ -20,6 +20,7 @@
 #include "xanatoo/time.hpp"
 #include "xanatoo/json_min.hpp"
 #include "xanatoo/lemmy.hpp"
+#include "xanatoo/matrix.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/nostr.hpp"
@@ -685,6 +686,157 @@ void test_lemmy_urls() {
   EXPECT(!is_lemmy_url("https://www.reddit.com/r/linux"));
   EXPECT(!is_lemmy_url("lemmy.world/c/asklemmy"));  // scheme required
   EXPECT(!is_lemmy_url(""));
+}
+
+void test_matrix_refs() {
+  using namespace xanatoo;
+  auto r = parse_matrix_ref("matrix:r/matrix:matrix.org");
+  EXPECT(r && r->kind == MatrixRefKind::Alias && r->id == "#matrix:matrix.org");
+  r = parse_matrix_ref("matrix:roomid/abc:example.org/e/ev1?via=a.org&via=B.org&action=join");
+  EXPECT(r && r->kind == MatrixRefKind::RoomId && r->id == "!abc:example.org");
+  EXPECT(r && r->event == "$ev1" && r->via.size() == 2 && r->via[1] == "b.org");
+  r = parse_matrix_ref("matrix:u/alice%2Fx:example.org:8448");
+  EXPECT(r && r->kind == MatrixRefKind::User && r->id == "@alice/x:example.org:8448");
+  EXPECT(r && format_matrix_ref(*r) == "matrix:u/alice%2Fx:example.org:8448");
+  // v12 room ids name no server.
+  r = parse_matrix_ref("matrix:roomid/L58ME6ufiP49v97UIOBIpvWKEgj4912JmECPuDzlvCI");
+  EXPECT(r && r->id == "!L58ME6ufiP49v97UIOBIpvWKEgj4912JmECPuDzlvCI");
+  r = parse_matrix_ref("matrix:directory/Matrix.org?since=t%2B1&q=linux+games");
+  EXPECT(r && r->kind == MatrixRefKind::Directory && r->id == "matrix.org");
+  EXPECT(r && r->since == "t+1" && r->query == "linux games");
+  EXPECT(r && format_matrix_ref(*r) == "matrix:directory/matrix.org?since=t%2B1&q=linux%20games");
+  EXPECT(parse_matrix_ref("matrix:directory/")->id.empty());
+  EXPECT(!is_matrix_ref("matrix:r/nohost"));
+  EXPECT(!is_matrix_ref("matrix:u/a:bad_host!"));
+  EXPECT(!is_matrix_ref("matrix:u/a:example.org/e/x"));
+  EXPECT(!is_matrix_ref("matrix:x/a:example.org"));
+  EXPECT(!is_matrix_ref("matrix://example.org"));
+  EXPECT(!is_matrix_ref("matrix:directory/evil.org/x?y"));
+  EXPECT(!is_matrix_ref("https://matrix.org/"));
+
+  EXPECT(matrix_ref_for_id("#a:b.org") == "matrix:r/a:b.org");
+  EXPECT(matrix_ref_for_id("@u:b.org") == "matrix:u/u:b.org");
+  EXPECT(matrix_ref_for_id("!x") == "matrix:roomid/x");
+  EXPECT(matrix_ref_for_id("$e").empty());
+  EXPECT(matrix_ref_for_id("@has space:b.org").empty());
+  EXPECT(matrix_ref_from_url("https://matrix.to/#/%23matrix%3Amatrix.org") ==
+         "matrix:r/matrix:matrix.org");
+  EXPECT(matrix_ref_from_url("https://matrix.to/#/!r:x.org/$ev?via=y.org") ==
+         "matrix:roomid/r:x.org/e/ev?via=y.org");
+  EXPECT(matrix_ref_from_url("https://matrix.to/#/@bob:x.org") == "matrix:u/bob:x.org");
+  EXPECT(matrix_ref_from_url("https://example.org/#/@bob:x.org").empty());
+  EXPECT(matrix_to_url("matrix:r/matrix:matrix.org") == "https://matrix.to/#/#matrix:matrix.org");
+  EXPECT(matrix_to_url("matrix:roomid/r:x.org/e/ev?via=y.org") ==
+         "https://matrix.to/#/!r:x.org/$ev?via=y.org");
+  EXPECT(matrix_to_url("matrix:directory/x.org").empty());
+
+  EXPECT(matrix_server_name("Example.ORG:8448") == "example.org:8448");
+  EXPECT(matrix_server_name("[::1]:80") == "[::1]:80");
+  EXPECT(matrix_server_name("a/b").empty());
+  EXPECT(matrix_server_name("a:").empty());
+  EXPECT(matrix_server_name("-a.org").empty());
+  EXPECT(matrix_id_server("@u:x.org") == "x.org");
+  EXPECT(matrix_id_server("!abc").empty());
+  EXPECT(matrix_iso_time(0).empty());
+  EXPECT(matrix_iso_time(1700000000123) == "2023-11-14T22:13:20Z");
+  EXPECT(matrix_iso_time(951782400000) == "2000-02-29T00:00:00Z");
+}
+
+namespace {
+std::string matrix_doc_text(const xanatoo::Document& doc) {
+  std::string all;
+  for (const auto& n : doc.nodes)
+    for (const auto& s : n.spans) all += s.text + "|";
+  return all;
+}
+bool matrix_doc_has_href(const xanatoo::Document& doc, std::string_view href) {
+  for (const auto& n : doc.nodes)
+    for (const auto& s : n.spans)
+      if (s.href == href) return true;
+  return false;
+}
+}  // namespace
+
+void test_matrix_documents() {
+  using namespace xanatoo;
+  const std::string dir_json = R"({"chunk":[
+    {"room_id":"!a:matrix.org","name":"Matrix HQ","topic":"Chat about Matrix\nsecond line",
+     "canonical_alias":"#matrix:matrix.org","num_joined_members":7858,
+     "world_readable":true,"join_rule":"public"},
+    {"room_id":"!S","name":"Community","num_joined_members":3,"room_type":"m.space"}],
+    "next_batch":"p1","total_room_count_estimate":2})";
+  MatrixRef ref = *parse_matrix_ref("matrix:directory/matrix.org");
+  Document d = matrix_directory_document("matrix.org", dir_json, ref);
+  EXPECT(d.meta.title == "Matrix rooms · matrix.org");
+  EXPECT(matrix_doc_has_href(d, "matrix:r/matrix:matrix.org"));
+  EXPECT(matrix_doc_has_href(d, "matrix:roomid/S?via=matrix.org"));
+  EXPECT(matrix_doc_has_href(d, "matrix:directory/matrix.org?since=p1"));
+  const std::string text = matrix_doc_text(d);
+  EXPECT(text.find("Chat about Matrix|") != std::string::npos);
+  EXPECT(text.find("second line") == std::string::npos);
+  EXPECT(text.find("7858 members · public history") != std::string::npos);
+  EXPECT(text.find(" (space)") != std::string::npos);
+
+  auto found = matrix_discover_payload(dir_json, "matrix.org");
+  int rooms = 0, spaces = 0, servers = 0;
+  for (const auto& e : found) {
+    rooms += e.kind == MatrixEntryKind::Room;
+    spaces += e.kind == MatrixEntryKind::Space;
+    servers += e.kind == MatrixEntryKind::Server;
+  }
+  EXPECT(rooms == 1 && spaces == 1 && servers == 1);
+
+  // /messages arrives newest first; edits, replies, members and encryption.
+  MatrixRoomData data;
+  data.room_id = "!a:matrix.org";
+  data.summary_json = R"({"room_id":"!a:matrix.org","name":"Matrix HQ",
+    "canonical_alias":"#matrix:matrix.org","num_joined_members":2,"join_rule":"public",
+    "topic":"Topic & <b>text</b>"})";
+  data.messages_json = R"({"chunk":[
+    {"type":"m.room.message","event_id":"$edit","sender":"@bob:x.org","origin_server_ts":3000,
+     "content":{"body":"* fixed","msgtype":"m.text","m.new_content":{"body":"hello fixed","msgtype":"m.text"},
+     "m.relates_to":{"rel_type":"m.replace","event_id":"$one"}}},
+    {"type":"m.room.message","event_id":"$two","sender":"@alice:matrix.org","origin_server_ts":2000,
+     "content":{"body":"> <@bob:x.org> hello\n\nreply","msgtype":"m.text","format":"org.matrix.custom.html",
+     "formatted_body":"<mx-reply><blockquote>quoted</blockquote></mx-reply>see <a href=\"https://matrix.to/#/@bob:x.org\">Bob</a>",
+     "m.relates_to":{"m.in_reply_to":{"event_id":"$one"}}}},
+    {"type":"m.room.encrypted","event_id":"$enc","sender":"@bob:x.org","origin_server_ts":1500,"content":{"algorithm":"x"}},
+    {"type":"m.room.message","event_id":"$one","sender":"@bob:x.org","origin_server_ts":1000,
+     "content":{"body":"hello","msgtype":"m.text"}},
+    {"type":"m.reaction","event_id":"$r","sender":"@bob:x.org","origin_server_ts":900,"content":{}}],
+    "end":"t-older","state":[{"type":"m.room.member","state_key":"@bob:x.org","event_id":"$m",
+     "sender":"@bob:x.org","content":{"membership":"join","displayname":"Bob B"}}]})";
+  Document room = matrix_room_document(*parse_matrix_ref("matrix:r/matrix:matrix.org"), data);
+  EXPECT(room.meta.title == "Matrix HQ");
+  std::vector<const Node*> msgs;
+  for (const auto& n : room.nodes)
+    if (n.kind == NodeKind::Message) msgs.push_back(&n);
+  EXPECT(msgs.size() == 3);
+  if (msgs.size() == 3) {
+    EXPECT(msgs[0]->label == "one" && msgs[0]->src == "Bob B");
+    EXPECT(msgs[1]->label == "enc");
+    EXPECT(msgs[2]->label == "two" && msgs[2]->alt == "one");
+    EXPECT(msgs[0]->spans.size() >= 2 && msgs[0]->spans[0].href == "matrix:u/bob:x.org");
+    EXPECT(msgs[0]->spans.size() >= 2 &&
+           msgs[0]->spans[1].datetime == "1970-01-01T00:00:01Z");
+  }
+  const std::string rtext = matrix_doc_text(room);
+  EXPECT(rtext.find("hello fixed") != std::string::npos);
+  EXPECT(rtext.find("quoted") == std::string::npos);
+  EXPECT(rtext.find("[encrypted message]") != std::string::npos);
+  EXPECT(rtext.find("Topic & <b>text</b>") != std::string::npos);
+  EXPECT(matrix_doc_has_href(room, "matrix:u/bob:x.org"));
+  EXPECT(matrix_doc_has_href(room, "matrix:roomid/a:matrix.org?from=t-older"));
+  EXPECT(matrix_doc_has_href(room, "https://matrix.to/#/#matrix:matrix.org"));
+  auto people = matrix_discover_payload(data.messages_json, "matrix.org");
+  bool bob = false;
+  for (const auto& e : people)
+    if (e.kind == MatrixEntryKind::Person && e.name == "@bob:x.org") bob = e.title == "Bob B";
+  EXPECT(bob);
+
+  Document prof = matrix_profile_document("@bob:x.org", R"({"displayname":"Bob B"})");
+  EXPECT(prof.meta.title == "Bob B");
+  EXPECT(matrix_doc_has_href(prof, "matrix:directory/x.org"));
 }
 
 void test_find_all() {
@@ -6599,6 +6751,8 @@ int main() {
   test_lemmy_quote_links();
   test_lemmy_urls();
   test_lemmy_post_markup();
+  test_matrix_refs();
+  test_matrix_documents();
   test_gemini_urls();
   test_nostr_refs();
   test_nostr_content();

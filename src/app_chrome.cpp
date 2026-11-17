@@ -20,6 +20,7 @@
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/lemmy.hpp"
+#include "xanatoo/matrix.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/wayback.hpp"
 #include "xanatoo/video_sites.hpp"
@@ -64,7 +65,7 @@ void apply_ui_scale(App& app) {
                          &app.history_win, &app.styles_win, &app.downloads_win,
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win, &app.nostr_accounts_win,
-                         &app.lemmy_explorer_win, &app.bookmarks_win,
+                         &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
                          &app.subscriptions_win, &app.certs_win, &app.related_win}) {
     w->x = static_cast<int>(std::lround(w->x * ratio));
     w->y = static_cast<int>(std::lround(w->y * ratio));
@@ -427,6 +428,8 @@ StatusLine compute_status(App& app) {
       label = "Reddit: ";
     else if (xanatoo::is_lemmy_ref(app.hover.href))
       label = "Lemmy: ";
+    else if (xanatoo::is_matrix_ref(app.hover.href))
+      label = "Matrix: ";
     else if (xanatoo::is_hn_ref(app.hover.href))
       label = "Hacker News: ";
     else if (xanatoo::is_youtube_ref(app.hover.href))

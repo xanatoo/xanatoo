@@ -17,6 +17,7 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/lemmy_directory.hpp"
+#include "xanatoo/matrix_directory.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
 
@@ -38,7 +39,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 19> panels(App& app) {
+std::array<PanelRef, 20> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -56,6 +57,7 @@ std::array<PanelRef, 19> panels(App& app) {
            {"revisions", &app.revision_win, app.revision_panel_open},
            {"nostr-explorer", &app.nostr_explorer_win, app.nostr_explorer_open},
            {"lemmy-explorer", &app.lemmy_explorer_win, app.lemmy_explorer_open},
+           {"matrix-explorer", &app.matrix_explorer_win, app.matrix_explorer_open},
            {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
            {"certificates", &app.certs_win, app.certs.open},
            {"related-sites", &app.related_win, app.related.open}}};
@@ -142,6 +144,8 @@ std::string session_text(App& app) {
   out << "lemmy.tab=" << app.lemmy_tab << "\n";
   out << "lemmy.sort=" << app.lemmy_sort << "\n";
   out << "lemmy.instance_only=" << (app.lemmy_instance_only ? 1 : 0) << "\n";
+  out << "matrix.server=" << app.matrix_server << "\n";
+  out << "matrix.tab=" << app.matrix_tab << "\n";
   out << "related-sites.follow=" << (app.related.follow ? 1 : 0) << "\n";
   for (const PanelRef& r : panels(app)) {
     const FloatWindow& w = *r.win;
@@ -389,6 +393,18 @@ void restore_session(App& app) {
       app.related.follow = *v == "1";
     if (get("lemmy-explorer.open") && *get("lemmy-explorer.open") == "1")
       app.lemmy_explorer_open = true;
+    if (const std::string* v = get("matrix.server")) {
+      const std::string server = xanatoo::matrix_server_name(*v);
+      if (!server.empty()) {
+        xanatoo::matrix_directory_add_server(server);
+        app.matrix_server = server;
+      }
+    }
+    if (const std::string* v = get("matrix.tab"))
+      if (v->size() == 1 && (*v)[0] >= '0' && (*v)[0] <= '3')
+        app.matrix_tab = (*v)[0] - '0';
+    if (get("matrix-explorer.open") && *get("matrix-explorer.open") == "1")
+      app.matrix_explorer_open = true;
     if (get("certificates.open") && *get("certificates.open") == "1")
       show_certificates(app);
     // "recommendations" is the panel's first name (migration alias).

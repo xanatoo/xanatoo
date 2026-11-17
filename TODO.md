@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Matrix: read-only rooms, directories, Matrix Explorer
+
+- `matrix:` refs in the spec's URI form (`matrix:r/room:server`,
+  `matrix:u/user:server`, `matrix:roomid/…[/e/…]`) plus
+  `matrix:directory/server` for public room directories; matrix.to links
+  map both ways. Details: docs/dev/SERVICES.md "Matrix".
+- Anonymous: directories, room summaries, profiles (verified live against
+  matrix.org and zirco.dev in Xvfb). Room messages / space contents need
+  an access token (Credentials → Matrix); that path is unit tested with
+  fixture JSON only, never run against a real server here (no token).
+- Matrix Explorer panel (servers / rooms / spaces / people seen so far,
+  Room directory, Open field). Checked in Xvfb.
+- Later: sending messages / joining (needs login + sync, deliberately not
+  started); media (mxc:// needs authenticated media downloads); paging
+  space hierarchies beyond 50; Subscriptions for rooms; style sheet.
+
 ## Status (2026-11-17) — Real toolbar icons in Nix builds; `dir///gallery`
 
 - WASM (and the Nix native / Windows / R36S packages) showed the crude

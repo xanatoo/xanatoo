@@ -372,7 +372,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
-  Subscriptions, Certificates, RelatedSites, Document
+  Subscriptions, Certificates, RelatedSites, MatrixExplorer, Document
 };
 
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
@@ -389,6 +389,7 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
     case WindowRole::Certificates: return UiPanelLayer::Certificates;
     case WindowRole::RelatedSites: return UiPanelLayer::RelatedSites;
+    case WindowRole::MatrixExplorer: return UiPanelLayer::MatrixExplorer;
     default: return UiPanelLayer::Chrome;
   }
 }
@@ -974,6 +975,12 @@ struct App {
   std::string lemmy_instance = "lemmy.world";
   std::string lemmy_sort = "Hot";
   bool lemmy_instance_only = false;
+  bool matrix_explorer_open = false;
+  int matrix_tab = 1;  // 0: servers, 1: rooms, 2: spaces, 3: people
+  std::string matrix_search;
+  std::string matrix_server = "matrix.org";
+  bool matrix_has_token = false;      // cached; credentials are read on demand
+  uint64_t matrix_token_checked = 0;  // ticks of the last check (0 = never)
   bool nostr_accounts_open = false;
   int nostr_tab = 0;  // 0: people, 1: events, 2: NIP-29 groups
   std::string nostr_search;
@@ -1092,6 +1099,7 @@ struct App {
   FloatWindow revision_win = make_float_panel(WindowRole::Revisions, 120, 140, 550, 560);
   FloatWindow nostr_explorer_win = make_float_panel(WindowRole::NostrExplorer, 180, 120, 560, 520);
   FloatWindow lemmy_explorer_win = make_float_panel(WindowRole::LemmyExplorer, 190, 130, 560, 520);
+  FloatWindow matrix_explorer_win = make_float_panel(WindowRole::MatrixExplorer, 200, 140, 560, 520);
   FloatWindow nostr_accounts_win = make_float_panel(WindowRole::NostrAccounts, 200, 150, 440, 440);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
   FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);

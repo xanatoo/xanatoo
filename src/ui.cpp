@@ -2527,6 +2527,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Lemmy Explorer", nullptr, state.lemmy_explorer_open,
                           state.lemmy_supported || state.lemmy_explorer_open))
         cmd = UiCommand::ToggleLemmyExplorer;
+      if (ImGui::MenuItem("Matrix Explorer", nullptr, state.matrix_explorer_open,
+                          state.matrix_supported || state.matrix_explorer_open))
+        cmd = UiCommand::ToggleMatrixExplorer;
       if (ImGui::MenuItem("Nostr Accounts", nullptr, state.nostr_accounts_open))
         cmd = UiCommand::ToggleNostrAccounts;
       ImGui::EndMenu();
@@ -3350,6 +3353,15 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       catalog_field(CatalogKey::SimilarsNetKey, "similars.net key");
       if (classic_button("similars.net API"))
         xanatoo::sdl::open_url("https://similars.net/api/");
+
+      ImGui::SeparatorText("Matrix (room messages, spaces)");
+      ImGui::TextDisabled("Optional: directories, room summaries and profiles "
+                          "need no account. The token is sent to this "
+                          "homeserver only; xanatoo never joins or posts.");
+      catalog_field(CatalogKey::MatrixHomeserver, "Homeserver");
+      catalog_field(CatalogKey::MatrixAccessToken, "Access token");
+      ImGui::TextDisabled("Homeserver: matrix.org or https://matrix-client.matrix.org. "
+                          "Element: Settings → Help & About → Access token.");
 
       ImGui::Spacing();
       bool catalog_values_valid = true;
@@ -4526,6 +4538,168 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           ImGui::TextWrapped(current == LemmyEntryKind::Instance ?
               "No matching instances. Add a server or discover federated peers." :
               "No cached matches yet. Browse a server feed, search it, or find communities to collect public names and posts.");
+        } else if (matching > 250) {
+          ImGui::TextDisabled("Showing first 250 of %d matches. Narrow the filter to find more.", matching);
+        }
+      }
+      ImGui::EndChild();
+    }
+    ImGui::End();
+  }
+
+  // ---- Matrix catalogue, inside its native dockable panel ----
+  if (state.matrix_explorer_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::MatrixExplorer))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.matrix_explorer_x + 3),
+                                  float(state.matrix_explorer_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(
+        float(std::max(1, state.matrix_explorer_w - 6)),
+        float(std::max(1, state.matrix_explorer_h - 6))));
+    if (ImGui::Begin("##matrix_explorer_body", nullptr, embedded_panel_flags)) {
+      int counts[4] = {};
+      for (const auto& entry : state.matrix_entries)
+        ++counts[static_cast<int>(entry.kind)];
+      ImGui::TextDisabled("%d servers · %d rooms · %d spaces · %d people",
+                          counts[0], counts[1], counts[2], counts[3]);
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Public names seen in Matrix responses, stored locally");
+
+      ImGui::SetNextItemWidth(-1.f);
+      if (ImGui::BeginCombo("##matrix_server", state.matrix_server.c_str())) {
+        for (const auto& entry : state.matrix_entries) {
+          if (entry.kind != MatrixEntryKind::Server) continue;
+          const bool selected = entry.name == state.matrix_server;
+          if (ImGui::Selectable(entry.name.c_str(), selected)) {
+            cmd = UiCommand::MatrixSetServer;
+            result.arg = entry.name;
+          }
+          if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Server whose public room directory Room directory opens");
+
+      ImGui::BeginDisabled(!state.matrix_supported);
+      MatrixRef dir;
+      dir.kind = MatrixRefKind::Directory;
+      dir.id = state.matrix_server;
+      if (classic_button("Room directory")) {
+        cmd = UiCommand::NavigateUrl;
+        result.arg = format_matrix_ref(dir);
+      }
+      if (matrix_search_input_[0] != '\0') {
+        ImGui::SameLine();
+        if (classic_button("Search directory")) {
+          dir.query = matrix_search_input_;
+          cmd = UiCommand::NavigateUrl;
+          result.arg = format_matrix_ref(dir);
+        }
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip(state.matrix_has_token ?
+              "Search this server's room directory for the filter words" :
+              "Directory search needs an access token (Credentials)");
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SetNextItemWidth(-70.f * scale_);
+      const bool open_enter = ImGui::InputTextWithHint(
+          "##matrix_open", "#room:server, @user:server, matrix.to link or server",
+          matrix_open_input_, sizeof matrix_open_input_,
+          ImGuiInputTextFlags_EnterReturnsTrue);
+      ImGui::SameLine();
+      if ((classic_button("Open") || open_enter) && matrix_open_input_[0] != '\0') {
+        std::string_view in = matrix_open_input_;
+        trim_ascii(in);
+        std::string ref;
+        if (starts_with_ci(in, "matrix:")) ref = std::string(in);
+        else if (!in.empty() && (in[0] == '#' || in[0] == '!' || in[0] == '@'))
+          ref = matrix_ref_for_id(in);
+        else ref = matrix_ref_from_url(in);
+        if (!ref.empty()) {
+          cmd = UiCommand::NavigateUrl;
+          result.arg = ref;
+        } else {
+          cmd = UiCommand::MatrixAddServer;  // a bare server name
+          result.arg = std::string(in);
+        }
+      }
+
+      ImGui::SetNextItemWidth(-1.f);
+      if (ImGui::InputTextWithHint("##matrix_filter", "Filter observed entries…",
+                                   matrix_search_input_, sizeof matrix_search_input_)) {
+        cmd = UiCommand::MatrixSetSearch;
+        result.arg = matrix_search_input_;
+      }
+      static const char* const kTabs[] = {"Servers", "Rooms", "Spaces", "People"};
+      for (int i = 0; i < 4; ++i) {
+        if (i) ImGui::SameLine();
+        if (ImGui::RadioButton(kTabs[i], state.matrix_tab == i)) {
+          cmd = UiCommand::MatrixSetTab;
+          result.arg = std::to_string(i);
+        }
+      }
+      if (!state.matrix_has_token) {
+        ImGui::TextDisabled("Anonymous: rooms show their summary only.");
+        ImGui::SameLine();
+        if (classic_button("Credentials…")) cmd = UiCommand::ToggleCredentials;
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip("An access token for your homeserver shows room "
+                            "messages and space contents (read-only)");
+      }
+      ImGui::Separator();
+
+      if (ImGui::BeginChild("##matrix_results", ImVec2(0.f, 0.f), false)) {
+        const MatrixEntryKind current = static_cast<MatrixEntryKind>(state.matrix_tab);
+        const std::string query = ascii_lower(state.matrix_search);
+        int matching = 0;
+        for (const auto& item : state.matrix_entries) {
+          if (item.kind != current) continue;
+          if (!query.empty() &&
+              ascii_lower(item.title).find(query) == std::string::npos &&
+              ascii_lower(item.name).find(query) == std::string::npos &&
+              ascii_lower(item.topic).find(query) == std::string::npos)
+            continue;
+          if (++matching > 250) continue;
+          ImGui::PushID(item.ref.c_str());
+          std::string label = item.title;
+          if (item.title != item.name) label += " · " + item.name;
+          if (item.members) label += " · " + std::to_string(item.members) + " members";
+          const bool selected = current == MatrixEntryKind::Server &&
+                                item.name == state.matrix_server;
+          if (ImGui::Selectable(label.c_str(), selected)) {
+            if (current == MatrixEntryKind::Server) {
+              cmd = UiCommand::MatrixSetServer;
+              result.arg = item.name;
+            } else {
+              cmd = UiCommand::NavigateUrl;
+              result.arg = item.ref;
+            }
+          }
+          if (current == MatrixEntryKind::Server && ImGui::IsItemHovered() &&
+              ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            cmd = UiCommand::NavigateUrl;
+            result.arg = item.ref;
+          }
+          if (ImGui::IsItemHovered()) {
+            if (current == MatrixEntryKind::Server)
+              ImGui::SetTooltip("Select for Room directory; double-click opens it");
+            else if (!item.topic.empty() && ImGui::BeginTooltip()) {
+              ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.f);
+              ImGui::TextUnformatted(item.ref.c_str());
+              ImGui::TextWrapped("%s", item.topic.c_str());
+              ImGui::PopTextWrapPos();
+              ImGui::EndTooltip();
+            } else
+              ImGui::SetTooltip("%s", item.ref.c_str());
+          }
+          ImGui::PopID();
+        }
+        if (matching == 0) {
+          ImGui::TextWrapped(current == MatrixEntryKind::Server ?
+              "No matching servers. Type a server name above and press Open." :
+              "Nothing collected yet. Open a room directory, a room or a "
+              "profile to collect public rooms, spaces and people.");
         } else if (matching > 250) {
           ImGui::TextDisabled("Showing first 250 of %d matches. Narrow the filter to find more.", matching);
         }

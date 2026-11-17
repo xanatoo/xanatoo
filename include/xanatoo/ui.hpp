@@ -9,6 +9,7 @@
 #include "xanatoo/urlbar_suggestions.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/lemmy_directory.hpp"
+#include "xanatoo/matrix.hpp"
 #include "xanatoo/style.hpp"
 #include "xanatoo/subscriptions.hpp"
 #include "xanatoo/ui_panel_layers.hpp"
@@ -63,6 +64,11 @@ enum class UiCommand {
   LemmyAddInstance,    // arg = https://host or host
   LemmySetSort,        // arg = Hot, New, Active, TopDay, TopWeek
   LemmyToggleInstanceOnly,
+  ToggleMatrixExplorer, // observed Matrix servers, rooms, spaces, people
+  MatrixSetTab,         // arg = 0..3
+  MatrixSetSearch,      // arg = local filter text
+  MatrixSetServer,      // arg = server name (selected for directory actions)
+  MatrixAddServer,      // arg = server name or https://server
   ToggleNostrAccounts, // local watch-only identities, signer management later
   ToggleCertificates,  // Certificates panel; arg = host:port opens it on that row
   CertAccept,          // arg = host:port: trust the changed certificate
@@ -325,6 +331,14 @@ struct UiState {
   int lemmy_explorer_x = 0, lemmy_explorer_y = 0;
   int lemmy_explorer_w = 0, lemmy_explorer_h = 0;
   std::vector<LemmyDirectoryEntry> lemmy_entries;
+  bool matrix_explorer_open = false;
+  bool matrix_supported = false;
+  bool matrix_has_token = false;
+  int matrix_tab = 1;
+  std::string matrix_search, matrix_server;
+  int matrix_explorer_x = 0, matrix_explorer_y = 0;
+  int matrix_explorer_w = 0, matrix_explorer_h = 0;
+  std::vector<MatrixDirectoryEntry> matrix_entries;
   bool nostr_accounts_open = false;
   int nostr_tab = 0;
   std::string nostr_search;
@@ -711,6 +725,8 @@ private:
   char nostr_group_relay_[512] = {};
   char lemmy_search_input_[256] = {};
   char lemmy_instance_input_[256] = {};
+  char matrix_search_input_[256] = {};
+  char matrix_open_input_[512] = {};
   std::string style_editor_sheet_;
   std::string style_editor_loaded_;
   char style_editor_[65536] = {};

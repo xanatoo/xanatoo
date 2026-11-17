@@ -41,7 +41,7 @@ option(XANATOO_MINIMAL_PORT "Offline, dependency-light cross-platform build" ${_
 # so the page must be cross-origin isolated (docs/PORTS.md).
 set(XANATOO_WASM_DEPS_ROOT "" CACHE PATH "Emscripten prefix with thumtoo's libraries")
 if(XANATOO_MINIMAL_PORT)
-  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI NOSTR REDDIT LEMMY HN YOUTUBE VIDEO
+  set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI NOSTR REDDIT LEMMY MATRIX HN YOUTUBE VIDEO
                    EBOOKS FEEDS WEB WIKIPEDIA)
   # Gopher/Spartan/Nex/Finger use plain TCP only (no TLS library). Keep them
   # available under MINIMAL_PORT except on Emscripten (no raw sockets).
@@ -52,7 +52,7 @@ if(XANATOO_MINIMAL_PORT)
   set(XANATOO_WASM_FETCH OFF)
   if(EMSCRIPTEN AND XANATOO_WASM_DEPS_ROOT)
     set(XANATOO_WASM_FETCH ON)
-    foreach(_f LEMMY HN VIDEO EBOOKS FEEDS WEB WIKIPEDIA)
+    foreach(_f LEMMY MATRIX HN VIDEO EBOOKS FEEDS WEB WIKIPEDIA)
       list(REMOVE_ITEM _minimal_off ${_f})
     endforeach()
   endif()
@@ -141,6 +141,7 @@ option(XANATOO_FINGER "Enable finger:// network client (plain TCP)" ON)
 option(XANATOO_NOSTR "Enable Nostr note/thread fetch (TLS WebSocket)" ON)
 option(XANATOO_REDDIT "Enable Reddit .json fetch (TLS HTTPS)" ON)
 option(XANATOO_LEMMY "Enable Lemmy API v3 fetch (TLS HTTPS)" ON)
+option(XANATOO_MATRIX "Enable read-only Matrix rooms / directories (Client-Server API, TLS HTTPS)" ON)
 option(XANATOO_YOUTUBE "Enable YouTube channel / video / comment fetch (InnerTube, TLS HTTPS)" ON)
 option(XANATOO_VIDEO "Enable PeerTube / Odysee / Dailymotion fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_HN "Enable Hacker News fetch (Firebase + Algolia APIs, TLS HTTPS)" ON)
@@ -237,6 +238,8 @@ add_executable(xanatoo
   src/lemmy.cpp
   src/lemmy_discovery.cpp
   src/lemmy_directory.cpp
+  src/matrix.cpp
+  src/matrix_directory.cpp
   src/hackernews.cpp
   src/youtube.cpp
   src/video_sites.cpp
@@ -358,7 +361,7 @@ else()
 endif()
 
 set(XANATOO_NEED_OPENSSL OFF)
-if(XANATOO_GEMINI OR XANATOO_NOSTR OR XANATOO_REDDIT OR XANATOO_LEMMY OR
+if(XANATOO_GEMINI OR XANATOO_NOSTR OR XANATOO_REDDIT OR XANATOO_LEMMY OR XANATOO_MATRIX OR
    XANATOO_HN OR XANATOO_YOUTUBE OR XANATOO_VIDEO OR XANATOO_EBOOKS OR XANATOO_FEEDS OR XANATOO_WEB OR
    XANATOO_WIKIPEDIA)
   set(XANATOO_NEED_OPENSSL ON)
@@ -461,6 +464,14 @@ if(XANATOO_LEMMY)
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_LEMMY=0)
   message(STATUS "Lemmy API client: OFF")
+endif()
+
+if(XANATOO_MATRIX)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_MATRIX=1)
+  message(STATUS "Matrix client (read-only): ON (HTTPS, ${XANATOO_TLS})")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_MATRIX=0)
+  message(STATUS "Matrix client (read-only): OFF")
 endif()
 
 if(XANATOO_VIDEO)
@@ -673,6 +684,8 @@ add_executable(xanatoo_tests
   src/lemmy.cpp
   src/lemmy_discovery.cpp
   src/lemmy_directory.cpp
+  src/matrix.cpp
+  src/matrix_directory.cpp
   src/hackernews.cpp
   src/youtube.cpp
   src/video_sites.cpp
@@ -732,6 +745,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_NOSTR=0
   XANATOO_REDDIT=0
   XANATOO_LEMMY=0
+  XANATOO_MATRIX=0
   XANATOO_HN=0
   XANATOO_YOUTUBE=0
   XANATOO_VIDEO=0

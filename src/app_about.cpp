@@ -100,6 +100,11 @@ AboutSection services() {
   s.items.push_back({"Lemmy", XANATOO_LEMMY,
                      "`lemmy:instance/c/…` communities and posts (API v3)",
                      "lemmy:lemmy.world/c/technology", "`-DXANATOO_LEMMY=ON`"});
+  s.items.push_back({"Matrix", XANATOO_MATRIX,
+                     "`matrix:r/room:server` rooms, `matrix:u/user:server` "
+                     "profiles and `matrix:directory/server` public room "
+                     "directories (read-only; messages need an access token)",
+                     "matrix:directory/matrix.org", "`-DXANATOO_MATRIX=ON`"});
   s.items.push_back({"Nostr", XANATOO_NOSTR,
                      "`note1…` / `npub1…` / `nostr:…` notes, threads and "
                      "profiles over relay WebSockets",

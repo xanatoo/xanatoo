@@ -163,7 +163,8 @@ bridge and persistent storage (for example, IndexedDB) are future work.
 ## Network in the browser
 
 With `XANATOO_WASM_DEPS_ROOT` (the pthreads build above) the Wasm build turns
-on the web reader, Wikipedia, Hacker News, feeds, Lemmy and the video sites.
+on the web reader, Wikipedia, Hacker News, feeds, Lemmy, Matrix (the
+Client-Server API requires CORS) and the video sites.
 `src/https_wasm.cpp` replaces the socket / TLS client behind `https.hpp` with
 `emscripten_fetch` (`-sFETCH=1`, synchronous, so every request runs on a
 worker thread: `app_fetch.cpp` spawns threads when pthreads exist).

@@ -142,6 +142,51 @@ read-only service clients. Every client is read-only: never post or log in.
   v4 with different endpoints. v4-only servers require a later client update.
 - Optional UA override: `XANATOO_LEMMY_USER_AGENT`.
 
+## Matrix
+
+- Read-only Client-Server API client (`src/matrix.cpp`), gated by
+  `XANATOO_MATRIX` (default ON; HTTPS; also in the Wasm build, the API
+  requires CORS). Never registers, logs in, joins rooms or sends events.
+- Addresses are the spec's `matrix:` URIs (sigil dropped):
+  `matrix:r/room:server`, `matrix:roomid/id[:server]?via=s`,
+  `matrix:roomid/id/e/event`, `matrix:u/user:server`. Extension:
+  `matrix:directory/server[?since=…][&q=…]` (public room directory;
+  `matrix:directory/` = configured / matrix.org); rooms take `from=` for
+  "Earlier messages". `parse_matrix_ref` / `format_matrix_ref` round-trip;
+  `https://matrix.to/#/…` links map both ways (`alternate_view_url`,
+  and links inside Matrix documents are rewritten to refs, except
+  `rel=external`).
+- Server names (`matrix_server_name`) are validated before they enter a
+  URL; the API base comes from `/.well-known/matrix/client` (cached,
+  https-only base_url), else `https://server`.
+- Anonymous (what servers allow without a token, checked against
+  matrix.org): `GET /v3/publicRooms` of the server itself (no `server=`,
+  no search), `/v3/directory/room/{alias}`, `/v1/room_summary/{room}`
+  (fallback `im.nheko.summary`), `/v3/profile/{user}`. Room messages
+  (`/messages`, `/context`), space contents (`/hierarchy`) and directory
+  search / other servers' directories (`POST /publicRooms?server=`) need
+  an access token: `CatalogKey::MatrixHomeserver` + `MatrixAccessToken`
+  (Credentials dialog, or `XANATOO_MATRIX_HOMESERVER` /
+  `XANATOO_MATRIX_ACCESS_TOKEN`). Then every request goes to that
+  homeserver and the token is only ever sent to its base URL. Reading a
+  room without joining works for `world_readable` history; otherwise a
+  Note explains it (no join). Guest accounts are deliberately not used
+  (registration is an account write).
+- Documents (pure, unit tested): `matrix_directory_document` (Article
+  entries: Header link, first topic line, Caption with alias / members),
+  `matrix_room_document` (heading, Caption, topic, space children,
+  "Messages" Thread: `/messages` arrives newest first and is reversed;
+  edits (`m.replace`) replace the shown text, reply fallbacks are stripped,
+  `m.in_reply_to` / `m.thread` → `alt` threading, `formatted_body` through
+  `html_append_blocks`, media and encrypted events as metadata captions,
+  member displaynames from `state`), `matrix_profile_document`.
+- **Matrix Explorer** (Panels): dockable `FloatWindow` like the Lemmy
+  Explorer. `matrix_discover_payload` (pure) collects servers, rooms,
+  spaces and people from responses; `matrix_directory.cpp` keeps them in
+  `state_dir()/matrix-directory.txt` (memory only under `--no-save`), with
+  a few seed servers. The Open field takes `#room:server`, `@user:server`,
+  `!id`, matrix.to links, `matrix:` refs or a server name (added).
+
 ## Nostr
 
 - WSS over `TlsStream` (`tls.hpp`).

@@ -24,6 +24,8 @@ enum class CatalogKey : size_t {
   DiscogsToken,
   WebxtrendToken,  // Related Sites panel (similar websites)
   SimilarsNetKey,
+  MatrixHomeserver,   // Matrix: server name or https:// API base
+  MatrixAccessToken,  // Matrix: sent to MatrixHomeserver only
   Count
 };
 
@@ -43,6 +45,8 @@ inline constexpr std::array<CatalogKeyInfo, catalog_key_count> catalog_key_info 
     {"discogs_token", "XANATOO_DISCOGS_TOKEN"},
     {"webxtrend_token", "XANATOO_WEBXTREND_TOKEN"},
     {"similars_net_key", "XANATOO_SIMILARS_NET_KEY"},
+    {"matrix_homeserver", "XANATOO_MATRIX_HOMESERVER"},
+    {"matrix_access_token", "XANATOO_MATRIX_ACCESS_TOKEN"},
 }};
 
 constexpr size_t catalog_key_index(CatalogKey key) {
