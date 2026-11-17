@@ -1329,6 +1329,7 @@ static void on_controllerdeviceadded(App& app, SDL_Event& ev, bool imgui_mouse,
     if (app.gamepad) {
       app.stick_cursor_on = true;
       app.stick_cursor_init = false;
+      note_stick_use(app);
       flash_status(app,
                    "Pad: R-stick cursor · A click · B rclick · "
                    "D-pad nav · L-stick scroll · Start help");
@@ -1367,6 +1368,7 @@ static void on_controllerdeviceremoved(App& app, SDL_Event& ev,
 static void on_controllerbuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
                                     bool imgui_keys) {
   // Gamepad is always for navigation (never text entry).
+  note_stick_use(app);
   switch (xanatoo::sdl::gamepad_event_button(ev)) {
     case xanatoo::sdl::button::DpadUp:
       nav_move_line(app, true);
@@ -1463,6 +1465,7 @@ static void on_controllerbuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
 
 static void on_controllerbuttonup(App& app, SDL_Event& ev, bool imgui_mouse,
                                   bool imgui_keys) {
+  note_stick_use(app);
   if (xanatoo::sdl::gamepad_event_button(ev) == xanatoo::sdl::button::A &&
       app.stick_lmb) {
     app.stick_lmb = false;

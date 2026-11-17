@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Gamepad cursor auto-hides
+
+- The stick cursor is drawn only within 3 s of the last gamepad input
+  (buttons, right/left stick, triggers); it keeps its position and shows
+  again on the next input. Built + unit tests; not tried with a real pad.
+
 ## Status (2026-11-17) — Matrix: read-only rooms, directories, Matrix Explorer
 
 - `matrix:` refs in the spec's URI form (`matrix:r/room:server`,

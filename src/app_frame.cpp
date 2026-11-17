@@ -714,6 +714,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       stick_active = true;
     }
     if (app.stick_lmb || app.stick_rmb) stick_active = true;
+    if (stick_active) note_stick_use(app);
     if (stick_active) {
       const int ix = static_cast<int>(app.stick_cx);
       const int iy = static_cast<int>(app.stick_cy);
@@ -2889,6 +2890,7 @@ void poll_gamepad_axes(App& app) {
     // Left stick Y: scroll focused pane (unchanged).
     float ly = axis(xanatoo::sdl::AxisLeftY);
     if (ly != 0.f) {
+      note_stick_use(app);
       Pane& p = focused_pane(app);
       const float max_s = pane_max_scroll(app, p);
       p.scroll_y = std::max(0.f, std::min(max_s, p.scroll_y + ly * 18.f));
@@ -2898,6 +2900,7 @@ void poll_gamepad_axes(App& app) {
     static bool lt_held = false, rt_held = false;
     float lt = axis(xanatoo::sdl::AxisLeftTrigger);
     float rt = axis(xanatoo::sdl::AxisRightTrigger);
+    if (lt > 0.f || rt > 0.f) note_stick_use(app);
     if (lt > 0.5f) {
       if (!lt_held) {
         nav_page(app, true);
@@ -5054,7 +5057,7 @@ void present_frame(App& app) {
     set_cursor(app, pointer);
   }
   app.ui.end_frame(app.sdl);
-  if (app.stick_cursor_on) {
+  if (stick_cursor_visible(app)) {
     draw_stick_cursor(app, app.sdl, static_cast<int>(app.stick_cx),
                       static_cast<int>(app.stick_cy),
                       app.stick_lmb || app.stick_rmb);

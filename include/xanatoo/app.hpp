@@ -1070,6 +1070,9 @@ struct App {
   float stick_cx = 0.f;
   float stick_cy = 0.f;
   bool stick_cursor_init = false;
+  // Last gamepad input (sdl::ticks); the stick cursor hides after
+  // kStickCursorIdleMs without any (stick_cursor_visible).
+  Uint32 stick_last_use = 0;
   bool stick_lmb = false;
   bool stick_rmb = false;
   float mouse_x = 0.f;
@@ -1508,6 +1511,12 @@ void toggle_chrome(App& app);
 void open_first_gamepad(App& app);
 void clear_interaction_hover(App& app);
 void draw_stick_cursor(App& app, SDL_Renderer* r, int cx, int cy, bool pressed);
+// Gamepad idle time after which the stick cursor is no longer drawn.
+inline constexpr Uint32 kStickCursorIdleMs = 3000;
+// Note gamepad input: shows the stick cursor again.
+void note_stick_use(App& app);
+// Stick cursor on and the pad used within kStickCursorIdleMs.
+bool stick_cursor_visible(const App& app);
 void set_cursor(App& app, SDL_Cursor* c);
 void reset_blink(App& app);
 

@@ -67,6 +67,13 @@ void clear_interaction_hover(App& app) {
   app.hover.annotation_pane = -1;
 }
 
+void note_stick_use(App& app) { app.stick_last_use = xanatoo::sdl::ticks(); }
+
+bool stick_cursor_visible(const App& app) {
+  return app.stick_cursor_on &&
+         xanatoo::sdl::ticks() - app.stick_last_use < kStickCursorIdleMs;
+}
+
 void draw_stick_cursor(App& app, SDL_Renderer* r, int cx, int cy,
                        bool pressed) {
   const int ox[7] = {0, 0, 4, 6, 9, 7, 11};

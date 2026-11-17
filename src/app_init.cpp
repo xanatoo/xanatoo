@@ -234,7 +234,10 @@ bool app_init(App& app) {
   }
   apply_font_sizes(app);
   open_first_gamepad(app);
-  if (app.gamepad) app.stick_cursor_on = true;
+  if (app.gamepad) {
+    app.stick_cursor_on = true;
+    note_stick_use(app);
+  }
   for (int pi = 0; pi < kCentreViews; ++pi)
     if (const DocBuffer* b = find_buf(app, app.panes[pi].buf))
       push_nav_history(app, pi, b->path);

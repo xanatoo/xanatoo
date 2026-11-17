@@ -133,6 +133,9 @@ overlap foreground native frames.
 - Touch and native mouse cursor selection use the same ownership check as
   mouse presses. A gamepad-driven pointer is likewise masked while its native
   foreground window hides a form.
+- The gamepad's software cursor hides after `kStickCursorIdleMs` (3 s)
+  without gamepad input (any button, stick past the deadzone, trigger) and
+  reappears on the next input (`note_stick_use`, `stick_cursor_visible`).
 
 The vendored-ImGui regression exercises two overlapping native panel bodies,
 each with a child, and swaps their stacking order without focusing them. It
