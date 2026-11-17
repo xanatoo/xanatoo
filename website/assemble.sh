@@ -28,6 +28,7 @@ done
 
 mkdir -p "$out/downloads/r36s" "$out/downloads/versions" "$out/wasm"
 cp -r "$site/images" "$out/images"
+cp "$site/404.html" "$out/404.html"   # GitHub Pages: old download links
 # Versioned names (from <target>.json), so downloads never collide; the
 # page links them through @file-<target>@.
 for t in android win64 win32; do
@@ -35,8 +36,13 @@ for t in android win64 win32; do
 done
 # PortMaster expects the zip under the name its port.json gives.
 cp "$src/$(file r36s)" "$out/downloads/r36s/xanatoo.zip"
-# The Emscripten index.html loads relative .js / .wasm / .data files.
+# The Emscripten index.html loads relative .js / .wasm / .data files, and
+# registers coi-sw.js (cross-origin isolation, GitHub Pages sends no COOP /
+# COEP). A build whose page loads it must ship it.
 cp -r "$src/wasm/." "$out/wasm/"
+if grep -q coi-sw.js "$out/wasm/index.html" && ! test -s "$out/wasm/coi-sw.js"; then
+  echo "assemble: wasm/index.html registers coi-sw.js, but the build lacks it" >&2; exit 1
+fi
 
 ver() { jq -r '.version // "unknown"' "$src/versions/$1.json"; }
 for t in "${targets[@]}"; do

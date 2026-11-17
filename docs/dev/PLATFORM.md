@@ -69,7 +69,11 @@ The website <https://xanatoo.github.io/> is built from `website/`
   serves `downloads/<file>` and links them through `@file-<target>@`;
   `publish-build.sh` deletes the previous `file` once the new json is up;
   `fetch-builds.sh` still reads older records (no `file`: the old fixed
-  names).
+  names). `website/404.html` (Pages serves it for missing paths) sends old
+  or outdated `downloads/*.apk|zip` links to `/#download`.
+- The browser edition on Pages relies on `wasm/coi-sw.js` for cross-origin
+  isolation (`docs/PORTS.md`); `assemble.sh` fails if the page registers it
+  but the build lacks the file.
 - CI (`artifacts.yml`) builds each target as its own matrix job. On master a
   success runs `nix run .#publish-build -- continuous <target> dist`, which
   swaps that target's assets on the `continuous` prerelease (temporary

@@ -636,6 +636,7 @@ if(EMSCRIPTEN)
                 ${CMAKE_CURRENT_BINARY_DIR}/xanatoo.js
                 ${CMAKE_CURRENT_BINARY_DIR}/xanatoo.wasm
                 ${CMAKE_CURRENT_BINARY_DIR}/xanatoo.data
+                ${CMAKE_CURRENT_SOURCE_DIR}/mk/wasm/coi-sw.js
           DESTINATION .)
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/xanatoo.html
           DESTINATION . RENAME index.html)

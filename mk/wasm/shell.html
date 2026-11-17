@@ -60,7 +60,42 @@
       },
       onAbort: function (reason) { status.textContent = 'Error: ' + reason; }
     };
+
+    // Threads (PDF / DjVu reading, network fetches) need a cross-origin
+    // isolated page. Where the host cannot send COOP / COEP (GitHub Pages),
+    // coi-sw.js adds them: register it, then reload once under its control.
+    // The app script stays inert in the template below until then.
+    function startApp() {
+      var tpl = document.getElementById('app-script');
+      document.body.appendChild(document.importNode(tpl.content, true));
+    }
+    function isolate() {
+      var key = 'xanatoo-coi-reload', tried = false;
+      try { tried = sessionStorage.getItem(key) === '1'; } catch (e) {}
+      if (!window.isSecureContext || !navigator.serviceWorker || tried) {
+        status.textContent = 'This browser cannot run the threaded build here ' +
+          '(no cross-origin isolation; private windows often block it).';
+        return;
+      }
+      status.textContent = 'Enabling cross-origin isolation…';
+      navigator.serviceWorker.register('coi-sw.js').then(function () {
+        return navigator.serviceWorker.ready;
+      }).then(function () {
+        try { sessionStorage.setItem(key, '1'); } catch (e) {}
+        location.reload();
+      }, function (err) {
+        status.textContent = 'Error: could not install coi-sw.js (' + err + ')';
+      });
+    }
+    window.addEventListener('DOMContentLoaded', function () {
+      if (self.crossOriginIsolated) {
+        try { sessionStorage.removeItem('xanatoo-coi-reload'); } catch (e) {}
+        startApp();
+      } else {
+        isolate();
+      }
+    });
   </script>
-  {{{ SCRIPT }}}
+  <template id="app-script">{{{ SCRIPT }}}</template>
 </body>
 </html>

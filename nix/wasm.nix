@@ -180,7 +180,7 @@ let
     installPhase = ''
       runHook preInstall
       cmake --install build
-      for f in index.html xanatoo.js xanatoo.wasm xanatoo.data; do
+      for f in index.html xanatoo.js xanatoo.wasm xanatoo.data coi-sw.js; do
         test -s "$out/$f"
       done
       runHook postInstall

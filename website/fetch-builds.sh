@@ -65,6 +65,8 @@ from_site() {
     for f in index.html xanatoo.js xanatoo.wasm xanatoo.data; do
       get "$site/wasm/$f" "$dir/wasm/$f"
     done
+    # Builds from before the isolation shim (mk/wasm/coi-sw.js) have none.
+    get "$site/wasm/coi-sw.js" "$dir/wasm/coi-sw.js" || rm -f "$dir/wasm/coi-sw.js"
     return
   fi
   file=$(jq -r .file "$json")

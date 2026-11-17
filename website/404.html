@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Ingo Ruhnke <grumbel@gmail.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xanatoo — not found</title>
+<script>
+// GitHub Pages serves this page for every missing path. Downloads carry
+// their version in the name, so old links (and links to an older build)
+// go to the download list instead.
+if (/^\/downloads\/[^/]+\.(apk|zip)$/.test(location.pathname)) {
+  location.replace('/#download');
+}
+</script>
+<style>
+:root { --paper: #f6f1e6; --ink: #23201b; --link: #1d4f91; }
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #1b1915; --ink: #e8e0d0; --link: #8db6ee; }
+}
+body { margin: 0; padding: 3rem 16px; background: var(--paper); color: var(--ink);
+       font-family: Georgia, serif; line-height: 1.6; }
+main { max-width: 36rem; margin: 0 auto; }
+a { color: var(--link); }
+</style>
+</head>
+<body>
+<main>
+<h1>Not found</h1>
+<p>There is nothing at this address. Downloads are renamed with every build;
+the current ones are on the <a href="/#download">download list</a>.</p>
+<p><a href="/">xanatoo home</a></p>
+</main>
+</body>
+</html>

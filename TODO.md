@@ -16,9 +16,17 @@
   asset removal not yet run on GitHub.
 - Page: Windows stays "offline edition" (still true: MINIMAL_PORT, no
   sockets/TLS on WIN32); WASM text now says which services pass CORS.
-- Open: the live `wasm/` is served without COOP/COEP and has no
-  service-worker shim, but the pthreads (thumtoo) build needs
-  SharedArrayBuffer — check whether it starts on GitHub Pages at all.
+- The live `wasm/` (no COOP/COEP on Pages) did not start at all: headless
+  Chromium shows "SharedArrayBuffer transfer requires
+  self.crossOriginIsolated". Fixed with `mk/wasm/coi-sw.js` + a gate in
+  `shell.html` (docs/PORTS.md). Verified in headless Chromium on a plain
+  `http.server`: registers, reloads, `crossOriginIsolated`, welcome.md
+  opens; Wikipedia / HN XHRs still 200 under COEP. Not yet seen on the
+  real Pages site or in Firefox / Safari.
+- Headless browser does work here: the "never run in a browser" note
+  (2026-11-13) was a leaked `LD_LIBRARY_PATH` (alsa-lib) breaking
+  chromium's glibc; `env -u LD_LIBRARY_PATH`.
+- `website/404.html`: old fixed download URLs → `/#download`.
 
 ## Status (2026-11-17) — Website in this repo; CI builds go straight to it
 

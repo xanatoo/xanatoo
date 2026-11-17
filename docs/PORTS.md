@@ -137,8 +137,17 @@ DjVuLibre and libunarr as static wasm32 libraries. They need **pthreads**
 (thumtoo's tile workers, the page reader), so the page must be cross-origin
 isolated: serve it with `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` (`mk/wasm/scripts/serve.py` and
-`nix run .#xanatoo-wasm` do; GitHub Pages cannot send these headers, use a
-service-worker shim or another host). The "Open file…" button and drops on
+`nix run .#xanatoo-wasm` do). Hosts that cannot send headers (GitHub Pages)
+get them from `mk/wasm/coi-sw.js`, installed next to `index.html`: when the
+page is not isolated, `shell.html` registers that service worker and reloads
+once. The worker re-serves same-origin responses with COOP / COEP / CORP and
+leaves cross-origin CORS fetches alone. The Emscripten `{{{ SCRIPT }}}` sits
+in a `<template>` and is only inserted once `crossOriginIsolated` holds, so
+the threaded runtime never starts (and fails) before the reload. No service
+worker (private windows, plain `http://` off localhost) → a status message.
+Test headless: nixpkgs `chromium --headless=new --enable-logging=stderr`
+prints the console (unset `LD_LIBRARY_PATH` first if the shell leaks one).
+The "Open file…" button and drops on
 the canvas copy a file into `/upload` of the virtual filesystem and open it
 (`xanatoo_web_open`, `main.cpp`); nothing is uploaded anywhere. Glib is
 patched for Emscripten's libc (stubs for `pthread_getname_np`,
