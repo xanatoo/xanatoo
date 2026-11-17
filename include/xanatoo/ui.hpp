@@ -627,6 +627,11 @@ public:
   // keystroke goes to the document instead of the chrome.
   void release_input_capture();
 
+  // The canvas (not ImGui) chose the pointer for this frame. The ImGui SDL
+  // backends apply ImGui's cursor in the next new_frame; telling ImGui the
+  // same shape keeps them from flipping it back to an arrow every frame.
+  void claim_cursor(xanatoo::sdl::SystemCursor kind);
+
   // Open a top-level menu by name ("File", "Edit", …) for Alt+letter mnemonics.
   void request_menu(const char* name);
 

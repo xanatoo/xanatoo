@@ -883,6 +883,21 @@ void Ui::process_event(const SDL_Event& ev) {
 // field (ImGui shows its text cursor) gets a left click there, which places
 // the caret, and the primary selection as typed input trickled in after the
 // click; anything else gets the middle press as it was.
+void Ui::claim_cursor(xanatoo::sdl::SystemCursor kind) {
+  if (!ready_) return;
+  using K = xanatoo::sdl::SystemCursor;
+  ImGuiMouseCursor c = ImGuiMouseCursor_Arrow;
+  switch (kind) {
+    case K::Arrow: c = ImGuiMouseCursor_Arrow; break;
+    case K::Hand: c = ImGuiMouseCursor_Hand; break;
+    case K::ResizeEW: c = ImGuiMouseCursor_ResizeEW; break;
+    case K::ResizeNS: c = ImGuiMouseCursor_ResizeNS; break;
+    case K::ResizeNWSE: c = ImGuiMouseCursor_ResizeNWSE; break;
+    case K::Move: c = ImGuiMouseCursor_ResizeAll; break;
+  }
+  ImGui::SetMouseCursor(c);
+}
+
 void Ui::resolve_middle_click() {
   if (!std::exchange(middle_click_.pending, false)) return;
   ImGuiIO& io = ImGui::GetIO();

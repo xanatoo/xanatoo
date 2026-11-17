@@ -127,6 +127,14 @@ void draw_stick_cursor(App& app, SDL_Renderer* r, int cx, int cy,
 
 void set_cursor(App& app, SDL_Cursor* c) {
   if (!c) c = app.cursor_arrow;
+  using K = xanatoo::sdl::SystemCursor;
+  const K kind = c == app.cursor_hand        ? K::Hand
+                 : c == app.cursor_sizewe    ? K::ResizeEW
+                 : c == app.cursor_sizens    ? K::ResizeNS
+                 : c == app.cursor_sizenwse  ? K::ResizeNWSE
+                 : c == app.cursor_sizeall   ? K::Move
+                                             : K::Arrow;
+  app.ui.claim_cursor(kind);
   // ImGui's SDL backend also changes the cursor each frame. Our cached choice
   // alone cannot tell whether it replaced the native pane/panel cursor.
   if (c != app.cursor_current || SDL_GetCursor() != c) {

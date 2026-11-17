@@ -208,3 +208,7 @@ Mouse cursor feedback must use the same hit-test as the action it advertises:
 `float_resize_at` for native panel edges, `dock_split_at` for neighbours,
 and `tile_divider_rect` for centre tiles. ImGui handles its own controls;
 the SDL2 backend must detect external cursor changes to restore its I-beam.
+`set_cursor` also hands the canvas cursor to ImGui (`Ui::claim_cursor`):
+both backends apply ImGui's cursor in their next `new_frame`, and without
+the claim they reset a canvas hand to an arrow every frame, which flickers
+while frames redraw continuously (e.g. hovering a quote).
