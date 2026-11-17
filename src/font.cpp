@@ -40,9 +40,10 @@ Font::~Font() {
   }
 }
 
-bool Font::load(const std::string& path, int pixel_size, SDL_Renderer* renderer) {
+bool Font::load(const FontFace& file, int pixel_size, SDL_Renderer* renderer) {
   renderer_ = renderer;
-  path_ = path;
+  path_ = file.path;
+  face_index_ = file.index;
   // Clear previous face if reloading
   drop_cache();
   for (FallbackFace& f : fallbacks_) FT_Done_Face(f.face);
@@ -55,8 +56,12 @@ bool Font::load(const std::string& path, int pixel_size, SDL_Renderer* renderer)
     std::cerr << "FreeType init failed\n";
     return false;
   }
-  if (FT_New_Face(library_, path.c_str(), 0, &face_)) {
-    std::cerr << "Failed to load font: " << path << "\n";
+  if (file.index < 0 ||
+      FT_New_Face(library_, file.path.c_str(), file.index, &face_)) {
+    face_ = nullptr;
+    std::cerr << "Failed to load font: " << file.path;
+    if (file.index != 0) std::cerr << " (face " << file.index << ")";
+    std::cerr << "\n";
     return false;
   }
   set_size(pixel_size);
@@ -91,20 +96,20 @@ FT_Face Font::fallback_face(uint32_t codepoint) {
   const std::string family = face_->family_name ? face_->family_name : "";
   const int weight = (face_->style_flags & FT_STYLE_FLAG_BOLD) ? 1 : 0;
   const int slant = (face_->style_flags & FT_STYLE_FLAG_ITALIC) ? 1 : 0;
-  for (const std::string& path :
-       fallback_font_paths(codepoint, family, weight, slant)) {
-    if (path == path_) continue;
+  for (const FontFace& file :
+       fallback_font_faces(codepoint, family, weight, slant)) {
+    if (file == this->face()) continue;
     bool open = false;
-    for (const FallbackFace& f : fallbacks_) open = open || f.path == path;
+    for (const FallbackFace& f : fallbacks_) open = open || f.file == file;
     if (open) continue;  // already checked above
     FT_Face face = nullptr;
-    if (FT_New_Face(library_, path.c_str(), 0, &face)) continue;
+    if (FT_New_Face(library_, file.path.c_str(), file.index, &face)) continue;
     if (!FT_IS_SCALABLE(face)) {  // bitmap-only (colour emoji) faces
       FT_Done_Face(face);
       continue;
     }
     FT_Set_Pixel_Sizes(face, 0, pixel_size_);
-    fallbacks_.push_back({path, face});
+    fallbacks_.push_back({file, face});
     if (FT_Get_Char_Index(face, codepoint) != 0) return face;
   }
   return nullptr;
@@ -190,7 +195,23 @@ int Font::measure(const std::string& text) {
 }
 
 #if XANATOO_FONTCONFIG
-std::string fontconfig_find(const std::string& family, int weight, int slant) {
+// The file and collection index of a FontConfig match.
+static FontFace fc_face_of(FcPattern* p) {
+  FontFace out;
+  FcChar8* file = nullptr;
+  if (FcPatternGetString(p, FC_FILE, 0, &file) != FcResultMatch || !file)
+    return out;
+  out.path = reinterpret_cast<const char*>(file);
+  int index = 0;
+  // Variable fonts put the named instance in the upper 16 bits; FreeType
+  // takes the same encoding.
+  if (FcPatternGetInteger(p, FC_INDEX, 0, &index) == FcResultMatch)
+    out.index = index;
+  return out;
+}
+
+FontFace fontconfig_find_face(const std::string& family, int weight,
+                              int slant) {
   if (!FcInit()) return {};
 
   FcPattern* pat = FcPatternCreate();
@@ -209,28 +230,23 @@ std::string fontconfig_find(const std::string& family, int weight, int slant) {
   FcPattern* match = FcFontMatch(nullptr, pat, &result);
   FcPatternDestroy(pat);
   if (!match) return {};
-
-  FcChar8* file = nullptr;
-  std::string path;
-  if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch && file) {
-    path = reinterpret_cast<const char*>(file);
-  }
+  FontFace face = fc_face_of(match);
   FcPatternDestroy(match);
-  return path;
+  return face;
 }
 
-std::vector<std::string> fallback_font_paths(uint32_t codepoint,
-                                             const std::string& family,
-                                             int weight, int slant) {
+std::vector<FontFace> fallback_font_faces(uint32_t codepoint,
+                                          const std::string& family,
+                                          int weight, int slant) {
   // One FcFontSort per (family, style, codepoint); the answer never changes.
   static std::mutex memo_mutex;
-  static std::unordered_map<std::string, std::vector<std::string>> memo;
+  static std::unordered_map<std::string, std::vector<FontFace>> memo;
   std::lock_guard<std::mutex> lock(memo_mutex);
   std::string key = family + '\n' + std::to_string(weight) +
                     std::to_string(slant) + '\n' + std::to_string(codepoint);
   if (auto it = memo.find(key); it != memo.end()) return it->second;
 
-  std::vector<std::string> paths;
+  std::vector<FontFace> paths;
   if (FcInit()) {
     FcPattern* pat = FcPatternCreate();
     FcCharSet* want = FcCharSetCreate();
@@ -258,9 +274,8 @@ std::vector<std::string> fallback_font_paths(uint32_t codepoint,
           if (FcPatternGetCharSet(f, FC_CHARSET, 0, &cs) != FcResultMatch ||
               !FcCharSetHasChar(cs, codepoint))
             continue;
-          FcChar8* file = nullptr;
-          if (FcPatternGetString(f, FC_FILE, 0, &file) == FcResultMatch && file)
-            paths.emplace_back(reinterpret_cast<const char*>(file));
+          if (FontFace face = fc_face_of(f); !face.empty())
+            paths.push_back(std::move(face));
         }
         FcFontSetDestroy(set);
       }
@@ -346,25 +361,40 @@ const std::vector<ScannedFace>& scanned_faces() {
         if (ec || !entry.is_regular_file(ec)) continue;
         const auto path = entry.path();
         if (!is_font_file(path)) continue;
-        FT_Face face = nullptr;
-        if (FT_New_Face(lib, path.string().c_str(), -1, &face)) continue;
-        const long nfaces = face->num_faces > 0 ? face->num_faces : 1;
-        FT_Done_Face(face);
+        const std::string file = path.string();
+        // Face 0 also reports how many members a collection has.
+        long nfaces = 1;
         for (long i = 0; i < nfaces; ++i) {
-          if (FT_New_Face(lib, path.string().c_str(), i, &face)) continue;
+          FT_Face face = nullptr;
+          if (FT_New_Face(lib, file.c_str(), i, &face)) {
+            if (i == 0) break;
+            continue;
+          }
+          if (i == 0 && face->num_faces > 1) nfaces = face->num_faces;
           if (!face->family_name || !face->family_name[0] ||
               !FT_IS_SCALABLE(face)) {
             FT_Done_Face(face);
             continue;
           }
           ScannedFace s;
-          s.path = path.string();
+          s.path = file;
           s.face_index = static_cast<int>(i);
           s.family = face->family_name;
           s.bold = (face->style_flags & FT_STYLE_FLAG_BOLD) != 0;
           s.italic = (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
-          // Filename hints when the face flags are blank (common on Android).
-          if (!s.bold || !s.italic) {
+          // The style name tells collection members apart ("Bold Italic").
+          if ((!s.bold || !s.italic) && face->style_name) {
+            std::string style = face->style_name;
+            for (char& c : style)
+              c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (style.find("bold") != std::string::npos) s.bold = true;
+            if (style.find("italic") != std::string::npos ||
+                style.find("oblique") != std::string::npos)
+              s.italic = true;
+          }
+          // Filename hints when the face flags are blank (common on
+          // Android); a collection's file name describes no single member.
+          if ((!s.bold || !s.italic) && nfaces == 1) {
             std::string stem = path.stem().string();
             for (char& c : stem)
               c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -422,7 +452,8 @@ const char* generic_prefer(std::string_view generic) {
 
 }  // namespace
 
-std::string fontconfig_find(const std::string& family, int weight, int slant) {
+FontFace fontconfig_find_face(const std::string& family, int weight,
+                              int slant) {
   if (family.empty()) return {};
   std::string want = family;
   if (want == "serif" || want == "sans-serif" || want == "sans" ||
@@ -451,19 +482,18 @@ std::string fontconfig_find(const std::string& family, int weight, int slant) {
     }
   }
   if (!best) return {};
-  // Font::load uses path only (face index 0). For .ttc multi-face files the
-  // primary face is usually the Regular we want; non-zero indices still
-  // return the collection path (same as FontConfig often does for the
-  // regular member). Callers that need a specific index would need FT face
-  // index support in Font::load — out of scope here.
-  return best->path;
+  return {best->path, best->face_index};
 }
 
-std::vector<std::string> fallback_font_paths(uint32_t, const std::string&,
-                                             int, int) {
-  static const std::vector<std::string> paths = [] {
-    std::vector<std::string> found;
-    std::unordered_set<std::string> seen;
+std::vector<FontFace> fallback_font_faces(uint32_t, const std::string&,
+                                          int, int) {
+  static const std::vector<FontFace> paths = [] {
+    std::vector<FontFace> found;
+    std::unordered_set<std::string> seen;  // "path\nindex"
+    auto add = [&](const std::string& path, int index) {
+      if (seen.insert(path + '\n' + std::to_string(index)).second)
+        found.push_back({path, index});
+    };
     for (const char* f : {"DejaVuSans.ttf", "Roboto-Regular.ttf",
                           "NotoSans-Regular.ttf",
                           "NotoSansSymbols-Regular-Subsetted.ttf",
@@ -474,16 +504,13 @@ std::vector<std::string> fallback_font_paths(uint32_t, const std::string&,
       for (const auto& dir : font_dirs()) {
         std::error_code ec;
         const auto p = dir / f;
-        if (std::filesystem::exists(p, ec)) {
-          const std::string s = p.string();
-          if (seen.insert(s).second) found.push_back(s);
-        }
+        if (std::filesystem::exists(p, ec)) add(p.string(), 0);
       }
     }
     // Any other scanned Regular face as late coverage.
     for (const ScannedFace& face : scanned_faces()) {
       if (face.bold || face.italic) continue;
-      if (seen.insert(face.path).second) found.push_back(face.path);
+      add(face.path, face.face_index);
     }
     return found;
   }();
@@ -499,11 +526,13 @@ std::string fontconfig_family_from_file(const std::string& path) {
 #endif  // XANATOO_FONTCONFIG
 
 
-static bool try_load(Font& font, const std::string& path, int px,
+static bool try_load(Font& font, const FontFace& face, int px,
                      SDL_Renderer* r, const char* label) {
-  if (path.empty()) return false;
-  if (font.load(path, px, r)) {
-    std::cerr << "font " << label << ": " << path << " @ " << px << " px\n";
+  if (face.empty()) return false;
+  if (font.load(face, px, r)) {
+    std::cerr << "font " << label << ": " << face.path;
+    if (face.index != 0) std::cerr << " (face " << face.index << ")";
+    std::cerr << " @ " << px << " px\n";
     return true;
   }
   return false;
@@ -511,7 +540,7 @@ static bool try_load(Font& font, const std::string& path, int px,
 
 // Restored pre-R36S UI font path (commit before d55b74d UI-scale work).
 // GNOME 2–era faces: Bitstream Vera → DejaVu Sans.
-std::string ui_font_path(bool bold) {
+FontFace ui_font_face(bool bold) {
   const char* families[] = {
       "DejaVu Sans",
       "Bitstream Vera Sans",
@@ -522,10 +551,10 @@ std::string ui_font_path(bool bold) {
       nullptr,
   };
   for (const char** f = families; *f; ++f) {
-    std::string path = fontconfig_find(*f, bold ? 1 : 0, 0);
-    if (!path.empty()) return path;
+    FontFace face = fontconfig_find_face(*f, bold ? 1 : 0, 0);
+    if (!face.empty()) return face;
   }
-  if (bold) return ui_font_path(false);
+  if (bold) return ui_font_face(false);
   const char* files[] = {
       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
       "/usr/share/fonts/TTF/DejaVuSans.ttf",
@@ -535,12 +564,13 @@ std::string ui_font_path(bool bold) {
       nullptr,
   };
   for (const char** f = files; *f; ++f) {
-    if (std::filesystem::exists(*f)) return *f;
+    if (std::filesystem::exists(*f)) return {*f, 0};
   }
   // PortMaster ships DejaVu in its data directory.
-  if (std::string p = data_file("fonts/DejaVuSans.ttf"); !p.empty()) return p;
+  if (std::string p = data_file("fonts/DejaVuSans.ttf"); !p.empty())
+    return {p, 0};
   if (const char* body = std::getenv("XANATOO_FONT")) {
-    if (body[0] != '\0' && std::filesystem::exists(body)) return body;
+    if (body[0] != '\0' && std::filesystem::exists(body)) return {body, 0};
   }
   return {};
 }
@@ -698,44 +728,44 @@ bool FontSet::load(SDL_Renderer* renderer, const std::string& preferred_path,
   }
   if (family.empty()) family = "sans-serif";
 
-  std::string reg = preferred_path;
+  FontFace reg{preferred_path, 0};
   if (reg.empty() || !try_load(regular, reg, body_px, renderer, "regular")) {
-    reg = fontconfig_find(family, 0, 0);
+    reg = fontconfig_find_face(family, 0, 0);
     if (!try_load(regular, reg, body_px, renderer, "regular")) {
       std::cerr << "Failed to load a regular body font (family=" << family << ")\n";
       return false;
     }
   }
 
-  std::string b = fontconfig_find(family, 1, 0);
+  FontFace b = fontconfig_find_face(family, 1, 0);
   if (!try_load(bold, b, body_px, renderer, "bold")) {
     // Soft-fail: share regular face metrics by loading same file
-    try_load(bold, regular.path(), body_px, renderer, "bold(fallback)");
+    try_load(bold, regular.face(), body_px, renderer, "bold(fallback)");
   }
-  std::string it = fontconfig_find(family, 0, 1);
+  FontFace it = fontconfig_find_face(family, 0, 1);
   if (!try_load(italic, it, body_px, renderer, "italic")) {
-    try_load(italic, regular.path(), body_px, renderer, "italic(fallback)");
+    try_load(italic, regular.face(), body_px, renderer, "italic(fallback)");
   }
-  std::string bi = fontconfig_find(family, 1, 1);
+  FontFace bi = fontconfig_find_face(family, 1, 1);
   if (!try_load(bold_italic, bi, body_px, renderer, "bold-italic")) {
     if (bold.loaded())
-      try_load(bold_italic, bold.path(), body_px, renderer, "bold-italic(fallback)");
+      try_load(bold_italic, bold.face(), body_px, renderer, "bold-italic(fallback)");
     else
-      try_load(bold_italic, regular.path(), body_px, renderer, "bold-italic(fallback)");
+      try_load(bold_italic, regular.face(), body_px, renderer, "bold-italic(fallback)");
   }
 
   // Heading: own family when the style names one, else the body family;
   // bold unless the style asks for a regular weight.
-  std::string h;
+  FontFace h;
   const std::string heading_family = fontconfig_pick_family(families.heading);
   if (!heading_family.empty())
-    h = fontconfig_find(heading_family, families.heading_bold ? 1 : 0, 0);
+    h = fontconfig_find_face(heading_family, families.heading_bold ? 1 : 0, 0);
   else if (families.heading_bold)
-    h = bold.loaded() ? bold.path() : regular.path();
+    h = bold.loaded() ? bold.face() : regular.face();
   else
-    h = regular.path();
+    h = regular.face();
   if (!try_load(heading, h, heading_px, renderer, "heading")) {
-    try_load(heading, regular.path(), heading_px, renderer, "heading(fallback)");
+    try_load(heading, regular.face(), heading_px, renderer, "heading(fallback)");
   }
 
   // Monospace for code: the style's family first, then common ones.
@@ -748,26 +778,27 @@ bool FontSet::load(SDL_Renderer* renderer, const std::string& preferred_path,
     mono_families.emplace_back(f);
   bool mono_ok = false;
   for (const std::string& f : mono_families) {
-    if (try_load(mono, fontconfig_find(f, 0, 0), body_px, renderer, "mono")) {
+    if (try_load(mono, fontconfig_find_face(f, 0, 0), body_px, renderer,
+                 "mono")) {
       mono_ok = true;
       break;
     }
   }
   if (!mono_ok) {
-    try_load(mono, regular.path(), body_px, renderer, "mono(fallback)");
+    try_load(mono, regular.face(), body_px, renderer, "mono(fallback)");
   }
 
   // Margin text: the same faces, smaller.
   const int spx = small_px(body_px);
-  auto path_of = [&](const Font& f) {
-    return f.loaded() ? f.path() : regular.path();
+  auto face_of = [&](const Font& f) {
+    return f.loaded() ? f.face() : regular.face();
   };
-  try_load(small, regular.path(), spx, renderer, "small");
-  try_load(small_bold, path_of(bold), spx, renderer, "small-bold");
-  try_load(small_italic, path_of(italic), spx, renderer, "small-italic");
-  try_load(small_bold_italic, path_of(bold_italic), spx, renderer,
+  try_load(small, regular.face(), spx, renderer, "small");
+  try_load(small_bold, face_of(bold), spx, renderer, "small-bold");
+  try_load(small_italic, face_of(italic), spx, renderer, "small-italic");
+  try_load(small_bold_italic, face_of(bold_italic), spx, renderer,
            "small-bold-italic");
-  try_load(small_mono, path_of(mono), spx, renderer, "small-mono");
+  try_load(small_mono, face_of(mono), spx, renderer, "small-mono");
 
   return regular.loaded();
 }

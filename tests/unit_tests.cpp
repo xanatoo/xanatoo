@@ -6316,6 +6316,27 @@ void test_math() {
   EXPECT(mx.width > 1.f && mx.ascent + mx.depth > 2.f * base.ascent);
 }
 
+// Font lookups carry the collection member; Font::load opens exactly it.
+static void test_font_face_index() {
+  using namespace xanatoo;
+  const FontFace face = fontconfig_find_face("DejaVu Sans", 1, 0);
+  if (face.empty()) {
+    std::fprintf(stderr, "SKIP test_font_face_index (no font)\n");
+    return;
+  }
+  EXPECT_EQ(fontconfig_find("DejaVu Sans", 1, 0), face.path);
+  Font font;
+  EXPECT(font.load(face, 18, nullptr));
+  EXPECT(font.face() == face);
+  EXPECT_EQ(font.face_index(), face.index);
+  // A member the file does not have fails instead of falling back to 0.
+  Font missing;
+  const FontFace absent{face.path, 4096}, negative{face.path, -1};
+  EXPECT(!missing.load(absent, 18, nullptr));
+  EXPECT(!missing.loaded());
+  EXPECT(!missing.load(negative, 18, nullptr));
+}
+
 static void test_transfer_label() {
   using xanatoo::transfer_label;
   EXPECT_EQ(transfer_label(0, -1, 0), std::string());
@@ -6347,6 +6368,7 @@ static void test_transfer_label() {
 
 int main() {
   test_transfer_label();
+  test_font_face_index();
   test_reply_markdown();
   test_sdl_time_bridge();
   test_about_markdown();

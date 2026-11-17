@@ -138,13 +138,13 @@ bool app_init(App& app) {
   }
   // Chrome text: same face/size as the ImGui menus, independent of the
   // document style sheet and zoom.
-  if (const std::string ui = xanatoo::ui_font_path(); ui.empty() ||
+  if (const xanatoo::FontFace ui = xanatoo::ui_font_face(); ui.empty() ||
       !app.ui_font.load(ui, kUiFontPx, app.sdl))
-    app.ui_font.load(app.fonts.regular.path(), kUiFontPx, app.sdl);
-  if (const std::string ui = xanatoo::ui_font_path(true); !ui.empty())
+    app.ui_font.load(app.fonts.regular.face(), kUiFontPx, app.sdl);
+  if (const xanatoo::FontFace ui = xanatoo::ui_font_face(true); !ui.empty())
     app.ui_font_bold.load(ui, kUiFontPx, app.sdl);
   if (!app.ui_font.path().empty())
-    app.ui_font_tiny.load(app.ui_font.path(), kStructTagPx, app.sdl);
+    app.ui_font_tiny.load(app.ui_font.face(), kStructTagPx, app.sdl);
   std::cerr << "chrome font: " << app.ui_font.path() << " @ " << kUiFontPx
             << " px\n";
   using xanatoo::sdl::SystemCursor;

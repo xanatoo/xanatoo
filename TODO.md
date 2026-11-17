@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Font collection members
+
+- Font lookups return `FontFace` (file + face index); `Font::load` opens
+  that member and `Font::face()` reopens it (FontSet variants, small
+  faces, chrome fonts, fallbacks). FontConfig passes `FC_INDEX` (also the
+  named instance of variable fonts); the FontConfig-less scan returns the
+  scanned member, so a `.ttc` no longer loads face 0 of another family.
+  ImGui menus get `FontNo`. `fallback_font_paths` → `fallback_font_faces`,
+  `ui_font_path` → `ui_font_face`; `fontconfig_find` stays for path-only
+  callers (math font).
+- Scan (no FontConfig): each file opened once per member (face 0 also
+  gives the count; no extra counting open); bold / italic from the style
+  name before file-name hints, which now apply to single-face files only.
+  Still one full scan at first lookup, cached — startup cost only; leave
+  it unless Android startup is measured to suffer.
+- Not checked on a device; the `-DXANATOO_FONTCONFIG=OFF` build compiles
+  and its tests pass on Linux.
+
 ## Status (2026-11-17) — Review fixes for the Grok commits since c342f54
 
 - DOCX native import: run text was never extracted (the `<w:t>` check
@@ -42,8 +60,6 @@
 - Curlie `stime=92452189`: checked 2026-11-17, still required (search is
   empty without it) and still accepted. If Curlie search breaks again,
   read the current value from their search form.
-- Still open from the review: FontConfig-less font scan cost / `.ttc`
-  face 0.
 
 ## Status (2026-11-15) — Small-net input prompts and binary downloads
 

@@ -761,8 +761,10 @@ static void load_ui_fonts(ImGuiIO& io, float scale) {
   // GNOME 2 commonly used Sans 10. Keep its Sans-family look, with a little
   // more pixel size to balance xanatoo's intentionally large 32 px icons.
   const float size_px = std::round(16.0f * scale);
-  std::string path = ui_font_path();
+  const FontFace face = ui_font_face();
+  const std::string& path = face.path;
   ImFontConfig cfg;
+  cfg.FontNo = face.index;  // member of a .ttc collection
   cfg.OversampleH = 2;
   cfg.OversampleV = 1;
   cfg.PixelSnapH = true;  // crisper menus on integer positions

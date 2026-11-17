@@ -7,8 +7,15 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 
 - Sheets may name faces with poor coverage (Verdana has no arrows):
   `Font::glyph` draws codepoints the face lacks from fallback faces
-  (`fallback_font_paths`: FontConfig coverage sort, fixed list on Android);
+  (`fallback_font_faces`: FontConfig coverage sort, fixed list on Android);
   line metrics stay the primary face's.
+- Font lookups return a `FontFace` (file + collection index); `Font::load`
+  opens that member, so a `.ttc` / `.otc` match is the requested family,
+  not face 0. FontConfig supplies `FC_INDEX`; without FontConfig
+  (Android) `scanned_faces` lists every member of each file once at first
+  lookup (cached), with style from flags, then style name, then the file
+  name (single-face files only). Pass `face()`, not `path()`, when
+  reopening a loaded font.
 - `ViewSettings::style` (view.conf) is the global *fallback* sheet; the toolbar
   and View menu issue `UiCommand::SelectStyle` / `ReloadStyles`. The dockable
   Styles panel uses an embedded ImGui editor and `style.cpp` helpers to create,

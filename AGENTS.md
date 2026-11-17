@@ -131,7 +131,7 @@ behaviour is free functions ("systems") taking `App&`.
 - Never hard-code document colours/spacing in layout/render; add a role or
   property to `DocStyle` instead. UI chrome keeps using `theme.hpp`.
 - Canvas chrome text (status line, window titles, outline, backlinks,
-  tooltips) uses `app.ui_font` / `app.ui_font_bold` (`ui_font_path()`, the
+  tooltips) uses `app.ui_font` / `app.ui_font_bold` (`ui_font_face()`, the
   ImGui face at `kUiFontPx`), never `app.fonts` — those follow the style
   sheet and zoom. Cut long labels with `fit_text`.
   More: `docs/dev/CONTENT.md`.

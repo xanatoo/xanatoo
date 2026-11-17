@@ -14,6 +14,15 @@
 
 namespace xanatoo {
 
+// A font file plus the member to open when it is a collection (.ttc /
+// .otc): FreeType's face index, 0 for plain .ttf / .otf files.
+struct FontFace {
+  std::string path;
+  int index = 0;
+  bool empty() const { return path.empty(); }
+  bool operator==(const FontFace&) const = default;
+};
+
 struct Glyph {
   SDL_Texture* texture = nullptr;
   int width = 0;
@@ -31,7 +40,10 @@ public:
   Font(const Font&) = delete;
   Font& operator=(const Font&) = delete;
 
-  bool load(const std::string& path, int pixel_size, SDL_Renderer* renderer);
+  bool load(const FontFace& face, int pixel_size, SDL_Renderer* renderer);
+  bool load(const std::string& path, int pixel_size, SDL_Renderer* renderer) {
+    return load(FontFace{path, 0}, pixel_size, renderer);
+  }
   void set_size(int pixel_size);
 
   const Glyph& glyph(uint32_t codepoint);
@@ -46,6 +58,8 @@ public:
   int pixel_size() const { return pixel_size_; }
   bool loaded() const { return face_ != nullptr; }
   const std::string& path() const { return path_; }
+  int face_index() const { return face_index_; }
+  FontFace face() const { return {path_, face_index_}; }
 
   // Measure a UTF-8 string width in pixels
   int measure(const std::string& text);
@@ -55,6 +69,7 @@ private:
   FT_Face face_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;
   std::string path_;
+  int face_index_ = 0;
   int pixel_size_ = 0;
   int line_height_ = 0;
   int ascender_ = 0;
@@ -66,7 +81,7 @@ private:
   std::array<const Glyph*, 256> latin1_{};
   // Faces opened for codepoints the primary face lacks, same pixel size.
   struct FallbackFace {
-    std::string path;
+    FontFace file;
     FT_Face face = nullptr;
   };
   std::vector<FallbackFace> fallbacks_;
@@ -76,12 +91,12 @@ private:
   void drop_cache();
 };
 
-// Font files that may cover `codepoint` when a face of `family` lacks it,
+// Faces that may cover `codepoint` when a face of `family` lacks it,
 // best first (FontConfig: sorted by similarity, filtered by coverage;
 // without FontConfig: the usual broad-coverage system faces, unfiltered).
-std::vector<std::string> fallback_font_paths(uint32_t codepoint,
-                                             const std::string& family,
-                                             int weight, int slant);
+std::vector<FontFace> fallback_font_faces(uint32_t codepoint,
+                                          const std::string& family,
+                                          int weight, int slant);
 
 // Which face to use when laying out / drawing a glyph.
 enum class FontRole : uint8_t {
@@ -113,9 +128,16 @@ inline bool is_small_role(FontRole role) {
          role == FontRole::SmallCode;
 }
 
-// Resolve a font file via FontConfig (family + weight + slant).
-// weight: 0=regular, 1=bold; slant: 0=roman, 1=italic.
-std::string fontconfig_find(const std::string& family, int weight, int slant);
+// Resolve a face via FontConfig, or the font-directory scan without it
+// (family + weight + slant). weight: 0=regular, 1=bold; slant: 0=roman,
+// 1=italic. The index picks the matching member of a collection.
+FontFace fontconfig_find_face(const std::string& family, int weight,
+                              int slant);
+// Just the file of fontconfig_find_face (callers that open face 0 only).
+inline std::string fontconfig_find(const std::string& family, int weight,
+                                   int slant) {
+  return fontconfig_find_face(family, weight, slant).path;
+}
 
 // Infer a family name from a user-supplied TTF/OTF path (best-effort).
 std::string fontconfig_family_from_file(const std::string& path);
@@ -132,7 +154,7 @@ struct FontFamilies {
 
 // Face for UI chrome (menus, status line, panels): a GNOME 2–era sans
 // (DejaVu Sans / Vera / Liberation …), independent of document style sheets.
-std::string ui_font_path(bool bold = false);
+FontFace ui_font_face(bool bold = false);
 
 // First family of `names` that FontConfig has installed, else "".
 std::string fontconfig_pick_family(const std::vector<std::string>& names);
