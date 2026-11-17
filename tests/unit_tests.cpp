@@ -5491,13 +5491,14 @@ void test_wikipedia() {
   for (const Node& n : doc.nodes)
     for (const InlineSpan& s : n.spans)
       if (s.kind == InlineKind::Link) hrefs.push_back(s.href);
-  EXPECT_EQ(hrefs.size(), size_t(5));
-  if (hrefs.size() == 5) {
+  EXPECT_EQ(hrefs.size(), size_t(6));
+  if (hrefs.size() == 6) {
     EXPECT_EQ(hrefs[0], "external:https://en.wikipedia.org/wiki/Hypertext");
-    EXPECT_EQ(hrefs[1], "wikipedia:Ted_Nelson");
-    EXPECT_EQ(hrefs[2], "#History");
-    EXPECT_EQ(hrefs[3], "https://en.wikipedia.org/wiki/Category:Web");
-    EXPECT_EQ(hrefs[4], "wikipedia:de:Hypertext");
+    EXPECT_EQ(hrefs[1], "wikipedia:Hypertext");
+    EXPECT_EQ(hrefs[2], "wikipedia:Ted_Nelson");
+    EXPECT_EQ(hrefs[3], "#History");
+    EXPECT_EQ(hrefs[4], "https://en.wikipedia.org/wiki/Category:Web");
+    EXPECT_EQ(hrefs[5], "wikipedia:de:Hypertext");
   }
   Document figure = parse_html_page(
       "<base href=\"//en.wikipedia.org/wiki/\"><main>"
