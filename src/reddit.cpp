@@ -514,11 +514,12 @@ std::optional<Document> reddit_fetch(std::string_view url_in, std::string* err) 
         }
         std::string next = reddit_json_url(loc);
         next = next.empty() ? loc : next;
-        if (!http_redirect_keeps_security(current, next)) {
-          last_err = "refusing HTTPS-to-HTTP Reddit redirect";
+        auto target = secure_redirect_target(current, next);
+        if (!target) {
+          last_err = "unsupported Reddit redirect: " + loc;
           break;
         }
-        current = std::move(next);
+        current = std::move(*target);
         continue;
       }
       resp = std::move(one);

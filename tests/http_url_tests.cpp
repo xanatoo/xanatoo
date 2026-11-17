@@ -21,6 +21,7 @@ int main() {
   using xanatoo::parse_http_url;
   using xanatoo::resolve_http_redirect;
   using xanatoo::http_redirect_keeps_security;
+  using xanatoo::secure_redirect_target;
   auto plain = parse_http_url("http://localhost:8080/a/b?x=1#ignored");
   check(plain.has_value(), "http URL accepted");
   if (plain) {
@@ -66,6 +67,26 @@ int main() {
         "HTTPS to HTTPS redirect allowed");
   check(!http_redirect_keeps_security("https://a.example", "http://b.example"),
         "HTTPS to HTTP downgrade must be rejected");
+  auto upgrade = [](std::string_view from, std::string_view to) {
+    bool up = false;
+    auto r = secure_redirect_target(from, to, &up);
+    return r ? (up ? "^" : "=") + *r : std::string("<invalid>");
+  };
+  check(upgrade("https://doi.org/x", "http://portal.acm.org/c.cfm?doid=1#f") ==
+        "^https://portal.acm.org/c.cfm?doid=1#f",
+        "HTTPS to HTTP redirect is upgraded, not downgraded");
+  check(upgrade("https://a.example/", "http://b.example:80") ==
+        "^https://b.example", "upgrade drops the explicit HTTP port");
+  check(upgrade("https://a.example/", "http://b.example:8080/p") ==
+        "^https://b.example:8080/p", "upgrade keeps another explicit port");
+  check(upgrade("https://a.example/", "http://[::1]/p") ==
+        "^https://[::1]/p", "upgrade keeps IPv6 brackets");
+  check(upgrade("http://a.example/", "http://b.example/p") ==
+        "=http://b.example/p", "explicit HTTP browsing is not upgraded");
+  check(upgrade("https://a.example/", "https://b.example/p") ==
+        "=https://b.example/p", "HTTPS redirect unchanged");
+  check(upgrade("https://a.example/", "ftp://b.example/") == "<invalid>",
+        "unsupported scheme has no target");
   check(!resolve_http_redirect("http://a.example", "ftp://other/a"),
         "reject unsupported redirect scheme");
   return failures ? 1 : 0;

@@ -12,13 +12,18 @@ Gemini, with OpenSSL on desktop and Mbed TLS on Android.
 | Nostr `wss://` | Required | Invalid/untrusted relay certificates prevent the WebSocket connection. |
 | NIP-11 `https://` | Required | Additionally demands HTTPS, public resolved IP addresses for automatic discovery, and a 256 KiB response limit. |
 | Gemini `gemini://` | TOFU (SHA-256 leaf certificate pin) | First contact is unauthenticated; later connections require the same certificate per host and port. |
-| `http://` | Not applicable | Explicitly requested plaintext HTTP is allowed. Redirects from HTTPS back to HTTP are rejected. |
+| `http://` | Not applicable | Explicitly requested plaintext HTTP is allowed. An HTTPS redirect to `http://` is upgraded to `https://` (no plaintext request). |
 
 For verified connections, the certificate must chain to a trusted root and
 match the requested hostname (or IP address). The client **fails closed** if
 the trust store is unavailable or the certificate is invalid. There is no
 "ignore certificate errors" switch exposed by the browsing UI. Redirects
-can upgrade HTTP to HTTPS but never downgrade an HTTPS connection to HTTP.
+can upgrade HTTP to HTTPS but never downgrade an HTTPS connection to HTTP:
+like browser HTTPS-Upgrades, an HTTPS response redirecting to `http://host/p`
+is followed as `https://host/p` (`secure_redirect_target`, an explicit `:80`
+dropped). Stale `http://` links behind HTTPS redirectors (e.g. doi.org → ACM)
+thus keep working; if the server has no HTTPS, the fetch fails instead of
+falling back to plaintext.
 
 ## System trust stores
 

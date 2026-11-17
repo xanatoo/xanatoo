@@ -30,4 +30,13 @@ std::optional<std::string> resolve_http_redirect(std::string_view base,
 bool http_redirect_keeps_security(std::string_view from,
                                   std::string_view to);
 
+// The URL to actually fetch for a resolved redirect from `from` to `to`.
+// An HTTPS → http:// redirect is upgraded to the same address over https://
+// (an explicit :80 is dropped), like browser HTTPS-Upgrades; no plaintext
+// request is made. Everything else is returned unchanged. Sets *upgraded when
+// the scheme was rewritten; nullopt when either URL is not HTTP(S).
+std::optional<std::string> secure_redirect_target(std::string_view from,
+                                                  std::string_view to,
+                                                  bool* upgraded = nullptr);
+
 }  // namespace xanatoo

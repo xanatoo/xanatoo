@@ -150,4 +150,26 @@ bool http_redirect_keeps_security(std::string_view from,
   return src && dst && (!src->secure || dst->secure);
 }
 
+std::optional<std::string> secure_redirect_target(std::string_view from,
+                                                  std::string_view to,
+                                                  bool* upgraded) {
+  if (upgraded) *upgraded = false;
+  const auto src = parse_http_url(from);
+  const auto dst = parse_http_url(to);
+  if (!src || !dst) return std::nullopt;
+  if (!src->secure || dst->secure) return std::string(to);
+  const std::string_view rest = to.substr(7);  // after "http://"
+  const size_t split = rest.find_first_of("/?#");
+  const std::string_view tail = split == std::string_view::npos ?
+      std::string_view{} : rest.substr(split);
+  std::string out = "https://";
+  if (dst->host.find(':') != std::string::npos) out += "[" + dst->host + "]";
+  else out += dst->host;
+  if (dst->port != 80) out += ":" + std::to_string(dst->port);
+  out += tail;
+  if (!parse_http_url(out)) return std::nullopt;
+  if (upgraded) *upgraded = true;
+  return out;
+}
+
 }  // namespace xanatoo

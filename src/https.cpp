@@ -253,6 +253,7 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
                                            std::string* final_url) {
   std::string current(url);
   std::optional<HttpResult> resp;
+  bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
     resp = https_get(current, user_agent, err);
     if (!resp || resp->status < 300 || resp->status >= 400 ||
@@ -263,12 +264,15 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
       if (err) *err = "unsupported HTTP redirect: " + resp->location;
       return std::nullopt;
     }
-    if (!http_redirect_keeps_security(current, *next)) {
-      if (err) *err = "HTTPS redirect refused: destination uses plaintext HTTP";
+    auto target = secure_redirect_target(current, *next, &upgraded);
+    if (!target) {
+      if (err) *err = "unsupported HTTP redirect: " + resp->location;
       return std::nullopt;
     }
-    current = std::move(*next);
+    current = std::move(*target);
   }
+  if (!resp && upgraded && err)
+    *err = "HTTPS redirect to plaintext HTTP; HTTPS upgrade failed: " + *err;
   if (final_url) *final_url = current;
   return resp;
 }
@@ -455,6 +459,7 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpBodyCallback& on_body,
                              std::string* err, std::string* final_url) {
   std::string current(url);
+  bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
     HttpStreamHeaders headers;
     const bool ok = stream_once(current, user_agent,
@@ -468,7 +473,11 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
               !headers.location.empty()) return true;
           return on_body(bytes);
         }, headers, err);
-    if (!ok) return false;
+    if (!ok) {
+      if (upgraded && err)
+        *err = "HTTPS redirect to plaintext HTTP; HTTPS upgrade failed: " + *err;
+      return false;
+    }
     if (headers.status < 300 || headers.status >= 400 ||
         headers.location.empty()) {
       if (final_url) *final_url = current;
@@ -479,11 +488,12 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
       if (err) *err = "unsupported HTTP redirect: " + headers.location;
       return false;
     }
-    if (!http_redirect_keeps_security(current, *next)) {
-      if (err) *err = "HTTPS redirect refused: destination uses plaintext HTTP";
+    auto target = secure_redirect_target(current, *next, &upgraded);
+    if (!target) {
+      if (err) *err = "unsupported HTTP redirect: " + headers.location;
       return false;
     }
-    current = std::move(*next);
+    current = std::move(*target);
   }
   if (err) *err = "too many HTTP redirects";
   return false;
