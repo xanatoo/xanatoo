@@ -61,9 +61,15 @@ The website <https://xanatoo.github.io/> is built from `website/`
 `xanatoo/xanatoo.github.io` repository only holds the deploy workflow.
 
 - `.#release-<target>` (android, r36s, win64, win32, wasm): the exact
-  release assets with fixed names (`xanatoo.apk`, `xanatoo-r36s.zip`,
-  `xanatoo-win{32,64}.zip`, `xanatoo-wasm.tar.gz`) plus `<target>.json`
-  (version, rev, revCount, lastModified from the flake's `self`).
+  release asset plus `<target>.json` (version, rev, revCount, lastModified
+  from the flake's `self`, and `file`, the asset's name). Names carry the
+  version (`+` → `-`) and platform: `xanatoo-<v>-android-universal.apk`,
+  `-windows-x86_64.zip`, `-windows-i686.zip`, `-wasm32.tar.gz`; only R36S
+  stays `xanatoo.zip` (the name PortMaster's `port.json` gives). The site
+  serves `downloads/<file>` and links them through `@file-<target>@`;
+  `publish-build.sh` deletes the previous `file` once the new json is up;
+  `fetch-builds.sh` still reads older records (no `file`: the old fixed
+  names).
 - CI (`artifacts.yml`) builds each target as its own matrix job. On master a
   success runs `nix run .#publish-build -- continuous <target> dist`, which
   swaps that target's assets on the `continuous` prerelease (temporary

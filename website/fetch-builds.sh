@@ -5,8 +5,9 @@
 # fetch-builds.sh DIR
 #
 # Fill DIR with the newest build of every target, in the layout
-# assemble.sh reads: xanatoo.apk, xanatoo-r36s.zip, xanatoo-win{32,64}.zip,
-# wasm/, versions/<target>.json.
+# assemble.sh reads: versions/<target>.json, which names the target's
+# download in "file" (e.g. xanatoo-<version>-android-universal.apk), that
+# file in DIR, and wasm/ (the unpacked browser edition).
 #
 # Builds come from the rolling `continuous` release of xanatoo/xanatoo
 # (publish-build.sh), where each target is replaced only when its own
@@ -22,7 +23,7 @@ mkdir -p "$dir/versions"
 
 get() { curl -fsSL --retry 3 -o "$2" "$1"; }
 
-# target  release asset        live-site path
+# target  file name before <target>.json had "file"  its live-site path
 targets=(
   "android xanatoo.apk         downloads/xanatoo.apk"
   "r36s    xanatoo-r36s.zip    downloads/r36s/xanatoo.zip"
@@ -31,10 +32,15 @@ targets=(
   "wasm    xanatoo-wasm.tar.gz wasm/"
 )
 
+# Write the file name into a version record that predates "file".
+with_file() { jq --arg f "$2" '.file //= $f' "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
+
 from_release() {
-  local target=$1 asset=$2 tmp
+  local target=$1 legacy=$2 tmp asset
   tmp=$(mktemp -d)
   get "$release/$target.json" "$tmp/$target.json" || { rm -rf "$tmp"; return 1; }
+  with_file "$tmp/$target.json" "$legacy"
+  asset=$(jq -r .file "$tmp/$target.json")
   get "$release/$asset" "$tmp/$asset" || { rm -rf "$tmp"; return 1; }
   if [ "$target" = wasm ]; then
     mkdir "$tmp/wasm"
@@ -47,18 +53,25 @@ from_release() {
   rm -rf "$tmp"
 }
 
+# The live site serves downloads/<file> (r36s: downloads/r36s/xanatoo.zip);
+# sites from before "file" serve the legacy path.
 from_site() {
-  local target=$1 asset=$2 path=$3
+  local target=$1 legacy=$2 path=$3 json=$dir/versions/$1.json file
+  get "$site/downloads/versions/$target.json" "$json" \
+    || legacy_version "$target" > "$json"
+  with_file "$json" "$legacy"
   if [ "$target" = wasm ]; then
     mkdir -p "$dir/wasm"
     for f in index.html xanatoo.js xanatoo.wasm xanatoo.data; do
       get "$site/wasm/$f" "$dir/wasm/$f"
     done
-  else
-    get "$site/$path" "$dir/$asset"
+    return
   fi
-  get "$site/downloads/versions/$target.json" "$dir/versions/$target.json" \
-    || legacy_version "$target" > "$dir/versions/$target.json"
+  file=$(jq -r .file "$json")
+  if [ "$target" != r36s ] && [ "$file" != "$legacy" ]; then
+    path=downloads/$file
+  fi
+  get "$site/$path" "$dir/$file"
 }
 
 # Sites deployed before versions/ existed built every file from one
@@ -71,10 +84,10 @@ legacy_version() {
 
 failed=0
 for t in "${targets[@]}"; do
-  read -r target asset path <<<"$t"
-  if from_release "$target" "$asset"; then
+  read -r target legacy path <<<"$t"
+  if from_release "$target" "$legacy"; then
     echo "$target: release, $(jq -r .version "$dir/versions/$target.json")"
-  elif from_site "$target" "$asset" "$path"; then
+  elif from_site "$target" "$legacy" "$path"; then
     echo "::warning::$target: not on the release, kept the live site's copy"
   else
     echo "::error::$target: neither the release nor the live site has it"

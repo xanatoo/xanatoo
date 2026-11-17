@@ -188,24 +188,26 @@ a pane, and the page reflows around you.</p>
 snapshot; @version-note@</p>
 
 <ul class="dl">
-  <li><a class="row" href="downloads/xanatoo.apk">
+  <li><a class="row" href="downloads/@file-android@">
     <span class="name">Android</span><span class="rev">@version-android@</span><span class="lead"></span><span class="what">APK · arm &amp; x86</span></a></li>
   <li><a class="row" href="downloads/r36s/xanatoo.zip">
     <span class="name">R36S &amp; ArkOS handhelds</span><span class="rev">@version-r36s@</span><span class="lead"></span><span class="what">PortMaster zip</span></a></li>
-  <li><a class="row" href="downloads/xanatoo-win64.zip">
+  <li><a class="row" href="downloads/@file-win64@">
     <span class="name">Windows 64-bit</span><span class="rev">@version-win64@</span><span class="lead"></span><span class="what">ZIP · offline edition</span></a></li>
-  <li><a class="row" href="downloads/xanatoo-win32.zip">
+  <li><a class="row" href="downloads/@file-win32@">
     <span class="name">Windows 32-bit</span><span class="rev">@version-win32@</span><span class="lead"></span><span class="what">ZIP · offline edition</span></a></li>
   <li><a class="row" href="wasm/">
-    <span class="name">Try in your browser</span><span class="rev">@version-wasm@</span><span class="lead"></span><span class="what">WASM · open ↗</span></a></li>
+    <span class="name">Try in your browser</span><span class="rev">@version-wasm@</span><span class="lead"></span><span class="what">WASM · limited online · open ↗</span></a></li>
   <li><div class="row">
     <span class="name">Linux &amp; macOS</span><span class="lead"></span><span class="what">with Nix, below</span></div></li>
 </ul>
 
-<p class="ver">The Windows and browser versions are early <em>offline</em>
-editions. They include the editor, local document readers and passage links,
-but not the in-app network services. The browser preview does not save changes
-or import files from your computer yet.</p>
+<p class="ver">The Windows versions are early <em>offline</em> editions: they
+include the editor, local document readers and passage links, but none of the
+in-app network services. The browser version reaches only the few services
+whose servers allow requests from other web pages (Wikipedia, Hacker News,
+some feeds and sites); most web pages, Gemini, Reddit and Nostr stay out of
+reach, and it does not keep your changes.</p>
 
 <details open>
   <summary>Linux and macOS</summary>
@@ -243,9 +245,17 @@ nix run github:xanatoo/xanatoo -- wikipedia:Ted_Nelson</pre>
   <summary>WebAssembly — try it in a browser</summary>
   <p><a href="wasm/">Open the live preview</a> without installing anything.
   It starts with xanatoo’s welcome document and demonstrates text editing,
-  layout and navigation. Changes exist only in the current session; refreshing
-  the page discards them. File import, exports, online services and persistent
-  storage are still planned.</p>
+  layout and navigation; <em>Open file…</em> reads a document, PDF, DjVu or
+  comic archive from your computer into the page (nothing is uploaded).</p>
+  <p>Online access is limited by the browser: a page may only read another
+  site that explicitly allows it (CORS). Wikipedia, Hacker News and some feeds,
+  Lemmy instances and ebook hosts do; ordinary web pages, archived snapshots,
+  Reddit and YouTube do not, and fail with “request failed or blocked by the
+  browser”. Gemini and Nostr need sockets a browser does not offer, and remote
+  images do not load yet. For the full network features use the Linux, macOS
+  or Android version.</p>
+  <p>Changes exist only in the current session; refreshing the page discards
+  them. Exports and persistent storage are still planned.</p>
 </details>
 
 <h2 id="idea"><a class="sec" href="#idea">§</a>The idea</h2>

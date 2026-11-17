@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Versioned download names; honest WASM network text
+
+- Release assets / site downloads are `xanatoo-<version>-<platform>.<ext>`
+  (`android-universal.apk`, `windows-x86_64.zip`, `windows-i686.zip`,
+  `wasm32.tar.gz`; `+` → `-`); R36S keeps `xanatoo.zip` for PortMaster.
+  `<target>.json` gains `file`; `assemble.sh` links `@file-<target>@`;
+  `publish-build.sh` deletes the previous file after the new json;
+  `fetch-builds.sh` still reads the old fixed names.
+- Verified: `site-from-release` against today's (old-format) release and
+  site; a fake new-format release served locally, then a second fetch from
+  the resulting site alone (identical output). `publish-build.sh` stale
+  asset removal not yet run on GitHub.
+- Page: Windows stays "offline edition" (still true: MINIMAL_PORT, no
+  sockets/TLS on WIN32); WASM text now says which services pass CORS.
+- Open: the live `wasm/` is served without COOP/COEP and has no
+  service-worker shim, but the pthreads (thumtoo) build needs
+  SharedArrayBuffer — check whether it starts on GitHub Pages at all.
+
 ## Status (2026-11-17) — Website in this repo; CI builds go straight to it
 
 - Website sources moved here from xanatoo.github.io into `website/`;

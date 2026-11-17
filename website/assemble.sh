@@ -6,8 +6,8 @@
 #
 # Build the site in OUT from the page sources next to this script
 # (index.html, images/) and the builds in SRC (see fetch-builds.sh):
-#   xanatoo.apk  xanatoo-r36s.zip  xanatoo-win32.zip  xanatoo-win64.zip
-#   wasm/  versions/{android,r36s,win32,win64,wasm}.json
+#   versions/{android,r36s,win32,win64,wasm}.json, each naming its
+#   download in "file", those files, and wasm/ (the browser edition).
 # Used by `nix run .#site-from-release` (CI: builds from the release) and
 # by `nix build .#site` (every build from this checkout), see nix/site.nix.
 set -euo pipefail
@@ -16,19 +16,25 @@ src=$1 out=$2
 site=$(dirname "$(readlink -f "$0")")
 targets=(android r36s win64 win32 wasm)
 
-for f in xanatoo.apk xanatoo-r36s.zip xanatoo-win32.zip xanatoo-win64.zip \
+file() { jq -r '.file // empty' "$src/versions/$1.json"; }
+for t in "${targets[@]}"; do
+  test -s "$src/versions/$t.json" || { echo "assemble: missing $src/versions/$t.json" >&2; exit 1; }
+  test -n "$(file "$t")" || { echo "assemble: $t.json names no file" >&2; exit 1; }
+done
+for f in "$(file android)" "$(file r36s)" "$(file win32)" "$(file win64)" \
          wasm/index.html wasm/xanatoo.js wasm/xanatoo.wasm wasm/xanatoo.data; do
   test -s "$src/$f" || { echo "assemble: missing $src/$f" >&2; exit 1; }
 done
 
 mkdir -p "$out/downloads/r36s" "$out/downloads/versions" "$out/wasm"
 cp -r "$site/images" "$out/images"
-# Stable file names, so links never change (the version is on the page).
-cp "$src/xanatoo.apk" "$out/downloads/xanatoo.apk"
+# Versioned names (from <target>.json), so downloads never collide; the
+# page links them through @file-<target>@.
+for t in android win64 win32; do
+  cp "$src/$(file "$t")" "$out/downloads/$(file "$t")"
+done
 # PortMaster expects the zip under the name its port.json gives.
-cp "$src/xanatoo-r36s.zip" "$out/downloads/r36s/xanatoo.zip"
-cp "$src/xanatoo-win32.zip" "$out/downloads/xanatoo-win32.zip"
-cp "$src/xanatoo-win64.zip" "$out/downloads/xanatoo-win64.zip"
+cp "$src/$(file r36s)" "$out/downloads/r36s/xanatoo.zip"
 # The Emscripten index.html loads relative .js / .wasm / .data files.
 cp -r "$src/wasm/." "$out/wasm/"
 
@@ -58,8 +64,11 @@ sed -e "s|@version@|$newest|g" \
     -e "s|@version-win64@|$(ver win64)|g" \
     -e "s|@version-win32@|$(ver win32)|g" \
     -e "s|@version-wasm@|$(ver wasm)|g" \
+    -e "s|@file-android@|$(file android)|g" \
+    -e "s|@file-win64@|$(file win64)|g" \
+    -e "s|@file-win32@|$(file win32)|g" \
     "$site/index.html" > "$out/index.html"
-if grep -q '@version' "$out/index.html"; then
+if grep -q -E '@(version|file)' "$out/index.html"; then
   echo "assemble: unreplaced placeholder in index.html" >&2; exit 1
 fi
 chmod -R u+w "$out"

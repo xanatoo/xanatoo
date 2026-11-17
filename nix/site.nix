@@ -22,38 +22,51 @@ let
   website = lib.cleanSource ../website;
   lastModified = self.lastModified or 1;
 
-  metaJson = target: pkgs.writeText "${target}.json" (builtins.toJSON {
-    inherit target version lastModified;
+  metaJson = target: file: pkgs.writeText "${target}.json" (builtins.toJSON {
+    inherit target version lastModified file;
     rev = self.rev or self.dirtyRev or "";
     revCount = self.revCount or 0;
   });
 
-  # Fixed asset names: the release is flat and the site links never change.
+  # Asset names carry the version and the platform, so downloads of
+  # different builds never collide (`+` is not safe in GitHub asset names).
+  # <target>.json names the file; fetch-builds.sh and assemble.sh read it.
+  fileVersion = lib.replaceStrings [ "+" ] [ "-" ] version;
+  files = {
+    android = "xanatoo-${fileVersion}-android-universal.apk";
+    # PortMaster installs the zip under the name its port.json gives.
+    r36s = "xanatoo.zip";
+    win64 = "xanatoo-${fileVersion}-windows-x86_64.zip";
+    win32 = "xanatoo-${fileVersion}-windows-i686.zip";
+    wasm = "xanatoo-${fileVersion}-wasm32.tar.gz";
+  };
+
   release = target: install: pkgs.runCommand "xanatoo-release-${target}" {
     nativeBuildInputs = [ pkgs.gnutar pkgs.gzip ];
   } ''
     mkdir $out
+    file=$out/${files.${target}}
     ${install}
-    cp ${metaJson target} $out/${target}.json
+    cp ${metaJson target files.${target}} $out/${target}.json
   '';
 
   releases = {
     android = release "android" ''
-      cp ${packages.xanatoo-android}/*.apk $out/xanatoo.apk
+      cp ${packages.xanatoo-android}/*.apk "$file"
     '';
     r36s = release "r36s" ''
-      cp ${packages.xanatoo-r36s-portmaster-zip}/xanatoo.zip $out/xanatoo-r36s.zip
+      cp ${packages.xanatoo-r36s-portmaster-zip}/xanatoo.zip "$file"
     '';
     win64 = release "win64" ''
-      cp ${packages.xanatoo-win64-zip}/*.zip $out/xanatoo-win64.zip
+      cp ${packages.xanatoo-win64-zip}/*.zip "$file"
     '';
     win32 = release "win32" ''
-      cp ${packages.xanatoo-win32-zip}/*.zip $out/xanatoo-win32.zip
+      cp ${packages.xanatoo-win32-zip}/*.zip "$file"
     '';
     # The browser edition is a directory; the release keeps it as one file.
     wasm = release "wasm" ''
       tar -C ${packages.xanatoo-wasm} --sort=name --mtime=@${toString lastModified} \
-        --owner=0 --group=0 --numeric-owner -ch . | gzip -9n > $out/xanatoo-wasm.tar.gz
+        --owner=0 --group=0 --numeric-owner -ch . | gzip -9n > "$file"
     '';
   };
 
@@ -65,9 +78,10 @@ let
     ${lib.concatMapStrings (t: ''
       cp ${releases.${t}}/${t}.json $out/versions/
     '') (lib.attrNames releases)}
-    cp ${releases.android}/xanatoo.apk ${releases.r36s}/xanatoo-r36s.zip \
-       ${releases.win64}/xanatoo-win64.zip ${releases.win32}/xanatoo-win32.zip $out/
-    tar -C $out/wasm -xzf ${releases.wasm}/xanatoo-wasm.tar.gz
+    ${lib.concatMapStrings (t: ''
+      cp ${releases.${t}}/${files.${t}} $out/
+    '') [ "android" "r36s" "win64" "win32" ]}
+    tar -C $out/wasm -xzf ${releases.wasm}/${files.wasm}
   '';
 
   site = pkgs.runCommand "xanatoo-site-${version}" {
