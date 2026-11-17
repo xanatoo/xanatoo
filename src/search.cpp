@@ -282,6 +282,11 @@ std::vector<SearchEngine> builtin_table() {
       {"duckduckgo", "DuckDuckGo", "dd", "DDG",
        "https://html.duckduckgo.com/html/?q=%s", "page", "+",
        {"duckduckgo.com"}},
+      // Server-rendered result page with /page/<slug> links (checked
+      // 2026-11-18; /api/full-text-search has JSON too).
+      {"grokipedia", "Grokipedia", "gk", "Gk",
+       "https://grokipedia.com/search?q=%s", "page", "+",
+       {"grokipedia.com"}},
       // Free, no-key web search APIs (JSON result mappers).
       {"freeserp", "FreeSerp", "fs", "FS",
        "https://freeserp.ai/api.php?index=web&q=%s&size=30", "freeserp", "+",
@@ -339,6 +344,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"curlie", 0xc2410c},     {"youtube", 0xff0000},
       {"peertube", 0xf1680d},  {"odysee", 0xe50054},
       {"dailymotion", 0x0066dc}, {"duckduckgo", 0xde5833},
+      {"grokipedia", 0x111111},
       {"freeserp", 0x5b21b6},  {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)
