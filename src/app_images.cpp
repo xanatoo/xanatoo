@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Remote images: ImageCache queues the http(s) / nex sources layout asks for;
+// Remote images: ImageCache queues the http(s) / gemini / spartan / gopher /
+// nex sources layout asks for;
 // a few detached workers download each one into cache_dir()/images/ and
 // prebuild its inline thumbnail (stb builds; thumtoo makes it on request),
 // then the main thread marks it done and relayouts (the image's size
@@ -15,7 +16,10 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/http_status.hpp"
+#include "xanatoo/gemini.hpp"
+#include "xanatoo/gopher.hpp"
 #include "xanatoo/nex.hpp"
+#include "xanatoo/spartan.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
@@ -36,25 +40,77 @@ constexpr uint64_t kThumbCacheBytes = 128ull * 1024 * 1024;
 // Web PDFs / DjVu / comics shown as pages (html_page.cpp `PagesCopy`).
 constexpr uint64_t kDocumentCacheBytes = 1024ull * 1024 * 1024;
 
-// Download `url` to its cache file and build the inline thumbnail.
-bool download_image(const std::string& url) {
-  std::string body;
-  if (xanatoo::is_nex_url(url)) {
-#if defined(XANATOO_NEX) && XANATOO_NEX
-    std::string err;
-    auto r = xanatoo::nex_fetch(url, &err);
-    if (!r || r->is_directory || r->body.empty()) {
-      std::cerr << "image: " << url << ": "
-                << (err.empty() ? "no image" : err) << "\n";
+// The bytes of the small-net image `url` (gemini / spartan / gopher / nex),
+// or false with `err` set (empty when the client is not built in).
+bool fetch_smallnet_image(const std::string& url, std::string& body,
+                          std::string& err) {
+#if defined(XANATOO_GEMINI) && XANATOO_GEMINI
+  if (xanatoo::is_gemini_url(url)) {
+    auto r = xanatoo::gemini_fetch(url, &err);
+    if (!r) return false;
+    if (r->status < 20 || r->status >= 30) {
+      err = "status " + std::to_string(r->status) + " " + r->meta;
       return false;
     }
     body = std::move(r->body);
-#else
-    return false;
+    return true;
+  }
 #endif
+#if defined(XANATOO_SPARTAN) && XANATOO_SPARTAN
+  if (xanatoo::is_spartan_url(url)) {
+    auto r = xanatoo::spartan_fetch(url, &err);
+    if (!r) return false;
+    if (r->status != 2) {
+      err = "status " + std::to_string(r->status) + " " + r->meta;
+      return false;
+    }
+    body = std::move(r->body);
+    return true;
+  }
+#endif
+#if defined(XANATOO_GOPHER) && XANATOO_GOPHER
+  if (xanatoo::is_gopher_url(url)) {
+    auto r = xanatoo::gopher_fetch(url, &err);
+    if (!r) return false;
+    if (r->is_menu || r->needs_input) {
+      err = "no image";
+      return false;
+    }
+    body = std::move(r->body);
+    return true;
+  }
+#endif
+#if defined(XANATOO_NEX) && XANATOO_NEX
+  if (xanatoo::is_nex_url(url)) {
+    auto r = xanatoo::nex_fetch(url, &err);
+    if (!r) return false;
+    if (r->is_directory) {
+      err = "no image";
+      return false;
+    }
+    body = std::move(r->body);
+    return true;
+  }
+#endif
+  (void)url;
+  (void)body;
+  return false;
+}
+
+// Download `url` to its cache file and build the inline thumbnail.
+bool download_image(const std::string& url) {
+  std::string body;
+  std::string err;
+  if (!xanatoo::starts_with_ci(url, "http://") &&
+      !xanatoo::starts_with_ci(url, "https://")) {
+    const bool got = fetch_smallnet_image(url, body, err);
+    if (!got || body.empty()) {
+      std::cerr << "image: " << url << ": "
+                << (!err.empty() ? err : got ? "no image" : "no client") << "\n";
+      return false;
+    }
   } else {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
-    std::string err;
     auto r = xanatoo::https_get_follow(url, xanatoo::user_agent("image fetch"),
                                        &err);
     if (!r || r->status != 200 || r->body.empty()) {

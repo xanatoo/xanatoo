@@ -167,8 +167,10 @@
   them with `nex_fetch`. Answers without an image extension are sniffed
   (`looks_like_image`) and shown as an image page. Verified under Xvfb
   against a local Nex server (both cases).
-- Open: Gemini / Spartan image MIME types and Gopher `I` / `g` items still
-  go to "Unsupported media" / download offers instead of the image viewer.
+- Done: Gemini / Spartan image answers and Gopher `I` / `g` items open in
+  the image viewer too (`has_image_fetch_scheme`, `fetch_smallnet_image`,
+  `show_fetched_image`). Verified under Xvfb against local Gopher, Spartan
+  and Gemini servers, with and without an image extension.
 
 ## Status (2026-11-15) — Small-net protocols: Gopher, Spartan, Nex, Finger
 

@@ -46,6 +46,22 @@ namespace {
 constexpr size_t kPageCacheMax = 16;
 constexpr Uint32 kPageCacheTtl = 5 * 60 * 1000;
 
+// A small-net answer that is a picture (by its bytes, whatever the MIME type
+// or item type says) goes into the remote image cache, so the page is that
+// image like an http one. False: not a picture, show it otherwise.
+[[maybe_unused]] bool show_fetched_image(const std::string& url,
+                                         std::string_view body,
+                                         FetchShared& out) {
+  if (!xanatoo::looks_like_image(body)) return false;
+  if (xanatoo::store_remote_image(url, body)) {
+    out.doc = xanatoo::image_url_document(url);
+  } else {
+    out.error = "cannot cache image " + url;
+  }
+  out.raw_source.reset();
+  return true;
+}
+
 #if defined(XANATOO_GEMINI) && XANATOO_GEMINI
 void fetch_gemini(const std::string& url, FetchShared& out) {
   out.service = "Gemini";
@@ -79,6 +95,7 @@ void fetch_gemini(const std::string& url, FetchShared& out) {
   } else if (mime.empty() || mime.find("text/gemini") != std::string::npos ||
              mime.find("text/plain") != std::string::npos) {
     out.doc = xanatoo::parse_gemtext(resp->body);
+  } else if (show_fetched_image(resp->final_url, resp->body, out)) {
   } else {
     // Binary or unknown — show a short notice instead of mojibake.
     out.doc = xanatoo::parse_gemtext(
@@ -102,6 +119,11 @@ void fetch_gopher(const std::string& url, FetchShared& out) {
                                                 : resp->input_prompt;
     return;
   }
+  // Image items (I / g, or any binary that is a picture) open in the image
+  // viewer; an explicit download still saves them.
+  if (resp->is_binary && !out.force_download &&
+      show_fetched_image(resp->final_url, resp->body, out))
+    return;
   if (resp->is_binary) {
     if (!out.download)
       out.download = std::make_shared<xanatoo::DownloadProgress>();
@@ -237,6 +259,7 @@ void fetch_spartan(const std::string& url, FetchShared& out) {
     out.doc = xanatoo::parse_gemtext(body);
   } else if (mime.find("text/plain") != std::string::npos) {
     out.doc = xanatoo::parse_document(resp->body, "remote.txt");
+  } else if (show_fetched_image(resp->final_url, resp->body, out)) {
   } else {
     out.doc = xanatoo::parse_gemtext(
         "# Unsupported media\n\nSpartan returned MIME type `" + resp->meta +
@@ -251,16 +274,9 @@ void fetch_nex(const std::string& url, FetchShared& out) {
   auto resp = xanatoo::nex_fetch(url, &out.error);
   if (!resp) return;
   out.final_url = resp->final_url;
-  // Nex sends no MIME type: a picture is known by its bytes. It goes into
-  // the remote image cache, so the page is that image like an http one.
-  if (!resp->is_directory && xanatoo::looks_like_image(resp->body)) {
-    if (xanatoo::store_remote_image(resp->final_url, resp->body)) {
-      out.doc = xanatoo::image_url_document(resp->final_url);
-    } else {
-      out.error = "cannot cache image " + resp->final_url;
-    }
+  // Nex sends no MIME type: a picture is known by its bytes.
+  if (!resp->is_directory && show_fetched_image(resp->final_url, resp->body, out))
     return;
-  }
   out.raw_source = resp->body;
   if (resp->is_directory) {
     out.doc = xanatoo::parse_document(resp->body, "remote.md");

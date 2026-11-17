@@ -251,8 +251,7 @@ Image ImageCache::load_thumb(const std::string& resolved, int edge) {
 }
 
 bool is_remote_image(std::string_view src) {
-  return starts_with_ci(src, "https://") || starts_with_ci(src, "http://") ||
-         starts_with_ci(src, "nex://");
+  return has_image_fetch_scheme(src);
 }
 
 bool looks_like_image(std::string_view b) {

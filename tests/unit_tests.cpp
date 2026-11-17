@@ -1257,7 +1257,9 @@ void test_path_helpers() {
   EXPECT(is_image_url("/abs/pic.gif"));
   EXPECT(!is_image_url("https://example.org/page.png.html"));
   EXPECT(!is_image_url("https://example.org/?img=a.png"));
-  EXPECT(!is_image_url("gemini://host/a.png"));
+  EXPECT(is_image_url("gemini://host/a.png"));
+  EXPECT(is_image_url("gopher://host/I/pics/a.jpg"));
+  EXPECT(is_image_url("spartan://host/a.gif"));
   EXPECT(!is_image_url("mailto:a.png"));
   EXPECT(is_image_url("nex://host/pics/a.png"));
 }
@@ -3398,7 +3400,9 @@ void test_image_address() {
   EXPECT(xanatoo::is_image_address("http://x.org/a.PNG?w=3"));
   EXPECT(!xanatoo::is_image_address("https://x.org/page.html"));
   EXPECT(!xanatoo::is_image_address("photos/a.jpg"));
-  EXPECT(!xanatoo::is_image_address("gemini://x.org/a.png"));
+  EXPECT(xanatoo::is_image_address("gemini://x.org/a.png"));
+  EXPECT(xanatoo::is_remote_image("gopher://x.org/I/a"));
+  EXPECT(!xanatoo::is_image_address("finger://x.org/a.png"));
   EXPECT(xanatoo::is_image_address("nex://x.org/a.jpg"));
   EXPECT(!xanatoo::is_image_address("nex://x.org/a.txt"));
   EXPECT(xanatoo::is_remote_image("nex://x.org/a.jpg"));
