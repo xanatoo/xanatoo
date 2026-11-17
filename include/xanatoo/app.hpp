@@ -1665,6 +1665,9 @@ void draw_download_confirm(App& app);
 bool download_folder_dialog_available();
 // Open the native folder picker; on success, begin_download into that dir.
 void pick_download_folder(App& app, const std::string& url);
+// Main loop: start the downloads whose folder the (possibly threaded) SDL
+// folder dialog has answered.
+void poll_download_folder_picks(App& app);
 
 // Apply finished jobs (once per frame).
 void poll_fetches(App& app);

@@ -61,6 +61,16 @@ int main() {
     CHECK(u->host == "mozz.us");
     CHECK(u->port == 300);
     CHECK(u->path == "/files/about.txt");
+    CHECK(!u->prompt);
+  }
+  {
+    // "=:" prompt links end in an empty '?'; the query is sent decoded.
+    auto p = parse_spartan_url("spartan://example.com/search?");
+    CHECK(p && p->prompt && p->path == "/search" && p->data.empty());
+    CHECK(p->canonical == "spartan://example.com/search?");
+    auto q = parse_spartan_url("spartan://example.com/search?hello%20world%2");
+    CHECK(q && !q->prompt && q->query == "hello%20world%2");
+    CHECK(q->data == "hello world%2");
   }
 
   // Nex

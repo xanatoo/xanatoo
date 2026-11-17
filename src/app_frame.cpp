@@ -4994,6 +4994,7 @@ void run_frame(App& app) {
   update_touch(app);
   sync_nav_history(app);  // capture scroll before a completed fetch swaps pages
   poll_fetches(app);
+  poll_download_folder_picks(app);
   poll_subscriptions(app);
   sync_nav_history(app);  // apply Back/Forward restore after remote loads
   autosave_drafts(app);

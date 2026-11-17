@@ -19,10 +19,19 @@
   `FetchShared::allow_pages` is set for Navigate / Tab and for Context
   previews only (`start_fetch(..., preview_pages)`); split previews and
   subscriptions refuse them again.
-- Open from the review (not fixed): Spartan `=:` prompts don't prompt,
-  Download-to-folder callback thread, Layout menu "Manage / edit style
-  sheets…" opens the picker, Gopher selector / `h` URL handling, Curlie
-  `stime` token, artifacts workflow always green.
+- Spartan: `=:` prompt links ask for input (they used to load the bare
+  path), the query is sent percent-decoded, `text/plain` is plain text.
+  Verified under Xvfb against a local test server.
+- "Download to…": the SDL3 folder dialog callback (may be another thread)
+  only queues the answer; `poll_download_folder_picks` starts the download
+  on the main loop.
+- Layout → Style sheet → "Manage / edit style sheets…" opens the manager;
+  Panels has "Manage Style Sheets" (as `docs/STYLESHEETS.md` says).
+- Still open from the review: Gopher (`?` always a query, selectors not
+  percent-coded, info lines reflowed as Markdown, labels unescaped, `h`
+  `URL:` items, relative refs), Finger replies containing a code fence,
+  Curlie `stime` token, artifacts workflow always green, FontConfig-less
+  font scan cost / `.ttc` face 0, Context panel UTF-8 cuts.
 
 ## Status (2026-11-15) — Small-net input prompts and binary downloads
 

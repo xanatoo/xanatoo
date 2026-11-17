@@ -27,6 +27,33 @@ bool is_spartan_url(std::string_view url) {
          lower(url[6]) == 'n' && url[7] == ':' && url[8] == '/' && url[9] == '/';
 }
 
+namespace {
+int hex_value(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// %XX → byte; everything else (including '+') stays as it is.
+std::string percent_decode(std::string_view s) {
+  std::string out;
+  out.reserve(s.size());
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (s[i] == '%' && i + 2 < s.size()) {
+      const int hi = hex_value(s[i + 1]), lo = hex_value(s[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out.push_back(static_cast<char>(hi * 16 + lo));
+        i += 2;
+        continue;
+      }
+    }
+    out.push_back(s[i]);
+  }
+  return out;
+}
+}  // namespace
+
 std::optional<SpartanUrl> parse_spartan_url(std::string_view url) {
   if (!is_spartan_url(url)) return std::nullopt;
   std::string_view rest = url.substr(10);
@@ -78,6 +105,8 @@ std::optional<SpartanUrl> parse_spartan_url(std::string_view url) {
   if (q != std::string_view::npos) {
     out.path = std::string(path_query.substr(0, q));
     out.query = std::string(path_query.substr(q + 1));
+    out.data = percent_decode(out.query);
+    out.prompt = out.query.empty();
   } else {
     out.path = std::string(path_query);
   }
@@ -87,7 +116,7 @@ std::optional<SpartanUrl> parse_spartan_url(std::string_view url) {
   o << "spartan://" << out.host;
   if (out.port != 300) o << ':' << out.port;
   o << out.path;
-  if (!out.query.empty()) o << '?' << out.query;
+  if (!out.query.empty() || out.prompt) o << '?' << out.query;
   out.canonical = o.str();
   return out;
 }
@@ -129,8 +158,8 @@ static std::optional<SpartanResponse> spartan_fetch_once(const SpartanUrl& u,
   if (fd < 0) return std::nullopt;
 
   // request-line: host SP path SP content-length CRLF [data]
-  // Query becomes the data block (common client convention).
-  const std::string& data = u.query;
+  // The decoded query becomes the data block (common client convention).
+  const std::string& data = u.data;
   std::ostringstream req;
   req << u.host << ' ' << u.path << ' ' << data.size() << "\r\n";
   if (!data.empty()) req << data;

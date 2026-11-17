@@ -194,6 +194,19 @@ read-only service clients. Every client is read-only: never post or log in.
   `--no-save` approvals stay in memory. See `docs/TLS.md` and the pure
   `gemini_tofu_tests.cpp` suite; do not bypass this with another fetch path.
 
+## Spartan (`spartan.hpp`)
+
+- `src/spartan.cpp`, gated by `XANATOO_SPARTAN` (default ON; plain TCP,
+  port 300). `fetch_spartan` in `app_fetch.cpp`; URL tests in
+  `tests/smallnet_url_tests.cpp`.
+- `=:` input lines become links ending in an empty `?`
+  (`spartan_rewrite_prompts`); `parse_spartan_url` marks them
+  `SpartanUrl::prompt`, and `fetch_spartan` answers with an input request
+  (`input_status` 10, the Gemini / Gopher-search flow) without contacting
+  the server. The typed query is percent-decoded (`SpartanUrl::data`) and
+  sent as the request's data block.
+- `text/gemini` (or no type) is gemtext, `text/plain` is plain text.
+
 ## YouTube
 
 - `src/youtube.cpp`, gated by `XANATOO_YOUTUBE` (default ON; needs TLS).

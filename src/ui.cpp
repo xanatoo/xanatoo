@@ -332,7 +332,7 @@ void fill_style_items(const UiState& state, UiCommand& cmd, std::string& arg) {
   }
   ImGui::Separator();
   if (ImGui::MenuItem("Manage / edit style sheets..."))
-    cmd = UiCommand::ToggleStylesPanel;
+    cmd = UiCommand::ToggleStyleManagerPanel;
   if (ImGui::MenuItem("Reload style sheets"))
     cmd = UiCommand::ReloadStyles;
 }
@@ -2506,6 +2506,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleCertificates;
       if (ImGui::MenuItem("Style Sheets", nullptr, state.styles_open))
         cmd = UiCommand::ToggleStylesPanel;
+      if (ImGui::MenuItem("Manage Style Sheets", nullptr,
+                          state.styles_manager_open))
+        cmd = UiCommand::ToggleStyleManagerPanel;
       if (ImGui::MenuItem("Annotations", nullptr, state.annotations_panel_open))
         cmd = UiCommand::ToggleAnnotationsPanel;
       if (ImGui::MenuItem("Context", nullptr, state.context_open))

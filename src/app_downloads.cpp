@@ -15,6 +15,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
 #include <sstream>
 
 namespace xanatoo::app {
@@ -323,25 +327,24 @@ bool download_folder_dialog_available() {
 
 namespace {
 
-struct FolderPickState {
-  App* app = nullptr;
+// SDL may run the folder dialog's callback on another thread, so it only
+// queues the answer; poll_download_folder_picks hands it to the main loop.
+struct FolderPick {
   std::string url;
+  std::string folder;  // empty: cancelled
 };
+std::mutex g_folder_picks_mutex;
+std::vector<FolderPick> g_folder_picks;
 
 #if defined(XANATOO_SDL3) && XANATOO_SDL3 && !defined(EMSCRIPTEN)
-static void folder_dialog_callback(void* userdata, const char* const* filelist,
-                                   int /*filter*/) {
-  auto* st = static_cast<FolderPickState*>(userdata);
-  if (!st || !st->app) {
-    delete st;
-    return;
-  }
-  if (filelist && filelist[0] && filelist[0][0]) {
-    begin_download(*st->app, st->url, filelist[0]);
-  } else {
-    flash_status(*st->app, "Download cancelled");
-  }
-  delete st;
+void folder_dialog_callback(void* userdata, const char* const* filelist,
+                            int /*filter*/) {
+  std::unique_ptr<std::string> url(static_cast<std::string*>(userdata));
+  if (!url) return;
+  FolderPick pick{std::move(*url), {}};
+  if (filelist && filelist[0] && filelist[0][0]) pick.folder = filelist[0];
+  std::lock_guard<std::mutex> lock(g_folder_picks_mutex);
+  g_folder_picks.push_back(std::move(pick));
 }
 #endif
 
@@ -353,12 +356,26 @@ void pick_download_folder(App& app, const std::string& url) {
     begin_download(app, url, {});
     return;
   }
-  auto* st = new FolderPickState{&app, url};
-  SDL_ShowOpenFolderDialog(folder_dialog_callback, st, app.window, nullptr,
-                           false);
+  SDL_ShowOpenFolderDialog(folder_dialog_callback, new std::string(url),
+                           app.window, nullptr, false);
 #else
   begin_download(app, url, {});
 #endif
+}
+
+void poll_download_folder_picks(App& app) {
+  std::vector<FolderPick> picks;
+  {
+    std::lock_guard<std::mutex> lock(g_folder_picks_mutex);
+    if (g_folder_picks.empty()) return;
+    picks.swap(g_folder_picks);
+  }
+  for (FolderPick& p : picks) {
+    if (p.folder.empty())
+      flash_status(app, "Download cancelled");
+    else
+      begin_download(app, p.url, p.folder);
+  }
 }
 
 void draw_download_confirm(App& /*app*/) {

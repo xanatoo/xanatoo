@@ -15,7 +15,9 @@ struct SpartanUrl {
   std::string host;
   int port = 300;
   std::string path;       // absolute, begins with /
-  std::string query;      // optional, becomes upload data per common convention
+  std::string query;      // optional, as written in the URL (percent-encoded)
+  std::string data;       // the query percent-decoded: the request's data block
+  bool prompt = false;    // "path?" with an empty query: ask the user for input
   std::string canonical;
 };
 std::optional<SpartanUrl> parse_spartan_url(std::string_view url);

@@ -209,6 +209,14 @@ static std::string spartan_rewrite_prompts(std::string_view body,
 
 void fetch_spartan(const std::string& url, FetchShared& out) {
   out.service = "Spartan";
+  // A "=:" prompt link ("path?", see spartan_rewrite_prompts): ask for the
+  // input first, like a Gemini status 10; the URL bar appends the query.
+  if (auto u = xanatoo::parse_spartan_url(url); u && u->prompt) {
+    out.final_url = u->canonical;
+    out.input_status = 10;
+    out.input_meta = "Spartan input";
+    return;
+  }
   auto resp = xanatoo::spartan_fetch(url, &out.error);
   if (!resp) return;
   out.final_url = resp->final_url;
@@ -225,9 +233,10 @@ void fetch_spartan(const std::string& url, FetchShared& out) {
   while (!mime.empty() && mime.back() == ' ') mime.pop_back();
   if (mime.find("text/markdown") != std::string::npos) {
     out.doc = xanatoo::parse_document(body, "remote.md");
-  } else if (mime.empty() || mime.find("text/gemini") != std::string::npos ||
-             mime.find("text/plain") != std::string::npos) {
+  } else if (mime.empty() || mime.find("text/gemini") != std::string::npos) {
     out.doc = xanatoo::parse_gemtext(body);
+  } else if (mime.find("text/plain") != std::string::npos) {
+    out.doc = xanatoo::parse_document(resp->body, "remote.txt");
   } else {
     out.doc = xanatoo::parse_gemtext(
         "# Unsupported media\n\nSpartan returned MIME type `" + resp->meta +
