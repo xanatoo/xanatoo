@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -313,16 +314,20 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         return;
       }
 
-    // Linked quote: margin arrow or the quoted text opens Context (not a
-    // navigation link — safe on touch without hover).
-    if (at >= 0)
-      if (const long q = quote_at(app, app.panes[at],
-                                  local_x(app, mx, at), my);
-          q >= 0) {
+    // Linked quote: the margin arrow opens Context at once. A press on the
+    // quoted text still places the caret / starts a selection; a plain
+    // click (no drag, no selection) opens Context on release.
+    app.quote_click = {};
+    if (at >= 0) {
+      const float lx = local_x(app, mx, at);
+      if (const long q = quote_icon_at(app, app.panes[at], lx, my); q >= 0) {
         focus_view(app, at);
         show_quote_in_context(app, at, static_cast<size_t>(q));
         return;
       }
+      if (const long q = quote_span_at(app, app.panes[at], lx, my); q >= 0)
+        app.quote_click = {q, at, app.panes[at].buf, x, y};
+    }
 
     // A bookmark's margin icon selects its passage.
     if (at >= 0)
@@ -473,6 +478,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     if (auto hit = xanatoo::hit_test_link_ex(doc_of(app, p), p.layout, lx,
                                              my, p.scroll_y)) {
       const std::optional<std::string> href = hit->href;
+      app.quote_click = {};  // a link inside a quote follows the link
       const bool ctrl_click = (SDL_GetModState() & KMOD_CTRL) != 0;
       if (!ctrl_click && open_link_image(app, app.focus, *href)) return;
       // Trail mode: first-tile links open in the second, then shift along.
@@ -867,6 +873,12 @@ static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
 }
 
 void pointer_left_up(App& app, int x, int y) {
+  if (const App::QuoteClick qc = std::exchange(app.quote_click, {});
+      qc.link >= 0 && qc.pane >= 0 && qc.pane < kMaxViews &&
+      app.panes[qc.pane].buf == qc.buf &&
+      std::abs(x - qc.x) <= 4 && std::abs(y - qc.y) <= 4 &&
+      app.panes[qc.pane].sel.anchor == app.panes[qc.pane].sel.focus)
+    show_quote_in_context(app, qc.pane, static_cast<size_t>(qc.link));
   gallery_pointer_up(app);
   dock_split_release(app);
   float_release(app, x, y);

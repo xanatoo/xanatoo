@@ -558,6 +558,9 @@ struct FetchShared {
   // feed the view, such as a PDF shown as pages, stop early.
   std::atomic<bool> abandoned{false};
   bool force_download = false;  // set before the worker starts
+  // PDF / DjVu / comic answers may open as pages (set before the worker
+  // starts): Navigate / Tab, and Context panel previews.
+  bool allow_pages = false;
   std::optional<xanatoo::Document> doc;
   std::optional<std::string> raw_source;
   std::shared_ptr<xanatoo::DownloadProgress> download;
@@ -1097,6 +1100,15 @@ struct App {
   long quote_focus = -1;
   float context_reply_y = -1.f;
   Touch touch;
+  // A press on linked quoted text: on release without a drag or selection
+  // it opens the Context panel; otherwise the press placed the caret or
+  // started a selection as usual (pointer_left_down / pointer_left_up).
+  struct QuoteClick {
+    long link = -1;
+    int pane = -1;
+    BufferId buf = kNoBuffer;
+    int x = 0, y = 0;
+  } quote_click;
   std::vector<FetchJob> fetches;
   std::vector<std::shared_ptr<xanatoo::DownloadProgress>> downloads;
   // Confirmation before an explicit download starts (Cancel | Download [to…]).
@@ -1567,6 +1579,8 @@ std::vector<QuoteIcon> quote_icons(App& app, Pane& p);
 long quote_icon_at(App& app, Pane& p, float lx, float my);
 // Margin arrow, or a hit inside a linked quote / source span.
 long quote_at(App& app, Pane& p, float lx, float my);
+// Only a hit inside a linked quote / source span (no margin arrow).
+long quote_span_at(App& app, Pane& p, float lx, float my);
 // Open the Context panel on quote link `link` of view `pi` (touch-friendly).
 void show_quote_in_context(App& app, int pi, size_t link);
 // Fills App::context_quotes for a right-click at `at` in pane `p`.
@@ -1631,7 +1645,11 @@ bool remote_fetch_supported(std::string_view url, std::string* why);
 // Tab jobs have no pane (-1) and fill buffer `tab_buf`.
 uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
                      const std::string& url, bool record_history = true,
-                     BufferId tab_buf = kNoBuffer);
+                     BufferId tab_buf = kNoBuffer,
+                     bool preview_pages = false);
+// `preview_pages`: a Preview may open a PDF / DjVu / comic answer as pages
+// (transfers the whole file). Only the Context panel asks for that; split
+// previews and subscriptions refuse such answers.
 // "Download Link": save the http(s) answer to Downloads whatever its type
 // (a PDF that would otherwise open as pages, or even an HTML page).
 // Open the download confirmation dialog for an http(s) URL.

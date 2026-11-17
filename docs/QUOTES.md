@@ -47,7 +47,11 @@ underlined originals, linked highlight) are implemented. Offline demo:
 - A linked quote has an up arrow at the right edge of its first line
   (`quote_icons`, hit-tested by `quote_icon_at` for click, hover tooltip and
   hand cursor): solid for exact matches, an outline for approximate ones.
-  Click jumps to the original.
+  Clicking the arrow opens the Context panel on the original. A plain click
+  on the quoted text (or the original's underlined span) does the same on
+  release (`App::quote_click`), but only without a drag or selection, so
+  the caret, selection and links inside the quote work as usual. The
+  context menu still jumps.
 - Quoted text in the original has a dotted underline in the `mark` colour.
 - Context menu: inside a quote "Go to Quoted Message (author)", inside
   quoted text "Go to Reply Quoting This (author)" (up to 8).

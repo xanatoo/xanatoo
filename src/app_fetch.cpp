@@ -412,12 +412,12 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     std::string body;
     xanatoo::WebPagesFile pages;
     pages.stop = &out->abandoned;
-    // Always pass `pages` so Preview (Context panel) can open PDF / DjVu /
-    // comics the same way Navigate does. Downloads UI still needs allow_download.
+    // `pages` only where a PDF / DjVu / comic may be shown (allow_pages):
+    // other previews and subscriptions must not transfer whole files.
     out->doc = xanatoo::web_fetch(url, &out->error, &out->final_url,
                                   &out->http_status, &body,
                                   allow_download ? out->download.get() : nullptr,
-                                  &pages,
+                                  out->allow_pages ? &pages : nullptr,
                                   out->force_download);
     if (out->doc) out->raw_source = std::move(body);
     // PDF / DjVu / comic answer: open the cached copy as pages; the
@@ -872,7 +872,7 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
 
 uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
                      const std::string& url, bool record_history,
-                     BufferId tab_buf) {
+                     BufferId tab_buf, bool preview_pages) {
   if (purpose == FetchPurpose::Navigate)
     cancel_fetches(app, pane);
   else if (purpose == FetchPurpose::Preview)
@@ -887,6 +887,10 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
+  job.shared->allow_pages =
+      (purpose != FetchPurpose::Preview &&
+       purpose != FetchPurpose::Subscription) ||
+      (purpose == FetchPurpose::Preview && preview_pages);
   if (purpose != FetchPurpose::Preview && purpose != FetchPurpose::Subscription) {
     job.shared->download = std::make_shared<xanatoo::DownloadProgress>();
     job.shared->download->url = url;

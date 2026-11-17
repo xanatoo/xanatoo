@@ -3075,13 +3075,33 @@ void test_office_import() {
        "<w:p><w:r><w:t>Paragraph with </w:t></w:r>"
        "<w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r>"
        "<w:r><w:t> text.</w:t></w:r></w:p>"
-       "</w:body></w:document>"}});
+       // Line break and complex-script bold must not make a run bold;
+       // w:val="0" switches bold off.
+       "<w:p><w:r><w:rPr><w:bCs/></w:rPr><w:t>plain</w:t><w:br/>"
+       "<w:t>next</w:t></w:r>"
+       "<w:r><w:rPr><w:b w:val=\"0\"/><w:i/></w:rPr><w:t>slanted</w:t></w:r></w:p>"
+       // Text around a hyperlink survives.
+       "<w:p><w:r><w:t>See </w:t></w:r>"
+       "<w:hyperlink r:id=\"rId5\"><w:r><w:t>the site</w:t></w:r></w:hyperlink>"
+       "<w:r><w:t> for more.</w:t></w:r></w:p>"
+       "</w:body></w:document>"},
+      {"word/_rels/document.xml.rels",
+       "<Relationships><Relationship Id=\"rId5\" Type=\"hyperlink\" "
+       "Target=\"https://example.org/\" TargetMode=\"External\"/>"
+       "</Relationships>"}});
   std::string err;
   auto md = xanatoo::docx_to_markdown(docx, &err);
   EXPECT(md.has_value());
   EXPECT(err.empty());
   EXPECT(md->find("Hello DOCX") != std::string::npos);
-  EXPECT(md->find("bold") != std::string::npos);
+  EXPECT(md->find("**bold**") != std::string::npos);
+  EXPECT(md->find("plain") != std::string::npos);
+  EXPECT(md->find("**plain") == std::string::npos);
+  EXPECT(md->find("next") != std::string::npos);
+  EXPECT(md->find("*slanted*") != std::string::npos);
+  EXPECT(md->find("**slanted") == std::string::npos);
+  EXPECT(md->find("See [the site](https://example.org/) for more.") !=
+         std::string::npos);
 
   const std::string odt = test_zip({
       {"content.xml",
@@ -6394,6 +6414,7 @@ int main() {
   test_utf8_pop_back();
   test_sanitize_epub_markdown();
   test_epub_native();
+  test_office_import();
   test_hit_test_wrapped_link();
   test_layout_skips_lines_outside_band();
   test_layout_line_table_matches_fresh();

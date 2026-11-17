@@ -128,9 +128,8 @@ long quote_icon_at(App& app, Pane& p, float lx, float my) {
   return -1;
 }
 
-// Margin arrow, or caret inside a linked quote / its source span.
-long quote_at(App& app, Pane& p, float lx, float my) {
-  if (const long q = quote_icon_at(app, p, lx, my); q >= 0) return q;
+// Caret inside a linked quote / its source span (not the margin arrow).
+long quote_span_at(App& app, Pane& p, float lx, float my) {
   auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y);
   if (!hit) return -1;
   DocBuffer* b = quote_buffer(app, p);
@@ -147,6 +146,11 @@ long quote_at(App& app, Pane& p, float lx, float my) {
     if (in(ql.quote) || in(ql.source)) return static_cast<long>(qi);
   }
   return -1;
+}
+
+long quote_at(App& app, Pane& p, float lx, float my) {
+  if (const long q = quote_icon_at(app, p, lx, my); q >= 0) return q;
+  return quote_span_at(app, p, lx, my);
 }
 
 void show_quote_in_context(App& app, int pi, size_t link) {
@@ -347,6 +351,11 @@ void refresh_context_panel(App& app) {
     app.context_scroll_to = scroll_to;
     app.context_win.scroll = 0.f;
   };
+  // True when `key` is what the panel already shows. This runs every frame,
+  // so callers check it before loading or copying a document.
+  auto loaded = [&](const std::string& key) {
+    return app.context_has_doc && app.context_source_key == key;
+  };
   auto set_loading = [&](const std::string& url) {
     app.context_kind = "Loading";
     app.context_title = url;
@@ -369,7 +378,9 @@ void refresh_context_panel(App& app) {
       app.context_can_jump = false;
       app.context_jump_pane = -1;
       app.context_jump_link = -1;
-      set_doc(xanatoo::image_url_document(url), "image:" + url);
+      const std::string key = "image:" + url;
+      if (!loaded(key)) set_doc(xanatoo::image_url_document(url), key);
+      app.context_pending_url.clear();
       return;
     }
     // Local PDF / DjVu / comic path (rare as "remote" but shared helper).
@@ -381,7 +392,10 @@ void refresh_context_panel(App& app) {
       app.context_can_jump = false;
       app.context_jump_pane = -1;
       app.context_jump_link = -1;
-      set_doc(load_doc(app, url), "fixed:" + url);
+      const std::string key = "fixed:" + url;
+      // load_doc reads every page size synchronously: only once per target.
+      if (!loaded(key)) set_doc(load_doc(app, url), key);
+      app.context_pending_url.clear();
       return;
     }
     if (const CachedPage* c = find_cached_page(app, url)) {
@@ -396,7 +410,10 @@ void refresh_context_panel(App& app) {
       return;
     }
     if (app.context_pending_url != url) {
-      start_fetch(app, FetchPurpose::Preview, -1, url);
+      // Only the Context panel's own previews may open PDF / DjVu / comic
+      // answers as pages (they transfer the whole file).
+      start_fetch(app, FetchPurpose::Preview, -1, url, true, kNoBuffer,
+                  /*preview_pages=*/true);
       app.context_pending_url = url;
     }
     set_loading(url);
@@ -487,37 +504,46 @@ void refresh_context_panel(App& app) {
         app.context_can_jump = false;
         app.context_jump_pane = -1;
         app.context_jump_link = -1;
-        set_doc(xanatoo::image_url_document(t.url), "image:" + t.url);
+        const std::string key = "image:" + t.url;
+        if (!loaded(key)) set_doc(xanatoo::image_url_document(t.url), key);
+        app.context_pending_url.clear();
         return;
       }
-      BufferId bi = find_buffer(app, t.url);
-      xanatoo::Document doc;
-      std::string key;
-      if (bi != kNoBuffer) {
-        doc = buf(app, bi).doc;
-        key = "page-buf:" + std::to_string(bi);
-      } else {
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(t.url, ec)) {
-          app.context_kind = "Link";
-          app.context_title = t.url;
-          app.context_body = "File not found.";
-          app.context_meta.clear();
-          app.context_pending_url.clear();
-          return;
+      // The key names the exact content (buffer generation, file path and
+      // fragment), so an unchanged target is neither re-read nor copied.
+      const BufferId bi = find_buffer(app, t.url);
+      const std::string key =
+          bi != kNoBuffer
+              ? "page-buf:" + std::to_string(bi) + ":" +
+                    std::to_string(buf(app, bi).doc_gen) + t.fragment
+              : "page-file:" + t.url + t.fragment;
+      if (!loaded(key)) {
+        xanatoo::Document doc;
+        if (bi != kNoBuffer) {
+          doc = buf(app, bi).doc;
+        } else {
+          std::error_code ec;
+          if (!std::filesystem::is_regular_file(t.url, ec)) {
+            app.context_kind = "Link";
+            app.context_title = t.url;
+            app.context_body = "File not found.";
+            app.context_meta.clear();
+            app.context_pending_url.clear();
+            return;
+          }
+          doc = load_doc(app, t.url);
         }
-        doc = load_doc(app, t.url);
-        key = "page-file:" + t.url;
+        xanatoo::NodeId scroll = xanatoo::INVALID_NODE;
+        if (!t.fragment.empty()) {
+          if (auto d = xanatoo::jump_to_href(doc, t.fragment))
+            scroll = d->node;
+        }
+        set_doc(doc, key, scroll);
       }
+      app.context_pending_url.clear();
       app.context_kind = "Page";
       app.context_title = t.url;
       app.context_meta.clear();
-      xanatoo::NodeId scroll = xanatoo::INVALID_NODE;
-      if (!t.fragment.empty()) {
-        if (auto d = xanatoo::jump_to_href(doc, t.fragment))
-          scroll = d->node;
-      }
-      set_doc(doc, key, scroll);
       app.context_body.clear();
       return;
     }

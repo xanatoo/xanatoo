@@ -2,6 +2,28 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Review fixes for the Grok commits since c342f54
+
+- DOCX native import: run text was never extracted (the `<w:t>` check
+  compared the prefix), so bold / italic / links were lost and paragraphs
+  with a hyperlink kept only the link text. Runs are now walked tag by tag
+  (`<w:b>` / `<w:i>` with `w:val`, not `bCs` / `br`); `test_office_import`
+  is registered and checks emphasis and text around links.
+- Context panel: local link targets (file read, buffer copy, fixed-layout
+  pages) load once per target, not every frame; buffer keys include
+  `doc_gen`. Verified under Xvfb (one load while hovering).
+- Quoted text: a press places the caret / selects again; only a plain click
+  (no drag, no selection, no link) opens Context on release
+  (`App::quote_click`). Margin arrow unchanged. Verified under Xvfb.
+- Previews no longer transfer whole PDFs / DjVu / comics:
+  `FetchShared::allow_pages` is set for Navigate / Tab and for Context
+  previews only (`start_fetch(..., preview_pages)`); split previews and
+  subscriptions refuse them again.
+- Open from the review (not fixed): Spartan `=:` prompts don't prompt,
+  Download-to-folder callback thread, Layout menu "Manage / edit style
+  sheets…" opens the picker, Gopher selector / `h` URL handling, Curlie
+  `stime` token, artifacts workflow always green.
+
 ## Status (2026-11-15) — Small-net input prompts and binary downloads
 
 - Gopher type 7: navigating without `?query` sets `input_status` (URL-bar

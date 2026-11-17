@@ -174,9 +174,11 @@ int docx_heading_level(std::string_view style) {
   return 0;
 }
 
-// Better DOCX paragraph converter with bold/italic
+// DOCX paragraph → HTML block with bold / italic / links. `inline_only`
+// returns just the inline content (the inside of a hyperlink).
 std::string docx_para_html(std::string_view p_xml,
-                           const std::map<std::string, std::string>& rels) {
+                           const std::map<std::string, std::string>& rels,
+                           bool inline_only = false) {
   std::string style;
   // pPr pStyle
   size_t ppr = p_xml.find(":pPr");
@@ -266,7 +268,8 @@ std::string docx_para_html(std::string_view p_xml,
         j = g2 + 1;
         if (depth == 0) {
           body += "<a href=\"" + esc_html(href) + "\">";
-          body += docx_para_html(p_xml.substr(start, l2 - start), rels);
+          body += docx_para_html(p_xml.substr(start, l2 - start), rels,
+                                 /*inline_only=*/true);
           body += "</a>";
           i = j;
           break;
@@ -305,33 +308,41 @@ std::string docx_para_html(std::string_view p_xml,
         j = g2 + 1;
         if (depth == 0) {
           std::string_view run = p_xml.substr(start, l2 - start);
-          if (run.find("<w:b") != std::string_view::npos ||
-              run.find(":b ") != std::string_view::npos ||
-              run.find(":b/>") != std::string_view::npos ||
-              run.find(":b>") != std::string_view::npos)
-            bold = true;
-          if (run.find("<w:i") != std::string_view::npos ||
-              run.find(":i ") != std::string_view::npos ||
-              run.find(":i/>") != std::string_view::npos ||
-              run.find(":i>") != std::string_view::npos)
-            italic = true;
-          std::string text;
-          for (size_t t = run.find(":t"); t != std::string_view::npos;
-               t = run.find(":t", t + 1)) {
-            // ensure tag is t
-            size_t ts = t;
-            while (ts > 0 && is_name_char(run[ts - 1])) --ts;
-            if (local_name(run.substr(ts, t + 1 - ts)) != "t") continue;
-            size_t tg = run.find('>', t);
+          // Walk the run's tags in order: rPr toggles (<w:b/>, <w:i/>; not
+          // bCs / br / iCs), text (<w:t>), tabs and line breaks.
+          std::string text;  // already HTML
+          for (size_t k = run.find('<'); k != std::string_view::npos;) {
+            const bool closing = k + 1 < run.size() && run[k + 1] == '/';
+            size_t n0 = k + 1 + (closing ? 1 : 0), n1 = n0;
+            while (n1 < run.size() && is_name_char(run[n1])) ++n1;
+            const std::string_view tag = local_name(run.substr(n0, n1 - n0));
+            const size_t tg = run.find('>', n1);
             if (tg == std::string_view::npos) break;
-            size_t tc = run.find("</", tg);
-            if (tc == std::string_view::npos) break;
-            text += xml_text_content(run.substr(tg + 1, tc - tg - 1));
+            const bool empty_el = tg > 0 && run[tg - 1] == '/';
+            const std::string_view attrs =
+                run.substr(n1, tg - n1 - (empty_el ? 1 : 0));
+            size_t next = run.find('<', tg + 1);
+            if (!closing) {
+              if (tag == "b" || tag == "i") {
+                std::string v = html_attr(attrs, "w:val");
+                if (v.empty()) v = html_attr(attrs, "val");
+                const bool on = v != "0" && v != "false" && v != "off";
+                (tag == "b" ? bold : italic) = on;
+              } else if (tag == "t" && !empty_el) {
+                const size_t tc = run.find("</", tg + 1);
+                if (tc == std::string_view::npos) break;
+                text += esc_html(xml_text_content(run.substr(tg + 1, tc - tg - 1)));
+                next = run.find('<', tc + 2);
+              } else if (tag == "tab") {
+                text.push_back('\t');
+              } else if (tag == "br" || tag == "cr") {
+                text += "<br/>";
+              }
+            }
+            k = next;
           }
-          if (run.find(":tab") != std::string_view::npos) text.push_back('\t');
-          if (run.find(":br") != std::string_view::npos) text += "\n";
           if (!text.empty()) {
-            std::string piece = esc_html(text);
+            std::string piece = std::move(text);
             if (italic) piece = "<em>" + piece + "</em>";
             if (bold) piece = "<strong>" + piece + "</strong>";
             body += piece;
@@ -348,6 +359,7 @@ std::string docx_para_html(std::string_view p_xml,
   }
 
   if (body.empty()) body = esc_html(xml_text_content(p_xml));
+  if (inline_only) return body;
 
   const int level = docx_heading_level(style);
   if (level > 0)
