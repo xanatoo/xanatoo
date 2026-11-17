@@ -147,8 +147,18 @@ behaviour is free functions ("systems") taking `App&`.
 ## Coding rules
 
 - GPLv3+ with short SPDX headers on every source file.
-- Author: Ingo Ruhnke <grumbel@gmail.com>
-- Commit directly to git; add a `Co-authored-by:` trailer for the AI agent that did the work.
+- Author: Ingo Ruhnke <grumbel@gmail.com> (SPDX headers and git commits).
+- Commit directly to git. Git author **and** committer are always
+  `Ingo Ruhnke <grumbel@gmail.com>`, never the agent, a placeholder
+  ("xanatoo contributor", "Fix", "CI", …) or an `example.com` address.
+  If `git config user.email` is empty or different, commit with
+  `git -c user.name="Ingo Ruhnke" -c user.email=grumbel@gmail.com commit …`;
+  do not pass `--author`, set `GIT_AUTHOR_*` / `GIT_COMMITTER_*`, or change
+  the repository's git config.
+- Credit the AI agent only through a trailer in the last paragraph of the
+  message, one per agent, e.g. `Co-authored-by: Grok <grok@x.ai>`.
+  Check with `git log -1 --format='%an <%ae> / %cn <%ce>'` after committing
+  and `git commit --amend --reset-author` if it is wrong.
 - Always commit your working changes when a task is done (no need to ask); never leave finished work uncommitted.
 - Prefer clear data layouts over clever abstractions.
 - No drive-by feature removal; discuss first.
