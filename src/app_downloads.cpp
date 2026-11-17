@@ -3,7 +3,7 @@
 
 #include "xanatoo/app.hpp"
 #include "imgui.h"
-#if !defined(EMSCRIPTEN)
+#if defined(XANATOO_SDL3) && XANATOO_SDL3 && !defined(EMSCRIPTEN)
 #include <SDL3/SDL_dialog.h>
 #endif
 #include "xanatoo/paths.hpp"
@@ -309,11 +309,12 @@ void download_action(App& app, const std::string& action) {
 // ---- Download confirmation dialog ------------------------------------------
 
 bool download_folder_dialog_available() {
-#if defined(EMSCRIPTEN)
-  return false;
-#elif defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_MACOS) || \
-    defined(SDL_PLATFORM_LINUX) || defined(__linux__) || defined(_WIN32) || \
-    defined(__APPLE__)
+  // SDL_ShowOpenFolderDialog is an SDL3 API; SDL2 / R36S / wasm have no
+  // equivalent, so fall back to the default download directory.
+#if defined(XANATOO_SDL3) && XANATOO_SDL3 && !defined(EMSCRIPTEN) && \
+    (defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_MACOS) || \
+     defined(SDL_PLATFORM_LINUX) || defined(__linux__) || defined(_WIN32) || \
+     defined(__APPLE__))
   return true;
 #else
   return false;
@@ -327,7 +328,7 @@ struct FolderPickState {
   std::string url;
 };
 
-#if !defined(EMSCRIPTEN)
+#if defined(XANATOO_SDL3) && XANATOO_SDL3 && !defined(EMSCRIPTEN)
 static void folder_dialog_callback(void* userdata, const char* const* filelist,
                                    int /*filter*/) {
   auto* st = static_cast<FolderPickState*>(userdata);
@@ -347,7 +348,7 @@ static void folder_dialog_callback(void* userdata, const char* const* filelist,
 }  // namespace
 
 void pick_download_folder(App& app, const std::string& url) {
-#if !defined(EMSCRIPTEN)
+#if defined(XANATOO_SDL3) && XANATOO_SDL3 && !defined(EMSCRIPTEN)
   if (!download_folder_dialog_available()) {
     begin_download(app, url, {});
     return;
