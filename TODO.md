@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — CI builds go straight to the website
+
+- `artifacts.yml` builds android / r36s / win64 / win32 / wasm as
+  independent matrix jobs (wasm / win moved out of `check.yml`, which now
+  only runs `nix flake check`). On master each success replaces its own
+  assets on the `continuous` prerelease via `tools/ci/publish-build.sh`
+  (upload under a temporary name, then delete + rename, so a failed upload
+  keeps the old file; an older revCount never overwrites a newer one) and
+  runs the website's `pages.yml`.
+- xanatoo.github.io: `pages.yml` no longer builds with Nix; it runs
+  `scripts/fetch-builds.sh` (release, else the live site's copy) and
+  `scripts/assemble.sh` (also used by its `flake.nix`). The page shows
+  each download's version; `android-update.json` comes from the APK's own
+  `android.json`, so the update check matches the APK actually served.
+- Needs the repository secret `SITE_DISPATCH_TOKEN` (fine-grained, on
+  xanatoo.github.io, Actions read/write); without it the site still
+  updates on its pushes and nightly. Not yet run on GitHub.
+
 ## Status (2026-11-17) — Recommendations panel (similar websites)
 
 - Panels / Go → Recommendations (`WindowRole::Recommendations`,

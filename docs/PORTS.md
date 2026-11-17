@@ -41,9 +41,13 @@ the `-zip` outputs contain those folders. `.#sdl3-wasm` and
 `XANATOO_WASM_*_ROOT` CMake options select these libraries without triggering
 Emscripten port downloads.
 
-`.github/workflows/check.yml` executes `nix flake check` and uploads the
-actual Windows and web flake outputs. There is no separate, drifting CI build
-recipe. The standalone commands below remain useful for development outside
+`.github/workflows/check.yml` executes `nix flake check`;
+`.github/workflows/artifacts.yml` builds the Android, R36S, Windows and web
+flake outputs as independent jobs. On master each successful job replaces its
+own assets on the rolling `continuous` release (`tools/ci/publish-build.sh`,
+which also writes `<target>.json` with the version) and triggers the website
+deploy (secret `SITE_DISPATCH_TOKEN`); a failed target keeps its previous
+release assets and download. There is no separate, drifting CI build recipe. The standalone commands below remain useful for development outside
 Nix, but are not the source of truth for releases.
 
 ## Windows (MinGW-w64)

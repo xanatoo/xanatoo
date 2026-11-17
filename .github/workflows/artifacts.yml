@@ -1,10 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #
-# Build each portable flake package independently and upload whatever succeeds.
-# A failing target does not cancel the others (fail-fast: false), but it does
-# turn the run red. Artifacts stay available for download from the Actions run
-# summary. wasm / win32 / win64 are built and uploaded by check.yml.
+# Build each downloadable flake package independently. A failing target
+# does not cancel the others (fail-fast: false), but it does turn the run red.
+#
+# Every run uploads its successful builds as Actions artifacts. On master
+# (push or manual run) each successful target also replaces its own assets
+# on the rolling `continuous` release (tools/ci/publish-build.sh) and asks the
+# website to redeploy, so a download goes live minutes after its build.
+# A failed target leaves its previous release assets, and so its previous
+# download on the website, in place.
+#
+# Website trigger: the repository secret SITE_DISPATCH_TOKEN, a fine-grained
+# token for xanatoo/xanatoo.github.io with "Actions: read and write". Without
+# it the release is still updated and the site picks it up on its next run
+# (push or nightly).
 
 name: artifacts
 
@@ -13,103 +23,92 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
-  # Optional: rebuild artifacts nightly even without commits
-  # schedule:
-  #   - cron: "17 3 * * *"
+
+env:
+  RELEASE_TAG: continuous
 
 jobs:
   package:
-    name: ${{ matrix.attr }}
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # release assets (master only, see "Publish")
     strategy:
       # One target failing must not cancel the rest of the matrix.
       fail-fast: false
       matrix:
         include:
-          - attr: xanatoo-android
-            kind: apk          # single .apk (or dir containing it)
-          - attr: xanatoo-r36s-portmaster-zip
-            kind: zip
-          # Optional SDL3 PortMaster variant (heavier; keep if you want it)
-          # - attr: xanatoo-r36s-sdl3-portmaster-zip
-          #   kind: zip
+          # target: the name on the release and the website
+          - target: android
+            attr: xanatoo-android
+          - target: r36s
+            attr: xanatoo-r36s-portmaster-zip
+          - target: win64
+            attr: xanatoo-win64-zip
+          - target: win32
+            attr: xanatoo-win32-zip
+          - target: wasm
+            attr: xanatoo-wasm
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # self.revCount / shortRev for the version string
 
+      # The Android SDK / NDK and the cross toolchains need Nix store space.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
       - uses: cachix/install-nix-action@v31
         with:
-          # Enough space for Android SDK / cross toolchains
-          nix_path: nixpkgs=channel:nixos-unstable
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build ${{ matrix.attr }}
-        id: build
+        run: nix build -L ".#${{ matrix.attr }}" --out-link result
+
+      # Fixed asset names, one or more per target (release assets are flat).
+      - name: Stage
         run: |
           set -euo pipefail
-          echo "Building .#${{ matrix.attr }} …"
-          if nix build -L ".#${{ matrix.attr }}" --out-link "result-${{ matrix.attr }}"; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          fi
-
-      - name: Stage artifact
-        if: steps.build.outputs.ok == 'true'
-        run: |
-          set -euo pipefail
-          ATTR="${{ matrix.attr }}"
-          KIND="${{ matrix.kind }}"
-          SRC="result-${ATTR}"
-          DEST="dist/${ATTR}"
-          mkdir -p "$DEST"
-
-          case "$KIND" in
-            zip)
-              # zip derivations usually put a single .zip in the store path
-              find -L "$SRC" -name '*.zip' -exec cp -v {} "$DEST/" \;
-              # fallback: copy everything if no .zip found
-              if ! ls "$DEST"/*.zip >/dev/null 2>&1; then
-                cp -rL "$SRC"/. "$DEST/"
-              fi
-              ;;
-            apk)
-              find -L "$SRC" -name '*.apk' -exec cp -v {} "$DEST/" \;
-              if ! ls "$DEST"/*.apk >/dev/null 2>&1; then
-                cp -rL "$SRC"/. "$DEST/"
-              fi
-              ;;
-            dir)
-              cp -rL "$SRC"/. "$DEST/"
-              ;;
-            *)
-              cp -rL "$SRC"/. "$DEST/"
+          mkdir dist
+          case "${{ matrix.target }}" in
+            android) cp -v result/*.apk dist/xanatoo.apk ;;
+            r36s)    cp -v result/xanatoo.zip dist/xanatoo-r36s.zip ;;
+            win32|win64) cp -v result/*.zip "dist/xanatoo-${{ matrix.target }}.zip" ;;
+            wasm)
+              for f in index.html xanatoo.js xanatoo.wasm xanatoo.data; do
+                test -s "result/$f"
+              done
+              tar -C result -czhf dist/xanatoo-wasm.tar.gz --owner=0 --group=0 .
               ;;
           esac
+          ls -l dist
 
-          echo "Staged contents of $DEST:"
-          find "$DEST" -type f | head -40
-
-      - name: Upload ${{ matrix.attr }}
-        if: steps.build.outputs.ok == 'true'
+      - name: Upload ${{ matrix.target }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.attr }}
-          path: dist/${{ matrix.attr }}/
-          if-no-files-found: warn
+          name: xanatoo-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
           retention-days: 14
 
-  # Summary: fails when any package job failed, so the run status is honest.
-  summary:
-    name: summary
-    needs: package
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Report
+      - name: Publish to the ${{ env.RELEASE_TAG }} release
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/ci/publish-build.sh "$RELEASE_TAG" "${{ matrix.target }}" dist/*
+
+      - name: Redeploy the website
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
         run: |
-          echo "Package jobs: ${{ needs.package.result }}"
-          echo "Successful builds appear as downloadable artifacts on this run."
-          test "${{ needs.package.result }}" = success
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::SITE_DISPATCH_TOKEN not set; the website picks up the release on its next run."
+            exit 0
+          fi
+          gh workflow run pages.yml -R xanatoo/xanatoo.github.io --ref master \
+            || echo "::warning::Could not trigger the website deploy."
