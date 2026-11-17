@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Stop ends every service's transfer
+
+- `TransferMeter::cancel` points at the job's `abandoned` flag; the read
+  loops of HTTP(S) (so all web services), Gemini, Gopher, Spartan, Nex and
+  Finger check `transfer_cancelled()` per block. Before, Stop only dropped
+  the job and the worker kept reading to the end. Checked in Xvfb with Esc
+  on slow local Nex and plain-HTTP transfers; Gemini / Spartan / Finger
+  only by code (same one-line check). Not covered: worker threads a service
+  spawns itself (no meter), connect / TLS handshake waits (bounded by the
+  15 s socket timeouts), the Emscripten fetch transport.
+
 ## Status (2026-11-17) — Gopher transfers can be stopped
 
 - Stop / Esc and the Downloads panel Cancel now end Gopher transfers (the

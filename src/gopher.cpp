@@ -348,6 +348,11 @@ std::optional<GopherResponse> gopher_fetch(std::string_view url,
   for (;;) {
     ssize_t n = ::read(fd, buf, sizeof(buf));
     if (n <= 0) break;
+    if (transfer_cancelled()) {
+      ::close(fd);
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     const std::string_view chunk(buf, static_cast<size_t>(n));
     meter_bytes(chunk.size());
     const GopherRead next =

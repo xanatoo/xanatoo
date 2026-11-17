@@ -212,6 +212,11 @@ static std::optional<GeminiResponse> gemini_fetch_once(const GeminiUrl& u,
   for (;;) {
     int n = tls.read(buf, sizeof(buf));
     if (n <= 0) break;
+    if (transfer_cancelled()) {
+      tls.close();
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     data.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));  // Gemini sends no length
     if (data.size() > 8 * 1024 * 1024) break;  // 8 MiB cap

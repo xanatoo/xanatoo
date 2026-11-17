@@ -147,8 +147,7 @@ void fetch_gopher(const std::string& url, FetchShared& out) {
   xanatoo::GopherReadHooks hooks;
   hooks.stream_binary = saving;
   hooks.chunk = [&](std::string_view bytes) {
-    if (out.abandoned.load(std::memory_order_relaxed))
-      return xanatoo::GopherRead::Cancel;
+    // Stop / Esc is checked by gopher_fetch itself (transfer_cancelled).
     if (dl && dl->cancel.load(std::memory_order_relaxed)) {
       out.error = "download cancelled";
       return xanatoo::GopherRead::Cancel;
@@ -994,6 +993,7 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
+  job.shared->meter.cancel = &job.shared->abandoned;
   job.shared->allow_pages =
       (purpose != FetchPurpose::Preview &&
        purpose != FetchPurpose::Subscription) ||

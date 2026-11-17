@@ -150,6 +150,11 @@ static std::optional<SpartanResponse> spartan_fetch_once(const SpartanUrl& u,
   for (;;) {
     ssize_t n = ::read(fd, buf, sizeof(buf));
     if (n <= 0) break;
+    if (transfer_cancelled()) {
+      ::close(fd);
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     raw.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));
     if (raw.size() > 8 * 1024 * 1024) break;

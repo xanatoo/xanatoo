@@ -171,6 +171,10 @@ std::optional<HttpResult> https_request(std::string_view method,
   for (;;) {
     int n = conn.read(buf, sizeof(buf));
     if (n <= 0) break;
+    if (transfer_cancelled()) {
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     data.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));
     if (!metered_headers) {
@@ -375,6 +379,10 @@ bool stream_once(const std::string& url, std::string_view agent,
       return false;
     }
     if (n == 0) break;
+    if (transfer_cancelled()) {
+      if (err) *err = transfer_cancelled_error();
+      return false;
+    }
     total_read += static_cast<uint64_t>(n);
     std::string_view data(buf, static_cast<size_t>(n));
     if (!have_headers) {

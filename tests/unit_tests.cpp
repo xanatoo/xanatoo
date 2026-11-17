@@ -6711,6 +6711,20 @@ static void test_transfer_label() {
   EXPECT_EQ(m.received.load(), 100u);
   EXPECT_EQ(m.expected.load(), 1000);
   EXPECT(m.first_ms.load() >= 0);
+
+  // The meter carries the job's cancel flag to the readers.
+  EXPECT(!xanatoo::transfer_cancelled());  // no meter installed
+  std::atomic<bool> stop{false};
+  xanatoo::TransferMeter c;
+  {
+    xanatoo::TransferMeterScope scope(&c);
+    EXPECT(!xanatoo::transfer_cancelled());  // no flag
+    c.cancel = &stop;
+    EXPECT(!xanatoo::transfer_cancelled());
+    stop.store(true);
+    EXPECT(xanatoo::transfer_cancelled());
+  }
+  EXPECT(!xanatoo::transfer_cancelled());
 }
 
 int main() {

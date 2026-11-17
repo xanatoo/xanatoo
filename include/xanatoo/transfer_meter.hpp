@@ -7,6 +7,8 @@
 // the network readers (https.cpp, gemini.cpp) feed whatever meter the
 // current thread has, so service clients need no extra parameter. The main
 // thread only reads the atomics. Header-only; the formatting is pure.
+// The same meter carries the job's cancel flag: readers check
+// transfer_cancelled() per block, so Stop ends any service's transfer.
 
 #include <atomic>
 #include <chrono>
@@ -24,6 +26,10 @@ struct TransferMeter {
   std::atomic<int64_t> expected{-1};
   // Steady-clock milliseconds of the first byte; -1 before it.
   std::atomic<int64_t> first_ms{-1};
+  // Set by the main thread when the job is dropped (toolbar Stop, Esc,
+  // navigating elsewhere); null: never cancelled. Set before the worker
+  // starts.
+  const std::atomic<bool>* cancel = nullptr;
 };
 
 inline int64_t transfer_now_ms() {
@@ -49,6 +55,15 @@ public:
 private:
   TransferMeter* prev_;
 };
+
+// Worker side: the job this thread fetches for was cancelled; a reader
+// stops and fails with transfer_cancelled_error().
+inline bool transfer_cancelled() {
+  const TransferMeter* m = thread_transfer_meter();
+  return m && m->cancel && m->cancel->load(std::memory_order_relaxed);
+}
+
+inline const char* transfer_cancelled_error() { return "cancelled"; }
 
 // Worker side: `n` more bytes arrived on this thread's request.
 inline void meter_bytes(size_t n) {

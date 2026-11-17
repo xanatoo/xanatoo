@@ -17,7 +17,7 @@ read-only service clients. Every client is read-only: never post or log in.
   text: do not parse them as Markdown or conflate matching DNs with a valid
   cryptographic self-signature.
 - `include/xanatoo/https.hpp` + `src/https.cpp` — HTTPS GET/POST over `TlsStream` (chunked bodies decoded; `https_get_follow` follows redirects without HTTPS→HTTP downgrade; such redirects are upgraded via `secure_redirect_target`) plus `tcp_connect_host` for Gemini / Nostr (built when any network feature is ON). Keep NIP-11 HTTPS-only/public-only/256 KiB limits independent of ordinary verified HTTPS browsing. See `docs/TLS.md`.
-- `include/xanatoo/transfer_meter.hpp` — thread-local byte meter for the loading indicator: fetch workers install one (`TransferMeterScope`), network readers call `meter_bytes` / `meter_expect`; a new raw reader loop should feed it too.
+- `include/xanatoo/transfer_meter.hpp` — thread-local byte meter for the loading indicator: fetch workers install one (`TransferMeterScope`), network readers call `meter_bytes` / `meter_expect`; a new raw reader loop should feed it too. The meter also carries the job's cancel flag (`TransferMeter::cancel` → `FetchShared::abandoned`, set by Stop / Esc / navigating away): every reader loop (HTTP(S) in `https.cpp`, Gemini, Gopher, Spartan, Nex, Finger) checks `transfer_cancelled()` per block and fails with `transfer_cancelled_error()`, so a new reader loop must check it too.
 - `include/xanatoo/json_min.hpp` — tiny JSON field/object helpers for read-only API clients (header-only). The `*_field` lookups are flat (first match anywhere): use `json_top_level(obj)` when nested objects repeat a key.
 
 ## Service refs (`native.hpp`)
@@ -256,9 +256,9 @@ read-only service clients. Every client is read-only: never post or log in.
 - Relative references: `/<type><selector>` and `?query` per the URL form,
   anything else relative to the selector's directory with the same type.
 - Transfers: `gopher_fetch` takes `GopherReadHooks`; `fetch_gopher`
-  (`app_fetch.cpp`) returns `Cancel` on `FetchShared::abandoned` (toolbar
-  Stop / Esc) or `DownloadProgress::cancel` (Downloads panel), so the read
-  loop closes the socket. A Download streams binary items straight into
+  (`app_fetch.cpp`) returns `Cancel` on `DownloadProgress::cancel`
+  (Downloads panel); Stop / Esc goes through `transfer_cancelled()` like
+  every reader. A Download streams binary items straight into
   the `DownloadFile` (phase Active, live `received`, no 32 MiB cap).
   Navigate / Tab sniff the first 512 bytes: images are read in full and
   shown, any other binary stops there (`Enough`) and is offered, so a

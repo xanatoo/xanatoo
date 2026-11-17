@@ -114,6 +114,11 @@ std::optional<FingerResponse> finger_fetch(std::string_view url,
   for (;;) {
     ssize_t n = ::read(fd, buf, sizeof(buf));
     if (n <= 0) break;
+    if (transfer_cancelled()) {
+      ::close(fd);
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     data.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));
     if (data.size() > 1 * 1024 * 1024) break;  // 1 MiB cap for finger
