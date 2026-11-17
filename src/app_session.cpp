@@ -38,7 +38,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 18> panels(App& app) {
+std::array<PanelRef, 19> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -57,7 +57,8 @@ std::array<PanelRef, 18> panels(App& app) {
            {"nostr-explorer", &app.nostr_explorer_win, app.nostr_explorer_open},
            {"lemmy-explorer", &app.lemmy_explorer_win, app.lemmy_explorer_open},
            {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
-           {"certificates", &app.certs_win, app.certs.open}}};
+           {"certificates", &app.certs_win, app.certs.open},
+           {"recommendations", &app.recommend_win, app.recommend.open}}};
 }
 
 int unscale(const App& app, int v) {
@@ -387,6 +388,8 @@ void restore_session(App& app) {
       app.lemmy_explorer_open = true;
     if (get("certificates.open") && *get("certificates.open") == "1")
       show_certificates(app);
+    if (get("recommendations.open") && *get("recommendations.open") == "1")
+      app.recommend.open = true;
     if (get("nostr-accounts.open") && *get("nostr-accounts.open") == "1") {
       app.nostr_accounts_open = true;
       refresh_nostr_catalogue(app);

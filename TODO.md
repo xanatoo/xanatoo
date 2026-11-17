@@ -2,6 +2,25 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Recommendations panel (similar websites)
+
+- Panels / Go → Recommendations (`WindowRole::Recommendations`,
+  `app_recommend.cpp`, pure parsers in `recommendations.cpp`, tested in
+  `test_recommendations`): sites similar to the focused page's site,
+  asked once per host while the panel is open, kept for the session.
+  Click opens, middle-click / context menu opens a new tab, Refresh asks
+  again. Verified under Xvfb (lwn.net, kernel.org via a row click,
+  en.wikipedia.org falling back to wikipedia.org).
+- None of the requested services has a key-less API. similarsites.com's
+  public pages embed their list as JSON and need no key (primary source).
+  webXtrend (free token, 100/day) and similars.net (free key, 1000/month,
+  link-back credit) are optional, configured under Credentials; both
+  parsers are written from the docs only (no key to test with).
+  similarsitesearch.com's API is gone (404); RapidAPI needs a key.
+- Possible next steps: on-disk cache per domain (helps the keyed
+  services' quotas); Curlie category siblings as another key-less source
+  (Curlie search by domain is noisy: it matches pages mentioning it).
+
 ## Status (2026-11-17) — Font collection members
 
 - Font lookups return `FontFace` (file + face index); `Font::load` opens

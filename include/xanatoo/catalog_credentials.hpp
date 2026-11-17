@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
-// Credentials for catalog adapters. Never embed these in a search:/media:
+// Credentials for catalog adapters (and the Recommendations panel's
+// optional similar-site services). Never embed these in a search:/media:
 // address or a document. Values are read on demand so changes take effect
 // without restarting the application.
 
@@ -21,6 +22,8 @@ enum class CatalogKey : size_t {
   TmdbReadToken,
   TmdbApiKey,
   DiscogsToken,
+  WebxtrendToken,  // Recommendations panel (similar websites)
+  SimilarsNetKey,
   Count
 };
 
@@ -38,6 +41,8 @@ inline constexpr std::array<CatalogKeyInfo, catalog_key_count> catalog_key_info 
     {"tmdb_read_token", "XANATOO_TMDB_READ_TOKEN"},
     {"tmdb_api_key", "XANATOO_TMDB_API_KEY"},
     {"discogs_token", "XANATOO_DISCOGS_TOKEN"},
+    {"webxtrend_token", "XANATOO_WEBXTREND_TOKEN"},
+    {"similars_net_key", "XANATOO_SIMILARS_NET_KEY"},
 }};
 
 constexpr size_t catalog_key_index(CatalogKey key) {

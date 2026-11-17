@@ -51,6 +51,7 @@ std::pair<int, int> min_size(const FloatWindow& w) {
       return {340, 260};
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Recommendations:
       return {300, 240};
     case WindowRole::Help:
     case WindowRole::Document:
@@ -152,6 +153,9 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Certificates:
       app.certs.open = false;
+      break;
+    case WindowRole::Recommendations:
+      app.recommend.open = false;
       break;
     case WindowRole::Document:
       close_doc_window(app, static_cast<size_t>(&w - app.soft_wins.data()));
@@ -325,7 +329,8 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
       w.role != WindowRole::NostrExplorer &&
       w.role != WindowRole::LemmyExplorer &&
       w.role != WindowRole::NostrAccounts &&
-      w.role != WindowRole::Certificates) {
+      w.role != WindowRole::Certificates &&
+      w.role != WindowRole::Recommendations) {
     begin_scroll_drag(app, w, my);
     return;
   }
@@ -368,6 +373,7 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::LemmyExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Recommendations:
       break;  // ImGui supplies controls inside the native dockable panels.
     case WindowRole::Revisions:
       click_revision_panel(app, mx, my);
@@ -437,6 +443,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.lemmy_explorer_open) st.push_back(&app.lemmy_explorer_win);
   if (app.nostr_accounts_open) st.push_back(&app.nostr_accounts_win);
   if (app.certs.open) st.push_back(&app.certs_win);
+  if (app.recommend.open) st.push_back(&app.recommend_win);
   if (app.styles_panel_open) st.push_back(&app.styles_win);
   if (app.styles_manager_panel_open) st.push_back(&app.styles_manager_win);
   if (app.bookmarks_panel_open) st.push_back(&app.bookmarks_win);
@@ -539,6 +546,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::LemmyExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Recommendations:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Document:
       return soft_client_rect(app, w);
@@ -583,6 +591,7 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::LemmyExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Recommendations:
       return 0.f;
     case WindowRole::Revisions:
       return revision_panel_max_scroll(app, ch);
@@ -758,7 +767,8 @@ bool float_wheel(App& app, int mx, int my, int wheel_y) {
       w->role == WindowRole::NostrExplorer ||
       w->role == WindowRole::LemmyExplorer ||
       w->role == WindowRole::NostrAccounts ||
-      w->role == WindowRole::Certificates)
+      w->role == WindowRole::Certificates ||
+      w->role == WindowRole::Recommendations)
     return true;  // the embedded editor owns its own scroll position
   w->scroll -= static_cast<float>(wheel_y) * scroll_wheel_step(*w);
   clamp_scroll_min(*w);
@@ -881,6 +891,10 @@ void draw_floats(App& app) {
       case WindowRole::Certificates:
         if (draw_floating_frame(app, *w, "Certificates", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Certificates);
+        break;
+      case WindowRole::Recommendations:
+        if (draw_floating_frame(app, *w, "Recommendations", float_active(app, *w)))
+          app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Recommendations);
         break;
       case WindowRole::Help:
         draw_help_window(app);

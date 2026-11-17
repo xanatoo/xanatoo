@@ -69,6 +69,10 @@ enum class UiCommand {
   CertReject,          // arg = host:port: keep the old pin
   CertForget,          // arg = host:port: remove the pin
   CertSelect,          // arg = host:port: show that row in detail
+  ToggleRecommendations, // similar websites of the focused page's site
+  RecommendOpen,       // arg = https://domain/: open in the focused view
+  RecommendOpenTab,    // arg = https://domain/: open in a new tab
+  RecommendRefresh,    // ask the services again for the shown site
   NostrSearchLocal,    // arg = search text
   NostrShowPeople,     // people vs event result tab
   NostrShowEvents,
@@ -357,6 +361,19 @@ struct UiState {
   std::string cert_selected;
   std::string cert_error;
   bool cert_no_save = false;
+  // Recommendations panel: similar websites of the focused page's site.
+  struct RecommendRow {
+    std::string domain, title, description, category, source;
+    float score = 0.f;  // 0..1, 0 = unknown
+  };
+  bool recommend_open = false;
+  int recommend_x = 0, recommend_y = 0, recommend_w = 0, recommend_h = 0;
+  std::string recommend_host;    // the page's site, "" = no web page
+  std::string recommend_domain;  // domain the rows belong to
+  bool recommend_loading = false;
+  bool recommend_similars_net = false;  // rows from similars.net (credit)
+  std::vector<RecommendRow> recommend_rows;
+  std::vector<std::string> recommend_notes;
   NostrCacheStats nostr_stats;
   std::vector<NostrCachedPerson> nostr_people;
   std::vector<NostrCachedEvent> nostr_events;

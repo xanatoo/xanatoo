@@ -2496,6 +2496,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleBacklinks;
       if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
+      if (ImGui::MenuItem("Recommendations", nullptr, state.recommend_open))
+        cmd = UiCommand::ToggleRecommendations;
       if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
       if (ImGui::MenuItem("History", "Ctrl+Shift+H", state.history_open))
@@ -2550,6 +2552,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleBacklinks;
       if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
+      if (ImGui::MenuItem("Recommendations", nullptr, state.recommend_open))
+        cmd = UiCommand::ToggleRecommendations;
       if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
       if (ImGui::MenuItem("Search Bar", "Ctrl+K", state.searchbar))
@@ -3336,6 +3340,16 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       catalog_field(CatalogKey::DiscogsToken, "Personal token");
       if (classic_button("Discogs developer settings"))
         xanatoo::sdl::open_url("https://www.discogs.com/settings/developers");
+
+      ImGui::SeparatorText("Similar websites (Recommendations panel)");
+      ImGui::TextDisabled("Optional: similarsites.com needs no key. Free "
+                          "accounts add more results.");
+      catalog_field(CatalogKey::WebxtrendToken, "webXtrend token");
+      if (classic_button("webXtrend API"))
+        xanatoo::sdl::open_url("https://webxtrend.com/similar-websites");
+      catalog_field(CatalogKey::SimilarsNetKey, "similars.net key");
+      if (classic_button("similars.net API"))
+        xanatoo::sdl::open_url("https://similars.net/api/");
 
       ImGui::Spacing();
       bool catalog_values_valid = true;
@@ -4683,6 +4697,128 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::PopID();
       } else if (!state.cert_rows.empty()) {
         ImGui::TextDisabled("Select a server to see its certificate.");
+      }
+    }
+    ImGui::End();
+  }
+
+  // ---- Recommendations: similar websites of the focused page's site ----
+  if (state.recommend_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Recommendations))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.recommend_x + 3),
+                                  float(state.recommend_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.recommend_w - 6)),
+                                   float(std::max(1, state.recommend_h - 6))));
+    if (ImGui::Begin("##recommendations_body", nullptr, embedded_panel_flags)) {
+      if (state.recommend_host.empty()) {
+        ImGui::TextWrapped("Open a web page to see sites similar to it.");
+      } else {
+        const std::string& shown = state.recommend_domain.empty()
+                                       ? state.recommend_host
+                                       : state.recommend_domain;
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Similar to");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(shown.c_str());
+        ImGui::SameLine();
+        ImGui::BeginDisabled(state.recommend_loading);
+        if (classic_button("Refresh") && cmd == UiCommand::None)
+          cmd = UiCommand::RecommendRefresh;
+        ImGui::EndDisabled();
+        if (state.recommend_loading)
+          ImGui::TextDisabled("Asking similar-site services\xe2\x80\xa6");
+        for (const auto& note : state.recommend_notes)
+          ImGui::TextDisabled("%s", note.c_str());
+        if (!state.recommend_loading && state.recommend_rows.empty())
+          ImGui::TextDisabled("No similar sites known for %s.", shown.c_str());
+        const float foot = ImGui::GetFrameHeightWithSpacing();
+        const bool list = !state.recommend_rows.empty();
+        if (list && ImGui::BeginChild("##recommend_list", ImVec2(0.f, -foot),
+                                      ImGuiChildFlags_Borders)) {
+          for (size_t i = 0; i < state.recommend_rows.size(); ++i) {
+            const auto& row = state.recommend_rows[i];
+            ImGui::PushID(static_cast<int>(i));
+            const std::string url = "https://" + row.domain + "/";
+            if (ImGui::Selectable(row.domain.c_str(), false) &&
+                cmd == UiCommand::None) {
+              cmd = UiCommand::RecommendOpen;
+              result.arg = url;
+            }
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) &&
+                cmd == UiCommand::None) {
+              cmd = UiCommand::RecommendOpenTab;
+              result.arg = url;
+            }
+            if (ImGui::IsItemHovered()) {
+              ImGui::BeginTooltip();
+              ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.f);
+              ImGui::TextUnformatted(url.c_str());
+              if (!row.description.empty())
+                ImGui::TextUnformatted(row.description.c_str());
+              if (!row.category.empty())
+                ImGui::TextDisabled("%s", row.category.c_str());
+              ImGui::TextDisabled("from %s \xc2\xb7 middle-click: new tab",
+                                  row.source.c_str());
+              ImGui::PopTextWrapPos();
+              ImGui::EndTooltip();
+            }
+            if (ImGui::BeginPopupContextItem("##recommend_row")) {
+              if (ImGui::MenuItem("Open") && cmd == UiCommand::None) {
+                cmd = UiCommand::RecommendOpen;
+                result.arg = url;
+              }
+              if (ImGui::MenuItem("Open in New Tab") && cmd == UiCommand::None) {
+                cmd = UiCommand::RecommendOpenTab;
+                result.arg = url;
+              }
+              if (ImGui::MenuItem("Copy Address"))
+                ImGui::SetClipboardText(url.c_str());
+              ImGui::EndPopup();
+            }
+            // Title, else the start of the description (all of it in the tooltip).
+            std::string sub = !row.title.empty() && row.title != row.domain
+                                  ? row.title : row.description;
+            if (sub.size() > 110) {
+              size_t cut = 110;
+              while (cut > 0 && (static_cast<unsigned char>(sub[cut]) & 0xC0) == 0x80)
+                --cut;
+              sub.resize(cut);
+              sub += "\xe2\x80\xa6";
+            }
+            if (!sub.empty()) {
+              ImGui::Indent();
+              ImGui::PushTextWrapPos(0.f);
+              ImGui::TextDisabled("%s", sub.c_str());
+              ImGui::PopTextWrapPos();
+              ImGui::Unindent();
+            }
+            if (row.score > 0.f) {
+              // Similarity as a thin bar under the row.
+              const ImVec2 p = ImGui::GetCursorScreenPos();
+              const float w = ImGui::GetContentRegionAvail().x;
+              const float h = std::max(2.f, 3.f * scale_);
+              ImDrawList* dl = ImGui::GetWindowDrawList();
+              dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), IM_COL32(0, 0, 0, 28));
+              dl->AddRectFilled(p, ImVec2(p.x + w * std::clamp(row.score, 0.f, 1.f),
+                                          p.y + h),
+                                IM_COL32(70, 120, 190, 200));
+              ImGui::Dummy(ImVec2(w, h));
+            }
+            ImGui::PopID();
+          }
+        }
+        if (list) ImGui::EndChild();
+        // Credit the services (similars.net asks for a link back).
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("Data:");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("similarsites.com"))
+          xanatoo::sdl::open_url(("https://similarsites.com/site/" + shown).c_str());
+        if (state.recommend_similars_net) {
+          ImGui::SameLine();
+          if (ImGui::SmallButton("similars.net"))
+            xanatoo::sdl::open_url("https://similars.net/");
+        }
       }
     }
     ImGui::End();

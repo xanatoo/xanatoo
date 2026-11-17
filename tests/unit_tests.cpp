@@ -68,6 +68,7 @@
 #include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/markdown_body.hpp"
 #include "xanatoo/quote_links.hpp"
+#include "xanatoo/recommendations.hpp"
 #include <string>
 #include <algorithm>
 #include <set>
@@ -540,6 +541,93 @@ void test_json_min() {
   EXPECT_EQ(json_str_field(arr[1], "a"), "2");
 
   EXPECT_EQ(json_unescape(R"(line\nand\t\"q\")"), "line\nand\t\"q\"");
+}
+
+void test_recommendations() {
+  using namespace xanatoo;
+  using V = std::vector<std::string>;
+  EXPECT(recommend_domains("lwn.net") == V{"lwn.net"});
+  EXPECT(recommend_domains("WWW.LWN.net") == V{"lwn.net"});
+  EXPECT(recommend_domains("en.wikipedia.org") ==
+         (V{"en.wikipedia.org", "wikipedia.org"}));
+  EXPECT(recommend_domains("news.bbc.co.uk") == (V{"news.bbc.co.uk", "bbc.co.uk"}));
+  EXPECT(recommend_domains("localhost").empty());
+  EXPECT(recommend_domains("127.0.0.1").empty());
+  EXPECT(recommend_domains("bad_host.org").empty());
+  EXPECT(recommend_domains("").empty());
+  EXPECT_EQ(similar_site_domain("https://Www.Example.org:8080/a?b"), "example.org");
+  EXPECT_EQ(similar_site_domain("kernel.org"), "kernel.org");
+
+  const std::string page =
+      R"(<html><head></head><body><script id="__NEXT_DATA__" type="application/json">)"
+      R"({"props":{"pageProps":{"siteData":{"SimilarSites":[)"
+      R"({"Site":"kernel.org","Description":"The Linux Kernel Archives",)"
+      R"("Category":"Computers_Electronics_and_Technology/Programming_and_Developer_Software",)"
+      R"("Grade":0.93},{"Site":"not a domain","Grade":0.5},)"
+      R"({"Site":"LXer.com","Title":"LXer","Grade":1.7}]}}}})"
+      R"(</script></body></html>)";
+  std::string err;
+  auto a = parse_similarsites_page(page, &err);
+  EXPECT(err.empty());
+  EXPECT_EQ(a.size(), 2u);
+  if (a.size() == 2) {
+    EXPECT_EQ(a[0].domain, "kernel.org");
+    EXPECT_EQ(a[0].description, "The Linux Kernel Archives");
+    EXPECT_EQ(a[0].category, "Computers Electronics and Technology \xe2\x80\xba "
+                             "Programming and Developer Software");
+    EXPECT(a[0].score > 0.92 && a[0].score < 0.94);
+    EXPECT_EQ(a[1].domain, "lxer.com");
+    EXPECT(a[1].score == 1.0);  // clamped
+    EXPECT_EQ(a[1].source, "similarsites.com");
+  }
+  // Unknown site: the page has data but no list.
+  err.clear();
+  EXPECT(parse_similarsites_page(
+             R"(<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"siteData":{}}}}</script>)",
+             &err).empty());
+  EXPECT(err.empty());
+  EXPECT(parse_similarsites_page("<html>nothing</html>", &err).empty());
+  EXPECT(!err.empty());
+
+  err.clear();
+  auto w = parse_webxtrend_similar(
+      R"({"meta":{"page_type":"site"},"data":[{"domain":"b.org","similarity":0.4},)"
+      R"({"domain":"a.org","similarity":0.9,"title":"A","description":"d"}]})", &err);
+  EXPECT(err.empty());
+  EXPECT_EQ(w.size(), 2u);
+  if (w.size() == 2) {
+    EXPECT_EQ(w[0].domain, "a.org");  // sorted by similarity
+    EXPECT_EQ(w[0].title, "A");
+  }
+  EXPECT(parse_webxtrend_similar(
+             R"({"rcode":401,"error":"token_missing","msg":"Token missing"})", &err)
+             .empty());
+  EXPECT_EQ(err, "webXtrend: Token missing");
+
+  err.clear();
+  auto n = parse_similars_net(
+      R"([{"domain":"c.net","title":"C","category":"News","subcategory":"Tech",)"
+      R"("match_score":99},{"url":"https://www.d.net/","match_score":"50"}])", &err);
+  EXPECT(err.empty());
+  EXPECT_EQ(n.size(), 2u);
+  if (n.size() == 2) {
+    EXPECT_EQ(n[0].category, "News \xe2\x80\xba Tech");
+    EXPECT(n[0].score > 0.98);
+    EXPECT_EQ(n[1].domain, "d.net");
+    EXPECT(n[1].score == 0.5);
+  }
+  EXPECT(parse_similars_net(R"({"error":"API key required."})", &err).empty());
+  EXPECT_EQ(err, "similars.net: API key required.");
+
+  std::vector<SimilarSite> merged = a;
+  merge_similar_sites(merged, n, "lwn.net");
+  std::vector<SimilarSite> dup(1);
+  dup[0].domain = "kernel.org";
+  SimilarSite self;
+  self.domain = "lwn.net";
+  dup.push_back(self);
+  merge_similar_sites(merged, dup, "https://www.lwn.net/");
+  EXPECT_EQ(merged.size(), 4u);
 }
 
 void test_reddit_urls() {
@@ -2424,6 +2512,8 @@ void test_catalog_credentials() {
   values[CatalogKey::TmdbReadToken] = "sample-read-token";
   values[CatalogKey::TmdbApiKey] = "sample-api-key";
   values[CatalogKey::DiscogsToken] = "sample-discogs";
+  values[CatalogKey::WebxtrendToken] = "sample-webxtrend";
+  values[CatalogKey::SimilarsNetKey] = "sample-similars";
   EXPECT(save_catalog_credentials(values));
   EXPECT(load_catalog_credentials().values == values.values);
   EXPECT(effective_catalog_credential(CatalogKey::RawgApiKey) == "sample-key");
@@ -6397,6 +6487,7 @@ int main() {
   test_ebook_urls();
   test_string_helpers();
   test_json_min();
+  test_recommendations();
   test_reddit_urls();
   test_find_all();
   test_foreign_markdown();

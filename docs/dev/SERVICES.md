@@ -257,6 +257,36 @@ read-only service clients. Every client is read-only: never post or log in.
   Live Page is `UiCommand::ToggleArchive`; HTTP error banners link to it
   (`add_http_banner`). See `docs/ARCHIVE.md`.
 
+## Similar websites (`recommendations.hpp`)
+
+Recommendations panel source. `recommend_domains` drops `www.` and falls
+back from a subdomain to its parent (`en.wikipedia.org` → `wikipedia.org`,
+never to `co.uk`); the first domain with any result wins.
+
+- **similarsites.com** (no key, always asked): `GET /site/<domain>` is a
+  Next.js page; the list is the embedded `__NEXT_DATA__` JSON at
+  `props/pageProps/siteData/SimilarSites` (`Site`, `Title`, `Description`,
+  `Category`, `Grade` 0..1). An unknown site answers 200 with no list.
+  Checked 2026-11-17. If the page shape changes, the panel shows the note
+  from `parse_similarsites_page`.
+- **webXtrend** (free account token, 100 calls/day): `POST
+  https://api.webxtrend.com/v1.0/similar` with `{"token","query"}`; rows
+  `domain`, `similarity`, `title`, `description`. Asked only with
+  `CatalogKey::WebxtrendToken` (`XANATOO_WEBXTREND_TOKEN`). The reply shape
+  beyond the documented fields is unverified (no token at hand); the
+  parser accepts the list at top level or under `data` / `results`.
+- **similars.net** (free key, 1000 requests/month, max 5 rows): `GET
+  /api/<domain>` with `Authorization: Bearer`; asked only with
+  `CatalogKey::SimilarsNetKey`. Their terms require a link back: the panel
+  shows a "similars.net" credit button when rows came from it.
+- Skipped: similarsitesearch.com (API page gone, 404), RapidAPI
+  "similarsites" (key required, JS-only docs), data.similarweb.com (403 to
+  non-browser clients), Marginalia's similar-sites view (behind an
+  anti-bot wait page; not scraped).
+
+Keys live with the catalog credentials (`catalog-credentials.conf`,
+Edit → Credentials…); they are read on the main thread when a load starts.
+
 ## Ebooks
 
 - `src/ebooks.cpp`, gated by `XANATOO_EBOOKS` (default ON).
