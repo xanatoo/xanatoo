@@ -78,6 +78,31 @@ float scroll_wheel_step(const FloatWindow& w) {
   return w.role == WindowRole::Help ? 48.f : 40.f;
 }
 
+// ImGui widgets own the client area (and its scrolling) of these windows.
+// The Context panel only falls back to ImGui while it has no document;
+// with one it draws natively and scrolls like Help.
+bool imgui_scrolls(const App& app, const FloatWindow& w) {
+  switch (w.role) {
+    case WindowRole::Context:
+      return !app.context_has_doc;
+    case WindowRole::Annotations:
+    case WindowRole::Reply:
+    case WindowRole::Styles:
+    case WindowRole::StyleManager:
+    case WindowRole::Bookmarks:
+    case WindowRole::Subscriptions:
+    case WindowRole::NostrExplorer:
+    case WindowRole::LemmyExplorer:
+    case WindowRole::MatrixExplorer:
+    case WindowRole::NostrAccounts:
+    case WindowRole::Certificates:
+    case WindowRole::RelatedSites:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void clamp_scroll_min(FloatWindow& w) {
   if (w.scroll < 0.f) w.scroll = 0.f;
 }
@@ -324,18 +349,7 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
   // content-scroll roles reserve it for click-free jump/drag.
   const bool in_sb =
       mx >= cx + cw - sb_w && mx <= cx + cw + 2 && my >= cy && my <= cy + ch;
-  if (in_sb && w.role != WindowRole::Styles &&
-      w.role != WindowRole::Bookmarks &&
-      w.role != WindowRole::Context &&
-      w.role != WindowRole::Subscriptions &&
-      w.role != WindowRole::Reply &&
-      w.role != WindowRole::Annotations &&
-      w.role != WindowRole::NostrExplorer &&
-      w.role != WindowRole::LemmyExplorer &&
-      w.role != WindowRole::MatrixExplorer &&
-      w.role != WindowRole::NostrAccounts &&
-      w.role != WindowRole::Certificates &&
-      w.role != WindowRole::RelatedSites) {
+  if (in_sb && !imgui_scrolls(app, w)) {
     begin_scroll_drag(app, w, my);
     return;
   }
@@ -767,18 +781,7 @@ void float_release(App& app, int mx, int my) {
 bool float_wheel(App& app, int mx, int my, int wheel_y) {
   FloatWindow* w = float_at(app, mx, my);
   if (!w || w->role == WindowRole::Document) return false;  // pane scrolls
-  if (w->role == WindowRole::Annotations || w->role == WindowRole::Reply ||
-      w->role == WindowRole::Styles ||
-      w->role == WindowRole::StyleManager ||
-      w->role == WindowRole::Bookmarks ||
-      w->role == WindowRole::Context ||
-      w->role == WindowRole::Subscriptions ||
-      w->role == WindowRole::NostrExplorer ||
-      w->role == WindowRole::LemmyExplorer ||
-      w->role == WindowRole::MatrixExplorer ||
-      w->role == WindowRole::NostrAccounts ||
-      w->role == WindowRole::Certificates ||
-      w->role == WindowRole::RelatedSites)
+  if (imgui_scrolls(app, *w))
     return true;  // the embedded editor owns its own scroll position
   w->scroll -= static_cast<float>(wheel_y) * scroll_wheel_step(*w);
   clamp_scroll_min(*w);
