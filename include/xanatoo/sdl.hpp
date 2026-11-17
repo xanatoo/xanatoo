@@ -617,8 +617,11 @@ inline void set_nearest(SDL_Texture* texture) {
   if (!texture) return;
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
   SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
-#else
+#elif SDL_VERSION_ATLEAST(2, 0, 12)
+  // SDL 2.0.12+; R36S / older device sysroots may ship earlier SDL2.
   SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+#else
+  (void)texture;
 #endif
 }
 
