@@ -358,12 +358,35 @@ void draw_gallery_image(App& app, int pi) {
     dims = std::to_string(img.width) + "×" + std::to_string(img.height) +
            " · " + std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%";
   } else {
-    const std::string msg = fit_text(
-        font, std::string(img.pending ? "Loading " : "Cannot load ") + item->src,
-        avail_w);
-    app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                           static_cast<float>(all.y + all.h / 2), msg, 220, 120,
-                           120);
+    const bool remote = xanatoo::is_remote_image(item->src);
+    const ImageLoadState st = img.pending && remote
+                                  ? image_load_state(app, item->src)
+                                  : ImageLoadState{};
+    std::string head = !img.pending  ? "Cannot load "
+                       : !remote     ? "Preparing "
+                       : st.queued   ? "Waiting to load "
+                                     : "Loading ";
+    const std::string msg = fit_text(font, head + item->src, avail_w);
+    const int msg_y = all.y + all.h / 2;
+    if (img.pending)
+      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                             static_cast<float>(msg_y), msg, 200, 200, 205);
+    else
+      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                             static_cast<float>(msg_y), msg, 220, 120, 120);
+    if (img.pending) {
+      const int bar_h = std::max(4, static_cast<int>(5.f * app.ui_scale));
+      const int bw = std::min(avail_w, static_cast<int>(480.f * app.ui_scale));
+      const int bar_y = msg_y - font.descender() + pad / 2;
+      draw_image_progress_bar(app, SDL_Rect{all.x + pad, bar_y, bw, bar_h}, st,
+                              xanatoo::Rgba{60, 60, 66, 255});
+      const std::string bytes = xanatoo::transfer_label(st.received, st.expected, 0);
+      if (!bytes.empty())
+        app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                               static_cast<float>(bar_y + bar_h + pad / 2 +
+                                                  font.ascender()),
+                               bytes, 160, 160, 168);
+    }
   }
 
   const std::string counter = std::to_string(gv.index + 1) + " / " +

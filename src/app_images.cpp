@@ -14,7 +14,11 @@
 #include <iostream>
 #include <thread>
 
+#include <algorithm>
+#include <cmath>
+
 #include "xanatoo/app.hpp"
+#include "xanatoo/theme.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gopher.hpp"
@@ -140,6 +144,7 @@ bool download_image(const std::string& url) {
 void image_worker(std::shared_ptr<ImageFetchShared> sh) {
   for (;;) {
     std::string url;
+    std::shared_ptr<xanatoo::TransferMeter> meter;
     {
       std::lock_guard<std::mutex> lock(sh->mutex);
       if (sh->queue.empty()) {
@@ -148,9 +153,16 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
       }
       url = std::move(sh->queue.front());
       sh->queue.pop_front();
+      meter = std::make_shared<xanatoo::TransferMeter>();
+      sh->active[url] = meter;
     }
-    const bool ok = download_image(url);
+    bool ok = false;
+    {
+      xanatoo::TransferMeterScope scope(meter.get());
+      ok = download_image(url);
+    }
     std::lock_guard<std::mutex> lock(sh->mutex);
+    sh->active.erase(url);
     sh->done.emplace_back(std::move(url), ok);
   }
 }
@@ -186,6 +198,114 @@ void poll_images(App& app) {
   keep_views(app);
   for (Pane& p : app.panes) p.height_cache.clear();
   app.needs_layout = true;
+}
+
+ImageLoadState image_load_state(App& app, const std::string& url) {
+  ImageLoadState st;
+#ifndef __EMSCRIPTEN__
+  ImageFetchShared& sh = *app.image_fetch;
+  std::lock_guard<std::mutex> lock(sh.mutex);
+  if (auto it = sh.active.find(url); it != sh.active.end()) {
+    st.active = true;
+    st.received = it->second->received.load(std::memory_order_relaxed);
+    st.expected = it->second->expected.load(std::memory_order_relaxed);
+  } else {
+    st.queued = std::find(sh.queue.begin(), sh.queue.end(), url) != sh.queue.end();
+  }
+#else
+  (void)app;
+  (void)url;
+#endif
+  return st;
+}
+
+void draw_image_progress_bar(App& app, const SDL_Rect& r,
+                             const ImageLoadState& st, xanatoo::Rgba track) {
+  namespace th = xanatoo::theme;
+  if (r.w <= 0 || r.h <= 0) return;
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(app.sdl, track.r, track.g, track.b, track.a);
+  xanatoo::sdl::fill_rect(app.sdl, &r);
+  const th::Rgb accent = th::palette().accent;
+  if (st.active && st.expected > 0 &&
+      st.received <= static_cast<uint64_t>(st.expected)) {
+    const int w = static_cast<int>(static_cast<double>(r.w) *
+                                   static_cast<double>(st.received) /
+                                   static_cast<double>(st.expected));
+    if (w > 0) th::fill(app.sdl, SDL_Rect{r.x, r.y, w, r.h}, accent);
+    return;
+  }
+  // Size unknown (queued, chunked, thumbnail building): a sweeping segment,
+  // dimmer while the download has not started.
+  const float t = static_cast<float>(xanatoo::sdl::ticks()) / 1000.f;
+  const float phase = std::fmod(t * 0.8f, 1.f);
+  const int seg_w = std::max(8, r.w / 4);
+  const int seg_x = r.x - seg_w + static_cast<int>(phase * (r.w + seg_w));
+  const int x0 = std::max(r.x, seg_x);
+  const int x1 = std::min(r.x + r.w, seg_x + seg_w);
+  if (x1 > x0)
+    th::fill(app.sdl, SDL_Rect{x0, r.y, x1 - x0, r.h}, accent,
+             st.queued ? 110 : 255);
+}
+
+void draw_image_loading(App& app, int pi, const SDL_Rect& clip,
+                        float draw_scroll) {
+  Pane& pane = app.panes[pi];
+  xanatoo::Font& font = app.ui_font;
+  const int bar_h = std::max(3, static_cast<int>(4.f * app.ui_scale));
+  const int pad = std::max(4, static_cast<int>(8.f * app.ui_scale));
+  xanatoo::sdl::set_clip_rect(app.sdl, &clip);
+  for (const PositionedImage& im : pane.layout.images) {
+    if (im.page_w > 0) continue;  // fixed-layout pages: tiles of their own
+    const SDL_Rect r{pane.x + static_cast<int>(im.x),
+                     static_cast<int>(std::floor(im.y - draw_scroll)),
+                     static_cast<int>(im.width), static_cast<int>(im.height)};
+    if (r.w <= 0 || r.h <= 0 || r.y >= clip.y + clip.h || r.y + r.h <= clip.y ||
+        r.x >= clip.x + clip.w || r.x + r.w <= clip.x)
+      continue;
+    // The same lookup the raster drew the placeholder from (cached).
+    const xanatoo::Image& img = im.thumb > 0
+                                    ? app.images.thumb(im.src, im.base, im.thumb)
+                                    : app.images.get(im.src, im.base);
+    if (img.ok && img.texture) continue;
+    const bool remote = xanatoo::is_remote_image(im.src);
+    const ImageLoadState st =
+        img.pending && remote ? image_load_state(app, im.src) : ImageLoadState{};
+    // Tiny (inline icons): a bar along the bottom edge, no words.
+    if (r.w < 48 || r.h < font.line_height() + bar_h + 2 * pad) {
+      if (img.pending)
+        draw_image_progress_bar(app, SDL_Rect{r.x, r.y + r.h - 2, r.w, 2}, st,
+                                xanatoo::Rgba{200, 200, 210, 255});
+      continue;
+    }
+    std::string label;
+    if (!img.pending) {
+      label = "Cannot load image";
+    } else if (!remote) {
+      label = "Preparing image…";
+    } else if (st.active) {
+      label = "Loading image…";
+      const std::string bytes = xanatoo::transfer_label(
+          st.received, st.expected, 0);  // no ETA: rate unknown here
+      if (!bytes.empty()) label += "  " + bytes;
+    } else {
+      label = st.queued ? "Waiting to load image…" : "Loading image…";
+    }
+    const int bw = std::min(r.w - 2 * pad, static_cast<int>(240.f * app.ui_scale));
+    const int line = font.line_height();
+    const int block_h = line + (img.pending ? pad / 2 + bar_h : 0);
+    const int top = r.y + (r.h - block_h) / 2;
+    label = fit_text(font, label, r.w - 2 * pad);
+    const int lw = font.measure(label);
+    const uint8_t grey = img.pending ? 90 : 150;
+    app.renderer.draw_text(font, static_cast<float>(r.x + (r.w - lw) / 2),
+                           static_cast<float>(top + font.ascender()), label,
+                           grey, grey, static_cast<uint8_t>(grey + 10));
+    if (img.pending)
+      draw_image_progress_bar(
+          app, SDL_Rect{r.x + (r.w - bw) / 2, top + line + pad / 2, bw, bar_h}, st,
+          xanatoo::Rgba{200, 200, 210, 255});
+  }
 }
 
 void prune_image_caches() {

@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Image loading progress
+
+- Image placeholders in documents show "Loading image…" with bytes and a
+  progress bar (sweep when the size is unknown, dimmed while queued;
+  "Preparing image…" while thumtoo builds a thumbnail, "Cannot load image"
+  on failure); the `//gallery` viewer shows the bar and byte count under
+  its "Loading" line. Per-worker `TransferMeter` in `ImageFetchShared`.
+- Checked in Xvfb against a slow local HTTP server (with and without
+  Content-Length, document and gallery). Not covered: small-net image
+  sources (same meter hooks), image downloads are still not cancellable.
+
 ## Status (2026-11-17) — X11 / Wayland primary selection
 
 - Selecting text in a document view sets the primary selection (drag on

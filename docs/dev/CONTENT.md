@@ -244,6 +244,13 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   stores them in the remote image cache and shows `image_url_document`, so
   extension-less image URLs work too. An explicit Gopher download still
   saves the file.
+- Loading feedback: each image worker runs under its own `TransferMeter`
+  (`ImageFetchShared::active`, read with `image_load_state`).
+  `draw_image_loading` paints label + progress bar (sweep when the size is
+  unknown, dim while queued; "Preparing" for thumtoo thumbnails, "Cannot
+  load" on failure) over visible placeholders every frame, on top of the
+  pane raster; tiny inline images get a 2 px bar only. The `//gallery`
+  viewer shows the same bar and byte count (`draw_image_progress_bar`).
 - Layout draws remote images from their `kRemoteThumbEdge` thumbnail
   (`layout_remote_image`); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: a `has_image_fetch_scheme` URL or local

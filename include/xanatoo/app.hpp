@@ -593,6 +593,18 @@ struct ImageFetchShared {
   std::deque<std::string> queue;
   std::vector<std::pair<std::string, bool>> done;  // url, ok
   int workers = 0;
+  // Downloads in progress (url → its worker's meter), for the placeholders'
+  // progress bars; a worker adds its entry when it starts the URL.
+  std::unordered_map<std::string, std::shared_ptr<xanatoo::TransferMeter>> active;
+};
+
+// Where remote image `url` stands: still queued, or downloading with the
+// meter's figures. Neither: not fetching (done, failed, or a local image).
+struct ImageLoadState {
+  bool queued = false;
+  bool active = false;
+  uint64_t received = 0;
+  int64_t expected = -1;  // -1: size unknown
 };
 
 struct FetchJob {
@@ -1848,6 +1860,16 @@ void release_page_tiles(App& app);
 // Start downloads ImageCache asked for and apply finished ones (relayout).
 // Once per frame, after layout.
 void poll_images(App& app);
+// Download state of remote image `url` (main thread).
+ImageLoadState image_load_state(App& app, const std::string& url);
+// Progress over the visible image placeholders of view `pi` (still
+// downloading / thumbnail building / failed); painted every frame on top of
+// the pane raster, which keeps the plain placeholder.
+void draw_image_loading(App& app, int pi, const SDL_Rect& clip, float draw_scroll);
+// A progress bar in `r`: filled by `st` when its size is known, else a
+// sweeping segment. `track` is the bar's background.
+void draw_image_progress_bar(App& app, const SDL_Rect& r,
+                             const ImageLoadState& st, xanatoo::Rgba track);
 // Trim the download and thumbnail caches (background, at startup).
 void prune_image_caches();
 

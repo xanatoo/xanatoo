@@ -4275,6 +4275,7 @@ void draw_pane(App& app, int i) {
     draw_pane_layer(app, i, clip, static_cast<float>(pane.x), draw_scroll);
   }
   draw_page_tiles(app, i, clip, draw_scroll);
+  draw_image_loading(app, i, clip, draw_scroll);
 
   draw_pane_overlays(app, i);
   draw_footnote_overlay(app, i, clip);
