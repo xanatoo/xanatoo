@@ -3,6 +3,7 @@
 // Gopher protocol client (RFC 1436) for xanatoo.
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -49,12 +50,30 @@ struct GopherResponse {
   std::string input_prompt;   // shown when needs_input
 };
 
+// What a GopherReadHooks::chunk callback wants next.
+enum class GopherRead {
+  More,    // keep reading
+  Enough,  // stop and return what arrived so far (not an error)
+  Cancel,  // abort: gopher_fetch returns nullopt ("cancelled" unless err set)
+};
+
+// Optional hooks while the answer arrives (worker thread). `chunk` sees
+// every received block before it is buffered; it also lets Stop / a
+// Downloads-panel cancel end a long transfer.
+struct GopherReadHooks {
+  std::function<GopherRead(std::string_view)> chunk;
+  // Binary items: bytes go only to `chunk` (streamed to a file), body stays
+  // empty and the 32 MiB in-memory cap does not apply.
+  bool stream_binary = false;
+};
+
 #if defined(XANATOO_GOPHER) && XANATOO_GOPHER
 // Fetch over plain TCP. Type 7 with no query returns needs_input without
 // contacting the server. Binary types fill body with raw bytes and set
 // is_binary. On failure, nullopt and err set.
 std::optional<GopherResponse> gopher_fetch(std::string_view url,
-                                           std::string* err = nullptr);
+                                           std::string* err = nullptr,
+                                           const GopherReadHooks* hooks = nullptr);
 #endif
 
 // The URL a menu item links to: gopher://… (selector percent-encoded), or

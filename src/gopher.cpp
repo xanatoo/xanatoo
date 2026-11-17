@@ -306,7 +306,8 @@ std::string gopher_menu_to_markdown(const std::vector<GopherMenuItem>& items,
 #if defined(XANATOO_GOPHER) && XANATOO_GOPHER
 
 std::optional<GopherResponse> gopher_fetch(std::string_view url,
-                                           std::string* err) {
+                                           std::string* err,
+                                           const GopherReadHooks* hooks) {
   auto u = parse_gopher_url(url);
   if (!u) {
     if (err) *err = "not a gopher:// URL";
@@ -340,14 +341,25 @@ std::optional<GopherResponse> gopher_fetch(std::string_view url,
     return std::nullopt;
   }
 
+  const bool stream =
+      hooks && hooks->stream_binary && gopher_type_is_binary(u->type);
   std::string data;
-  char buf[4096];
+  char buf[16384];
   for (;;) {
     ssize_t n = ::read(fd, buf, sizeof(buf));
     if (n <= 0) break;
-    data.append(buf, static_cast<size_t>(n));
-    meter_bytes(static_cast<size_t>(n));
-    if (data.size() > 32 * 1024 * 1024) break;  // 32 MiB for binary items
+    const std::string_view chunk(buf, static_cast<size_t>(n));
+    meter_bytes(chunk.size());
+    const GopherRead next =
+        hooks && hooks->chunk ? hooks->chunk(chunk) : GopherRead::More;
+    if (next == GopherRead::Cancel) {
+      ::close(fd);
+      if (err && err->empty()) *err = "cancelled";
+      return std::nullopt;
+    }
+    if (!stream) data.append(chunk);
+    if (next == GopherRead::Enough) break;
+    if (!stream && data.size() > 32 * 1024 * 1024) break;  // 32 MiB in memory
   }
   ::close(fd);
 

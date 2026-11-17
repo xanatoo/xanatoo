@@ -109,10 +109,82 @@ void fetch_gemini(const std::string& url, FetchShared& out) {
 #endif
 
 #if defined(XANATOO_GOPHER) && XANATOO_GOPHER
+// File name for a saved Gopher binary item: the last selector segment, with
+// a leading item-type letter dropped.
+std::string gopher_download_name(const std::string& url) {
+  std::string name = xanatoo::download_filename(url, {});
+  if (!name.empty() && name != "download") return name;
+  size_t slash = url.rfind('/');
+  name = (slash == std::string::npos) ? "gopher-item" : url.substr(slash + 1);
+  if (name.empty() || name.size() < 2) name = "gopher-item";
+  if (name.size() > 1 &&
+      (name[0] == '9' || name[0] == 'g' || name[0] == 'I' ||
+       name[0] == 's' || name[0] == 'd'))
+    name = name.substr(1);
+  if (name.empty()) name = "gopher-item";
+  return name;
+}
+
 void fetch_gopher(const std::string& url, FetchShared& out) {
   out.service = "Gopher";
-  auto resp = xanatoo::gopher_fetch(url, &out.error);
-  if (!resp) return;
+  const auto parsed = xanatoo::parse_gopher_url(url);
+  const bool binary = parsed && xanatoo::gopher_type_is_binary(parsed->type);
+  const std::string item_url = parsed ? parsed->canonical : url;
+  auto& dl = out.download;
+  if (binary && dl) {
+    dl->url = item_url;
+    dl->name = gopher_download_name(item_url);
+  }
+  // Download: stream straight into the file, with progress and cancel.
+  // Navigate / Tab: the first bytes tell an image (shown) from any other
+  // binary, which is offered at once instead of read in full twice.
+  const bool saving = binary && out.force_download && dl;
+  xanatoo::DownloadFile file;
+  bool file_open = false;
+  bool offer = false;
+  std::string head;
+  constexpr size_t kSniff = 512;  // looks_like_image reads up to 512
+  xanatoo::GopherReadHooks hooks;
+  hooks.stream_binary = saving;
+  hooks.chunk = [&](std::string_view bytes) {
+    if (out.abandoned.load(std::memory_order_relaxed))
+      return xanatoo::GopherRead::Cancel;
+    if (dl && dl->cancel.load(std::memory_order_relaxed)) {
+      out.error = "download cancelled";
+      return xanatoo::GopherRead::Cancel;
+    }
+    if (!binary) return xanatoo::GopherRead::More;
+    if (saving) {
+      if (!file_open) {
+        if (!file.begin(dl->name, &out.error, dl->dest_dir))
+          return xanatoo::GopherRead::Cancel;
+        file_open = true;
+        dl->phase.store(xanatoo::DownloadPhase::Active,
+                        std::memory_order_release);
+      }
+      if (!file.append(bytes, &out.error)) return xanatoo::GopherRead::Cancel;
+      dl->received.fetch_add(bytes.size(), std::memory_order_relaxed);
+      return xanatoo::GopherRead::More;
+    }
+    if (head.size() >= kSniff) return xanatoo::GopherRead::More;
+    head.append(bytes.substr(0, kSniff - head.size()));
+    if (head.size() < kSniff || xanatoo::looks_like_image(head))
+      return xanatoo::GopherRead::More;
+    offer = true;
+    return xanatoo::GopherRead::Enough;
+  };
+  auto resp = xanatoo::gopher_fetch(url, &out.error, &hooks);
+  if (!resp) {
+    if (saving) {
+      if (out.error.empty()) out.error = "gopher download failed";
+      dl->error = out.error;
+      dl->phase.store(dl->cancel.load(std::memory_order_relaxed)
+                          ? xanatoo::DownloadPhase::Cancelled
+                          : xanatoo::DownloadPhase::Failed,
+                      std::memory_order_release);
+    }
+    return;
+  }
   out.final_url = resp->final_url;
   if (resp->needs_input) {
     out.input_status = 10;
@@ -122,49 +194,36 @@ void fetch_gopher(const std::string& url, FetchShared& out) {
   }
   // Image items (I / g, or any binary that is a picture) open in the image
   // viewer; an explicit download still saves them.
-  if (resp->is_binary && !out.force_download &&
+  if (resp->is_binary && !out.force_download && !offer &&
       show_fetched_image(resp->final_url, resp->body, out))
     return;
   if (resp->is_binary) {
-    if (!out.download)
-      out.download = std::make_shared<xanatoo::DownloadProgress>();
-    out.download->url = resp->final_url;
-    out.download->mime = resp->mime_hint;
-    std::string name = xanatoo::download_filename(resp->final_url, {});
-    if (name.empty() || name == "download") {
-      size_t slash = resp->final_url.rfind('/');
-      name = (slash == std::string::npos)
-                 ? "gopher-item"
-                 : resp->final_url.substr(slash + 1);
-      if (name.empty() || name.size() < 2) name = "gopher-item";
-      if (name.size() > 1 &&
-          (name[0] == '9' || name[0] == 'g' || name[0] == 'I' ||
-           name[0] == 's' || name[0] == 'd'))
-        name = name.substr(1);
-      if (name.empty()) name = "gopher-item";
-    }
-    out.download->name = name;
+    if (!dl) dl = std::make_shared<xanatoo::DownloadProgress>();
+    dl->url = resp->final_url;
+    dl->mime = resp->mime_hint;
+    if (dl->name.empty()) dl->name = gopher_download_name(resp->final_url);
     if (!out.force_download) {
       // Navigate/Tab: offer, do not save until the user confirms.
-      out.download->offered.store(true, std::memory_order_release);
-      out.final_url = resp->final_url;
+      dl->offered.store(true, std::memory_order_release);
       return;
     }
-    xanatoo::DownloadFile file;
     std::string err;
-    if (!file.begin(name, &err, out.download->dest_dir) ||
-        !file.append(resp->body, &err) ||
-        !file.finish(&err)) {
-      out.download->phase.store(xanatoo::DownloadPhase::Failed);
-      out.download->error = err.empty() ? "gopher binary save failed" : err;
-      out.error = out.download->error;
+    const bool ok =
+        (file_open || file.begin(dl->name, &err, dl->dest_dir)) &&
+        (saving || file.append(resp->body, &err)) && file.finish(&err);
+    if (!ok) {
+      dl->error = err.empty() ? "gopher binary save failed" : err;
+      dl->phase.store(xanatoo::DownloadPhase::Failed);
+      out.error = dl->error;
       return;
     }
-    out.download->path = file.path();
-    out.download->final_name = file.filename();
-    out.download->received.store(resp->body.size());
-    out.download->total.store(static_cast<int64_t>(resp->body.size()));
-    out.download->phase.store(xanatoo::DownloadPhase::Complete);
+    const uint64_t size =
+        saving ? dl->received.load() : static_cast<uint64_t>(resp->body.size());
+    dl->path = file.path();
+    dl->final_name = file.filename();
+    dl->received.store(size);
+    dl->total.store(static_cast<int64_t>(size));
+    dl->phase.store(xanatoo::DownloadPhase::Complete);
     out.raw_source.reset();
     return;
   }

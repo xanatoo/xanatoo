@@ -255,6 +255,14 @@ read-only service clients. Every client is read-only: never post or log in.
   so only that sequence is broken up.
 - Relative references: `/<type><selector>` and `?query` per the URL form,
   anything else relative to the selector's directory with the same type.
+- Transfers: `gopher_fetch` takes `GopherReadHooks`; `fetch_gopher`
+  (`app_fetch.cpp`) returns `Cancel` on `FetchShared::abandoned` (toolbar
+  Stop / Esc) or `DownloadProgress::cancel` (Downloads panel), so the read
+  loop closes the socket. A Download streams binary items straight into
+  the `DownloadFile` (phase Active, live `received`, no 32 MiB cap).
+  Navigate / Tab sniff the first 512 bytes: images are read in full and
+  shown, any other binary stops there (`Enough`) and is offered, so a
+  confirmed download fetches the item only once.
 - Finger replies are one code block; `markdown_code_fence`
   (`text_escape.hpp`) picks a fence longer than any backtick run inside.
 

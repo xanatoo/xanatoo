@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Gopher transfers can be stopped
+
+- Stop / Esc and the Downloads panel Cancel now end Gopher transfers (the
+  read loop ignored both before; a confirmed download also stayed Pending,
+  so the panel offered no Cancel and showed no progress). Downloads stream
+  to the file; Navigate offers a non-image binary after the first 512 bytes
+  instead of reading the whole item twice. Checked in Xvfb against a slow
+  local Gopher server (offer after 64 KiB; Esc closed a text transfer).
+  Downloads-panel Cancel itself not clicked through in Xvfb.
+
 ## Status (2026-11-17) — Gamepad cursor auto-hides
 
 - The stick cursor is drawn only within 3 s of the last gamepad input
