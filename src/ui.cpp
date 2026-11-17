@@ -2496,8 +2496,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleBacklinks;
       if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
-      if (ImGui::MenuItem("Recommendations", nullptr, state.recommend_open))
-        cmd = UiCommand::ToggleRecommendations;
+      if (ImGui::MenuItem("Related Sites", nullptr, state.related_open))
+        cmd = UiCommand::ToggleRelatedSites;
       if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
       if (ImGui::MenuItem("History", "Ctrl+Shift+H", state.history_open))
@@ -2552,8 +2552,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleBacklinks;
       if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
-      if (ImGui::MenuItem("Recommendations", nullptr, state.recommend_open))
-        cmd = UiCommand::ToggleRecommendations;
+      if (ImGui::MenuItem("Related Sites", nullptr, state.related_open))
+        cmd = UiCommand::ToggleRelatedSites;
       if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
       if (ImGui::MenuItem("Search Bar", "Ctrl+K", state.searchbar))
@@ -3341,7 +3341,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (classic_button("Discogs developer settings"))
         xanatoo::sdl::open_url("https://www.discogs.com/settings/developers");
 
-      ImGui::SeparatorText("Similar websites (Recommendations panel)");
+      ImGui::SeparatorText("Similar websites (Related Sites panel)");
       ImGui::TextDisabled("Optional: similarsites.com needs no key. Free "
                           "accounts add more results.");
       catalog_field(CatalogKey::WebxtrendToken, "webXtrend token");
@@ -4702,51 +4702,68 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::End();
   }
 
-  // ---- Recommendations: similar websites of the focused page's site ----
-  if (state.recommend_open &&
-      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Recommendations))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.recommend_x + 3),
-                                  float(state.recommend_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.recommend_w - 6)),
-                                   float(std::max(1, state.recommend_h - 6))));
-    if (ImGui::Begin("##recommendations_body", nullptr, embedded_panel_flags)) {
-      if (state.recommend_host.empty()) {
+  // ---- Related Sites: similar websites of the focused page's site ----
+  if (state.related_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::RelatedSites))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.related_x + 3),
+                                  float(state.related_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.related_w - 6)),
+                                   float(std::max(1, state.related_h - 6))));
+    if (ImGui::Begin("##related_sites_body", nullptr, embedded_panel_flags)) {
+      if (state.related_host.empty()) {
         ImGui::TextWrapped("Open a web page to see sites similar to it.");
       } else {
-        const std::string& shown = state.recommend_domain.empty()
-                                       ? state.recommend_host
-                                       : state.recommend_domain;
+        const std::string& shown = state.related_domain.empty()
+                                       ? state.related_host
+                                       : state.related_domain;
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Similar to");
         ImGui::SameLine();
         ImGui::TextUnformatted(shown.c_str());
         ImGui::SameLine();
-        ImGui::BeginDisabled(state.recommend_loading);
+        ImGui::BeginDisabled(state.related_loading);
         if (classic_button("Refresh") && cmd == UiCommand::None)
-          cmd = UiCommand::RecommendRefresh;
+          cmd = UiCommand::RelatedRefresh;
         ImGui::EndDisabled();
-        if (state.recommend_loading)
+        // Off holds the list while its rows are explored (a click would
+        // otherwise replace it with the clicked site's neighbours).
+        bool follow = state.related_follow;
+        same_line_if_fits("[x] Follow page");
+        if (ImGui::Checkbox("Follow page", &follow) && cmd == UiCommand::None)
+          cmd = UiCommand::RelatedFollow;
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip("On: show sites related to the focused page.\n"
+                            "Off: keep this list while browsing its sites.");
+        // On the checkbox's line: a new line would shift the rows under the
+        // pointer right after the click that opened one of them.
+        if (state.related_behind) {
+          same_line_if_fits("held");
+          ImGui::TextDisabled("held");
+          if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The focused page is another site.");
+        }
+        if (state.related_loading)
           ImGui::TextDisabled("Asking similar-site services\xe2\x80\xa6");
-        for (const auto& note : state.recommend_notes)
+        for (const auto& note : state.related_notes)
           ImGui::TextDisabled("%s", note.c_str());
-        if (!state.recommend_loading && state.recommend_rows.empty())
+        if (!state.related_loading && state.related_rows.empty())
           ImGui::TextDisabled("No similar sites known for %s.", shown.c_str());
         const float foot = ImGui::GetFrameHeightWithSpacing();
-        const bool list = !state.recommend_rows.empty();
-        if (list && ImGui::BeginChild("##recommend_list", ImVec2(0.f, -foot),
+        const bool list = !state.related_rows.empty();
+        if (list && ImGui::BeginChild("##related_list", ImVec2(0.f, -foot),
                                       ImGuiChildFlags_Borders)) {
-          for (size_t i = 0; i < state.recommend_rows.size(); ++i) {
-            const auto& row = state.recommend_rows[i];
+          for (size_t i = 0; i < state.related_rows.size(); ++i) {
+            const auto& row = state.related_rows[i];
             ImGui::PushID(static_cast<int>(i));
             const std::string url = "https://" + row.domain + "/";
             if (ImGui::Selectable(row.domain.c_str(), false) &&
                 cmd == UiCommand::None) {
-              cmd = UiCommand::RecommendOpen;
+              cmd = UiCommand::RelatedOpen;
               result.arg = url;
             }
             if (ImGui::IsItemClicked(ImGuiMouseButton_Middle) &&
                 cmd == UiCommand::None) {
-              cmd = UiCommand::RecommendOpenTab;
+              cmd = UiCommand::RelatedOpenTab;
               result.arg = url;
             }
             if (ImGui::IsItemHovered()) {
@@ -4762,13 +4779,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
               ImGui::PopTextWrapPos();
               ImGui::EndTooltip();
             }
-            if (ImGui::BeginPopupContextItem("##recommend_row")) {
+            if (ImGui::BeginPopupContextItem("##related_row")) {
               if (ImGui::MenuItem("Open") && cmd == UiCommand::None) {
-                cmd = UiCommand::RecommendOpen;
+                cmd = UiCommand::RelatedOpen;
                 result.arg = url;
               }
               if (ImGui::MenuItem("Open in New Tab") && cmd == UiCommand::None) {
-                cmd = UiCommand::RecommendOpenTab;
+                cmd = UiCommand::RelatedOpenTab;
                 result.arg = url;
               }
               if (ImGui::MenuItem("Copy Address"))
@@ -4814,7 +4831,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::SameLine();
         if (ImGui::SmallButton("similarsites.com"))
           xanatoo::sdl::open_url(("https://similarsites.com/site/" + shown).c_str());
-        if (state.recommend_similars_net) {
+        if (state.related_similars_net) {
           ImGui::SameLine();
           if (ImGui::SmallButton("similars.net"))
             xanatoo::sdl::open_url("https://similars.net/");

@@ -58,7 +58,7 @@ std::array<PanelRef, 19> panels(App& app) {
            {"lemmy-explorer", &app.lemmy_explorer_win, app.lemmy_explorer_open},
            {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
            {"certificates", &app.certs_win, app.certs.open},
-           {"recommendations", &app.recommend_win, app.recommend.open}}};
+           {"related-sites", &app.related_win, app.related.open}}};
 }
 
 int unscale(const App& app, int v) {
@@ -142,6 +142,7 @@ std::string session_text(App& app) {
   out << "lemmy.tab=" << app.lemmy_tab << "\n";
   out << "lemmy.sort=" << app.lemmy_sort << "\n";
   out << "lemmy.instance_only=" << (app.lemmy_instance_only ? 1 : 0) << "\n";
+  out << "related-sites.follow=" << (app.related.follow ? 1 : 0) << "\n";
   for (const PanelRef& r : panels(app)) {
     const FloatWindow& w = *r.win;
     out << r.name << ".open=" << (r.open ? 1 : 0) << "\n";
@@ -384,12 +385,15 @@ void restore_session(App& app) {
         app.lemmy_sort = *v;
     if (const std::string* v = get("lemmy.instance_only"))
       app.lemmy_instance_only = *v == "1";
+    if (const std::string* v = get("related-sites.follow"))
+      app.related.follow = *v == "1";
     if (get("lemmy-explorer.open") && *get("lemmy-explorer.open") == "1")
       app.lemmy_explorer_open = true;
     if (get("certificates.open") && *get("certificates.open") == "1")
       show_certificates(app);
-    if (get("recommendations.open") && *get("recommendations.open") == "1")
-      app.recommend.open = true;
+    // "recommendations" is the panel's first name (migration alias).
+    for (const char* key : {"related-sites.open", "recommendations.open"})
+      if (get(key) && *get(key) == "1") app.related.open = true;
     if (get("nostr-accounts.open") && *get("nostr-accounts.open") == "1") {
       app.nostr_accounts_open = true;
       refresh_nostr_catalogue(app);

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
-// Related / similar websites of a domain (Recommendations panel). Sources,
+// Related / similar websites of a domain (Related Sites panel). Sources,
 // tried in order and merged by domain:
 //   - similarsites.com: public site pages, no key; the list is the JSON the
 //     page embeds (`__NEXT_DATA__` → props/pageProps/siteData/SimilarSites).
@@ -11,7 +11,7 @@
 //   - similars.net (/api/{domain}): free key, 1000 requests a month, at most
 //     five results; only asked when a key is configured. Their terms ask for
 //     a link back to similars.net next to the results.
-// Parsers are pure and tested offline; `recommend_fetch` needs XANATOO_WEB.
+// Parsers are pure and tested offline; `related_fetch` needs XANATOO_WEB.
 
 #include <string>
 #include <string_view>
@@ -32,7 +32,7 @@ struct SimilarSite {
 // subdomain falls back to its parent ("en.wikipedia.org" → that, then
 // "wikipedia.org"), never down to a bare public suffix ("co.uk"). Empty for
 // IP addresses, "localhost" and other single-label names.
-std::vector<std::string> recommend_domains(std::string_view host);
+std::vector<std::string> related_domains(std::string_view host);
 
 // Lower-case bare host of a site entry ("https://Www.X.org/" → "x.org").
 std::string similar_site_domain(std::string_view s);
@@ -54,18 +54,18 @@ void merge_similar_sites(std::vector<SimilarSite>& into,
                          const std::vector<SimilarSite>& more,
                          std::string_view self = {});
 
-struct RecommendKeys {
+struct RelatedKeys {
   std::string webxtrend_token;
   std::string similars_key;
 };
 
-struct RecommendResult {
+struct RelatedResult {
   std::string domain;                 // the domain the list belongs to
   std::vector<SimilarSite> sites;
   std::vector<std::string> notes;     // one line per source that failed
 };
 
 // Blocking: ask every usable source for `host` (worker thread only).
-RecommendResult recommend_fetch(std::string_view host, const RecommendKeys& keys);
+RelatedResult related_fetch(std::string_view host, const RelatedKeys& keys);
 
 }  // namespace xanatoo

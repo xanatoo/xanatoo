@@ -68,7 +68,7 @@
 #include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/markdown_body.hpp"
 #include "xanatoo/quote_links.hpp"
-#include "xanatoo/recommendations.hpp"
+#include "xanatoo/related_sites.hpp"
 #include <string>
 #include <algorithm>
 #include <set>
@@ -543,18 +543,18 @@ void test_json_min() {
   EXPECT_EQ(json_unescape(R"(line\nand\t\"q\")"), "line\nand\t\"q\"");
 }
 
-void test_recommendations() {
+void test_related_sites() {
   using namespace xanatoo;
   using V = std::vector<std::string>;
-  EXPECT(recommend_domains("lwn.net") == V{"lwn.net"});
-  EXPECT(recommend_domains("WWW.LWN.net") == V{"lwn.net"});
-  EXPECT(recommend_domains("en.wikipedia.org") ==
+  EXPECT(related_domains("lwn.net") == V{"lwn.net"});
+  EXPECT(related_domains("WWW.LWN.net") == V{"lwn.net"});
+  EXPECT(related_domains("en.wikipedia.org") ==
          (V{"en.wikipedia.org", "wikipedia.org"}));
-  EXPECT(recommend_domains("news.bbc.co.uk") == (V{"news.bbc.co.uk", "bbc.co.uk"}));
-  EXPECT(recommend_domains("localhost").empty());
-  EXPECT(recommend_domains("127.0.0.1").empty());
-  EXPECT(recommend_domains("bad_host.org").empty());
-  EXPECT(recommend_domains("").empty());
+  EXPECT(related_domains("news.bbc.co.uk") == (V{"news.bbc.co.uk", "bbc.co.uk"}));
+  EXPECT(related_domains("localhost").empty());
+  EXPECT(related_domains("127.0.0.1").empty());
+  EXPECT(related_domains("bad_host.org").empty());
+  EXPECT(related_domains("").empty());
   EXPECT_EQ(similar_site_domain("https://Www.Example.org:8080/a?b"), "example.org");
   EXPECT_EQ(similar_site_domain("kernel.org"), "kernel.org");
 
@@ -6487,7 +6487,7 @@ int main() {
   test_ebook_urls();
   test_string_helpers();
   test_json_min();
-  test_recommendations();
+  test_related_sites();
   test_reddit_urls();
   test_find_all();
   test_foreign_markdown();

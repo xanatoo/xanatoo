@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Similar websites of a domain (recommendations.hpp).
+// Similar websites of a domain (related_sites.hpp).
 
-#include "xanatoo/recommendations.hpp"
+#include "xanatoo/related_sites.hpp"
 
 #include "xanatoo/json_dom.hpp"
 #include "xanatoo/util.hpp"
@@ -99,7 +99,7 @@ std::string similar_site_domain(std::string_view s) {
   return d;
 }
 
-std::vector<std::string> recommend_domains(std::string_view host) {
+std::vector<std::string> related_domains(std::string_view host) {
   const std::string d = similar_site_domain(host);
   std::vector<std::string> out;
   if (!domain_chars_ok(d)) return out;
@@ -252,7 +252,7 @@ void merge_similar_sites(std::vector<SimilarSite>& into,
 
 namespace {
 
-const std::string& recommend_agent() {
+const std::string& related_agent() {
   static const std::string ua = user_agent("related sites");
   return ua;
 }
@@ -270,7 +270,7 @@ std::vector<SimilarSite> ask_similarsites(const std::string& domain,
                                           std::string& note) {
   std::string e;
   auto r = https_get_follow("https://similarsites.com/site/" + domain,
-                            recommend_agent(), &e);
+                            related_agent(), &e);
   if (!r) {
     note = "similarsites.com: " + (e.empty() ? std::string("no answer") : e);
     return {};
@@ -289,7 +289,7 @@ std::vector<SimilarSite> ask_webxtrend(const std::string& domain,
   const std::string body = "{\"token\": " + json_quote(token) +
                            ", \"query\": " + json_quote(domain) + "}";
   auto r = https_request("POST", "https://api.webxtrend.com/v1.0/similar",
-                         recommend_agent(),
+                         related_agent(),
                          "Content-Type: application/json\r\n"
                          "Accept: application/json\r\n",
                          body, &e);
@@ -308,7 +308,7 @@ std::vector<SimilarSite> ask_similars_net(const std::string& domain,
                                           std::string& note) {
   std::string e;
   auto r = https_request("GET", "https://similars.net/api/" + domain + "?limit=5",
-                         recommend_agent(),
+                         related_agent(),
                          "Authorization: Bearer " + key +
                              "\r\nAccept: application/json\r\n",
                          {}, &e);
@@ -324,9 +324,9 @@ std::vector<SimilarSite> ask_similars_net(const std::string& domain,
 
 }  // namespace
 
-RecommendResult recommend_fetch(std::string_view host, const RecommendKeys& keys) {
-  RecommendResult res;
-  const auto domains = recommend_domains(host);
+RelatedResult related_fetch(std::string_view host, const RelatedKeys& keys) {
+  RelatedResult res;
+  const auto domains = related_domains(host);
   if (domains.empty()) {
     res.notes.push_back("Not a public web site.");
     return res;
@@ -368,10 +368,10 @@ RecommendResult recommend_fetch(std::string_view host, const RecommendKeys& keys
 
 #else
 
-RecommendResult recommend_fetch(std::string_view host, const RecommendKeys&) {
-  RecommendResult res;
+RelatedResult related_fetch(std::string_view host, const RelatedKeys&) {
+  RelatedResult res;
   res.domain = similar_site_domain(host);
-  res.notes.push_back("Recommendations need a build with -DXANATOO_WEB=ON.");
+  res.notes.push_back("Related sites need a build with -DXANATOO_WEB=ON.");
   return res;
 }
 

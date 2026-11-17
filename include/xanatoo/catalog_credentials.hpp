@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
-// Credentials for catalog adapters (and the Recommendations panel's
+// Credentials for catalog adapters (and the Related Sites panel's
 // optional similar-site services). Never embed these in a search:/media:
 // address or a document. Values are read on demand so changes take effect
 // without restarting the application.
@@ -22,7 +22,7 @@ enum class CatalogKey : size_t {
   TmdbReadToken,
   TmdbApiKey,
   DiscogsToken,
-  WebxtrendToken,  // Recommendations panel (similar websites)
+  WebxtrendToken,  // Related Sites panel (similar websites)
   SimilarsNetKey,
   Count
 };

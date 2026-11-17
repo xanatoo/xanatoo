@@ -38,7 +38,7 @@
 #include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/annotations.hpp"
 #include "xanatoo/search.hpp"
-#include "xanatoo/recommendations.hpp"
+#include "xanatoo/related_sites.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/types.hpp"
 #include "xanatoo/ui.hpp"
@@ -372,7 +372,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
-  Subscriptions, Certificates, Recommendations, Document
+  Subscriptions, Certificates, RelatedSites, Document
 };
 
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
@@ -388,7 +388,7 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::NostrAccounts: return UiPanelLayer::NostrAccounts;
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
     case WindowRole::Certificates: return UiPanelLayer::Certificates;
-    case WindowRole::Recommendations: return UiPanelLayer::Recommendations;
+    case WindowRole::RelatedSites: return UiPanelLayer::RelatedSites;
     default: return UiPanelLayer::Chrome;
   }
 }
@@ -803,23 +803,26 @@ struct CertPanel {
   std::string error;     // last store / action error
 };
 
-// Recommendations panel (app_recommend.cpp): similar websites of the
+// Related Sites panel (app_related.cpp): similar websites of the
 // focused page's site, asked once per domain on a worker thread.
-struct RecommendLoad {
+struct RelatedLoad {
   std::atomic<bool> done{false};
-  xanatoo::RecommendResult result;
+  xanatoo::RelatedResult result;
 };
 
-struct RecommendSite {
+struct RelatedSite {
   std::string host;  // as asked (the focused page's host)
-  std::shared_ptr<RecommendLoad> pending;
-  std::optional<xanatoo::RecommendResult> result;
+  std::shared_ptr<RelatedLoad> pending;
+  std::optional<xanatoo::RelatedResult> result;
 };
 
-struct RecommendPanel {
+struct RelatedPanel {
   bool open = false;
-  std::string host;  // site of the focused page; "" = not a web page
-  std::vector<RecommendSite> sites;  // this session's answers, newest last
+  // Follow the focused page; off holds the list on `host` while the user
+  // explores its rows (otherwise every click reshuffles the list).
+  bool follow = true;
+  std::string host;  // site shown; "" = not a web page
+  std::vector<RelatedSite> sites;  // this session's answers, newest last
 };
 
 // Scroll position from the last session, put back once the page is there
@@ -1091,8 +1094,8 @@ struct App {
   FloatWindow lemmy_explorer_win = make_float_panel(WindowRole::LemmyExplorer, 190, 130, 560, 520);
   FloatWindow nostr_accounts_win = make_float_panel(WindowRole::NostrAccounts, 200, 150, 440, 440);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
-  FloatWindow recommend_win = make_float_panel(WindowRole::Recommendations, 150, 120, 380, 480);
-  RecommendPanel recommend;
+  FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);
+  RelatedPanel related;
   ReplyDraft reply;
   SitemapPanel sitemap;
   SearchBar search;
@@ -1924,13 +1927,15 @@ void run_search(App& app, const std::string& text);  // → search: address
 // Ctrl+L text "w xanadu" → search address ("" when it is no keyword search).
 std::string search_from_location(const App& app, const std::string& text);
 
-// ---- recommendations panel (app_recommend.cpp) ----
-void toggle_recommendations(App& app);
+// ---- related sites panel (app_related.cpp) ----
+void toggle_related_sites(App& app);
 // Follow the focused page's site, start / finish loads (every frame).
-void update_recommendations(App& app);
+void update_related_sites(App& app);
 // Ask again for the shown site (drops this session's answer).
-void refresh_recommendations(App& app);
-void recommend_ui_state(App& app, xanatoo::UiState& st);
+void refresh_related_sites(App& app);
+// Follow toggle: off holds the list on the shown site.
+void toggle_related_follow(App& app);
+void related_ui_state(App& app, xanatoo::UiState& st);
 
 // ---- sitemap panel (app_sitemap.cpp) ----
 void toggle_sitemap(App& app);

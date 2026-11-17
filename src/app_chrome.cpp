@@ -65,7 +65,7 @@ void apply_ui_scale(App& app) {
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win, &app.nostr_accounts_win,
                          &app.lemmy_explorer_win, &app.bookmarks_win,
-                         &app.subscriptions_win, &app.certs_win, &app.recommend_win}) {
+                         &app.subscriptions_win, &app.certs_win, &app.related_win}) {
     w->x = static_cast<int>(std::lround(w->x * ratio));
     w->y = static_cast<int>(std::lround(w->y * ratio));
     w->w = static_cast<int>(std::lround(w->w * ratio));

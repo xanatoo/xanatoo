@@ -569,7 +569,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   }
   ui_state.location_icon = address_icon(app, ui_state.doc_label);
   cert_ui_state(app, ui_state);
-  recommend_ui_state(app, ui_state);
+  related_ui_state(app, ui_state);
   // Imported EPUBs are stored as content.md beside their extracted media.
   // Use the first image in that document as its cover when present.
   const std::string current = path_of(app, focused_pane(app));
@@ -736,8 +736,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ToggleNostrExplorer || c == C::ToggleNostrAccounts ||
         c == C::ToggleCertificates || c == C::CertAccept ||
         c == C::CertReject || c == C::CertForget || c == C::CertSelect ||
-        c == C::ToggleRecommendations || c == C::RecommendOpen ||
-        c == C::RecommendOpenTab || c == C::RecommendRefresh ||
+        c == C::ToggleRelatedSites || c == C::RelatedOpen ||
+        c == C::RelatedOpenTab || c == C::RelatedRefresh ||
+        c == C::RelatedFollow ||
         c == C::ToggleLemmyExplorer || c == C::LemmySetTab ||
         c == C::LemmySetSearch || c == C::LemmySetInstance ||
         c == C::LemmyAddInstance || c == C::LemmySetSort ||
@@ -1289,17 +1290,20 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::CertSelect:
       app.certs.selected = arg;
       break;
-    case C::ToggleRecommendations:
-      toggle_recommendations(app);
+    case C::ToggleRelatedSites:
+      toggle_related_sites(app);
       break;
-    case C::RecommendOpen:
+    case C::RelatedOpen:
       if (!arg.empty()) open_address(app, arg);
       break;
-    case C::RecommendOpenTab:
+    case C::RelatedOpenTab:
       if (!arg.empty()) open_link_in_tab(app, app.focus, arg);
       break;
-    case C::RecommendRefresh:
-      refresh_recommendations(app);
+    case C::RelatedFollow:
+      toggle_related_follow(app);
+      break;
+    case C::RelatedRefresh:
+      refresh_related_sites(app);
       break;
     case C::CertAccept:
       accept_gemini_cert(app, arg);
@@ -5014,7 +5018,7 @@ void run_frame(App& app) {
   autosave_session(app);
   update_split_preview(app);
   update_sitemap(app);
-  update_recommendations(app);
+  update_related_sites(app);
   update_page_panel(app);
   sync_window_size(app);
   relayout_if_needed(app);

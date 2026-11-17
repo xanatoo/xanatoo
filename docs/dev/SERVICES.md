@@ -257,9 +257,9 @@ read-only service clients. Every client is read-only: never post or log in.
   Live Page is `UiCommand::ToggleArchive`; HTTP error banners link to it
   (`add_http_banner`). See `docs/ARCHIVE.md`.
 
-## Similar websites (`recommendations.hpp`)
+## Similar websites (`related_sites.hpp`)
 
-Recommendations panel source. `recommend_domains` drops `www.` and falls
+Related Sites panel source. `related_domains` drops `www.` and falls
 back from a subdomain to its parent (`en.wikipedia.org` → `wikipedia.org`,
 never to `co.uk`); the first domain with any result wins.
 

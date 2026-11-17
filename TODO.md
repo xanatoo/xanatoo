@@ -46,6 +46,17 @@
   with stub packages; actionlint, shellcheck. Not yet run on GitHub;
   needs the `SITE_DISPATCH_TOKEN` secret.
 
+## Status (2026-11-17) — Related Sites panel (renamed, Follow toggle)
+
+- "Recommendations" → "Related Sites" (the list is similar sites, not
+  recommendations): UI, `WindowRole::RelatedSites`, `app_related.cpp`,
+  `related_sites.{hpp,cpp}`, session `related-sites.*` (old
+  `recommendations.open` still read; old geometry is dropped).
+- "Follow page" checkbox (`UiCommand::RelatedFollow`, saved in the
+  session): off holds the list on the shown site, so clicking its rows no
+  longer reshuffles it; "held" shows when the focused page is elsewhere.
+  Verified under Xvfb (lwn.net held → kernel.org; Follow on → kernel.org's list).
+
 ## Status (2026-11-17) — Recommendations panel (similar websites)
 
 - Panels / Go → Recommendations (`WindowRole::Recommendations`,

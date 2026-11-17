@@ -171,7 +171,7 @@ add_executable(xanatoo
   src/app_subscriptions.cpp
   src/app_downloads.cpp
   src/app_certs.cpp
-  src/app_recommend.cpp
+  src/app_related.cpp
   src/app_split.cpp
   src/app_footnotes.cpp
   src/app_sitemap.cpp
@@ -246,7 +246,7 @@ add_executable(xanatoo
   src/ebooks.cpp
   src/feed.cpp
   src/sitemap.cpp
-  src/recommendations.cpp
+  src/related_sites.cpp
   src/search.cpp
   src/search_results.cpp
   src/inflate.cpp
@@ -682,7 +682,7 @@ add_executable(xanatoo_tests
   src/ebooks.cpp
   src/feed.cpp
   src/sitemap.cpp
-  src/recommendations.cpp
+  src/related_sites.cpp
   src/search.cpp
   src/search_results.cpp
   src/inflate.cpp
