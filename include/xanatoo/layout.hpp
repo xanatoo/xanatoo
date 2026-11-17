@@ -31,6 +31,7 @@ struct PositionedGlyph {
   // out as a Link although its span is not one. 0 = the span decides.
   uint32_t auto_link = 0;
   InlineKind kind = InlineKind::Text;
+  uint8_t marks = 0;  // InlineSpan::marks (a struck-through link, …)
   FontRole font = FontRole::Body;
   Rgba color;  // computed from the style sheet (block role + inline kind)
 };

@@ -1360,6 +1360,85 @@ void test_path_format_dispatch() {
   EXPECT(!looks_like_sexpr("# Markdown title\n"));
 }
 
+void test_markdown_nested_inlines() {
+  using namespace xanatoo;
+  // "<kind:marks:text>" for every span of the first text node.
+  auto spans = [](const Document& d) {
+    std::string all;
+    for (const Node& n : d.nodes) {
+      if (n.spans.empty()) continue;
+      for (const InlineSpan& sp : n.spans) {
+        all += "<" + std::to_string(static_cast<int>(sp.kind)) + ":" +
+               std::to_string(sp.marks) + ":" + sp.text;
+        if (!sp.href.empty()) all += "@" + sp.href;
+        all += ">";
+      }
+      break;
+    }
+    return all;
+  };
+  auto md = [&](const char* src) { return spans(parse_document(src, "t.md")); };
+  const int T = 0, E = 1, S = 2, X = 3, L = 4, C = 5;
+  auto k = [](int kind, int marks, const char* text, const char* href = "") {
+    std::string s = "<" + std::to_string(kind) + ":" + std::to_string(marks) +
+                    ":" + text;
+    if (*href) s += std::string("@") + href;
+    return s + ">";
+  };
+  // Italic inside bold, bold inside italic, ***both***.
+  EXPECT_EQ(md("**a *b* c**"), k(S, 0, "a ") + k(E, kMarkStrong, "b") + k(S, 0, " c"));
+  EXPECT_EQ(md("*a **b** c*"), k(E, 0, "a ") + k(S, kMarkEmphasis, "b") + k(E, 0, " c"));
+  EXPECT_EQ(md("***ab***"), k(E, kMarkStrong, "ab"));
+  EXPECT_EQ(md("**a *b***"), k(S, 0, "a ") + k(E, kMarkStrong, "b"));
+  EXPECT_EQ(md("*a **b***"), k(E, 0, "a ") + k(S, kMarkEmphasis, "b"));
+  // A link inside bold, italic link text inside bold (DOC-style entries).
+  EXPECT_EQ(md("**1. [Media](http://m)**"),
+            k(S, 0, "1. ") + k(L, kMarkStrong, "Media", "http://m"));
+  EXPECT_EQ(md("**1958 — *[Schematics](http://s)*** — **Essential.**"),
+            k(S, 0, "1958 — ") +
+                k(L, kMarkStrong | kMarkEmphasis, "Schematics", "http://s") +
+                k(T, 0, " — ") + k(S, 0, "Essential."));
+  EXPECT_EQ(md("[*Title* x](http://t)"),
+            k(L, kMarkEmphasis, "Title", "http://t") + k(L, 0, " x", "http://t"));
+  EXPECT_EQ(md("~~a `c` b~~"), k(X, 0, "a ") + k(C, kMarkStrike, "c") + k(X, 0, " b"));
+  // A lone star between spaces stays text.
+  EXPECT_EQ(md("2 * 3 * 4"), k(T, 0, "2 * 3 * 4"));
+  EXPECT_EQ(md("**2 * 3**"), k(S, 0, "2 * 3"));
+  // Headings keep their links and faces.
+  EXPECT_EQ(md("# **Xanadu** and [Ted](http://t)"),
+            k(S, 0, "Xanadu") + k(T, 0, " and ") + k(L, 0, "Ted", "http://t"));
+  EXPECT_EQ(md("## **A [b](http://b)**"),
+            k(S, 0, "A ") + k(L, kMarkStrong, "b", "http://b"));
+
+  // Round trips: Markdown, S-expressions, XML.
+  for (const char* src :
+       {"**1958 — *[Schematics](http://s)*** — **Essential.** x\n",
+        "**a *b* c** and ***d*** ~~e [f](http://f) g~~\n",
+        "*a **b** c* [*T* x](http://t)\n"}) {
+    const Document d = parse_document(src, "t.md");
+    const std::string want = spans(d);
+    EXPECT_EQ(spans(parse_document(serialize_document(d, "t.md"), "t.md")), want);
+    EXPECT_EQ(spans(parse_sexpr(serialize_sexpr(d))), want);
+    EXPECT_EQ(spans(parse_xml(serialize_xml(d))), want);
+  }
+  {
+    const std::string out =
+        serialize_markup(parse_document("**a *[b](http://b)***\n", "t.md"));
+    if (out.find("**a *[b](http://b)***") == std::string::npos)
+      std::fprintf(stderr, "markdown out: %s\n", out.c_str());
+    EXPECT(out.find("**a *[b](http://b)***") != std::string::npos);
+  }
+  EXPECT(serialize_sexpr(parse_document("**a *b***\n", "t.md"))
+             .find("(strong \"a \" (em \"b\"))") != std::string::npos);
+
+  // HTML: <strong><a> keeps the face on the link.
+  Document h;
+  const NodeId root = h.create(NodeKind::Document);
+  h.root = root;
+  html_append_blocks(h, root, "<p><strong>x <a href=\"http://a\">y</a></strong></p>");
+  EXPECT_EQ(spans(h), k(S, 0, "x ") + k(L, kMarkStrong, "y", "http://a"));
+}
+
 void test_parse_sexpr() {
   using namespace xanatoo;
   Document doc = parse_sexpr(
@@ -4874,7 +4953,8 @@ void test_search_results() {
       return all;
     };
     EXPECT_EQ(texts("\\#tag \\* x \\[y\\]"), "<#tag * x [y]>");
-    EXPECT_EQ(texts("[a *b* c_d (v)](http://x)"), "<a *b* c_d (v)>");
+    EXPECT_EQ(texts("[a *b* c_d (v)](http://x)"), "<a ><b>< c_d (v)>");
+    EXPECT_EQ(texts("[a \\*b\\* c\\_d](http://x)"), "<a *b* c_d>");
   }
   // Wikipedia: native refs (parentheses encoded), matched words in bold.
   const std::string wiki = search_results_markdown(
@@ -4920,7 +5000,7 @@ void test_search_results() {
                  plan("hn", "https://hn.algolia.com/api/v1/search?query=x", "x"),
                  "{\"hits\":[{\"title\":\"A *b* [video] _c_\",\"url\":\"http://x.org/\","
                  "\"objectID\":\"7\"}]}"),
-             "[A *b* (video) _c_](http://x.org/)"));
+             "[A \\*b\\* (video) \\_c\\_](http://x.org/)"));
   EXPECT(has(hn, "1 point · [1 comment](hn:item?id=42)"));
 
   // Internet Archive: array-valued fields, plain identifiers.
@@ -6527,6 +6607,7 @@ int main() {
   test_parse_document_dispatch();
   test_reddit_json_url_shapes();
   test_path_format_dispatch();
+  test_markdown_nested_inlines();
   test_parse_sexpr();
   test_heading_tag_spellings();
   test_parse_document_sexpr_path();

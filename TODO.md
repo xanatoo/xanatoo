@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-17) — Nested inline styles (marks); Nelson bibliography example
+
+- `examples/ted-nelson-bibliography.md` (was an untracked `DOC.md`).
+- Markdown italic inside bold, `***both***`, links inside bold / italic and
+  styled link text now parse: flat spans gain `InlineSpan::marks`
+  (docs/dev/CONTENT.md "Inline marks"). Round-trips through Markdown,
+  S-expressions and XML (`marks` attribute); HTML import sets them too.
+  The heading code path is unchanged; the document's link "headings" are
+  `**1. [Title](url)**` lines, whose link used to stay literal text.
+- Checked in Xvfb with the bibliography. Not done: org-mode export drops
+  marks; the editor's Bold / Italic toggles replace the kind and leave
+  marks alone.
+
 ## Status (2026-11-17) — Versioned download names; honest WASM network text
 
 - Release assets / site downloads are `xanatoo-<version>-<platform>.<ext>`

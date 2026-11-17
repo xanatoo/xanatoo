@@ -249,8 +249,79 @@ size_t parse_md_math(std::string_view text, size_t i, InlineSpan& out) {
   return std::string_view::npos;
 }
 
+bool md_space(char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+// Closing '*' run for an opener of `n` stars (1 or 2) whose content starts
+// at text[from]; npos when there is none. A run of the other width inside
+// opens and closes a nested span, so in "**a *b***" the inner '*' closes
+// first and the '**' after it, and in "*a **b***" the other way round.
+// Escapes and `code` are skipped. A nested run only opens before and
+// closes after a non-space (CommonMark flanking, so "2 * 3" stays text);
+// the closer itself is lenient, so "**bold **" written by the editor reads
+// back.
+size_t find_star_closer(std::string_view text, size_t from, size_t n) {
+  const size_t other = 3 - n;
+  bool inner = false;
+  size_t j = from;
+  while (j < text.size()) {
+    const char c = text[j];
+    if (c == '\\') {
+      j += 2;
+      continue;
+    }
+    if (c == '`') {
+      const size_t e = text.find('`', j + 1);
+      j = e == std::string_view::npos ? j + 1 : e + 1;
+      continue;
+    }
+    if (c != '*') {
+      ++j;
+      continue;
+    }
+    size_t run = 0;
+    while (j + run < text.size() && text[j + run] == '*') ++run;
+    const bool can_close = j > from && !md_space(text[j - 1]);
+    const bool can_open = j + run < text.size() && !md_space(text[j + run]);
+    if (j > from) {
+      if (run >= 3) return inner && can_close ? j + other : j;
+      if (run == n) return j;
+    }
+    if (run == other) {
+      if (inner && can_close) inner = false;
+      else if (can_open) inner = true;
+    }
+    j += run;
+  }
+  return std::string_view::npos;
+}
+
+// Nesting depth of emphasis / link text (a bound for pathological input).
+constexpr int kMaxInlineDepth = 16;
+
+void parse_inlines_at(Node& node, std::string_view text, int depth);
+
+// `inner` parsed as the content of a styling kind (Strong / Emphasis /
+// Strike), appended to node.spans with that kind or mark added.
+void push_styled(Node& node, std::string_view inner, InlineKind kind,
+                 int depth) {
+  Node tmp;
+  parse_inlines_at(tmp, inner, depth + 1);
+  for (InlineSpan& sp : tmp.spans) {
+    add_mark(sp, kind);
+    node.spans.push_back(std::move(sp));
+  }
+}
+
 // Parse inline spans for a single paragraph/heading line.
-void parse_inlines(Node& node, std::string_view text) {
+void parse_inlines_at(Node& node, std::string_view text, int depth) {
+  if (depth > kMaxInlineDepth) {
+    InlineSpan s;
+    s.text = std::string(text);
+    if (!s.text.empty()) node.spans.push_back(std::move(s));
+    return;
+  }
   size_t i = 0;
   std::string plain;
 
@@ -288,15 +359,13 @@ void parse_inlines(Node& node, std::string_view text) {
         continue;
       }
     }
-    // **strong**
-    if (i + 1 < text.size() && text[i] == '*' && text[i + 1] == '*') {
-      size_t end = text.find("**", i + 2);
+    // **strong** (its content may hold *emphasis*, links, code, …)
+    if (i + 2 < text.size() && text[i] == '*' && text[i + 1] == '*') {
+      const size_t end = find_star_closer(text, i + 2, 2);
       if (end != std::string_view::npos) {
         flush_plain();
-        InlineSpan s;
-        s.kind = InlineKind::Strong;
-        s.text = std::string(text.substr(i + 2, end - (i + 2)));
-        node.spans.push_back(std::move(s));
+        push_styled(node, text.substr(i + 2, end - (i + 2)),
+                    InlineKind::Strong, depth);
         i = end + 2;
         continue;
       }
@@ -306,23 +375,19 @@ void parse_inlines(Node& node, std::string_view text) {
       size_t end = text.find("~~", i + 2);
       if (end != std::string_view::npos) {
         flush_plain();
-        InlineSpan s;
-        s.kind = InlineKind::Strike;
-        s.text = std::string(text.substr(i + 2, end - (i + 2)));
-        node.spans.push_back(std::move(s));
+        push_styled(node, text.substr(i + 2, end - (i + 2)),
+                    InlineKind::Strike, depth);
         i = end + 2;
         continue;
       }
     }
     // *emphasis*
-    if (text[i] == '*') {
-      size_t end = text.find('*', i + 1);
+    if (text[i] == '*' && i + 1 < text.size() && !md_space(text[i + 1])) {
+      const size_t end = find_star_closer(text, i + 1, 1);
       if (end != std::string_view::npos) {
         flush_plain();
-        InlineSpan s;
-        s.kind = InlineKind::Emphasis;
-        s.text = std::string(text.substr(i + 1, end - (i + 1)));
-        node.spans.push_back(std::move(s));
+        push_styled(node, text.substr(i + 1, end - (i + 1)),
+                    InlineKind::Emphasis, depth);
         i = end + 1;
         continue;
       }
@@ -344,10 +409,8 @@ void parse_inlines(Node& node, std::string_view text) {
                text[end + 1] == '!' || text[end + 1] == '?');
           if (right_ok) {
             flush_plain();
-            InlineSpan s;
-            s.kind = InlineKind::Emphasis;
-            s.text = std::string(text.substr(i + 1, end - (i + 1)));
-            node.spans.push_back(std::move(s));
+            push_styled(node, text.substr(i + 1, end - (i + 1)),
+                        InlineKind::Emphasis, depth);
             i = end + 1;
             continue;
           }
@@ -399,12 +462,19 @@ void parse_inlines(Node& node, std::string_view text) {
     // [text](url) or [text](#id) or [text](cite:key); optional {rel=…}
     if (text[i] == '[') {
       size_t mid = text.find("](", i + 1);
+      while (mid != std::string_view::npos && text[mid - 1] == '\\') {
+        size_t bs = 0;  // an odd run of backslashes escapes the ']'
+        while (bs < mid - i - 1 && text[mid - 1 - bs] == '\\') ++bs;
+        if (bs % 2 == 0) break;
+        mid = text.find("](", mid + 1);
+      }
       if (mid != std::string_view::npos) {
         size_t end = text.find(')', mid + 2);
         if (end != std::string_view::npos) {
           flush_plain();
           InlineSpan s;
-          s.text = std::string(text.substr(i + 1, mid - (i + 1)));
+          std::string_view label = text.substr(i + 1, mid - (i + 1));
+          s.text = std::string(label);
           std::string href(text.substr(mid + 2, end - (mid + 2)));
           // Citations: [Nelson 1965](cite:nelson65)
           if (href.rfind("cite:", 0) == 0) {
@@ -426,7 +496,21 @@ void parse_inlines(Node& node, std::string_view text) {
               next = bend + 1;
             }
           }
-          node.spans.push_back(std::move(s));
+          if (s.kind == InlineKind::Link &&
+              label.find_first_of("*_~`\\") != std::string_view::npos) {
+            // Styled link text: one Link span per styled run, each
+            // carrying the faces as marks ("[*Title*](url)").
+            Node tmp;
+            parse_inlines_at(tmp, label, depth + 1);
+            for (InlineSpan& part : tmp.spans) {
+              InlineSpan ls = s;
+              ls.marks = span_marks(part);
+              ls.text = std::move(part.text);
+              node.spans.push_back(std::move(ls));
+            }
+          } else {
+            node.spans.push_back(std::move(s));
+          }
           i = next;
           continue;
         }
@@ -511,6 +595,10 @@ void parse_inlines(Node& node, std::string_view text) {
     ++i;
   }
   flush_plain();
+}
+
+void parse_inlines(Node& node, std::string_view text) {
+  parse_inlines_at(node, text, 0);
 }
 
 }  // namespace
@@ -1530,24 +1618,46 @@ std::string md_inline_image(const InlineSpan& sp) {
   return "[" + img + "](" + sp.href + ")";
 }
 
+// Open / close the kMark* runs of consecutive spans as nested groups:
+// before each span, close the innermost groups until only marks the span
+// has stay open, then open the ones it adds (strong outside emphasis
+// outside strike). `core` writes a span without its faces.
+template <class Open, class Close, class Core>
+void emit_marked_spans(const std::vector<InlineSpan>& spans, Open open,
+                       Close close, Core core) {
+  constexpr uint8_t kOrder[] = {kMarkStrong, kMarkEmphasis, kMarkStrike};
+  std::vector<uint8_t> stack;
+  for (const InlineSpan& sp : spans) {
+    const uint8_t want = span_marks(sp);
+    size_t keep = 0;
+    while (keep < stack.size() && (want & stack[keep])) ++keep;
+    while (stack.size() > keep) {
+      close(stack.back());
+      stack.pop_back();
+    }
+    uint8_t have = 0;
+    for (uint8_t m : stack) have |= m;
+    for (uint8_t m : kOrder)
+      if ((want & m) && !(have & m)) {
+        open(m);
+        stack.push_back(m);
+      }
+    core(sp);
+  }
+  while (!stack.empty()) {
+    close(stack.back());
+    stack.pop_back();
+  }
+}
+
+const char* md_mark_delim(uint8_t m) {
+  return m == kMarkStrong ? "**" : m == kMarkEmphasis ? "*" : "~~";
+}
+
 void serialize_inlines(const Node& node, std::string& out) {
-  for (const auto& sp : node.spans) {
+  auto delim = [&](uint8_t m) { out += md_mark_delim(m); };
+  emit_marked_spans(node.spans, delim, delim, [&](const InlineSpan& sp) {
     switch (sp.kind) {
-      case InlineKind::Strong:
-        out += "**";
-        out += sp.text;
-        out += "**";
-        break;
-      case InlineKind::Emphasis:
-        out += "*";
-        out += sp.text;
-        out += "*";
-        break;
-      case InlineKind::Strike:
-        out += "~~";
-        out += sp.text;
-        out += "~~";
-        break;
       case InlineKind::Code:
         out += "`";
         out += sp.text;
@@ -1555,7 +1665,7 @@ void serialize_inlines(const Node& node, std::string& out) {
         break;
       case InlineKind::Link:
         out += "[";
-        out += sp.text;
+        escape_md_plain(sp.text, out);
         out += "](";
         out += sp.href;
         out += ")";
@@ -1593,11 +1703,11 @@ void serialize_inlines(const Node& node, std::string& out) {
         out += d;
         break;
       }
-      default:
+      default:  // Text, and the styling kinds (their faces are the groups)
         escape_md_plain(sp.text, out);
         break;
     }
-  }
+  });
 }
 
 // Heading depth (1–6) if `sec` can be written as an ATX "#"-heading and
@@ -2391,8 +2501,32 @@ void append_inline_from_sexpr(Node& node, const SExpr& e) {
     kind = InlineKind::Code;
   InlineSpan sp;
   sp.kind = kind;
-  for (size_t i = 1; i < e.kids.size(); ++i) sp.text += sexpr_text(e.kids[i]);
-  node.spans.push_back(std::move(sp));
+  if (kind_mark(kind) == 0) {
+    for (size_t i = 1; i < e.kids.size(); ++i) sp.text += sexpr_text(e.kids[i]);
+    node.spans.push_back(std::move(sp));
+    return;
+  }
+  // (strong "a " (em "b") (a "url" "c")): nested forms keep their own kind
+  // and take this one as a mark.
+  auto flush = [&]() {
+    if (sp.text.empty()) return;
+    node.spans.push_back(std::move(sp));
+    sp = InlineSpan{};
+    sp.kind = kind;
+  };
+  for (size_t i = 1; i < e.kids.size(); ++i) {
+    const SExpr& k = e.kids[i];
+    if (k.kind != SExpr::Kind::List) {
+      sp.text += sexpr_text(k);
+      continue;
+    }
+    flush();
+    const size_t from = node.spans.size();
+    append_inline_from_sexpr(node, k);
+    for (size_t j = from; j < node.spans.size(); ++j)
+      add_mark(node.spans[j], kind);
+  }
+  flush();
 }
 
 void fill_inlines(Node& node, const std::vector<SExpr>& kids, size_t from) {
@@ -3087,29 +3221,24 @@ void serialize_sexpr_inlines(const Node& node, std::string& out) {
     escape_sexpr_string(pending, out);
     pending.clear();
   };
-  for (const auto& sp : node.spans) {
-    if (sp.kind == InlineKind::Text) {
+  // Strong / Emphasis / Strike (as kinds or marks) are nested groups:
+  // (strong "a " (em (a "url" "b"))).
+  auto open = [&](uint8_t m) {
+    flush_pending();
+    out += m == kMarkStrong ? " (strong" : m == kMarkEmphasis ? " (em" : " (strike";
+  };
+  auto close = [&](uint8_t) {
+    flush_pending();
+    out += ")";
+  };
+  emit_marked_spans(node.spans, open, close, [&](const InlineSpan& sp) {
+    if (sp.kind == InlineKind::Text || kind_mark(sp.kind) != 0) {
       pending += sp.text;
-      continue;
+      return;
     }
     flush_pending();
     out.push_back(' ');
     switch (sp.kind) {
-      case InlineKind::Strong:
-        out += "(strong ";
-        escape_sexpr_string(sp.text, out);
-        out += ")";
-        break;
-      case InlineKind::Emphasis:
-        out += "(em ";
-        escape_sexpr_string(sp.text, out);
-        out += ")";
-        break;
-      case InlineKind::Strike:
-        out += "(strike ";
-        escape_sexpr_string(sp.text, out);
-        out += ")";
-        break;
       case InlineKind::Code:
         out += "(code ";
         escape_sexpr_string(sp.text, out);
@@ -3167,7 +3296,7 @@ void serialize_sexpr_inlines(const Node& node, std::string& out) {
         escape_sexpr_string(sp.text, out);
         break;
     }
-  }
+  });
   flush_pending();
 }
 

@@ -396,7 +396,8 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
     }
 
     const bool underline = layout.style_for(pg.node, st)[pg.kind].underline;
-    const bool strike = pg.kind == InlineKind::Strike;
+    const bool strike =
+        pg.kind == InlineKind::Strike || (pg.marks & kMarkStrike);
     if (underline || strike) {
       // Decorations bridge to the next glyph when it continues the same
       // decoration on the same line, so spaces (no bitmap, justified gaps)
@@ -405,7 +406,7 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
           i + 1 < glyphs.size() ? &glyphs[i + 1] : nullptr;
       const bool joins = next && next->node == pg.node &&
                          std::abs(next->y - pg.y) < 0.5f && next->x > pg.x &&
-                         next->kind == pg.kind;
+                         next->kind == pg.kind && next->marks == pg.marks;
       if (pg.codepoint == ' ' && !joins) continue;
       const int ux = static_cast<int>(pg.x + origin_x);
       const int uw =

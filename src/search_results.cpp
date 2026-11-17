@@ -79,14 +79,14 @@ std::string date_of(std::string_view iso) {
   return std::string(iso.substr(0, std::min<size_t>(iso.size(), 10)));
 }
 
-// Link text is taken literally by the parser (no escapes, no emphasis):
-// only brackets would end it early, so they become parentheses.
+// Link text may hold emphasis, so it is escaped; brackets would end it
+// early, so they become parentheses.
 std::string link(std::string_view text, std::string_view url) {
   std::string t = one_line(text);
   for (char& c : t)
     if (c == '[') c = '(';
     else if (c == ']') c = ')';
-  return "[" + t + "](" + md_url(url) + ")";
+  return "[" + search_md_escape(t) + "](" + md_url(url) + ")";
 }
 
 std::string plural(int64_t n, const char* one, const char* many) {

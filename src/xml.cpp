@@ -232,6 +232,10 @@ bool block_kind(std::string_view s, NodeKind& kind, int& level) {
   return false;
 }
 
+// Names of InlineSpan::marks bits in the "marks" attribute.
+constexpr std::pair<uint8_t, const char*> kMarkNames[] = {
+    {kMarkStrong, "strong"}, {kMarkEmphasis, "em"}, {kMarkStrike, "strike"}};
+
 bool inline_kind(std::string_view s, InlineKind& kind) {
   constexpr std::pair<std::string_view, InlineKind> names[] = {
       {"text", InlineKind::Text}, {"em", InlineKind::Emphasis},
@@ -287,7 +291,7 @@ void write_inlines(const Node& node, std::string& out) {
   if (!accepts_inline(node.kind) && !node.spans.empty())
     throw std::invalid_argument("XML export: inline text on a container node");
   for (const auto& sp : node.spans) {
-    const bool plain = sp.kind == InlineKind::Text &&
+    const bool plain = sp.kind == InlineKind::Text && sp.marks == 0 &&
         sp.role == InlineRole::Normal && sp.href.empty() && sp.rel.empty() &&
         sp.datetime.empty() && sp.target == INVALID_NODE && sp.src.empty() &&
         sp.alt.empty() && !sp.width && !sp.height && !sp.display;
@@ -298,6 +302,12 @@ void write_inlines(const Node& node, std::string& out) {
     out += '<';
     out += inline_tag(sp.kind);
     if (sp.role == InlineRole::Metadata) attr(out, "role", "metadata");
+    if (const uint8_t m = sp.marks & ~kind_mark(sp.kind)) {
+      std::string names;
+      for (auto [bit, name] : kMarkNames)
+        if (m & bit) names += names.empty() ? name : " " + std::string(name);
+      attr(out, "marks", names);
+    }
     if (!sp.href.empty()) attr(out, "href", sp.href);
     if (!sp.rel.empty()) attr(out, "rel", sp.rel);
     if (!sp.datetime.empty()) attr(out, "datetime", sp.datetime);
@@ -619,6 +629,20 @@ private:
       if (key == "role") {
         if (value != "metadata" && value != "normal") fail("unknown inline role");
         span.role = value == "metadata" ? InlineRole::Metadata : InlineRole::Normal;
+      } else if (key == "marks") {
+        for (size_t at = 0; at < value.size();) {
+          const size_t sp_end = std::min(value.find(' ', at), value.size());
+          const std::string_view word(value.data() + at, sp_end - at);
+          at = sp_end + 1;
+          if (word.empty()) continue;
+          bool known = false;
+          for (auto [bit, name] : kMarkNames)
+            if (word == name) {
+              span.marks |= bit;
+              known = true;
+            }
+          if (!known) fail("unknown inline mark: " + std::string(word));
+        }
       } else if (key == "href") span.href = value;
       else if (key == "rel") span.rel = value;
       else if (key == "datetime") span.datetime = value;

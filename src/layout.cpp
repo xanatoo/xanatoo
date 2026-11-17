@@ -107,25 +107,27 @@ void LayoutEngine::set_style(const DocStyle* style) {
 }
 
 // Face for an inline span inside a block set in `base` (a bold / italic
-// block face combines with the span's own emphasis).
-static FontRole style_role(FontRole base, InlineKind kind) {
+// block face combines with the span's own emphasis and its marks).
+static FontRole style_role(FontRole base, InlineKind kind, uint8_t marks) {
   switch (base) {  // small block faces: the body logic, then made small
     case FontRole::SmallCode: return FontRole::SmallCode;
-    case FontRole::Small: return small_role(style_role(FontRole::Body, kind));
+    case FontRole::Small:
+      return small_role(style_role(FontRole::Body, kind, marks));
     case FontRole::SmallBold:
-      return small_role(style_role(FontRole::BodyBold, kind));
+      return small_role(style_role(FontRole::BodyBold, kind, marks));
     case FontRole::SmallItalic:
-      return small_role(style_role(FontRole::BodyItalic, kind));
+      return small_role(style_role(FontRole::BodyItalic, kind, marks));
     case FontRole::SmallBoldItalic:
-      return small_role(style_role(FontRole::BodyBoldItalic, kind));
+      return small_role(style_role(FontRole::BodyBoldItalic, kind, marks));
     default: break;
   }
   if (kind == InlineKind::Code || base == FontRole::Code) return FontRole::Code;
   if (base == FontRole::Heading) return FontRole::Heading;
-  const bool strong = kind == InlineKind::Strong ||
+  marks |= kind_mark(kind);
+  const bool strong = (marks & kMarkStrong) ||
                       base == FontRole::BodyBold ||
                       base == FontRole::BodyBoldItalic;
-  const bool emph = kind == InlineKind::Emphasis ||
+  const bool emph = (marks & kMarkEmphasis) ||
                     base == FontRole::BodyItalic ||
                     base == FontRole::BodyBoldItalic;
   if (strong && emph) return FontRole::BodyBoldItalic;
@@ -2540,7 +2542,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   const bool small_base = is_small_role(base_role);
   // Font of a span's text (its inline style and metadata may override).
   auto span_role = [&](const InlineSpan& span) {
-    FontRole r = style_role(base_role, span.kind);
+    FontRole r = style_role(base_role, span.kind, span.marks);
     const InlineStyle& inl = (*style_)[span.kind];
     if (inl.has_font) r = inl.font;
     if (span.role == InlineRole::Metadata && style_->metadata.has_font)
@@ -2909,6 +2911,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       pg.char_index = c.char_idx;
       pg.auto_link = c.auto_link;
       pg.kind = c.kind;
+      pg.marks = node.spans[c.span_idx].marks;
       pg.font = c.role;
       const InlineRole semantic = node.spans[c.span_idx].role;
       pg.color = ctx_color && !(*style_)[c.kind].has_color &&

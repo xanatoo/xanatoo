@@ -197,7 +197,7 @@ class Builder {
   void finalize(NodeId n);
   void add_break();
   void push_text(NodeId t, InlineKind kind, std::string s,
-                 const std::string& href = {});
+                 const std::string& href = {}, uint8_t marks = 0);
   void emit(std::string s);
   void pop();
   void finish_row_group(NodeId table);
@@ -330,12 +330,12 @@ void Builder::close_para() {
 }
 
 void Builder::push_text(NodeId t, InlineKind kind, std::string s,
-                        const std::string& href) {
+                        const std::string& href, uint8_t marks) {
   auto& spans = doc_.get(t).spans;
   const std::string_view dt = times_.empty() ? std::string_view{}
                                               : std::string_view(times_.back());
   if (!spans.empty() && spans.back().kind == kind && spans.back().href == href &&
-      spans.back().datetime == dt) {
+      spans.back().marks == marks && spans.back().datetime == dt) {
     spans.back().text += s;
     return;
   }
@@ -343,6 +343,7 @@ void Builder::push_text(NodeId t, InlineKind kind, std::string s,
   span.kind = kind;
   span.text = std::move(s);
   span.href = href;
+  span.marks = marks;
   span.datetime = dt;
   spans.push_back(std::move(span));
 }
@@ -376,7 +377,17 @@ void Builder::emit(std::string s) {
   else if (strong_ > 0) kind = InlineKind::Strong;
   else if (em_ > 0) kind = InlineKind::Emphasis;
   else if (strike_ > 0) kind = InlineKind::Strike;
-  push_text(t, kind, std::move(s), kind == InlineKind::Link ? href : std::string{});
+  // Faces of enclosing <strong> / <em> / <s> the kind does not show
+  // (<strong><a>…</a></strong>, <b><i>…</i></b>).
+  uint8_t marks = 0;
+  if (!pre_mode()) {
+    if (strong_ > 0) marks |= kMarkStrong;
+    if (em_ > 0) marks |= kMarkEmphasis;
+    if (strike_ > 0) marks |= kMarkStrike;
+    marks &= static_cast<uint8_t>(~kind_mark(kind));
+  }
+  push_text(t, kind, std::move(s), kind == InlineKind::Link ? href : std::string{},
+            marks);
 }
 
 void Builder::text(std::string_view raw) {

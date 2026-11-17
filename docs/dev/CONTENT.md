@@ -72,6 +72,24 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - View-local fold: `folded_sections` set passed into layout; Section/
   Article show header only when folded. Outline twisties / ←→ / Ctrl+Shift+F.
 
+## Inline marks (nested emphasis)
+
+- Spans stay flat: one `InlineKind` each. Faces from enclosing markup are
+  `InlineSpan::marks` (`kMarkStrong` / `kMarkEmphasis` / `kMarkStrike`,
+  `types.hpp`): `**a *[b](u)***` is Strong "a " + Link "b" marked
+  strong|emphasis. `span_marks()` adds the kind's own face, `add_mark()`
+  wraps a span (plain text takes the kind, anything else the mark).
+- Markdown: `parse_inlines` recurses into `**` / `*` / `_` / `~~` content
+  and styled link text (`find_star_closer` pairs `***` runs like
+  CommonMark; a nested run needs flanking non-space, so `2 * 3` is text).
+  `[*T* x](u)` becomes one Link span per styled run, same href.
+- Writers group runs of shared marks (`emit_marked_spans`): Markdown
+  delimiters, S-expression `(strong "a " (em (a "u" "b")))`, XML a
+  `marks="strong em"` attribute. `html_min` sets marks from open
+  `<strong>` / `<em>` / `<s>`.
+- Layout: `style_role(base, kind, marks)` picks the face; `PositionedGlyph`
+  carries `marks` so render strikes through a marked link.
+
 ## HTML fragments (`html_min.hpp`)
 
 - `html_append_blocks`: tag soup → Paragraph / Heading / List / ListItem /

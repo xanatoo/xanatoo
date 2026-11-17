@@ -77,9 +77,27 @@ inline bool is_inline_object(InlineKind k) {
 inline constexpr const char* kInlineImageText = "\xEF\xBF\xBC";
 inline constexpr uint32_t kInlineImageCp = 0xFFFC;
 
+// Faces a span takes from enclosing markup, on top of its own kind: a link
+// inside bold text is a Link marked kMarkStrong, ***x*** an Emphasis marked
+// kMarkStrong. A Strong / Emphasis / Strike kind implies its own mark.
+inline constexpr uint8_t kMarkStrong = 1;
+inline constexpr uint8_t kMarkEmphasis = 2;
+inline constexpr uint8_t kMarkStrike = 4;
+
+// The mark a styling kind stands for (0 for every other kind).
+inline uint8_t kind_mark(InlineKind k) {
+  switch (k) {
+    case InlineKind::Strong: return kMarkStrong;
+    case InlineKind::Emphasis: return kMarkEmphasis;
+    case InlineKind::Strike: return kMarkStrike;
+    default: return 0;
+  }
+}
+
 struct InlineSpan {
   InlineKind kind = InlineKind::Text;
   InlineRole role = InlineRole::Normal;
+  uint8_t marks = 0;  // kMark* bits from enclosing markup (see above)
   std::string text;
   std::string href;   // Link target, or Cite key
   std::string rel;    // typed relation: glossary, source, contra, …
@@ -93,6 +111,18 @@ struct InlineSpan {
   // InlineKind::Math only (the TeX source is in `src`).
   bool display = false;
 };
+
+// All faces of a span: its marks plus the one its kind implies.
+inline uint8_t span_marks(const InlineSpan& s) {
+  return static_cast<uint8_t>(s.marks | kind_mark(s.kind));
+}
+
+// Wrap `s` in the styling kind `k` (Strong / Emphasis / Strike): plain text
+// takes the kind, anything else (a link, code, another style) the mark.
+inline void add_mark(InlineSpan& s, InlineKind k) {
+  if (s.kind == InlineKind::Text) s.kind = k;
+  else if (s.kind != k) s.marks = static_cast<uint8_t>(s.marks | kind_mark(k));
+}
 
 // Inline image span (text = kInlineImageText).
 InlineSpan inline_image(std::string src, std::string alt = {},

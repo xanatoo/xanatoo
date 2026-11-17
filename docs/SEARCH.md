@@ -76,8 +76,9 @@ canned answers): it writes Markdown and `parse_document` makes the
 document, so a mapper is ~25 lines and results get every link feature for
 free. `search_fetch` (HTTPS builds) fetches and maps. Rules learned:
 
-- The parser reads **link text literally** (no escapes, no emphasis): only
-  `[` / `]` are changed (to parentheses). Running text is escaped
+- Link text is parsed like running text (escapes, emphasis), so `link()`
+  escapes it with `search_md_escape` after changing `[` / `]` to
+  parentheses. Running text is escaped
   (`search_md_escape`: `\ ` * _ [ ]`, and `# - +` at a line start); `\<` is
   *not* unescaped, so `<` / `>` stay raw.
 - Link destinations: `(` `)` and blanks are percent-encoded.

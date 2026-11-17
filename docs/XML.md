@@ -73,7 +73,7 @@ omitted; the exporter omits most default attributes. `<doc>` additionally
 has `title`, `lang`, `author`, and may contain one `<front-matter>` text element
 to preserve Markdown YAML metadata without losing line breaks.
 
-Inline tags may carry `role="metadata"`, `href`, `rel`, `datetime`, `target`,
+Inline tags may carry `role="metadata"`, `marks`, `href`, `rel`, `datetime`, `target`,
 `src`, `alt`, `width`, `height`, and `display="true"` as appropriate. `nid`
 on blocks and `target` on inline spans preserve internal references even when
 node IDs are reassigned during import. These IDs are not stable cross-file
@@ -81,7 +81,11 @@ anchors; `label` / `href` remain the human-facing references.
 
 Flat inline spans deliberately cannot nest (for example, `<em>one
 <strong>two</strong></em>` is invalid). This mirrors the present document
-model; silently flattening nested markup would lose semantics. XML import also
+model; silently flattening nested markup would lose semantics. The faces a
+span inherits from enclosing emphasis are the `marks` attribute instead
+(space-separated `strong`, `em`, `strike`): `<em>one </em><strong
+marks="em">two</strong>`, or a link inside bold text as
+`<a href="…" marks="strong">`. XML import also
 doesn't attempt to read arbitrary SVG, XHTML or generic XML vocabularies.
 
 ## Editing and round trips
