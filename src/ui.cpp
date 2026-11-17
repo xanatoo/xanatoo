@@ -3099,8 +3099,18 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::Spacing();
       {
         std::string shown = state.download_confirm_url;
-        if (shown.size() > 72)
-          shown = shown.substr(0, 34) + "…" + shown.substr(shown.size() - 34);
+        if (shown.size() > 72) {
+          // Cut on UTF-8 character boundaries (no continuation bytes).
+          auto boundary = [&](size_t i) {
+            while (i > 0 && i < shown.size() &&
+                   (static_cast<unsigned char>(shown[i]) & 0xC0) == 0x80)
+              --i;
+            return i;
+          };
+          const size_t head = boundary(34);
+          const size_t tail = boundary(shown.size() - 34);
+          shown = shown.substr(0, head) + "…" + shown.substr(tail);
+        }
         ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 400.f * scale_);
         ImGui::TextDisabled("%s", shown.c_str());
         ImGui::PopTextWrapPos();

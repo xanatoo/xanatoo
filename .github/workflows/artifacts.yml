@@ -2,9 +2,9 @@
 # Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #
 # Build each portable flake package independently and upload whatever succeeds.
-# Individual targets are allowed to fail without blocking the others
-# (continue-on-error on the matrix job). Artifacts stay available for download
-# from the Actions run summary.
+# A failing target does not cancel the others (fail-fast: false), but it does
+# turn the run red. Artifacts stay available for download from the Actions run
+# summary. wasm / win32 / win64 are built and uploaded by check.yml.
 
 name: artifacts
 
@@ -21,18 +21,11 @@ jobs:
   package:
     name: ${{ matrix.attr }}
     runs-on: ubuntu-latest
-    # One target failing must not cancel the rest of the matrix.
-    continue-on-error: true
     strategy:
+      # One target failing must not cancel the rest of the matrix.
       fail-fast: false
       matrix:
         include:
-          - attr: xanatoo-wasm
-            kind: dir          # result/ is a directory tree
-          - attr: xanatoo-win32-zip
-            kind: zip
-          - attr: xanatoo-win64-zip
-            kind: zip
           - attr: xanatoo-android
             kind: apk          # single .apk (or dir containing it)
           - attr: xanatoo-r36s-portmaster-zip
@@ -108,8 +101,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Optional summary job so the workflow overall status is visible.
-  # It never fails the run; it only reports what landed.
+  # Summary: fails when any package job failed, so the run status is honest.
   summary:
     name: summary
     needs: package
@@ -118,6 +110,6 @@ jobs:
     steps:
       - name: Report
         run: |
-          echo "Individual package jobs finished (some may have failed)."
+          echo "Package jobs: ${{ needs.package.result }}"
           echo "Successful builds appear as downloadable artifacts on this run."
-          echo "Check the matrix jobs above for per-target logs."
+          test "${{ needs.package.result }}" = success

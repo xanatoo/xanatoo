@@ -32,8 +32,18 @@
   items link to the web, relative refs resolve against the selector's
   directory. Finger replies can contain fences. Shared helpers in
   `text_escape.hpp`. Verified under Xvfb against a local Gopher server.
-- Still open from the review: Curlie `stime` token, artifacts workflow always green, FontConfig-less
-  font scan cost / `.ttc` face 0, Context panel UTF-8 cuts.
+- Context panel: the generic "no preview" note no longer retitles a page
+  that stays on screen; pandoc / ebook notes replace the page; titles are
+  fitted by the frame (no byte cut), the download dialog cuts URLs on
+  UTF-8 boundaries.
+- CI `artifacts.yml`: no `continue-on-error` (a failed target turns the
+  run red), only Android / R36S (wasm / win32 / win64 come from
+  `check.yml`).
+- Curlie `stime=92452189`: checked 2026-11-17, still required (search is
+  empty without it) and still accepted. If Curlie search breaks again,
+  read the current value from their search form.
+- Still open from the review: FontConfig-less font scan cost / `.ttc`
+  face 0.
 
 ## Status (2026-11-15) — Small-net input prompts and binary downloads
 

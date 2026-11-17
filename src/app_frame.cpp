@@ -4609,9 +4609,7 @@ void draw_context_window(App& app) {
     title = app.context_kind;
   if (!app.context_title.empty()) {
     title += " — ";
-    title += app.context_title.size() > 48
-                 ? app.context_title.substr(0, 45) + "…"
-                 : app.context_title;
+    title += app.context_title;  // draw_floating_frame fits it (fit_text)
   }
 
   if (!app.context_has_doc) {

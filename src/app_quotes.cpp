@@ -493,6 +493,7 @@ void refresh_context_panel(App& app) {
             "This format needs an import step and is not previewed in Context.";
         app.context_meta.clear();
         app.context_pending_url.clear();
+        app.context_has_doc = false;  // show this note, not the last page
         return;
       }
       // Local image file: one-image document (ImageCache loads the pixels).
@@ -556,6 +557,7 @@ void refresh_context_panel(App& app) {
             "Book downloads are not opened in the Context panel.";
         app.context_meta.clear();
         app.context_pending_url.clear();
+        app.context_has_doc = false;  // show this note, not the last page
         return;
       }
       load_remote(t.url);
@@ -571,10 +573,13 @@ void refresh_context_panel(App& app) {
       return;
     }
 
+    // A page is on screen: keep it with its own title (the note below is
+    // only the fallback when nothing was loaded yet).
+    app.context_pending_url.clear();
+    if (app.context_has_doc) return;
     app.context_kind = "Link";
     app.context_title = app.hover.href;
     app.context_meta.clear();
-    app.context_pending_url.clear();
     if (!app.hover.preview.empty())
       app.context_body = app.hover.preview;
     else
@@ -582,12 +587,6 @@ void refresh_context_panel(App& app) {
           "No in-app preview for this link.\n\n"
           "Open it with the usual click, or use “Open Link in Trail View” "
           "from the context menu.";
-    if (app.context_has_doc) {
-      // Keep the last full page; only update the text fallback fields above
-      // when we have no document.
-    } else {
-      app.context_has_doc = false;
-    }
     return;
   }
 
