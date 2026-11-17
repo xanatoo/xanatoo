@@ -5066,19 +5066,23 @@ void present_frame(App& app) {
   apply_ui_scale(app);
 }
 
-// Offer a finished, non-empty selection of the focused view as the primary
-// selection (middle-click paste in other programs). An emptied selection
-// leaves the last text in place, as X11 programs do; a selection being
-// dragged is sent once the button is released.
+// Offer a selection the user just made in the focused view as the primary
+// selection (middle-click paste in other programs): a drag once the button
+// is released, double / shift clicks, Shift+arrows, Select All. Selections
+// set by the program (history restore, passage addresses, undo, find) and
+// switching to a view or buffer that already has one are only noted. An
+// emptied selection leaves the last text in place, as X11 programs do.
 static void publish_primary_selection(App& app) {
+  const bool user = std::exchange(app.primary_sel_input, false);
   if (app.dragging_sel || app.focus < 0 || app.focus >= kMaxViews) return;
   Pane& p = app.panes[app.focus];
-  if (p.sel.empty() || !find_buf(app, p.buf)) return;
   App::PrimarySel& last = app.primary_sel;
   if (last.pane == app.focus && last.buf == p.buf &&
       last.sel.anchor == p.sel.anchor && last.sel.focus == p.sel.focus)
     return;
+  const bool same_view = last.pane == app.focus && last.buf == p.buf;
   last = {app.focus, p.buf, p.sel};
+  if (!user || !same_view || p.sel.empty() || !find_buf(app, p.buf)) return;
   const std::string text = xanatoo::selected_text(doc_of(app, p), p.sel);
   if (!text.empty()) xanatoo::sdl::set_primary_selection(text);
 }
@@ -5086,7 +5090,6 @@ static void publish_primary_selection(App& app) {
 void run_frame(App& app) {
   SDL_Event ev;
   while (SDL_PollEvent(&ev)) handle_event(app, ev);
-  publish_primary_selection(app);
   update_touch(app);
   sync_nav_history(app);  // capture scroll before a completed fetch swaps pages
   poll_fetches(app);
@@ -5110,6 +5113,7 @@ void run_frame(App& app) {
   poll_gamepad_axes(app);
   relayout_if_needed(app);
   apply_pending_scroll(app);
+  publish_primary_selection(app);  // after menu / toolbar commands
   poll_images(app);
   pump_page_tiles(app);
   draw_panes(app);

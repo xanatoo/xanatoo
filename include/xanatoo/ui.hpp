@@ -657,6 +657,8 @@ public:
   bool ready() const { return ready_; }
 
 private:
+  void publish_text_field_selection();
+  void resolve_middle_click();
   struct Icon {
     SDL_Texture* texture = nullptr;
     int w = 0;
@@ -716,6 +718,22 @@ private:
   int url_context_end_ = 0;
   int url_context_cursor_ = 0;
   bool url_restore_selection_ = false;
+  // X11 / Wayland primary selection in ImGui text fields
+  // (publish_text_field_selection, process_event).
+  struct FieldSelection {
+    unsigned int id = 0;
+    std::string text;
+  } field_primary_;
+  // A middle press waits for the frame that lays out the widgets under it:
+  // over a text field it becomes a left click + typed text (its release is
+  // then swallowed, and the URL bar does not select all on that
+  // activation), elsewhere it is passed on late (resolve_middle_click).
+  struct MiddleClick {
+    bool pending = false;
+    bool released = false;
+  } middle_click_;
+  bool middle_paste_release_ = false;
+  int middle_paste_frames_ = 0;
   bool url_context_was_open_ = false;
   bool url_context_acted_ = false;
   char search_input_[512] = {};  // search bar text (kept between searches)

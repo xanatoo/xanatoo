@@ -852,11 +852,77 @@ void Ui::process_event(const SDL_Event& ev) {
       (xanatoo::sdl::keymod(ev) & KMOD_CTRL)) {
     return;
   }
+  // Middle click on a text field pastes the primary selection, X11 style.
+  // Whether a field is under the press is known only once a frame has laid
+  // out the widgets at that point: hold the press (and a quick release)
+  // until resolve_middle_click.
+  if (xanatoo::sdl::kMiddleClickPastesPrimary &&
+      (kind == xanatoo::sdl::EventKind::MouseButtonDown ||
+       kind == xanatoo::sdl::EventKind::MouseButtonUp) &&
+      ev.button.button == SDL_BUTTON_MIDDLE) {
+    if (kind == xanatoo::sdl::EventKind::MouseButtonDown) {
+      ImGui::GetIO().AddMousePosEvent(static_cast<float>(ev.button.x),
+                                      static_cast<float>(ev.button.y));
+      middle_click_ = {true, false};
+      return;
+    }
+    if (middle_click_.pending) {
+      middle_click_.released = true;
+      return;
+    }
+    if (std::exchange(middle_paste_release_, false)) return;
+  }
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
   xanatoo::imgui_sdl3::process_event(ev);
 #else
   ImGui_ImplSDL2_ProcessEvent(&ev);
 #endif
+}
+
+// The frame after a middle press has hovered the widgets under it: a text
+// field (ImGui shows its text cursor) gets a left click there, which places
+// the caret, and the primary selection as typed input trickled in after the
+// click; anything else gets the middle press as it was.
+void Ui::resolve_middle_click() {
+  if (!std::exchange(middle_click_.pending, false)) return;
+  ImGuiIO& io = ImGui::GetIO();
+  std::string text;
+  if (ImGui::GetMouseCursor() == ImGuiMouseCursor_TextInput)
+    text = xanatoo::sdl::primary_selection();
+  if (text.empty()) {
+    io.AddMouseButtonEvent(2, true);
+    if (middle_click_.released) io.AddMouseButtonEvent(2, false);
+    return;
+  }
+  io.AddMouseButtonEvent(0, true);
+  io.AddMouseButtonEvent(0, false);
+  io.AddInputCharactersUTF8(text.c_str());
+  middle_paste_release_ = !middle_click_.released;
+  middle_paste_frames_ = 4;  // click, release and text trickle over frames
+}
+
+// The selection of the active ImGui text field becomes the primary
+// selection once the mouse lets go of it (keyboard selections at once).
+// Password fields keep theirs; read-only fields keep their text outside the
+// edit state and are not offered either.
+void Ui::publish_text_field_selection() {
+  if (!xanatoo::sdl::kMiddleClickPastesPrimary) return;
+  ImGuiContext& g = *ImGui::GetCurrentContext();
+  const ImGuiInputTextState& st = g.InputTextState;
+  if (st.ID == 0 || st.ID != g.ActiveId) {
+    field_primary_.id = 0;
+    return;
+  }
+  if (g.IO.MouseDown[0] || !st.HasSelection() ||
+      (st.Flags & (ImGuiInputTextFlags_Password | ImGuiInputTextFlags_ReadOnly)))
+    return;
+  const int from = std::max(0, st.GetSelectionStart());
+  const int to = std::min(st.TextLen, st.GetSelectionEnd());
+  if (to <= from || st.TextA.Size < to) return;
+  std::string text(st.TextA.Data + from, static_cast<size_t>(to - from));
+  if (field_primary_.id == st.ID && field_primary_.text == text) return;
+  field_primary_ = {st.ID, text};
+  xanatoo::sdl::set_primary_selection(text);
 }
 
 bool Ui::want_capture_keyboard() const {
@@ -1306,7 +1372,9 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       bool enter = ImGui::InputText(
           "##urlbar", url_input_, sizeof(url_input_),
           ImGuiInputTextFlags_EnterReturnsTrue |
-              ImGuiInputTextFlags_AutoSelectAll);
+              // A middle-click paste inserts at the click, not over all.
+              (middle_paste_frames_ > 0 ? 0
+                                        : ImGuiInputTextFlags_AutoSelectAll));
       const ImGuiID url_id = ImGui::GetItemID();
       if (url_restore_selection_) {
         url_restore_selection_ = false;
@@ -5130,6 +5198,9 @@ void Ui::prepare_render() {
   const bool wants_text = ImGui::GetIO().WantTextInput;
   if (wants_text && !wanted_text_input_) platform_request_keyboard(window_);
   wanted_text_input_ = wants_text;
+  publish_text_field_selection();
+  if (middle_paste_frames_ > 0) --middle_paste_frames_;
+  resolve_middle_click();
   ImGui::Render();
   render_prepared_ = true;
 #if defined(XANATOO_SDL3) && XANATOO_SDL3

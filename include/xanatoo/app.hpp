@@ -896,12 +896,15 @@ struct App {
   TileMode tile_mode = TileMode::Independent;
   bool dragging_sel = false;
   // The selection last handed to the X11 / Wayland primary selection
-  // (publish_primary_selection); it is re-sent only when it changes.
+  // (publish_primary_selection), or the last one seen when it was not sent.
   struct PrimarySel {
     int pane = -1;
     BufferId buf = kNoBuffer;
     xanatoo::Selection sel{};
   } primary_sel;
+  // Keys, clicks or touches arrived this frame: a changed selection is the
+  // user's own (publish_primary_selection).
+  bool primary_sel_input = false;
   bool click_new_tab = false;  // middle-click in progress: panels open in a new tab
   bool dragging_split = false;
   bool dragging_diff_overview = false;

@@ -153,13 +153,27 @@ Back/Forward buttons show nearest-first targets derived from the focused
 pane's `NavHistory`, or `SplitHistory` when split browsing. `NavJump` uses a
 signed offset and must preserve the destination's caret/scroll state.
 
-Primary selection (X11 / Wayland): `publish_primary_selection` (start of
-`run_frame`) sends the focused view's non-empty selection through
-`sdl::set_primary_selection` whenever it changes (not while a drag is in
-progress; `App::primary_sel` remembers what was sent; read-only pages too).
-Middle-click paste in edit mode reads `sdl::primary_selection()` where
-`sdl::kMiddleClickPastesPrimary` (Linux desktop, SDL3 or SDL2 >= 2.26),
-the clipboard elsewhere. ImGui text fields do not take part.
+Primary selection (X11 / Wayland, `sdl::kMiddleClickPastesPrimary`: Linux
+desktop, SDL3 or SDL2 >= 2.26):
+- Document views: `publish_primary_selection` (in `run_frame` after the
+  chrome commands) sends the focused view's selection through
+  `sdl::set_primary_selection` when it changed in a frame with user input
+  (`App::primary_sel_input`, set in `handle_event`) in the same view and
+  buffer. Program-set selections (history restore, passage addresses, undo,
+  find) and switching to a view that has one are only recorded in
+  `App::primary_sel`. Read-only pages publish too.
+- Middle-click paste in edit mode reads `sdl::primary_selection()` (the
+  clipboard where the platform has no primary selection).
+- ImGui text fields (`Ui::publish_text_field_selection`, `prepare_render`):
+  the active field's selection from `ImGuiContext::InputTextState`, once
+  the left button is up; not password or read-only fields.
+- Middle press on an ImGui text field: `Ui::process_event` holds the press
+  (and a quick release) until `Ui::resolve_middle_click`, after the next
+  frame hovered the widgets; with ImGui's text cursor showing it becomes a
+  left click (caret at the click) plus the text via
+  `AddInputCharactersUTF8`, which the trickling input queue applies after the
+  click. Otherwise the middle press is passed on. The URL bar drops
+  `AutoSelectAll` for that activation (`middle_paste_frames_`).
 
 Windows place one way regardless of role: Left / Right docks are side
 columns that take width from the panes (stacked by `dock_seq`), Top /

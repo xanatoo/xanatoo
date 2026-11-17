@@ -4,14 +4,20 @@
 
 ## Status (2026-11-17) — X11 / Wayland primary selection
 
-- Selecting text in a document view now sets the primary selection (on
-  release of a drag, or whenever a keyboard / double-click selection
-  changes); middle-click in edit mode pastes the primary selection instead
-  of the clipboard on Linux (clipboard elsewhere, as before). Uses
-  `SDL_{Set,Get}PrimarySelectionText` (SDL3; SDL2 >= 2.26). Checked in
-  Xvfb with xclip in both directions. Not covered: ImGui inputs (address
-  bar, prompts) neither publish nor paste the primary selection; Wayland
-  only by SDL's contract, not tried.
+- Selecting text in a document view sets the primary selection (drag on
+  release, double / shift clicks, Shift+arrows, Select All); selections the
+  program sets (history, passages, undo, find, tab / view switches) do not.
+  Middle-click in edit mode pastes the primary selection on Linux
+  (clipboard elsewhere, as before). Uses `SDL_{Set,Get}PrimarySelectionText`
+  (SDL3; SDL2 >= 2.26).
+- ImGui text fields take part: a selection in the URL bar, search field,
+  prompts… becomes the primary selection, and a middle-click on a field
+  inserts it at the click point (URL bar included, no select-all).
+- Checked in Xvfb with xclip: document and URL-bar selections out,
+  middle-click into URL bar and document in, tab switch keeps an external
+  selection. Not covered: password / read-only ImGui fields (deliberately
+  not published), Wayland (SDL's contract only), multi-line text into
+  single-line fields (ImGui drops the newlines, as with Ctrl+V).
 
 ## Status (2026-11-17) — Stop ends every service's transfer
 

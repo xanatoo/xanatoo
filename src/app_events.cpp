@@ -2903,6 +2903,17 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 }
 
 void handle_event(App& app, SDL_Event& ev) {
+  switch (xanatoo::sdl::event_kind(ev)) {
+    case xanatoo::sdl::EventKind::KeyDown:
+    case xanatoo::sdl::EventKind::MouseButtonDown:
+    case xanatoo::sdl::EventKind::MouseButtonUp:
+    case xanatoo::sdl::EventKind::FingerUp:
+    case xanatoo::sdl::EventKind::GamepadButtonDown:
+      app.primary_sel_input = true;
+      break;
+    default:
+      break;
+  }
   // Android Back (trapped, see platform_pre_init) acts like Escape
   // everywhere: gallery images, ImGui popups, prompts, panels. The scancode stays
   // AC_BACK, so where Escape has nothing to close Back steps history back.
