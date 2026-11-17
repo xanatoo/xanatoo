@@ -13,7 +13,7 @@
 //  * Only CORS-safelisted response headers are visible (content-type yes,
 //    content-disposition no).
 //  * Streaming reads the whole body first, then hands it to on_body.
-//  * Raw TCP (Gemini, Nostr) does not exist: tcp_connect_host fails.
+//  * Raw TCP (Gemini, Nostr) does not exist: tcp_connect fails.
 
 #include "xanatoo/https.hpp"
 #include "xanatoo/http_url.hpp"
@@ -32,7 +32,7 @@ namespace xanatoo {
 const char* TlsStream::backend() { return "browser fetch"; }
 std::string TlsStream::version() { return "browser fetch (TLS by the browser)"; }
 
-int tcp_connect_host(const std::string&, int, std::string* err) {
+int tcp_connect(const std::string&, int, std::string* err, bool) {
   if (err) *err = "raw TCP sockets are not available in the browser";
   return -1;
 }
