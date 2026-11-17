@@ -6279,11 +6279,28 @@ void test_inflate() {
   EXPECT(!gunzip(fixed_gz.substr(0, 20)));  // truncated
   EXPECT(!gunzip(fixed_gz, 10));            // over the output cap
 
+  // HTTP Content-Encoding: decoded, passed through, or left alone.
+  out = decode_content_encoding("gzip", fixed_gz);
+  EXPECT(out && *out == "hello, hello, hello world");
+  out = decode_content_encoding(" X-GZip ", fixed_gz);
+  EXPECT(out && *out == "hello, hello, hello world");
+  out = decode_content_encoding("identity, gzip", fixed_gz);
+  EXPECT(out && *out == "hello, hello, hello world");
+  EXPECT(!decode_content_encoding("", fixed_gz));
+  EXPECT(!decode_content_encoding("identity", fixed_gz));
+  EXPECT(!decode_content_encoding("gzip", "<html>plain</html>"));
+  EXPECT(!decode_content_encoding("br", fixed_gz));
+  EXPECT(!decode_content_encoding("gzip", bad));
+
   const std::string stored_z(
       "\x78\x01\x01\x0d\x00\xf2\xff\x73\x74\x6f\x72\x65\x64\x20\x62\x6c\x6f"
       "\x63\x6b\x21\x24\x5e\x04\xde",
       24);
   out = zlib_inflate(stored_z);
+  EXPECT(out && *out == "stored block!");
+  out = decode_content_encoding("deflate", stored_z);
+  EXPECT(out && *out == "stored block!");
+  out = decode_content_encoding("deflate", stored_z.substr(2));  // raw
   EXPECT(out && *out == "stored block!");
 
   const std::string dyn_gz(

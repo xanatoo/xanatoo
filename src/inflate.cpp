@@ -3,8 +3,11 @@
 
 #include "xanatoo/inflate.hpp"
 
+#include "xanatoo/util.hpp"
+
 #include <array>
 #include <cstdint>
+#include <vector>
 
 namespace xanatoo {
 
@@ -299,6 +302,38 @@ std::optional<std::string> zlib_inflate(std::string_view in, size_t max_out) {
   for (size_t k = 0; k < 4; ++k)
     want = (want << 8) | static_cast<unsigned char>(in[at + k]);
   if (want != adler32(*out)) return std::nullopt;
+  return out;
+}
+
+std::optional<std::string> decode_content_encoding(std::string_view coding,
+                                                   std::string_view body,
+                                                   size_t max_out) {
+  std::vector<std::string> codings;
+  while (!coding.empty()) {
+    const size_t comma = coding.find(',');
+    std::string_view one = coding.substr(0, comma);
+    trim_ascii(one);
+    if (!one.empty()) codings.push_back(ascii_lower(one));
+    coding = comma == std::string_view::npos ? std::string_view{}
+                                             : coding.substr(comma + 1);
+  }
+  std::optional<std::string> out;
+  for (auto it = codings.rbegin(); it != codings.rend(); ++it) {
+    const std::string_view in = out ? std::string_view(*out) : body;
+    std::optional<std::string> next;
+    if (*it == "identity") continue;
+    if (*it == "gzip" || *it == "x-gzip") {
+      if (!is_gzip(in)) return out;  // labelled gzip, sent plain
+      next = gunzip(in, max_out);
+    } else if (*it == "deflate") {
+      next = zlib_inflate(in, max_out);
+      if (!next) next = inflate_raw(in, max_out);
+    } else {
+      return std::nullopt;  // unknown coding: leave the body alone
+    }
+    if (!next) return std::nullopt;
+    out = std::move(next);
+  }
   return out;
 }
 

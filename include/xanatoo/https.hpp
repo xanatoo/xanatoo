@@ -47,6 +47,7 @@ struct HttpStreamHeaders {
   std::string server;          // Server: (who answered: cloudflare, ESF, ...)
   std::string cf_mitigated;    // cf-mitigated: challenge (Cloudflare bot check)
   std::string retry_after;     // Retry-After: (rate limiting)
+  std::string content_encoding; // as sent; the body arrives already decoded
 };
 using HttpHeaderCallback = std::function<bool(const HttpStreamHeaders&)>;
 using HttpBodyCallback = std::function<bool(std::string_view)>;

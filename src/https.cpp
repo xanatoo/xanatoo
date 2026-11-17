@@ -4,6 +4,7 @@
 #include "xanatoo/https.hpp"
 #include "xanatoo/tcp.hpp"
 #include "xanatoo/http_url.hpp"
+#include "xanatoo/inflate.hpp"
 #include "xanatoo/net_address.hpp"
 #include "xanatoo/tls.hpp"
 #include "xanatoo/transfer_meter.hpp"
@@ -242,6 +243,9 @@ std::optional<HttpResult> https_request(std::string_view method,
   if (ascii_lower(header_val("transfer-encoding")).find("chunked") !=
       std::string::npos)
     out.body = dechunk(out.body);
+  if (auto decoded = decode_content_encoding(header_val("content-encoding"),
+                                             out.body))
+    out.body = std::move(*decoded);
   return out;
 }
 
@@ -335,7 +339,7 @@ struct ChunkDecoder {
   }
 };
 
-bool stream_once(const std::string& url, std::string_view agent,
+bool stream_raw(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
                  std::string* err) {
@@ -408,6 +412,7 @@ bool stream_once(const std::string& url, std::string_view agent,
       result.server = header_value(headers, "server");
       result.cf_mitigated = header_value(headers, "cf-mitigated");
       result.retry_after = header_value(headers, "retry-after");
+      result.content_encoding = header_value(headers, "content-encoding");
       const std::string length = header_value(headers, "content-length");
       if (!length.empty()) {
         auto [p, ec] = std::from_chars(length.data(),
@@ -458,6 +463,43 @@ bool stream_once(const std::string& url, std::string_view agent,
     return false;
   }
   return true;
+}
+
+// stream_raw with the Content-Encoding undone. An encoded body is collected
+// and handed on decoded at the end (the inflater works on whole buffers);
+// its length is then unknown up front.
+bool stream_once(const std::string& url, std::string_view agent,
+                 const HttpHeaderCallback& on_headers,
+                 const HttpBodyCallback& on_body, HttpStreamHeaders& result,
+                 std::string* err) {
+  constexpr size_t kMaxDecoded = 256u << 20;
+  bool encoded = false;
+  std::string packed;
+  const bool ok = stream_raw(url, agent,
+      [&](const HttpStreamHeaders& h) {
+        HttpStreamHeaders shown = h;
+        std::string_view coding = h.content_encoding;
+        trim_ascii(coding);
+        encoded = !coding.empty() && ascii_lower(coding) != "identity" &&
+                  !(h.status >= 300 && h.status < 400 && !h.location.empty());
+        if (encoded) shown.content_length = -1;
+        return on_headers(shown);
+      },
+      [&](std::string_view bytes) {
+        if (!encoded) return on_body(bytes);
+        if (packed.size() + bytes.size() > kMaxDecoded) {
+          if (err) *err = "HTTP response exceeds size limit";
+          return false;
+        }
+        packed.append(bytes);
+        return true;
+      }, result, err);
+  if (!ok || !encoded) return ok;
+  result.content_length = -1;
+  if (auto decoded = decode_content_encoding(result.content_encoding, packed,
+                                             kMaxDecoded))
+    packed = std::move(*decoded);
+  return packed.empty() || on_body(packed);
 }
 
 }  // namespace
