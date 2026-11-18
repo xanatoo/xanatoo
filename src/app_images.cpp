@@ -225,6 +225,9 @@ void poll_images(App& app) {
   keep_views(app);
   for (Pane& p : app.panes) p.height_cache.clear();
   app.needs_layout = true;
+  // The Context panel's own layout too: a preview image laid out as a
+  // placeholder would otherwise keep the placeholder's aspect ratio.
+  app.context_needs_layout = true;
 }
 
 ImageLoadState image_load_state(App& app, const std::string& url) {

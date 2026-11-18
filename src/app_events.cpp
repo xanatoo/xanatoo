@@ -1154,6 +1154,21 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
             const float hs = 12.f;
             if (!app.hover.image_card && lx >= ix1 - hs && my >= iy1 - hs)
               app.hover.image_handle = true;
+            // A thumbnail linked to its original (forums, <a><img>): the
+            // hover names that link, as the click follows it, so the
+            // Context panel and status line show the full image.
+            const auto& in = hd.get(pi.node);
+            for (size_t si = 0; si < in.spans.size(); ++si) {
+              const auto& sp = in.spans[si];
+              if (sp.kind != xanatoo::InlineKind::Link || sp.href.empty())
+                continue;
+              app.hover.href = sp.href;
+              app.hover.rel = sp.rel;
+              app.hover.link_node = pi.node;
+              app.hover.link_span = si;
+              app.hover.link_pane = hover_pane;
+              break;
+            }
             break;
           }
         }

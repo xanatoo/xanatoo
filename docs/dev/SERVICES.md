@@ -311,7 +311,8 @@ read-only service clients. Every client is read-only: never post or log in.
 - A thumbnail with a full-size original (4chan `s.jpg`, Bluesky `thumb` /
   `fullsize`) is an Image node with an empty Link span to the original, as
   `html_min` does for `<a><img>`: a click and the `//gallery` show the
-  original. Bluesky's `…@jpeg` CDN names pass `is_image_url`.
+  original. Hovering such a block image sets `hover.href` to that link too,
+  so the Context panel and status line name the original. Bluesky's `…@jpeg` CDN names pass `is_image_url`.
 
 ## Internet Archive
 
