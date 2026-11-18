@@ -231,12 +231,14 @@ void draw_up_strip(App& app, const SDL_Rect& strip) {
             strip, "▲");
 }
 
-// The hovered Prev / Next zone: the same glow, as deep as the Up one, from
-// the middle of the view's left or right edge, with ◀ / ▶.
+// The hovered Prev / Next zone: the same glow as the Up one (as deep, as
+// long as the Up strip is wide, up to the view height), from the middle of
+// the view's left or right edge, with ◀ / ▶.
 void draw_side_glow(App& app, const SDL_Rect& all, bool next) {
-  const int band = up_strip(app, all, 0).h;
+  const SDL_Rect up = up_strip(app, all, side_width(all));
+  const int band = up.h;
   const int depth = band * 2;
-  const int len = std::max(1, std::min(all.h, depth * 4));
+  const int len = std::max(1, std::min(all.h, up.w));
   const int x = next ? all.x + all.w - depth : all.x;
   const int y = all.y + (all.h - len) / 2;
   const SDL_Rect bx{next ? all.x + all.w - band : all.x, y, band, len};

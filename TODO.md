@@ -29,8 +29,8 @@
   glow texture and ▲ on hover. New sheet role `gallery` (background, color;
   black in default.xss) styles the grid and the single image's backdrop.
 - The single image's Prev / Next zones are lit the same way on hover: a
-  radial glow from the middle of the left / right edge (as deep as the Up
-  glow, 4× that tall) with ◀ / ▶, replacing the full-height tint and box.
+  radial glow from the middle of the left / right edge (the Up glow's size:
+  as deep, as long as the Up strip is wide, capped at the view height) with ◀ / ▶, replacing the full-height tint and box.
   Checked under Xvfb: hover glow, click goes to the page.
 
 ## Status (2026-11-18) — Image loading order and keep-alive
