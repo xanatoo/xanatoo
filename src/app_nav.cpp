@@ -289,17 +289,17 @@ bool can_nav_step(App& app, int dir) {
   return h.pos >= 0 && to >= 0 && to < static_cast<int>(h.entries.size());
 }
 
-bool nav_step(App& app, int dir) {
-  if (split_browsing(app) && app.focus < kCentreViews)
-    return split_history_step(app, dir);
-  if (!can_nav_step(app, dir)) return false;
+namespace {
+// Moves the focused view's trail to entry `to` (Back / Forward, or a jump
+// over several entries) without recording a new visit.
+bool nav_go(App& app, int to) {
   Pane& p = focused_pane(app);
   NavHistory& h = p.nav;
+  if (h.pos < 0 || to < 0 || to >= static_cast<int>(h.entries.size()))
+    return false;
   nav_history_capture(h, pane_address(app, p), p.sel, p.scroll_y);
-  const int from = h.pos;
   // A copy: navigation may replace the view's buffer, never its trail,
   // but keep the string independent of the vector anyway.
-  const int to = from + dir;
   const std::string url = h.entries[static_cast<size_t>(to)].url;
   h.restoring = to;
   h.pending_link = {};
@@ -310,6 +310,41 @@ bool nav_step(App& app, int dir) {
   h.pos = to;
   sync_nav_history(app);  // cached/local pages can be restored immediately
   return true;
+}
+}  // namespace
+
+bool nav_step(App& app, int dir) {
+  if (split_browsing(app) && app.focus < kCentreViews)
+    return split_history_step(app, dir);
+  if (!can_nav_step(app, dir)) return false;
+  return nav_go(app, focused_pane(app).nav.pos + dir);
+}
+
+bool nav_rewind_to_visit(App& app, const std::vector<int64_t>& visits) {
+  if (visits.empty()) return false;
+  // The focused view first, then the other views.
+  std::vector<int> order{app.focus};
+  for (int pi : live_views(app))
+    if (pi != app.focus) order.push_back(pi);
+  for (int pi : order) {
+    if (pi < 0 || pi >= kMaxViews) continue;
+    if (split_browsing(app) && pi < kCentreViews) continue;  // split trail
+    const NavHistory& h = app.panes[pi].nav;
+    if (h.pos < 0) continue;
+    // The entry nearest to the current one, should the page be there twice.
+    int best = -1;
+    for (int i = 0; i < static_cast<int>(h.entries.size()); ++i) {
+      const int64_t v = h.entries[static_cast<size_t>(i)].visit;
+      if (v == 0 || std::find(visits.begin(), visits.end(), v) == visits.end())
+        continue;
+      if (best < 0 || std::abs(i - h.pos) < std::abs(best - h.pos)) best = i;
+    }
+    if (best < 0) continue;
+    if (pi != app.focus) focus_view(app, pi);
+    if (best == h.pos) return true;  // shown already
+    return nav_go(app, best);
+  }
+  return false;
 }
 
 namespace {

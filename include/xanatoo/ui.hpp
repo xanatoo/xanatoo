@@ -265,6 +265,7 @@ enum class UiCommand {
   ToggleAutoLinks,          // view: plain-text http(s):// URLs become links
   ToggleAutoImages,         // view: image URLs in text show the picture
   ToggleHoverPreview,       // split view: preview hovered links on the right
+  ToggleHistoryRewinds,     // History panel: a click steps Back / Forward
   ToggleReaderDefault,      // Preferences: reader mode for new views
   TogglePreferences,        // Edit → Preferences window
   ToggleCredentials,        // Edit → Credentials dialog
@@ -421,6 +422,7 @@ struct UiState {
   std::vector<AnnotationHistoryItem> annotation_history;
   uint64_t annotation_note_created_gen = 0;
   bool hover_preview = false;
+  bool history_rewinds = true;  // ViewSettings::history_rewinds
   bool auto_links = true;  // ViewSettings::auto_links
   bool auto_images = true;  // ViewSettings::auto_images
   bool auto_updates = false;

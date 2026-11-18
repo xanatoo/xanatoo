@@ -267,8 +267,14 @@ reached on the right (`link`, `typed`, `new tab`, `restored`, …). Hollow
 dot = starts a trail (no source in the list). Rows the views show now are
 marked. 200 visits per page, the next page when scrolled near the end;
 stale after `record_visit` and when `poll_shared_state` sees another
-process's commit (selection follows its visit). Click / middle-click /
-Enter / Ctrl+Enter open (kind `history`); `/` or Ctrl+F opens the filter
+process's commit (selection follows its visit). Click / Enter on a visit
+still in a view's Back / Forward trail steps that trail to it (focusing
+the view; `nav_rewind_to_visit`), like pressing Back several times, so no
+new visit is recorded; other visits, middle-click and Ctrl+Enter open
+the page anew (kind `history`). Preference "History clicks go back in the
+view" (`ViewSettings::history_rewinds`, view.conf `history_rewinds`, on)
+picks the default; Shift+click / Shift+Enter does the other one. `/` or
+Ctrl+F opens the filter
 prompt (`PromptKind::HistoryFilter`, applied while typing, Enter keeps,
 Esc cancels); Esc in the panel clears the filter, then closes. Hover
 tooltip: address, time and dwell, kind and source title, href, `×n`, and

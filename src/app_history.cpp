@@ -182,13 +182,22 @@ int line_at(App& app, const FloatWindow& w, int my) {
              ? line : -1;
 }
 
-void open_line(App& app, int line) {
+// Opens the visit of `line`. With ViewSettings::history_rewinds (`invert`:
+// Shift flips it) a visit still in a view's Back / Forward trail is stepped
+// to there; otherwise, and in a new tab, it is opened as a new visit.
+void open_line(App& app, int line, bool invert = false) {
   const HistoryPanel& h = app.history;
   if (line < 0 || line >= static_cast<int>(h.lines.size())) return;
-  const int e = h.lines[static_cast<size_t>(line)].entry;
-  if (e < 0) return;
-  const std::string address =
-      h.visits[h.entries[static_cast<size_t>(e)].first].address;
+  const int ei = h.lines[static_cast<size_t>(line)].entry;
+  if (ei < 0) return;
+  const xanatoo::TrailEntry& e = h.entries[static_cast<size_t>(ei)];
+  const std::string address = h.visits[e.first].address;
+  if (app.view_settings.history_rewinds != invert && !app.click_new_tab &&
+      h.from_db) {
+    std::vector<int64_t> ids;
+    for (size_t k = 0; k < e.count; ++k) ids.push_back(h.visits[e.first + k].id);
+    if (nav_rewind_to_visit(app, ids)) return;
+  }
   app.visit_hint = xanatoo::VisitKind::History;
   open_address(app, address);
   app.visit_hint.reset();
@@ -371,11 +380,10 @@ void click_history_panel(App& app, FloatWindow& w, int my) {
   const int line = line_at(app, w, my);
   if (line < 0) return;
   app.history.sel = line;
-  open_line(app, line);
+  open_line(app, line, (SDL_GetModState() & KMOD_SHIFT) != 0);
 }
 
 bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
-  (void)shift;
   HistoryPanel& h = app.history;
   const int n = static_cast<int>(h.lines.size());
   auto step_sel = [&](int delta) {
@@ -426,7 +434,7 @@ bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
       app.click_new_tab = ctrl;
-      open_line(app, h.sel);
+      open_line(app, h.sel, shift);
       app.click_new_tab = false;
       return true;
     case SDLK_SLASH:

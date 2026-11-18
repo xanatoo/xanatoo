@@ -3306,6 +3306,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       toggle("Preview links on hover", state.hover_preview,
              UiCommand::ToggleHoverPreview,
              "Split view: a link hovered on the left shows on the right");
+      toggle("History clicks go back in the view", state.history_rewinds,
+             UiCommand::ToggleHistoryRewinds,
+             "A visit still in Back / Forward is stepped to, not visited anew "
+             "(Shift: the other way)");
       toggle("Make web addresses clickable", state.auto_links,
              UiCommand::ToggleAutoLinks,
              "http:// and https:// text in any document becomes a link");

@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — History clicks go back instead of revisiting
+
+- Clicking (or Enter on) a History panel visit that is still in a view's
+  Back / Forward trail now steps that trail to it (focusing the view)
+  instead of opening the page as a new `history` visit, which flooded the
+  log. Visits no view holds still open anew, as do middle-click and Ctrl+Enter.
+- Kept the old behaviour as a preference until more user testing:
+  "History clicks go back in the view" (`ViewSettings::history_rewinds`,
+  on by default); Shift+click / Shift+Enter does the other mode.
+- Builds, unit tests pass; not yet tried interactively.
+
 ## Status (2026-11-18) — History panel as a trail tree (history plan step 4)
 
 - The History panel draws the persistent visit log newest first with a

@@ -185,6 +185,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.footnote_overlay = app.view_settings.footnote_overlay;
   ui_state.bookmark_marks = app.view_settings.bookmark_marks;
   ui_state.hover_preview = app.view_settings.hover_preview;
+  ui_state.history_rewinds = app.view_settings.history_rewinds;
   ui_state.auto_links = app.view_settings.auto_links;
   ui_state.auto_images = app.view_settings.auto_images;
   ui_state.auto_updates = app.view_settings.auto_updates;
@@ -841,7 +842,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ViewLineSpacingLoose || c == C::ViewMargins ||
         c == C::ViewMeasure ||
         c == C::ToggleSectionFocus || c == C::ToggleJustify ||
-        c == C::ToggleHoverPreview || c == C::ToggleAutoLinks ||
+        c == C::ToggleHoverPreview || c == C::ToggleHistoryRewinds ||
+        c == C::ToggleAutoLinks ||
         c == C::ToggleAutoImages || c == C::ToggleAutoUpdates || c == C::TogglePreferences ||
         c == C::ToggleCredentials || c == C::SaveCatalogCredentials ||
         c == C::ClearCatalogCredentials ||
@@ -2783,6 +2785,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       flash_status(app, app.view_settings.hover_preview
                             ? "Link previews on hover on"
                             : "Link previews on hover off");
+      break;
+    case C::ToggleHistoryRewinds:
+      app.view_settings.history_rewinds = !app.view_settings.history_rewinds;
+      xanatoo::save_view_settings(app.view_settings);
+      flash_status(app, app.view_settings.history_rewinds
+                            ? "History clicks go back to the visit"
+                            : "History clicks open the page as a new visit");
       break;
     case C::ToggleReaderDefault: {
       // Views that follow the default switch with it (keep_views first).

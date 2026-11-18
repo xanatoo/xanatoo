@@ -1663,6 +1663,10 @@ void update_open_tab_links(App& app, int pi);
 // no page that way.
 bool can_nav_step(App& app, int dir);
 bool nav_step(App& app, int dir);
+// Steps a view's Back / Forward trail to the entry of one of `visits` (a
+// History panel row), focusing that view; no new visit is recorded. False
+// when no view's trail holds them.
+bool nav_rewind_to_visit(App& app, const std::vector<int64_t>& visits);
 bool is_bookmarked(App& app, const std::string& url);
 void add_bookmark(App& app, xanatoo::Bookmark b);
 void remove_bookmark(App& app, const std::string& url);

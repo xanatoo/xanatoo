@@ -116,6 +116,9 @@ draws the visit log as a trail tree: `visit_page` loads 200 visits at a time
 (more on scroll, filter as SQL `LIKE`), `history_trail.hpp` collapses
 in-page runs and assigns lanes, `history_changed` marks it stale (after
 `record_visit`, and when `poll_shared_state` sees another process write).
+A click steps a view's trail to a visit it still holds (`nav_rewind_to_visit`
+matches `NavHistoryEntry::visit`, via `nav_go` like `nav_step`) unless
+`ViewSettings::history_rewinds` is off / Shift is held.
 The persistent visit
 graph is `visits.hpp` (`record_visit` in `push_nav_history`, kinds via
 `App::visit_hint` / `NavHistory::pending_kind`, `docs/HISTORY.md` "Done

@@ -31,6 +31,10 @@ struct ViewSettings {
   // Split view: hovering a link in the left pane previews it on the right.
   // Off by default: the right pane changing without a click confuses.
   bool hover_preview = false;
+  // History panel: clicking a visit still in a view's Back / Forward trail
+  // steps that trail back (or forward) to it instead of opening the page
+  // as a new visit. Off: every click is a new visit (the older behaviour).
+  bool history_rewinds = true;
   // Bare http(s):// text becomes a clickable link at display time, in every
   // format (the document is not changed). On by default.
   bool auto_links = true;
