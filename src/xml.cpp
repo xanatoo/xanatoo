@@ -287,9 +287,15 @@ bool accepts_inline(NodeKind kind) {
   }
 }
 
+// Spans the export writes: containers cannot hold inline text in XML, so
+// stray spans on them (left by importers) are dropped, as the S-expression
+// writer does.
+bool exported_spans(const Node& node) {
+  return accepts_inline(node.kind) && !node.spans.empty();
+}
+
 void write_inlines(const Node& node, std::string& out) {
-  if (!accepts_inline(node.kind) && !node.spans.empty())
-    throw std::invalid_argument("XML export: inline text on a container node");
+  if (!exported_spans(node)) return;
   for (const auto& sp : node.spans) {
     const bool plain = sp.kind == InlineKind::Text && sp.marks == 0 &&
         sp.role == InlineRole::Normal && sp.href.empty() && sp.rel.empty() &&
@@ -366,13 +372,14 @@ void write_node(const Document& doc, NodeId id, std::string& out,
   }
   const bool has_front = node.kind == NodeKind::Document &&
                          !doc.meta.front_matter.empty();
-  if (node.children.empty() && node.spans.empty() && !has_front) {
+  const bool has_spans = exported_spans(node);
+  if (node.children.empty() && !has_spans && !has_front) {
     out += "/>";
     if (pretty) out += '\n';
     return;
   }
   out += '>';
-  const bool multiline = node.spans.empty() && (has_front || !node.children.empty());
+  const bool multiline = !has_spans && (has_front || !node.children.empty());
   if (multiline && pretty) out += '\n';
   if (has_front) {
     if (multiline && pretty) out.append((depth + 1) * 2, ' ');

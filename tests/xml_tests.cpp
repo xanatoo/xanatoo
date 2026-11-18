@@ -309,6 +309,30 @@ void test_rejections() {
   } catch (const std::invalid_argument&) {}
 }
 
+// Importers can leave text spans on container nodes; the S-expression
+// writer skips them, and the XML export must not fail on them either.
+void test_container_spans_skipped() {
+  Document a;
+  const NodeId root = a.create(NodeKind::Document);
+  const NodeId sec = a.create(NodeKind::Section, root);
+  a.append_text(sec, "stray");
+  const NodeId p = a.create(NodeKind::Paragraph, sec);
+  a.append_text(p, "kept");
+  const NodeId fig = a.create(NodeKind::Figure, root);
+  a.append_text(fig, "stray too");
+  std::string xml;
+  try {
+    xml = serialize_xml(a);
+  } catch (const std::invalid_argument&) {
+    check(false, "XML export accepts spans on containers");
+    return;
+  }
+  check(xml.find("stray") == std::string::npos, "container spans are dropped");
+  check(xml.find("kept") != std::string::npos, "paragraph text is kept");
+  const Document b = parse_xml(xml);
+  check(serialize_xml(b) == xml, "export without container spans round-trips");
+}
+
 }  // namespace
 
 int main() {
@@ -319,6 +343,7 @@ int main() {
   test_escapes_and_dispatch();
   test_float_scales();
   test_rejections();
+  test_container_spans_skipped();
   if (failures) {
     std::cerr << failures << " XML tests failed\n";
     return EXIT_FAILURE;
