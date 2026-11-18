@@ -66,6 +66,8 @@
   ;; Fixed-layout pages (PDF / DjVu / comics): gap after, the sheet shown
   ;; while tiles load, frame.
   (role page        (space-after 12) (background "#ffffff") (border "#c8c4b8"))
+  ;; The `//gallery` grid view: background behind the cards, text colour.
+  (role gallery     (background "#000000") (color "#dcdcdc"))
 
   ;; Inline roles.
   (role metadata (font small) (color "#787670"))  ; hostnames, points, discussion

@@ -881,6 +881,8 @@ struct App {
   // the sheets found in style_dirs() for the toolbar / View menu.
   xanatoo::DocStyle style;
   std::vector<xanatoo::StyleEntry> styles;
+  // White radial glow (alpha only), stretched under gallery edge-zone icons.
+  SDL_Texture* gallery_glow = nullptr;
   // Body font file: --font beats the sheet's body family, which beats
   // XANATOO_FONT (a packaging default, e.g. the Nix wrapper).
   std::string font_path;      // --font
@@ -1854,6 +1856,20 @@ void gallery_zoom(App& app, int pi, float factor, float x, float y);
 bool gallery_pan(App& app, int pi, float dx, float dy);
 // Draw pane `pi`'s single image into its rect (instead of the document).
 void draw_gallery_image(App& app, int pi);
+// The grid's Up strip (top edge, hover highlight), over the drawn page.
+void draw_gallery_grid_chrome(App& app, int pi);
+void release_gallery_textures(App& app);
+// While alive, the layout engine and the renderer use the `//gallery` grid
+// look (xanatoo::gallery_view_style of app.style) if `p` shows a gallery
+// grid; app.style again afterwards.
+struct GalleryStyleScope {
+  GalleryStyleScope(App& app, Pane& p);
+  ~GalleryStyleScope();
+  GalleryStyleScope(const GalleryStyleScope&) = delete;
+  GalleryStyleScope& operator=(const GalleryStyleScope&) = delete;
+  App& app;
+  std::optional<xanatoo::DocStyle> style;
+};
 
 // ---- fixed-layout pages (app_pagetiles.cpp, docs/FIXED_LAYOUT.md) ----
 // Once per frame before drawing: run thumtoo's tile scheduler when it asked

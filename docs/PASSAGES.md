@@ -221,7 +221,9 @@ page//gallery#item:7             the grid, scrolled to the 7th card
   once a fetched page changes.
 - The grid is a derived document (`gallery_document`: a Collection of cards)
   in `Pane::source_doc`, like a source view, and as read-only. Card size and
-  layout are the usual collection view settings.
+  layout are the usual collection view settings. It is laid out and drawn
+  with the sheet's `gallery` role as paper and ink (`GalleryStyleScope`;
+  black in the default sheet), which also fills behind the single image.
 - The single image is drawn into the pane's rect (`app_gallery.cpp`). Zoom
   and pan are view state (`Pane::gallery`), never in the address. Mouse,
   wheel, touch (pinch, pan, swipe) and keys act on the view under the pointer
@@ -231,7 +233,9 @@ page//gallery#item:7             the grid, scrolled to the 7th card
   the same view, with a history entry; Back returns to the page. Stepping
   (←/→, swipe, edge zones) replaces that entry instead of adding one, so Back
   never walks through the images one by one.
-- Up (Esc, the toolbar Up, the top strip): image → straight back to the
+- Up (Esc, the toolbar Up, the top strip — a thin band in the middle of the
+  view's top edge, in the grid as well, lit by a radial glow and ▲ while
+  hovered): image → straight back to the
   page, scrolled to the image when the gallery was of the whole page or one
   collection (`gallery_up_address`); otherwise the page at what the gallery
   was of (`page//id:photos//gallery` → `page#photos`). The grid is not a

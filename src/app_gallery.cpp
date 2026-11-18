@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <vector>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/util.hpp"
@@ -37,13 +38,20 @@ const xanatoo::GalleryItem* current_item(Pane& p) {
   return &gv->items[static_cast<size_t>(gv->index)];
 }
 
-// Edge zones: narrow full-height sides step, the middle of the top strip
-// goes up to the page, the button in the top right corner to the grid.
+// Edge zones: narrow full-height sides step, a thin strip along the middle
+// of the top edge goes up to the page, the button in the top right corner
+// to the grid.
 enum class Zone { None, Up, Prev, Next, Grid };
 int side_width(const SDL_Rect& r) {
   return std::min(std::max(40, r.w / 8), std::max(1, r.w / 3));
 }
-int top_height(const SDL_Rect& r) { return std::max(48, r.h / 7); }
+
+// The Up strip: thin, so it hides little of the picture (or the grid's
+// first row) under it; `inset` is left free at both ends.
+SDL_Rect up_strip(const App& app, const SDL_Rect& r, int inset) {
+  const int h = std::max(16, static_cast<int>(22.f * app.ui_scale));
+  return {r.x + inset, r.y, std::max(1, r.w - 2 * inset), std::min(h, r.h)};
+}
 
 // The grid button, in the top right corner (over the Next strip).
 SDL_Rect grid_button(const App& app, const SDL_Rect& r) {
@@ -59,8 +67,29 @@ Zone zone_at(const App& app, const Pane& p, int x, int y) {
   const int side = side_width(r);
   if (x - r.x < side) return Zone::Prev;
   if (x - r.x >= r.w - side) return Zone::Next;
-  if (y - r.y < top_height(r)) return Zone::Up;
+  if (in_rect(up_strip(app, r, side), x, y)) return Zone::Up;
   return Zone::None;
+}
+
+// The grid (a scrolled page): its Up strip spans the middle half of the
+// text area, the scrollbar excluded.
+SDL_Rect grid_rect(const Pane& p) {
+  return {p.x, p.y, std::max(1, p.w - sb_reserve(p)), std::max(1, p.h)};
+}
+SDL_Rect grid_up_strip(const App& app, const Pane& p) {
+  const SDL_Rect r = grid_rect(p);
+  return up_strip(app, r, r.w / 4);
+}
+
+// The gallery grid view whose Up strip is under a window point, -1 when
+// none (or a panel covers it).
+int grid_up_at(App& app, int x, int y) {
+  if (over_float_chrome(app, x, y)) return -1;
+  const int pi = pane_at(app, static_cast<float>(x), static_cast<float>(y));
+  if (pi < 0) return -1;
+  Pane& p = app.panes[pi];
+  if (!pane_gallery(p) || pane_image_view(p)) return -1;
+  return in_rect(grid_up_strip(app, p), x, y) ? pi : -1;
 }
 
 // Where the picture lives: the view minus padding and the caption lines.
@@ -142,6 +171,48 @@ int image_view_at(App& app, int x, int y) {
   return in_rect(view_rect(app.panes[pi]), x, y) ? pi : -1;
 }
 
+// The glow texture: white, alpha falling off from the middle of its top
+// edge (an ellipse touching the other three edges), smooth to zero.
+SDL_Texture* glow_texture(App& app) {
+  if (app.gallery_glow) return app.gallery_glow;
+  constexpr int W = 128, H = 48;
+  std::vector<Uint8> px(static_cast<size_t>(W * H * 4));
+  for (int y = 0; y < H; ++y)
+    for (int x = 0; x < W; ++x) {
+      const float dx = (x + 0.5f - W / 2.f) / (W / 2.f);
+      const float dy = (y + 0.5f) / static_cast<float>(H);
+      const float t = std::max(0.f, 1.f - std::sqrt(dx * dx + dy * dy));
+      Uint8* q = &px[static_cast<size_t>((y * W + x) * 4)];
+      q[0] = q[1] = q[2] = 255;
+      q[3] = static_cast<Uint8>(255.f * t * t * (3.f - 2.f * t) + 0.5f);
+    }
+  SDL_Texture* t = SDL_CreateTexture(app.sdl, SDL_PIXELFORMAT_RGBA32,
+                                     SDL_TEXTUREACCESS_STATIC, W, H);
+  if (!t) return nullptr;
+  SDL_UpdateTexture(t, nullptr, px.data(), W * 4);
+  SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+  app.gallery_glow = t;
+  return t;
+}
+
+// The hovered Up strip: a radial glow hanging from the top edge with ▲ in
+// its middle (nothing while the pointer is elsewhere).
+void draw_up_strip(App& app, const SDL_Rect& strip) {
+  if (SDL_Texture* glow = glow_texture(app)) {
+    // Taller than the strip so the light fades out just below it.
+    const SDL_Rect dst{strip.x, strip.y, strip.w, strip.h * 2};
+    SDL_SetTextureAlphaMod(glow, 110);
+    xanatoo::sdl::copy(app.sdl, glow, nullptr, &dst);
+  }
+  xanatoo::Font& font = app.ui_font;
+  const std::string g = "▲";
+  const float gx = static_cast<float>(strip.x + (strip.w - font.measure(g)) / 2);
+  const float gy = static_cast<float>(strip.y + (strip.h - font.line_height()) / 2 +
+                                      font.ascender());
+  app.renderer.draw_text(font, gx + 1.f, gy + 1.f, g, 0, 0, 0);
+  app.renderer.draw_text(font, gx, gy, g, 250, 250, 250);
+}
+
 // A 3×3 grid of squares on a dark disc-ish square; brighter when hovered.
 void draw_grid_button(App& app, const SDL_Rect& b, bool hot) {
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
@@ -162,6 +233,34 @@ void draw_grid_button(App& app, const SDL_Rect& b, bool hot) {
 }
 
 }  // namespace
+
+GalleryStyleScope::GalleryStyleScope(App& a, Pane& p) : app(a) {
+  if (!pane_gallery(p) || pane_image_view(p)) return;
+  style = xanatoo::gallery_view_style(app.style);
+  app.layout_engine.set_style(&*style);
+  app.renderer.set_style(&*style);
+}
+
+GalleryStyleScope::~GalleryStyleScope() {
+  if (!style) return;
+  app.layout_engine.set_style(&app.style);
+  app.renderer.set_style(&app.style);
+}
+
+void release_gallery_textures(App& app) {
+  if (app.gallery_glow) SDL_DestroyTexture(app.gallery_glow);
+  app.gallery_glow = nullptr;
+}
+
+void draw_gallery_grid_chrome(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  if (!pane_gallery(p) || pane_image_view(p)) return;
+  int mx = 0, my = 0;
+  xanatoo::sdl::mouse_position(&mx, &my);
+  const SDL_Rect r = grid_rect(p);
+  xanatoo::sdl::set_clip_rect(app.sdl, &r);
+  if (grid_up_at(app, mx, my) == pi) draw_up_strip(app, grid_up_strip(app, p));
+}
 
 std::string gallery_up_address(App& app, Pane& p) {
   if (!pane_image_view(p)) return {};
@@ -260,6 +359,12 @@ bool gallery_pan(App& app, int pi, float dx, float dy) {
 }
 
 bool gallery_pointer_down(App& app, int pi, int x, int y, int button) {
+  if (button == SDL_BUTTON_LEFT && pi >= 0 && grid_up_at(app, x, y) == pi) {
+    focus_view(app, pi);
+    app.key_focus = KeyFocus::Document;
+    gallery_up(app, pi);
+    return true;
+  }
   if (pi < 0 || !pane_image_view(app.panes[pi]) ||
       !in_rect(view_rect(app.panes[pi]), x, y))
     return false;
@@ -292,8 +397,8 @@ bool gallery_pointer_motion(App& app, int x, int y) {
     gallery_pan(app, pi, dx, dy);
     return true;
   }
-  if (image_view_at(app, x, y) < 0) return false;
-  // Nothing of the (hidden) grid is under the pointer.
+  // Nothing of the (hidden, or under the Up strip) grid is under the pointer.
+  if (image_view_at(app, x, y) < 0 && grid_up_at(app, x, y) < 0) return false;
   clear_interaction_hover(app);
   return true;
 }
@@ -392,7 +497,9 @@ void draw_gallery_image(App& app, int pi) {
   const SDL_Rect all = view_rect(p);
   xanatoo::sdl::set_clip_rect(app.sdl, &all);
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
-  SDL_SetRenderDrawColor(app.sdl, 18, 18, 20, 255);
+  // The sheet's gallery background, as behind the grid.
+  const xanatoo::Rgba bg = xanatoo::gallery_view_style(app.style).paper;
+  SDL_SetRenderDrawColor(app.sdl, bg.r, bg.g, bg.b, 255);
   xanatoo::sdl::fill_rect(app.sdl, &all);
 
   xanatoo::Font& font = app.ui_font;
@@ -484,17 +591,12 @@ void draw_gallery_image(App& app, int pi) {
   const Zone z = image_view_at(app, mx, my) == pi ? zone_at(app, p, mx, my)
                                                   : Zone::None;
   draw_grid_button(app, grid_button(app, all), z == Zone::Grid);
-  if (z != Zone::None && z != Zone::Grid) {
+  if (z == Zone::Up) draw_up_strip(app, up_strip(app, all, side_width(all)));
+  if (z == Zone::Prev || z == Zone::Next) {
     const int side = side_width(all);
-    SDL_Rect zr;
-    const char* glyph;
-    if (z == Zone::Up) {
-      zr = {all.x + side, all.y, all.w - 2 * side, top_height(all)};
-      glyph = "▲";
-    } else {
-      zr = {z == Zone::Prev ? all.x : all.x + all.w - side, all.y, side, all.h};
-      glyph = z == Zone::Prev ? "◀" : "▶";
-    }
+    const SDL_Rect zr{z == Zone::Prev ? all.x : all.x + all.w - side, all.y,
+                      side, all.h};
+    const char* glyph = z == Zone::Prev ? "◀" : "▶";
     SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(app.sdl, 255, 255, 255, 22);
     xanatoo::sdl::fill_rect(app.sdl, &zr);

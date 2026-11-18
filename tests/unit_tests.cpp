@@ -2086,6 +2086,31 @@ void test_style_sheet_parse() {
   EXPECT_EQ(st.warnings.size(), 3u);
 }
 
+void test_gallery_view_style() {
+  using namespace xanatoo;
+  // The grid view: the gallery role's background is the paper, its colour
+  // the ink; captions and plain text follow it.
+  DocStyle st = builtin_style();
+  apply_style_source(st, R"(
+    (page (margin "#101010") (image "dots.png"))
+    (role caption (color "#333333"))
+    (role gallery (background "#050607") (color "#eeeeee")))
+  )");
+  const DocStyle g = gallery_view_style(st);
+  EXPECT(g.paper == (Rgba{5, 6, 7, 255}));
+  EXPECT(g.ink == (Rgba{0xee, 0xee, 0xee, 255}));
+  EXPECT(!g.has_margin());
+  EXPECT(g.paper_image.empty());
+  EXPECT(!g[BlockRole::Caption].has_color);
+  EXPECT(g.text_color(BlockRole::Caption, InlineKind::Emphasis) == g.ink);
+  // The built-in look: black.
+  EXPECT(gallery_view_style(builtin_style()).paper == (Rgba{0, 0, 0, 255}));
+  // No gallery background: the page stays as it is.
+  DocStyle plain = builtin_style();
+  plain.block[static_cast<size_t>(BlockRole::Gallery)] = {};
+  EXPECT(gallery_view_style(plain).paper == plain.paper);
+}
+
 void test_named_style_scopes() {
   using namespace xanatoo;
   const std::string source =
@@ -6960,6 +6985,7 @@ int main() {
   test_reddit_credentials();
   test_catalog_credentials();
   test_style_sheet_parse();
+  test_gallery_view_style();
   test_named_style_scopes();
   test_layout_article_gaps();
   test_layout_inline_metadata();

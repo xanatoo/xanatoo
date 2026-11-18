@@ -56,6 +56,7 @@ constexpr RoleName kBlockRoles[] = {
     {"aside", BlockRole::Aside},
     {"article", BlockRole::Article},
     {"page", BlockRole::Page},
+    {"gallery", BlockRole::Gallery},
 };
 
 struct InlineName {
@@ -597,6 +598,12 @@ DocStyle builtin_style() {
     b.background = {255, 255, 255, 255};
     b.border = {200, 196, 184, 255};
   }
+  {
+    BlockStyle& b = blk(BlockRole::Gallery);
+    b.background = {0, 0, 0, 255};
+    b.has_color = true;
+    b.color = {220, 220, 220, 255};
+  }
 
   auto inl = [&](InlineKind k) -> InlineStyle& {
     return s.inl[static_cast<size_t>(k)];
@@ -610,6 +617,26 @@ DocStyle builtin_style() {
   inl(InlineKind::FootnoteRef) = {true, {30, 90, 180, 255}, {0, 0, 0, 0}, false};
   inl(InlineKind::Code) = {true, {130, 55, 30, 255}, {245, 235, 220, 200}, false};
   inl(InlineKind::Strike) = {true, {90, 90, 95, 255}, {0, 0, 0, 0}, false};
+  return s;
+}
+
+DocStyle gallery_view_style(const DocStyle& base) {
+  DocStyle s = base;
+  const BlockStyle& g = base[BlockRole::Gallery];
+  if (g.background.visible()) {
+    s.paper = g.background;
+    s.paper.a = 255;
+    s.margin = {0, 0, 0, 0};
+    s.margin_image.clear();
+    s.paper_image.clear();
+  }
+  if (g.has_color) {
+    s.ink = g.color;
+    for (BlockRole r : {BlockRole::Paragraph, BlockRole::Caption})
+      s.block[static_cast<size_t>(r)].has_color = false;
+    for (InlineKind k : {InlineKind::Text, InlineKind::Emphasis})
+      s.inl[static_cast<size_t>(k)].has_color = false;
+  }
   return s;
 }
 

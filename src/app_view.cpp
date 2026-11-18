@@ -434,6 +434,7 @@ void layout_panes(App& app) {
       const std::unordered_map<xanatoo::NodeId, float>* hints =
           pane.height_cache.empty() || paged ? nullptr : &pane.height_cache;
       app.layout_engine.set_hide_chrome(pane_reader(app, pane));
+      const GalleryStyleScope gallery_look(app, pane);
       const float layout_w = static_cast<float>(
           std::max(40, (pane.w - sb_gutter(pane)) / columns));
       pane.layout = app.layout_engine.layout(
@@ -517,6 +518,7 @@ void force_full_pane_layout(App& app, Pane& p) {
   try {
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.anchor);
+    const GalleryStyleScope gallery_look(app, p);
     p.layout = app.layout_engine.layout(
         doc_of(app, p), static_cast<float>(std::max(40, p.w - sb_gutter(p))),
         base_of(app, p), {}, nullptr, &app.folded_sections,

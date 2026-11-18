@@ -65,6 +65,7 @@ enum class BlockRole : uint8_t {
   Aside,          // text box beside the flow (in the page margin)
   Article,        // gap (space-before / -after) between articles on one page
   Page,           // fixed-layout page: gap after, sheet while loading, frame
+  Gallery,        // `//gallery` grid view: background (the paper), text colour
   Count
 };
 constexpr size_t kBlockRoleCount = static_cast<size_t>(BlockRole::Count);
@@ -167,6 +168,11 @@ DocStyle builtin_style();
 // Exposed for tests; load_style() is the normal entry point.
 void apply_style_source(DocStyle& style, std::string_view source,
                         const std::string& sheet_name = {});
+
+// The sheet as a `//gallery` grid view draws it: the gallery role's
+// background becomes the paper (no margin, no patterns) and its colour the
+// ink, which paragraphs, captions and plain / emphasised text then follow.
+DocStyle gallery_view_style(const DocStyle& base);
 
 // Apply one named role-only variant over an already resolved style. Unspecified
 // roles and properties remain unchanged. Returns false for an unknown name.

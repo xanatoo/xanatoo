@@ -4156,6 +4156,7 @@ static void draw_pane_scrollbar(App& app, int i) {
 static void draw_pane_layer(App& app, int i, const SDL_Rect& area, float ox,
                             float scroll) {
   Pane& pane = app.panes[i];
+  const GalleryStyleScope gallery_look(app, pane);
   xanatoo::sdl::set_clip_rect(app.sdl, &area);
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
   app.renderer.draw_backdrop(pane.layout, area, scroll, ox);
@@ -4292,6 +4293,7 @@ void draw_pane(App& app, int i) {
   draw_image_loading(app, i, clip, draw_scroll);
 
   draw_pane_overlays(app, i);
+  if (pane_gallery(pane)) draw_gallery_grid_chrome(app, i);
   draw_footnote_overlay(app, i, clip);
 
   // Scrollbar lives in the strip excluded from the content clip.

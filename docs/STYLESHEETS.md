@@ -172,7 +172,9 @@ recolours every parent rule that uses `accent` (see `night-amber.xss`).
 `message-alt`, `message-author`, `message-op`, `message-meta`, `table`,
 `rule`, `transclusion`, `aside`, `article`, `page` (sheet of a PDF / DjVu /
 comic page: `background` = paper before tiles arrive, `border`, `space-after`;
-`docs/FIXED_LAYOUT.md`).
+`docs/FIXED_LAYOUT.md`), `gallery` (the `//gallery` views: `background`
+replaces the paper and margin behind the grid and the single image, `color`
+the ink of its count line and captions; `gallery_view_style`).
 
 `(role header ...)` remains an input alias for older stylesheets, but
 `(role heading ...)` is the preferred spelling. It styles the title node,

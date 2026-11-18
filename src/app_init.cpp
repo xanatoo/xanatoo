@@ -282,6 +282,7 @@ void app_shutdown(App& app) {
   save_session(app);
   xanatoo::sdl::stop_text_input(app.window);
   release_pane_rasters(app);
+  release_gallery_textures(app);
   release_page_tiles(app);
   xanatoo::release_page_client();
   app.ui.shutdown();

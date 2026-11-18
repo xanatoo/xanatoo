@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Gallery Up strip and background
+
+- `//gallery` (the grid) has the Up strip too; in both views it is a thin
+  band (22 px × ui scale) in the middle of the top edge, lit by a radial
+  glow texture and ▲ on hover. New sheet role `gallery` (background, color;
+  black in default.xss) styles the grid and the single image's backdrop.
+  Checked under Xvfb: hover glow, click goes to the page.
+
 ## Status (2026-11-18) — Image loading order and keep-alive
 
 - Remote images on screen jump the download queue (`want_image_now` from
