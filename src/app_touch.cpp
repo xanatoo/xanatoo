@@ -7,6 +7,8 @@
 // click; on no text it opens on lift without the selection), two-finger
 // pinch = zoom. Touches on ImGui chrome are left
 // to ImGui, which sees SDL's touch-synthesised mouse events.
+// A finger has no hover: when the last one lifts, pointer_leave clears
+// every hover effect, which a mouse would end by moving away.
 
 #include <algorithm>
 #include <cmath>
@@ -198,6 +200,7 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   const float y = tf.y * static_cast<float>(app.win_h);
   t.fingers[t.count++] = TouchPoint{xanatoo::sdl::finger_id(tf), x, y};
   if (t.count == 1) {
+    app.pointer_away = false;  // ImGui follows this finger again
     begin_gesture(app, x, y);
   } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
              t.mode == TouchMode::Pan || t.mode == TouchMode::Image) {
@@ -350,7 +353,12 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
   if (primary) t.mode = TouchMode::Ignored;
   *f = t.fingers[t.count - 1];
   --t.count;
-  if (t.count == 0) t.mode = TouchMode::Idle;
+  if (t.count == 0) {
+    t.mode = TouchMode::Idle;
+    // A finger has no hover: once it lifts, nothing stays highlighted
+    // under where it was (links, tooltips, title buttons, ImGui items).
+    pointer_leave(app);
+  }
 }
 
 void update_touch(App& app) {

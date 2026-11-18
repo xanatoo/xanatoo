@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Touch ends hover
+
+- Lifting the last finger now calls `pointer_leave`: `app.hover` is reset,
+  `mouse_x/y` move off-window (`kPointerAway`) and ImGui gets no mouse
+  position (`UiState::pointer_away`, overriding the SDL backend's
+  global-mouse fallback, which still reports where the finger was). Link
+  highlights / tooltips, title-bar buttons, History rows, gallery edge
+  hints and ImGui menu items no longer stay lit after a tap or drag.
+  The next mouse motion or touch ends it.
+- Gallery hover hints read `app.mouse_x/y` instead of SDL's mouse state.
+- Builds, unit tests pass; not yet tried on a real touchscreen.
+- Possible follow-up: also call `pointer_leave` when the mouse leaves the
+  window (SDL window-leave event), which leaves hover stuck the same way.
+
 ## Status (2026-11-18) — History clicks go back instead of revisiting
 
 - Clicking (or Enter on) a History panel visit that is still in a view's

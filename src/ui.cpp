@@ -2389,7 +2389,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // Button/wheel events at such positions are also filtered at event entry.
   const bool pointer_hidden = pointer_obscured(
       state.pointer_x, state.pointer_y, state.pointer_native_top);
-  if (pointer_hidden)
+  if (pointer_hidden || state.pointer_away)
     ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
   ImGui::GetCurrentContext()->TestEngineHookItems = hover_tracking_;
   g_hover_capture = UiHoverItem{};

@@ -309,6 +309,9 @@ struct UiState {
   std::vector<UiPanelLayer> native_panel_order;
   std::optional<UiPanelLayer> pointer_native_top;
   float pointer_x = 0.f, pointer_y = 0.f;
+  // No pointer over the window (a touch ended): ImGui hovers nothing, even
+  // though SDL still reports the mouse where the finger was.
+  bool pointer_away = false;
   bool dirty = false;
   bool can_publish = false;
   bool can_make_local_copy = false;

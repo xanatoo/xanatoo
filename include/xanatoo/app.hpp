@@ -1171,6 +1171,10 @@ struct App {
   bool stick_rmb = false;
   float mouse_x = 0.f;
   float mouse_y = 0.f;
+  // No pointer over the window: a touch ended (a lifted finger sends no
+  // "moved away"). mouse_x/y sit at kPointerAway and nothing is hovered
+  // until the next mouse motion or touch (pointer_away, app_events.cpp).
+  bool pointer_away = false;
   SDL_Cursor* cursor_arrow = nullptr;
   SDL_Cursor* cursor_hand = nullptr;
   SDL_Cursor* cursor_sizewe = nullptr;
@@ -1632,6 +1636,10 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse);
 void pointer_left_up(App& app, int x, int y);
 // Right press: the context menu of what lies at (x, y); touch long press too.
 void pointer_right_down(App& app, int x, int y, bool imgui_mouse);
+// The pointer left the window (a touch ended): drop every hover effect, in
+// the document and in ImGui, until the next motion. Off-window position:
+inline constexpr float kPointerAway = -100000.f;
+void pointer_leave(App& app);
 
 // ---- touch (app_touch.cpp) ----
 // Mouse events SDL synthesises from a touchscreen (which == SDL_TOUCH_MOUSEID).

@@ -2879,6 +2879,7 @@ void run_chrome(App& app) {
   build_ui_state(app, ui_state);
   ui_state.pointer_x = ui_state.stick_active ? ui_state.stick_cx : app.mouse_x;
   ui_state.pointer_y = ui_state.stick_active ? ui_state.stick_cy : app.mouse_y;
+  ui_state.pointer_away = app.pointer_away && !ui_state.stick_active;
   ui_state.pointer_native_top = float_layer_at(
       app, static_cast<int>(ui_state.pointer_x),
       static_cast<int>(ui_state.pointer_y));

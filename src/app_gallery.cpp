@@ -290,8 +290,8 @@ void release_gallery_textures(App& app) {
 void draw_gallery_grid_chrome(App& app, int pi) {
   Pane& p = app.panes[pi];
   if (!pane_gallery(p) || pane_image_view(p)) return;
-  int mx = 0, my = 0;
-  xanatoo::sdl::mouse_position(&mx, &my);
+  const int mx = static_cast<int>(app.mouse_x);
+  const int my = static_cast<int>(app.mouse_y);
   const SDL_Rect r = grid_rect(p);
   xanatoo::sdl::set_clip_rect(app.sdl, &r);
   if (grid_up_at(app, mx, my) == pi) draw_up_strip(app, grid_up_strip(app, p));
@@ -690,8 +690,8 @@ void draw_gallery_image(App& app, int pi) {
                          128);
 
   // Hover hints: the edge zone under the pointer shows its icon.
-  int mx = 0, my = 0;
-  xanatoo::sdl::mouse_position(&mx, &my);
+  const int mx = static_cast<int>(app.mouse_x);
+  const int my = static_cast<int>(app.mouse_y);
   const Zone z = image_view_at(app, mx, my) == pi ? zone_at(app, p, mx, my)
                                                   : Zone::None;
   draw_grid_button(app, grid_button(app, all), z == Zone::Grid);

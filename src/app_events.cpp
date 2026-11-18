@@ -927,7 +927,15 @@ static void on_mousebuttonup(App& app, SDL_Event& ev, bool imgui_mouse,
     pointer_left_up(app, ev.button.x, ev.button.y);
 }
 
+void pointer_leave(App& app) {
+  app.pointer_away = true;
+  app.mouse_x = kPointerAway;
+  app.mouse_y = kPointerAway;
+  app.hover = Hover{};
+}
+
 void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
+  app.pointer_away = false;
   app.mouse_x = static_cast<float>(x);
   app.mouse_y = static_cast<float>(y);
   {
