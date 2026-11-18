@@ -200,6 +200,16 @@ int page_view_at(App& app, int x, int y) {
   return -1;
 }
 
+const char* page_help_key(App& app, int pi, int x, int y) {
+  const Pane& p = app.panes[pi];
+  if (!p.pages.on) return nullptr;
+  if (inside(bar_geom(app, p).bar, x, y)) return "@page-bar";
+  if (inside(edge_rect(app, p, false), x, y) ||
+      inside(edge_rect(app, p, true), x, y))
+    return "@page-edge";
+  return nullptr;
+}
+
 bool page_pointer_down(App& app, int pi, int x, int y) {
   Pane& p = app.panes[pi];
   if (!p.pages.on) return false;

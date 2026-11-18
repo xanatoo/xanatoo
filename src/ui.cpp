@@ -45,7 +45,43 @@
 
 namespace fs = std::filesystem;
 
+// ---- Help panel: Dear ImGui item hooks ----
+// With IMGUI_ENABLE_TEST_ENGINE every labelled widget reports its label
+// (ImGuiTestEngineHook_ItemInfo) right after it is submitted; while
+// TestEngineHookItems is on (Ui::set_hover_tracking) the hovered one is
+// kept for the Help panel. No test engine is linked: the other hooks are
+// empty.
+namespace {
+xanatoo::UiHoverItem g_hover_capture;
+}  // namespace
+
+void ImGuiTestEngineHook_ItemAdd(ImGuiContext*, ImGuiID, const ImRect&,
+                                 const ImGuiLastItemData*) {}
+void ImGuiTestEngineHook_ItemInfo(ImGuiContext* ctx, ImGuiID id,
+                                  const char* label, ImGuiItemStatusFlags) {
+  // Begin() also registers whole windows; those are not the last item.
+  if (!label || !ctx || ctx->LastItemData.ID != id) return;
+  if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) return;
+  g_hover_capture.label = label;
+  g_hover_capture.tip.clear();
+}
+void ImGuiTestEngineHook_Log(ImGuiContext*, const char*, ...) {}
+const char* ImGuiTestEngine_FindItemDebugLabel(ImGuiContext*, ImGuiID) {
+  return nullptr;
+}
+
 namespace xanatoo {
+
+namespace {
+// A widget whose label says little (icon buttons): its help key and live
+// tooltip, when it is the hovered item.
+void note_hover_help(const char* key, const char* tip) {
+  if (!ImGui::GetCurrentContext()->TestEngineHookItems) return;
+  if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) return;
+  g_hover_capture.label = key ? key : "";
+  g_hover_capture.tip = tip ? tip : "";
+}
+}  // namespace
 
 // Fit covers as well as square favicons into the available icon box.
 static ImVec2 icon_size(SDL_Texture* texture, float side) {
@@ -677,6 +713,7 @@ bool Ui::tool_button(const char* id, const char* icon_name, const char* tip,
   pop_toolbar_button_style(style_colors);
   ImGui::EndDisabled();
   const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+  if (hovered) note_hover_help(id, tip);
   if (right_clicked)
     *right_clicked = hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
   if (hovered && tip && tip[0]) {
@@ -735,6 +772,7 @@ bool Ui::tool_menu_begin(const char* id, const char* icon_name, const char* tip)
   popup_pos = ImVec2(button_min.x, button_max.y);
   pop_toolbar_button_style(style_colors);
   if (pressed) ImGui::OpenPopup("##menu");
+  note_hover_help(id, tip);
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && tip && tip[0])
     ImGui::SetTooltip("%s", tip);
   // Set this after the tooltip: SetTooltip() begins another ImGui window and
@@ -2097,6 +2135,8 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           if (ImGui::BeginTabItem(id.c_str(), &open, flags)) {
             ImGui::EndTabItem();
           }
+          // TabItemEx reports its label before ItemAdd: the hook misses it.
+          note_hover_help("tab", nullptr);
           ImGui::PopStyleColor();
           if (icon) {
             const ImVec2 min = ImGui::GetItemRectMin();
@@ -2351,6 +2391,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       state.pointer_x, state.pointer_y, state.pointer_native_top);
   if (pointer_hidden)
     ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+  ImGui::GetCurrentContext()->TestEngineHookItems = hover_tracking_;
+  g_hover_capture = UiHoverItem{};
   ImGui::NewFrame();
   // Stick is an *extra* pointer. Only drive ImGui from it while the stick is
   // actively used (axis motion or A/B held); otherwise leave the real mouse.
@@ -2575,6 +2617,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     if (ImGui::BeginMenu("Panels")) {
       if (ImGui::MenuItem("Keyboard Reference", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
+      if (ImGui::MenuItem("Help Panel", "Shift+F1", state.hover_help))
+        cmd = UiCommand::ToggleHoverHelp;
       ImGui::Separator();
       if (ImGui::MenuItem("Heading Outline", "Ctrl+Shift+O", state.outline))
         cmd = UiCommand::ToggleOutline;
@@ -2792,6 +2836,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     if (ImGui::BeginMenu("Help")) {
       if (ImGui::MenuItem("Keyboard Reference", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
+      if (ImGui::MenuItem("Help Panel", "Shift+F1", state.hover_help))
+        cmd = UiCommand::ToggleHoverHelp;
       ImGui::Separator();
       menu_item_cmd("Format Reference (FORMAT.md)", UiCommand::OpenFormatDoc, cmd);
       ImGui::Separator();
@@ -5222,6 +5268,13 @@ void Ui::prepare_render() {
   publish_text_field_selection();
   if (middle_paste_frames_ > 0) --middle_paste_frames_;
   resolve_middle_click();
+  if (hover_tracking_) {
+    hover_item_ = g_hover_capture;
+    const ImGuiWindow* hw = ImGui::GetCurrentContext()->HoveredWindow;
+    hover_item_.window = hw && hw->RootWindow ? hw->RootWindow->Name : "";
+  } else {
+    hover_item_ = UiHoverItem{};
+  }
   ImGui::Render();
   render_prepared_ = true;
 #if defined(XANATOO_SDL3) && XANATOO_SDL3

@@ -671,6 +671,7 @@ static void set_style(App& app, const std::string& name, bool set_default) {
   }
   apply_font_sizes(app);
   app.help_needs_layout = true;
+  app.hover_help.needs_layout = true;
   if (set_default) app.view_settings.style = app.style.name;
   apply_view_settings(app, set_default);  // relayout; only explicit choices save view.conf
   std::string msg = "Style: " + app.style.title;

@@ -39,7 +39,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 20> panels(App& app) {
+std::array<PanelRef, 21> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -60,7 +60,8 @@ std::array<PanelRef, 20> panels(App& app) {
            {"matrix-explorer", &app.matrix_explorer_win, app.matrix_explorer_open},
            {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
            {"certificates", &app.certs_win, app.certs.open},
-           {"related-sites", &app.related_win, app.related.open}}};
+           {"related-sites", &app.related_win, app.related.open},
+           {"hover-help", &app.hover_help_win, app.hover_help.open}}};
 }
 
 int unscale(const App& app, int v) {
@@ -333,6 +334,9 @@ void restore_session(App& app) {
       focus_view(app, split && *v == "1" ? 1 : 0);
     // Panels last: they read the pages just opened.
     if (get("help.open") && *get("help.open") == "1") app.help_mode = true;
+    if (get("hover-help.open") && *get("hover-help.open") == "1" &&
+        !app.hover_help.open)
+      toggle_hover_help(app);
     if (get("outline.open") && *get("outline.open") == "1") {
       app.outline_mode = true;
       refresh_outline(app);

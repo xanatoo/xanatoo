@@ -40,6 +40,8 @@ std::pair<int, int> min_size(const FloatWindow& w) {
       return {240, 180};
     case WindowRole::Context:
       return {280, 200};
+    case WindowRole::HoverHelp:
+      return {240, 160};
     case WindowRole::Reply:
       return {300, 240};
     case WindowRole::Annotations:
@@ -185,6 +187,10 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::RelatedSites:
       app.related.open = false;
+      break;
+    case WindowRole::HoverHelp:
+      app.hover_help.open = false;
+      app.ui.set_hover_tracking(false);
       break;
     case WindowRole::Document:
       close_doc_window(app, static_cast<size_t>(&w - app.soft_wins.data()));
@@ -410,6 +416,8 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::Help:
       click_help(app, w, mx, my);
       break;
+    case WindowRole::HoverHelp:
+      break;  // text only
     case WindowRole::Document:
       break;  // the view takes its clicks through the pane path
   }
@@ -471,6 +479,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.context_panel_open) st.push_back(&app.context_win);
   if (app.subscriptions_panel_open) st.push_back(&app.subscriptions_win);
   if (app.help_mode) st.push_back(&app.help);
+  if (app.hover_help.open) st.push_back(&app.hover_help_win);
   for (auto& sw : app.soft_wins) st.push_back(&sw);
   // Auto-opened downloads should remain visible above detached document
   // windows, just like a browser's downloads popover.
@@ -558,6 +567,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::Subscriptions:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Context:
+    case WindowRole::HoverHelp:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Downloads:
     case WindowRole::Reply:
@@ -582,6 +592,9 @@ float float_max_scroll(App& app, const FloatWindow& w) {
   switch (w.role) {
     case WindowRole::Help:
       return std::max(0.f, app.help_layout.content_height - view_h + 40.f);
+    case WindowRole::HoverHelp:
+      return std::max(0.f,
+                      app.hover_help.layout.content_height - view_h + 24.f);
     case WindowRole::Document:
       return view_live(app, w.view) ? pane_max_scroll(app, app.panes[w.view])
                                     : 0.f;
@@ -917,6 +930,9 @@ void draw_floats(App& app) {
         break;
       case WindowRole::Help:
         draw_help_window(app);
+        break;
+      case WindowRole::HoverHelp:
+        draw_hover_help_window(app);
         break;
       case WindowRole::Document:
         draw_soft_window(app, *w);

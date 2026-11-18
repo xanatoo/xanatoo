@@ -239,6 +239,7 @@ enum class UiCommand {
   PageColumns,        // arg: "0" (fit the width) … "3" columns per spread
   CollectionView,  // arg: layout / size / sort / "view" for the collection
   ToggleHelp,
+  ToggleHoverHelp,  // Help panel: explains the element under the pointer
   ToggleVirtualKeyboard,  // F3 / View — on-screen keyboard
   VirtualKey,             // arg = UTF-8 key ("a", "\n", "\b", " ")
   OpenInWindow,
@@ -464,6 +465,7 @@ struct UiState {
   float stick_cx = 0.f, stick_cy = 0.f;
   bool stick_lmb = false, stick_rmb = false;
   bool help = false;
+  bool hover_help = false;  // Help panel open
   bool selection = false;
   std::string context_comment_native;  // passage address for a right-clicked HN comment
   std::string context_comment_web;     // external HN per-comment permalink
@@ -583,6 +585,16 @@ struct UiState {
   std::string doc_label;
 };
 
+// The ImGui widget under the pointer, for the Help panel (empty label:
+// none): its ImGui label (or the explicit help key of a toolbar button),
+// its tooltip if the widget has a fixed one, and the root ImGui window
+// under the pointer (also set without a widget).
+struct UiHoverItem {
+  std::string label;
+  std::string tip;
+  std::string window;
+};
+
 struct UiFrameResult {
   UiCommand cmd = UiCommand::None;
   // Pixels reserved at the top of the window for menu + toolbar.
@@ -628,6 +640,10 @@ public:
   // After a menu/toolbar command, drop ImGui's active widget so the next
   // keystroke goes to the document instead of the chrome.
   void release_input_capture();
+  // Help panel: while on, every frame notes the widget under the pointer
+  // (ImGui's item hooks), read with hover_item() after the frame.
+  void set_hover_tracking(bool on) { hover_tracking_ = on; }
+  const UiHoverItem& hover_item() const { return hover_item_; }
 
   // The canvas (not ImGui) chose the pointer for this frame. The ImGui SDL
   // backends apply ImGui's cursor in the next new_frame; telling ImGui the
@@ -685,6 +701,8 @@ private:
   void tool_menu_end();
 
   bool ready_ = false;
+  bool hover_tracking_ = false;
+  UiHoverItem hover_item_;
   bool render_prepared_ = false;
   bool layered_panels_ = false;
   float scale_ = 1.f;

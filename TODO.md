@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Help panel
+
+- Shift+F1 / Panels → Help Panel: a dockable panel (docked right) explaining
+  the GUI element under the pointer — menus and items, toolbar buttons,
+  address / search fields, tabs, window title controls, resize edges, dock
+  separators, status line, tile divider, scrollbar, links, images,
+  stretchtext, gallery and paged-reading chrome, every panel body.
+- ImGui widgets found through ImGui's item hooks (`IMGUI_ENABLE_TEST_ENGINE`,
+  hooks in `ui.cpp`); canvas chrome through the clicks' own hit-tests
+  (`app_hoverhelp.cpp`). ~240 topics in `src/ui_help.cpp`; unlisted widgets
+  show their label + tooltip. `docs/UI.md` "Help panel".
+- Checked under Xvfb: toolbar, menu item, address field, tab, link, close
+  box, dock edge, status line. Not done: texts for dynamic menu entries
+  (Services list, history / bookmark entries) and the explorer panels'
+  individual widgets (they fall back to label + tooltip).
+
 ## Status (2026-11-18) — Usenet / NNTP reader
 
 - Read-only, anonymous NNTP client (`XANATOO_NNTP`, plain TCP; `nntps:`

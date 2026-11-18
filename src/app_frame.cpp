@@ -237,6 +237,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.chrome_hidden = app.chrome_hidden;
   ui_state.virtual_keyboard = app.virtual_keyboard;
   ui_state.help = app.help_mode;
+  ui_state.hover_help = app.hover_help.open;
   ui_state.selection = !focused_pane(app).sel.empty();
   ui_state.context_comment_native = app.context_comment_native;
   ui_state.context_comment_web = app.context_comment_web;
@@ -762,7 +763,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::NavJump ||
         c == C::GoHome || c == C::GoUp ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleBookmarks ||
-        c == C::ToggleContextPanel ||
+        c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
         c == C::DownloadAction ||
         c == C::ToggleSubscriptions || c == C::Subscribe ||
         c == C::Unsubscribe || c == C::SubscriptionOpen ||
@@ -2467,6 +2468,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ToggleChrome:
       toggle_chrome(app);
       break;
+    case C::ToggleHoverHelp:
+      toggle_hover_help(app);
+      break;
     case C::ToggleHelp:
       app.help_mode = !app.help_mode;
       if (app.help_mode) {
@@ -2894,6 +2898,7 @@ void run_chrome(App& app) {
       // Engine checkboxes: the menu stays open to tick several.
       ui_frame.cmd != xanatoo::UiCommand::ToggleSearchEngine)
     app.ui.release_input_capture();
+  update_hover_help(app);
 }
 
 void poll_gamepad_axes(App& app) {

@@ -184,6 +184,7 @@ add_executable(xanatoo
   src/paginate.cpp
   src/app_collection.cpp
   src/app_gallery.cpp
+  src/app_hoverhelp.cpp
   src/app_drafts.cpp
   src/app_revisions.cpp
   src/app_nostr.cpp
@@ -209,6 +210,7 @@ add_executable(xanatoo
   src/editor.cpp
   src/images.cpp
   src/ui.cpp
+  src/ui_help.cpp
   src/util.cpp
   src/subscriptions.cpp
   src/minibuffer.cpp
@@ -323,6 +325,10 @@ target_compile_definitions(xanatoo PRIVATE
   XANATOO_R36S=$<BOOL:${XANATOO_R36S}>
   XANATOO_SQLITE=$<BOOL:${XANATOO_SQLITE}>
   XANATOO_FONTCONFIG=$<BOOL:${XANATOO_FONTCONFIG}>)
+# Dear ImGui's item hooks (ImGuiTestEngineHook_ItemInfo, defined in ui.cpp)
+# tell the Help panel which widget the pointer is over; the vendored ImGui
+# sources must see the same switch as ui.cpp.
+target_compile_definitions(xanatoo PRIVATE IMGUI_ENABLE_TEST_ENGINE)
 
 # nix/r36s.nix: newer GCC than the sysroot's libstdc++ 9 (__cxa_call_terminate).
 if(XANATOO_R36S)
@@ -691,6 +697,8 @@ add_executable(xanatoo_tests
   tests/unit_tests.cpp
   tests/forum_tests.cpp
   tests/nntp_tests.cpp
+  tests/ui_help_tests.cpp
+  src/ui_help.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
   src/about.cpp

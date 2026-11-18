@@ -97,6 +97,32 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   frame/title click on a native-only panel or on another embedded panel.
   Popups and dialogs remain above all native frames.
 
+## Help panel
+
+**Shift+F1** (Panels / Help → Help Panel) opens a dockable panel
+(`WindowRole::HoverHelp`, docked right by default) that explains the
+element under the pointer; F1 stays the keyboard reference. Inside its own
+client area the text holds still so it can be read and scrolled.
+
+- Texts: `src/ui_help.cpp`, one table of topics (Markdown body, `|`
+  separated lower-case keys). Pure and unit-tested
+  (`tests/ui_help_tests.cpp`, which also lists the keys the app derives
+  itself — add new `@` keys there).
+- ImGui widgets: built with `IMGUI_ENABLE_TEST_ENGINE`; `ui.cpp` defines
+  ImGui's item hooks (no test engine is linked). While the panel is open
+  (`Ui::set_hover_tracking`) `ImGuiTestEngineHook_ItemInfo` keeps the
+  hovered widget's label; `ui_help_keys` turns it into keys: the `##id`
+  (trailing digits dropped), the visible text, the text without a trailing
+  `(…)` remark. Icon buttons (`tool_button`, `tool_menu_begin`) and tabs
+  (their hook fires before `ItemAdd`) note their id with
+  `note_hover_help`. A new menu item needs only a topic whose key is its
+  label. Without a topic the panel shows the label and the tooltip.
+- Canvas chrome: `hover_help_key_at` (`app_hoverhelp.cpp`) gives `@` keys
+  from the same hit-tests as the clicks / cursor (title zones, resize
+  edges, dock separators, status line, tile divider, scrollbar, gallery and
+  page chrome via `gallery_help_key` / `page_help_key`, `App::hover` for
+  page content); panel bodies are `@panel:<session name>`.
+
 ## Paint order
 
 1. Document panes, including overlays, footnotes, scrollbars and page chrome.

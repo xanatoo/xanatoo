@@ -2127,7 +2127,8 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
   // Help window is non-modal: Esc/F1 close it; other keys edit the document.
   if (app.help_mode &&
-      (xanatoo::sdl::keycode(ev) == SDLK_ESCAPE || xanatoo::sdl::keycode(ev) == SDLK_F1)) {
+      (xanatoo::sdl::keycode(ev) == SDLK_ESCAPE ||
+       (xanatoo::sdl::keycode(ev) == SDLK_F1 && !shift))) {
     app.help_mode = false;
     app.help.dragging = false;
     return;
@@ -2226,6 +2227,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       break;
 
     case SDLK_F1:
+      if (shift) {  // Shift+F1: the Help panel ("what's this?")
+        execute_command(app, UiCommand::ToggleHoverHelp);
+        break;
+      }
       app.help_mode = !app.help_mode;
       if (app.help_mode) {
         ensure_help_doc(app);

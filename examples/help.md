@@ -15,6 +15,7 @@ Jump to: [Files](#Files) · [Edit](#Edit) · [Navigate](#Navigate) · [View](#Vi
 - **Ctrl+S** — Save
 - **Ctrl+Shift+S** — Save As…
 - **Ctrl+R** / **F5** — Reload; **Ctrl+Shift+R** / **Shift+F5** / Shift+click on the Reload button — Force reload (converted files are converted again, downloaded books downloaded again). Right-click the Reload button for both
+- **Shift+F1** — Help panel: explains whatever the mouse pointer is over (menus, buttons, window controls, parts of the page)
 - **Ctrl+Q** — Quit (unsaved edits are kept as drafts; File → Drafts)
 - **Ctrl+T** — New tab
 - **Ctrl+W** — Close floating window, help, outline, or document tab

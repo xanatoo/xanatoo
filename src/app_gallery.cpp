@@ -393,6 +393,20 @@ bool gallery_pan(App& app, int pi, float dx, float dy) {
   return true;
 }
 
+const char* gallery_help_key(App& app, int pi, int x, int y) {
+  if (grid_up_at(app, x, y) == pi) return "@gallery-up";
+  Pane& p = app.panes[pi];
+  if (!pane_image_view(p) || !in_rect(view_rect(p), x, y)) return nullptr;
+  switch (zone_at(app, p, x, y)) {
+    case Zone::Up: return "@gallery-up";
+    case Zone::Grid: return "@gallery-grid";
+    case Zone::Prev: return "@gallery-prev";
+    case Zone::Next: return "@gallery-next";
+    case Zone::None: break;
+  }
+  return "@gallery-image";
+}
+
 bool gallery_pointer_down(App& app, int pi, int x, int y, int button) {
   if (button == SDL_BUTTON_LEFT && pi >= 0 && grid_up_at(app, x, y) == pi) {
     focus_view(app, pi);

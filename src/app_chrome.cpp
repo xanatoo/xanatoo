@@ -68,7 +68,8 @@ void apply_ui_scale(App& app) {
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win, &app.nostr_accounts_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
-                         &app.subscriptions_win, &app.certs_win, &app.related_win}) {
+                         &app.subscriptions_win, &app.certs_win, &app.related_win,
+                         &app.hover_help_win}) {
     w->x = static_cast<int>(std::lround(w->x * ratio));
     w->y = static_cast<int>(std::lround(w->y * ratio));
     w->w = static_cast<int>(std::lround(w->w * ratio));
@@ -90,6 +91,7 @@ void apply_ui_scale(App& app) {
   for (Pane& pane : app.panes) pane.height_cache.clear();
   app.needs_layout = true;
   app.help_needs_layout = true;
+  app.hover_help.needs_layout = true;
 
   app.ui.shutdown();
   if (!app.ui.init(app.window, app.sdl, app.ui_scale))

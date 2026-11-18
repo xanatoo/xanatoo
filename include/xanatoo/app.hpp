@@ -372,7 +372,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
-  Subscriptions, Certificates, RelatedSites, MatrixExplorer, Document
+  Subscriptions, Certificates, RelatedSites, MatrixExplorer, HoverHelp, Document
 };
 
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
@@ -496,6 +496,21 @@ struct Hover {
   std::string annotation;  // note id whose passage tab is hovered
   int annotation_pane = -1;
   bool chrome_notice = false;  // reader mode notice ("Show all")
+};
+
+// Help panel (WindowRole::HoverHelp, app_hoverhelp.cpp): the explanation
+// of the GUI element under the pointer, from the ui_help.hpp table. `key`
+// names what is shown (an ImGui label or an "@" canvas key); the document
+// is rebuilt only when it or the tooltip changes.
+struct HoverHelp {
+  bool open = false;
+  std::string key;
+  std::string tip;
+  xanatoo::Document doc;
+  xanatoo::LayoutResult layout;
+  bool has_doc = false;
+  bool needs_layout = true;
+  int layout_w = 0;
 };
 
 // Touchscreen gestures (app_touch.cpp). Fingers on the document surface
@@ -1136,6 +1151,9 @@ struct App {
   FloatWindow nostr_accounts_win = make_float_panel(WindowRole::NostrAccounts, 200, 150, 440, 440);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
   FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);
+  // Help panel (Shift+F1): explains the GUI element under the pointer.
+  HoverHelp hover_help;
+  FloatWindow hover_help_win = make_float_panel(WindowRole::HoverHelp, 200, 160, 360, 300);
   RelatedPanel related;
   ReplyDraft reply;
   SitemapPanel sitemap;
@@ -2133,6 +2151,20 @@ void draw_outline_panel(App& app);
 void draw_backlinks_panel(App& app);
 void draw_history_panel(App& app);
 void draw_help_window(App& app);
+// Help panel (app_hoverhelp.cpp): open / close, follow the pointer (each
+// frame after the chrome), draw. `hover_help_key_at` is the canvas part:
+// the "@" key of the native element at a window point, from the same
+// hit-tests as its clicks and cursor ("" over nothing explained).
+void toggle_hover_help(App& app);
+void update_hover_help(App& app);
+void draw_hover_help_window(App& app);
+std::string hover_help_key_at(App& app, int x, int y);
+// Help keys of the gallery / paged-reading chrome at a window point in view
+// `pi` (nullptr: none), from their own hit-tests.
+const char* gallery_help_key(App& app, int pi, int x, int y);
+const char* page_help_key(App& app, int pi, int x, int y);
+// The floating window whose resize edge is at (x, y), as float_resize_at.
+const FloatWindow* float_resize_window_at(App& app, int x, int y);
 void draw_floats(App& app);  // all floating windows, back→front
 void draw_dock_preview(App& app);
 void draw_hover_tooltip(App& app);
