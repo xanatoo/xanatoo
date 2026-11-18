@@ -239,6 +239,35 @@ std::vector<VisitRecord> recent_visits(size_t limit, int64_t before) {
   return out;
 }
 
+bool visit_log_available() { return statedb_connection() != nullptr; }
+
+std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
+                                    std::string_view filter) {
+  std::vector<VisitRecord> out;
+  sqlite3* d = statedb_connection();
+  if (!d || limit == 0) return out;
+  // LIKE pattern with %, _ and the escape character itself escaped.
+  std::string pattern = "%";
+  for (char c : filter) {
+    if (c == '%' || c == '_' || c == '\\') pattern += '\\';
+    pattern += c;
+  }
+  pattern += '%';
+  const std::string sql = std::string(kVisitColumns) +
+      "WHERE (?1 = 0 OR time < ?2 OR (time = ?2 AND id < ?1)) "
+      "AND (?3 = '' OR title LIKE ?4 ESCAPE '\\' "
+      "OR address LIKE ?4 ESCAPE '\\') "
+      "ORDER BY time DESC, id DESC LIMIT ?5;";
+  sqlite::Stmt s(d, sql.c_str());
+  s.bind(1, after ? after->id : int64_t{0})
+      .bind(2, after ? after->time : int64_t{0})
+      .bind(3, filter)
+      .bind(4, pattern)
+      .bind(5, static_cast<int64_t>(limit));
+  while (s.row()) out.push_back(visit_from(s));
+  return out;
+}
+
 #else  // !XANATOO_SQLITE
 
 int64_t store_observation(const PageObservation&) { return 0; }
@@ -247,6 +276,11 @@ int64_t store_visit(const VisitRecord&) { return 0; }
 void store_visit_leave(int64_t, int64_t) {}
 int64_t latest_visit_of(std::string_view) { return 0; }
 std::vector<VisitRecord> recent_visits(size_t, int64_t) { return {}; }
+bool visit_log_available() { return false; }
+std::vector<VisitRecord> visit_page(size_t, const VisitRecord*,
+                                    std::string_view) {
+  return {};
+}
 
 #endif
 

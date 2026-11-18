@@ -49,6 +49,24 @@ void vline(SDL_Renderer* r, int x, int y0, int y1, Rgb c) {
   xanatoo::sdl::draw_line(r, x, y0, x, y1);
 }
 
+void line(SDL_Renderer* r, int x0, int y0, int x1, int y1, Rgb c) {
+  set(r, c);
+  xanatoo::sdl::draw_line(r, x0, y0, x1, y1);
+}
+
+Rgb lane_color(int i) {
+  static constexpr Rgb kLanes[] = {
+      rgb(0x34, 0x65, 0xA4),  // blue (accent_dark)
+      rgb(0x4E, 0x9A, 0x06),  // green
+      rgb(0xC4, 0x6A, 0x00),  // orange
+      rgb(0x75, 0x50, 0x7B),  // plum
+      rgb(0x06, 0x98, 0x9A),  // teal
+      rgb(0xA4, 0x00, 0x00),  // red
+  };
+  constexpr int n = static_cast<int>(sizeof kLanes / sizeof kLanes[0]);
+  return kLanes[((i % n) + n) % n];
+}
+
 void vgradient(SDL_Renderer* r, const SDL_Rect& rc, Rgb top, Rgb bottom) {
   if (rc.h <= 0 || rc.w <= 0) return;
   for (int i = 0; i < rc.h; ++i) {

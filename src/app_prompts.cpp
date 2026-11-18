@@ -226,6 +226,11 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       return true;
     }
 
+    case PromptKind::HistoryFilter:
+      app.history.filter = pr.text;
+      close_prompt(app);
+      return true;
+
     case PromptKind::EditSummary:
       if (pr.node != xanatoo::INVALID_NODE) {
         d.get(pr.node).summary = pr.text;

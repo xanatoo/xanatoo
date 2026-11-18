@@ -110,7 +110,13 @@ captures the current position and completes deferred restores after fetching.
 `forward_nav_link` feeds the non-document link wash in `draw_pane_overlays`;
 link clicks pass their `NavLink` through `navigate_to_url`; same-document
 anchors use `navigate_anchor_link` so Back can return to the source. `App::visited`
-is only the session log for the History panel; the persistent visit
+is the session log (History menu, and the History panel's fallback without
+a visit log). The History panel (`app_history.cpp`, state `App::history`)
+draws the visit log as a trail tree: `visit_page` loads 200 visits at a time
+(more on scroll, filter as SQL `LIKE`), `history_trail.hpp` collapses
+in-page runs and assigns lanes, `history_changed` marks it stale (after
+`record_visit`, and when `poll_shared_state` sees another process write).
+The persistent visit
 graph is `visits.hpp` (`record_visit` in `push_nav_history`, kinds via
 `App::visit_hint` / `NavHistory::pending_kind`, `docs/HISTORY.md` "Done
 (step 3)"). `push_nav_history` additionally

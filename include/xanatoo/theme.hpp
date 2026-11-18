@@ -64,6 +64,9 @@ enum class Bevel { Raised, Sunken, Etched };
 void fill(SDL_Renderer* r, const SDL_Rect& rc, Rgb c, uint8_t a = 255);
 void hline(SDL_Renderer* r, int x0, int x1, int y, Rgb c);
 void vline(SDL_Renderer* r, int x, int y0, int y1, Rgb c);
+void line(SDL_Renderer* r, int x0, int y0, int x1, int y1, Rgb c);
+// Colour of lane `i` in trail graphs (History panel), repeating.
+Rgb lane_color(int i);
 void vgradient(SDL_Renderer* r, const SDL_Rect& rc, Rgb top, Rgb bottom);
 // 1px frame (inside `rc`); Raised = light top-left / dark bottom-right.
 void bevel(SDL_Renderer* r, const SDL_Rect& rc, Bevel style);

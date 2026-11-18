@@ -2,6 +2,26 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — History panel as a trail tree (history plan step 4)
+
+- The History panel draws the persistent visit log newest first with a
+  `git log --graph` lane graph: followed links continue a lane, tabs
+  opened from a page fork, typed / bookmark / external starts are hollow
+  dots; day headers; anchor jumps and reloads within a page share a row
+  (`×n`); session restores stay separate rows linked to the previous run.
+- `history_trail.hpp` (pure lane / run functions, `tests/history_trail_
+  tests.cpp`), `visit_page` (keyset paging by time + id, `LIKE` filter;
+  test in `sqlite_db_tests.cpp`), panel in `src/app_history.cpp`.
+- 200 visits per page, more on scroll / End; refreshed after each visit
+  and when another process writes. `/` or Ctrl+F filter (live), arrows /
+  Home / End / Enter / Ctrl+Enter, Esc clears filter then closes. Hover
+  tooltip with time, dwell, source, href and the observation.
+- Checked under Xvfb with an isolated state dir and seeded visits: forks,
+  merges, lanes crossing day headers, restore across days, filter,
+  tooltip, Esc, paging through 465 visits.
+- Not done: "this tab only" toggle, Context panel on hover, FTS.
+- Next: step 5, page thumbnails (docs/HISTORY.md order of work).
+
 ## Status (2026-11-18) — Visit graph and observations (history plan step 3)
 
 - Every page shown in a view is a visit in `xanatoo.sqlite` (`visits`,
@@ -16,7 +36,7 @@
   (`record_visit`, `record_reload_visit`); details `docs/HISTORY.md`.
 - Tests (`tests/sqlite_db_tests.cpp`: text hash, kinds, observation reuse,
   visits / pages, --no-save); checked end to end under Xvfb.
-- Next: step 4, History panel as a trail tree from the visit log.
+- Next: step 4 (done, see above).
 
 ## Status (2026-11-18) — Bookmarks and input histories in SQLite (history plan step 2)
 

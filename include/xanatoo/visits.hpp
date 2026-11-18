@@ -84,7 +84,16 @@ int64_t store_visit(const VisitRecord& v);
 void store_visit_leave(int64_t id, int64_t time);
 // Latest visit of the page `address` (exact address), 0 when none.
 int64_t latest_visit_of(std::string_view address);
+// True when the visit log can be read (SQLite built in, state_dir usable).
+bool visit_log_available();
 // Up to `limit` visits, newest first, older than `before` (ms; 0 = now).
 std::vector<VisitRecord> recent_visits(size_t limit, int64_t before = 0);
+
+// A page of the visit log for the History panel: newest first, after
+// (older than) the visit `after` (0 = from the newest; ties in time are
+// ordered by id, so paging loses nothing), and with a non-empty `filter`
+// only visits whose title or address contains it (ASCII case-insensitive).
+std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
+                                    std::string_view filter = {});
 
 }  // namespace xanatoo

@@ -2068,6 +2068,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   // The site map is mostly used on (read-only) web pages: its keys come
   // before the browse-mode filter below.
   if (!status_prompt && handle_sitemap_key(app, ev, ctrl, alt)) return;
+  if (!status_prompt && panel_has_keys(app, KeyFocus::History) && !alt) {
+    if (history_panel_key(app, xanatoo::sdl::keycode(ev), ctrl, shift)) return;
+    panel_key_unused(app, ev, ctrl, alt);
+  }
   if (!status_prompt && handle_page_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;

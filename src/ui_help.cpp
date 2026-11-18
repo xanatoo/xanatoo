@@ -399,7 +399,8 @@ const std::vector<UiHelpTopic> kTopics = {
     {"search bar", "Search bar",
      "Shows the search field next to the address. **Ctrl+K**."},
     {"show history", "History panel",
-     "The pages visited in this session. **Ctrl+Shift+H**."},
+     "Every page visited, newest first, as a trail tree: each visit is "
+     "linked to the page it was reached from. **Ctrl+Shift+H**."},
 
     // ---- Bookmarks ----
     {"bookmark this page", "Bookmark this page",
@@ -452,7 +453,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "Display settings of the view: line spacing, text width, margins, "
      "style sheet, and view options."},
     {"tb_history", "History panel",
-     "The pages visited in this session. **Ctrl+Shift+H**."},
+     "Every page visited, newest first, as a trail tree. "
+     "**Ctrl+Shift+H**."},
     {"urlbar", "Address field",
      "The address of the focused view. Type an address, a file path or a "
      "search and press Enter; suggestions come from history, tabs and "
@@ -510,8 +512,13 @@ const std::vector<UiHelpTopic> kTopics = {
      "Navigation and side bars of the web page as links; click to follow, "
      "middle-click for a new tab."},
     {"@panel:history", "History panel",
-     "Pages visited in this session, newest first. Click to open, "
-     "middle-click for a new tab."},
+     "Visits newest first, each linked to the visit it came from, like "
+     "`git log --graph`: a lane continues where you followed links, a fork "
+     "is a tab opened from a page, a hollow dot starts a trail (typed, "
+     "bookmark). Anchor jumps and reloads in one page share a row (*×n*). "
+     "Click to open, middle-click for a new tab, hover for details. With "
+     "the panel focused: **/** or **Ctrl+F** filters, arrows / Home / End "
+     "move, **Enter** opens, **Esc** clears the filter or closes."},
     {"@panel:styles", "Style sheets panel", "Pick the style sheet of the focused page."},
     {"@panel:style-manager", "Style sheet manager",
      "Create, edit and pin style sheets. Changes apply as you type."},

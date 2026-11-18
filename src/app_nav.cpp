@@ -135,6 +135,7 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
   if (const int64_t id = xanatoo::store_visit(v)) {
     if (left) xanatoo::store_visit_leave(left, v.time);
     cur.visit = id;
+    history_changed(app);
   }
 }
 
@@ -371,6 +372,7 @@ void poll_shared_state(App& app) {
   if (prompt_active(app) || now - app.shared_state_poll_ms < 1000) return;
   app.shared_state_poll_ms = now;
   if (!xanatoo::statedb_changed_elsewhere()) return;
+  history_changed(app);
   std::vector<xanatoo::Bookmark> marks = xanatoo::stored_bookmarks();
   auto same = [](const xanatoo::Bookmark& a, const xanatoo::Bookmark& b) {
     return a.address == b.address && a.title == b.title &&

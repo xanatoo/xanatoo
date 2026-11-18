@@ -161,6 +161,7 @@ add_executable(xanatoo
   src/app_view.cpp
   src/app_session.cpp
   src/app_nav.cpp
+  src/app_history.cpp
   src/app_softwin.cpp
   src/app_windows.cpp
   src/app_prompts.cpp
@@ -219,6 +220,7 @@ add_executable(xanatoo
   src/sqlite_db.cpp
   src/statedb.cpp
   src/visits.cpp
+  src/history_trail.cpp
   src/annotations.cpp
   src/epub_import.cpp
   src/epub_native.cpp
@@ -702,6 +704,7 @@ add_executable(xanatoo_tests
   tests/nntp_tests.cpp
   tests/ui_help_tests.cpp
   tests/sqlite_db_tests.cpp
+  tests/history_trail_tests.cpp
   src/ui_help.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
@@ -713,6 +716,7 @@ add_executable(xanatoo_tests
   src/sqlite_db.cpp
   src/statedb.cpp
   src/visits.cpp
+  src/history_trail.cpp
   src/sidestore.cpp
   src/annotations.cpp
   src/minibuffer.cpp

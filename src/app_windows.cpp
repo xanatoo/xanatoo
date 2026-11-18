@@ -363,21 +363,9 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::Backlinks:
       click_backlinks(app, w, my);
       break;
-    case WindowRole::History: {
-      auto [cx, cy, cw, ch] = float_client_rect(app, w);
-      const float step = static_cast<float>(
-          std::max(18, app.ui_font.line_height() + 7));
-      const int row = static_cast<int>(
-          (static_cast<float>(my - cy) + w.scroll) / step);
-      if (row >= 0 && row < static_cast<int>(app.visited.size())) {
-        const std::string& url =
-            app.visited[app.visited.size() - 1 - static_cast<size_t>(row)];
-        app.visit_hint = xanatoo::VisitKind::History;
-        open_address(app, url);
-        app.visit_hint.reset();
-      }
+    case WindowRole::History:
+      click_history_panel(app, w, my);
       break;
-    }
     case WindowRole::Styles:
     case WindowRole::StyleManager: {
       // ImGui owns the list / editor.
@@ -609,9 +597,7 @@ float float_max_scroll(App& app, const FloatWindow& w) {
                                    backlinks_row_step(app) +
                                8.f - view_h);
     case WindowRole::History:
-      return std::max(0.f, static_cast<float>(app.visited.size()) *
-                                   std::max(18, app.ui_font.line_height() + 7) +
-                               8.f - view_h);
+      return history_panel_max_scroll(app, w);
     case WindowRole::Styles:
     case WindowRole::StyleManager:
       return 0.f;  // ImGui handles scrolling.

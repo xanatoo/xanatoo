@@ -296,6 +296,10 @@ StatusLine compute_status(App& app) {
         label += "    (optional: href rel=glossary)";
         label += "    Enter confirm · Esc cancel";
         break;
+      case PromptKind::HistoryFilter:
+        label = "Filter history: " + shown_or_dots;
+        label += "    Enter keep · Esc cancel";
+        break;
       case PromptKind::EditSummary:
         label = "Stretch summary: " + shown_or_dots;
         label += "    Enter confirm · Esc cancel";

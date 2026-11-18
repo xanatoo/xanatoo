@@ -1,7 +1,8 @@
 # Browsing history, snapshots and shared state — plan
 
 Status (2026-11-18): **A done** (steps 1–2), **B + D recording done**
-(step 3: visits and observations in `xanatoo.sqlite`); C–F are plan.
+(step 3: visits and observations in `xanatoo.sqlite`), **C done** (step 4:
+History panel as a trail tree); E, F and thumbnails are plan.
 
 The request bundles five ideas. They depend on each other only in one
 direction, so they can land as separate steps:
@@ -236,6 +237,48 @@ graph left of the title like `git log --graph`:
 - Loading is paged by time (`WHERE time < ? ORDER BY time DESC LIMIT 200`),
   so years of history stay instant.
 
+### Done (step 4)
+
+`include/xanatoo/history_trail.hpp` / `src/history_trail.cpp` (pure, tests
+in `tests/history_trail_tests.cpp`):
+
+- `collapse_page_runs`: adjacent visits of one page where the newer one
+  was reached from the older by an anchor jump (`link` / `nav` to another
+  `#fragment`) or a `reload` become one entry (shown `×n`). A `restore` or
+  the same address opened again stays a row of its own, so session breaks
+  remain visible.
+- `trail_nodes`: one node per entry (newest id, oldest member's source;
+  sources into a run point at the run). With a filter, sources outside
+  the list are dropped (only links between shown rows are drawn).
+- `history_lanes`: the git pass. A visit takes the leftmost lane waiting
+  for it; other lanes waiting for it merge there (diagonal); a visit no
+  one waits for opens the leftmost free lane; a visit without source ends
+  its lane. A source that is not loaded keeps its lane open to the bottom
+  (the next page connects it). `lanes_below` gives the lines crossing a
+  day header.
+
+`visit_page(limit, after, filter)` (visits.cpp) pages by `(time, id)`, so
+visits with the same millisecond are not skipped, and filters title /
+address with `LIKE … ESCAPE` (`%` and `_` literal).
+
+Panel (`src/app_history.cpp`, state `App::history`): day headers, lane
+graph (colours `theme::lane_color`), time, title (or address), how it was
+reached on the right (`link`, `typed`, `new tab`, `restored`, …). Hollow
+dot = starts a trail (no source in the list). Rows the views show now are
+marked. 200 visits per page, the next page when scrolled near the end;
+stale after `record_visit` and when `poll_shared_state` sees another
+process's commit (selection follows its visit). Click / middle-click /
+Enter / Ctrl+Enter open (kind `history`); `/` or Ctrl+F opens the filter
+prompt (`PromptKind::HistoryFilter`, applied while typing, Enter keeps,
+Esc cancels); Esc in the panel clears the filter, then closes. Hover
+tooltip: address, time and dwell, kind and source title, href, `×n`, and
+the observation (status, type, size, ETag, Last-Modified, text hash).
+Without a visit log (no SQLite / no state dir) it lists `App::visited`.
+
+Not done: "this tab only" toggle (by `window`), the hover → Context panel
+(the tooltip shows the observation instead), FTS. `App::visited` stays (the
+History menu and the fallback), so the session file still stores it.
+
 ## D. Observations: identifying what was seen
 
 HTTP gives no content identity, so record several independent ones and let
@@ -345,7 +388,7 @@ hard-coded.
    validators and both hashes; recording in `push_nav_history` and the
    fetch path; `App::visited` from the DB. Tests: recording kinds, source
    chains, observation reuse, `no_save()`.
-4. **C** lane function + tests, History panel rewrite, filter, paging.
+4. **C** lane function + tests, History panel rewrite, filter, paging. (done)
 5. **Thumbnails** cache + Context panel / bookmarks use.
 6. **F** `history:graph` view.
 7. **E** snapshots for bookmarks first, `@observation` addresses,

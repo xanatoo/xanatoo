@@ -24,6 +24,7 @@
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gemini_tofu.hpp"
+#include "xanatoo/history_trail.hpp"
 #include "xanatoo/images.hpp"
 #include "xanatoo/layout.hpp"
 #include "xanatoo/locator.hpp"
@@ -44,6 +45,7 @@
 #include "xanatoo/ui.hpp"
 #include "xanatoo/tile_tree.hpp"
 #include "xanatoo/tls.hpp"
+#include "xanatoo/visits.hpp"
 #include "xanatoo/subscriptions.hpp"
 #include "xanatoo/view_settings.hpp"
 
@@ -809,6 +811,7 @@ enum class PromptKind : uint8_t {
   EditLink,
   EditCite,
   EditSummary,
+  HistoryFilter,  // History panel filter, applied while typing
 };
 
 struct Prompt {
@@ -830,6 +833,34 @@ struct GeminiSiteCert {
   std::optional<xanatoo::GeminiCertificateChange> change;
   std::string url;  // the page that met the change, reloaded on accept
   int pane = -1;
+};
+
+// A line of the History panel: a visit entry or a day header.
+struct HistoryLine {
+  int entry = -1;   // index into HistoryPanel::entries; -1: day header
+  std::string day;  // header text
+  int after = -1;   // day header: the entry above it (its lanes go on)
+};
+
+// History panel (WindowRole::History, app_history.cpp): the visit log,
+// newest first, as a trail tree (history_trail.hpp, docs/HISTORY.md "C").
+// Derived from the database; reloaded when `stale`.
+struct HistoryPanel {
+  std::vector<xanatoo::VisitRecord> visits;   // loaded, newest first
+  std::vector<xanatoo::TrailEntry> entries;   // page runs of `visits`
+  std::vector<xanatoo::LaneRow> lanes;        // one per entry
+  std::vector<HistoryLine> lines;             // what the panel draws
+  int graph_cols = 1;          // lane columns drawn (widest row, capped)
+  std::string filter;          // kept filter (Enter in the filter prompt)
+  std::string loaded_filter;   // the filter `visits` were loaded with
+  bool stale = true;           // reload from the visit log
+  bool more = false;           // older visits may exist (loaded on scroll)
+  bool from_db = false;        // false: this session's addresses only
+  int sel = -1;                // keyboard selection (line index)
+  int hover = -1;              // line under the pointer, -1 none
+  // Observation of the hovered visit, for its tooltip.
+  int64_t tip_observation = 0;
+  std::optional<xanatoo::PageObservation> tip_observed;
 };
 
 // Certificates panel (WindowRole::Certificates).
@@ -1005,6 +1036,7 @@ struct App {
   // Pages opened this session in any view, oldest first (History panel);
   // Back / Forward use each view's own `Pane::nav`.
   std::vector<std::string> visited;
+  HistoryPanel history;
   std::vector<xanatoo::Bookmark> bookmarks;
   std::vector<xanatoo::Subscription> subscriptions;
   bool subscriptions_panel_open = false;
@@ -2173,7 +2205,16 @@ void draw_split_chrome(App& app);
 void draw_status_bar(App& app);
 void draw_outline_panel(App& app);
 void draw_backlinks_panel(App& app);
+// History panel (app_history.cpp).
 void draw_history_panel(App& app);
+void click_history_panel(App& app, FloatWindow& w, int my);
+float history_panel_max_scroll(App& app, const FloatWindow& w);
+// Keys while the panel has keyboard focus; true = consumed.
+bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift);
+// The visit log changed (a visit was recorded, another process wrote).
+void history_changed(App& app);
+// Tooltip text for the hovered row ("" = none).
+std::string history_tooltip(App& app);
 void draw_help_window(App& app);
 // Help panel (app_hoverhelp.cpp): open / close, follow the pointer (each
 // frame after the chrome), draw. `hover_help_key_at` is the canvas part:

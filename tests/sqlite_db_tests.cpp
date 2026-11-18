@@ -380,6 +380,30 @@ void test_visits() {
   EXPECT_EQ(store_visit(v), 0);
   set_no_save(false);
   EXPECT_EQ(recent_visits(10).size(), 2u);
+  {
+    // History panel pages: ties in time are paged by id; filter by title
+    // or address, case-insensitive, with LIKE wildcards taken literally.
+    VisitRecord w;
+    w.time = 20;  // same time as v2
+    w.address = "https://b.example/100%_off";
+    w.title = "Closures";
+    w.kind = VisitKind::Address;
+    const int64_t v3 = store_visit(w);
+    auto p1 = visit_page(2, nullptr);
+    EXPECT_EQ(p1.size(), 2u);
+    if (p1.size() == 2) {
+      EXPECT_EQ(p1[0].id, v3);
+      EXPECT_EQ(p1[1].id, v2);
+      auto p2 = visit_page(2, &p1[1]);
+      EXPECT_EQ(p2.size(), 1u);
+      EXPECT(!p2.empty() && p2[0].id == v1);
+    }
+    EXPECT_EQ(visit_page(10, nullptr, "CLOSURE").size(), 1u);
+    EXPECT_EQ(visit_page(10, nullptr, "a.example").size(), 2u);
+    EXPECT_EQ(visit_page(10, nullptr, "%_").size(), 1u);
+    EXPECT_EQ(visit_page(10, nullptr, "0%_o").size(), 1u);
+    EXPECT_EQ(visit_page(10, nullptr, "x_y").size(), 0u);
+  }
   statedb_use_path({});
   std::error_code ec;
   fs::remove_all(t.path.string() + ".d", ec);
