@@ -2513,6 +2513,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Make web addresses clickable", nullptr,
                           state.auto_links))
         cmd = UiCommand::ToggleAutoLinks;
+      if (ImGui::MenuItem("Show images of image addresses", nullptr,
+                          state.auto_images))
+        cmd = UiCommand::ToggleAutoImages;
       ImGui::EndMenu();
     }
     force_menu("Layout");
@@ -3260,6 +3263,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       toggle("Make web addresses clickable", state.auto_links,
              UiCommand::ToggleAutoLinks,
              "http:// and https:// text in any document becomes a link");
+      toggle("Show images of image addresses", state.auto_images,
+             UiCommand::ToggleAutoImages,
+             "A picture under text that is the address of an image file");
       toggle("Reader mode by default", state.reader_default,
              UiCommand::ToggleReaderDefault,
              "Web pages without navigation, sidebars and footers (F9 per view)");

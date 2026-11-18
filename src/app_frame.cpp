@@ -186,6 +186,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.bookmark_marks = app.view_settings.bookmark_marks;
   ui_state.hover_preview = app.view_settings.hover_preview;
   ui_state.auto_links = app.view_settings.auto_links;
+  ui_state.auto_images = app.view_settings.auto_images;
   ui_state.auto_updates = app.view_settings.auto_updates;
   ui_state.reader_default = app.view_settings.reader_mode;
   ui_state.reader = pane_reader(app, focused_pane(app));
@@ -831,7 +832,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ViewMeasure ||
         c == C::ToggleSectionFocus || c == C::ToggleJustify ||
         c == C::ToggleHoverPreview || c == C::ToggleAutoLinks ||
-        c == C::ToggleAutoUpdates || c == C::TogglePreferences ||
+        c == C::ToggleAutoImages || c == C::ToggleAutoUpdates || c == C::TogglePreferences ||
         c == C::ToggleCredentials || c == C::SaveCatalogCredentials ||
         c == C::ClearCatalogCredentials ||
         c == C::SaveRedditCredentials || c == C::ClearRedditCredentials ||
@@ -2749,6 +2750,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       flash_status(app, app.view_settings.auto_links
                             ? "Web addresses in text are links"
                             : "Web addresses in text are plain text");
+      break;
+    case C::ToggleAutoImages:
+      app.view_settings.auto_images = !app.view_settings.auto_images;
+      apply_view_settings(app, true);
+      flash_status(app, app.view_settings.auto_images
+                            ? "Image addresses in text show the image"
+                            : "Image addresses in text show only the address");
       break;
     case C::ToggleHoverPreview:
       app.view_settings.hover_preview = !app.view_settings.hover_preview;

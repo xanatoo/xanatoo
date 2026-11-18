@@ -156,6 +156,15 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `href` = optional link. Layout places them as atoms on the baseline
   (`PositionedImage::in_text`; never resizable, a click follows the link or
   opens the viewer). Markdown `![a](s){width=… height=…}` inside text.
+- Image addresses in text (`ViewSettings::auto_images`, View → "Show
+  images of image addresses", on by default): `text_image_urls` finds bare
+  http(s) URLs of image files in plain text and links whose text is a web
+  address (`<https://…/x.jpg>`, Lemmy / HN style); `layout_text_images`
+  puts their remote thumbnails in a row under the paragraph, display-time
+  only (the document is unchanged; such a block takes no line table).
+  `PositionedImage::in_text` + `auto_link` (target in
+  `LayoutResult::auto_links`, or the link span); a failed load drops the
+  picture, the address stays a link.
 - `NodeKind::Aside`: a container of blocks, a side box (style role
   `aside`: `width`, `side`, `placement`, `indent` = padding, small `font`,
   muted `color`). `placement margin` (default) uses existing page margin

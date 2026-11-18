@@ -173,6 +173,49 @@ bool LayoutEngine::try_skip_block(NodeId id, float x, float& y, float max_width,
   return false;
 }
 
+static bool next_utf8(const std::string& text, size_t& i, uint32_t& cp);
+
+std::vector<TextImageUrl> text_image_urls(const Node& node) {
+  std::vector<TextImageUrl> out;
+  auto add = [&](std::string url, size_t span, bool link) {
+    if (!is_image_url(url)) return;
+    for (const TextImageUrl& t : out)
+      if (t.url == url) return;
+    for (const InlineSpan& s : node.spans)
+      if (s.kind == InlineKind::Image && (s.src == url || s.href == url))
+        return;
+    out.push_back({std::move(url), span, link});
+  };
+  std::vector<uint32_t> cps;
+  for (size_t si = 0; si < node.spans.size(); ++si) {
+    const InlineSpan& s = node.spans[si];
+    if (s.kind == InlineKind::Link) {
+      // A link written as its address ("https://…/x.jpg", or a shortened
+      // "https://…/x…"); a named link stays a link.
+      std::string_view text = s.text;
+      trim_ascii(text);
+      if (starts_with_ci(text, "http"))
+        add(s.href, si, true);
+      continue;
+    }
+    if (s.kind != InlineKind::Text && s.kind != InlineKind::Emphasis &&
+        s.kind != InlineKind::Strong && s.kind != InlineKind::Strike)
+      continue;
+    if (s.text.find("http") == std::string::npos &&
+        s.text.find("HTTP") == std::string::npos)
+      continue;
+    cps.clear();
+    size_t byte = 0;
+    for (uint32_t cp = 0; next_utf8(s.text, byte, cp);) cps.push_back(cp);
+    for (const auto& [b, e] : find_urls(cps)) {
+      std::string url;
+      for (size_t i = b; i < e; ++i) autolink_append_utf8(url, cps[i]);
+      add(std::move(url), si, false);
+    }
+  }
+  return out;
+}
+
 // Everything `in` laid out (a column, a table cell) added to `out`.
 static void append_result(LayoutResult& out, const LayoutResult& in) {
   auto add = [](auto& dst, const auto& src) {
@@ -186,7 +229,10 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
   for (size_t i = first_glyph; i < out.glyphs.size(); ++i)
     if (out.glyphs[i].auto_link != 0) out.glyphs[i].auto_link += link_base;
   add(out.boxes, in.boxes);
+  const size_t first_image = out.images.size();
   add(out.images, in.images);
+  for (size_t i = first_image; i < out.images.size(); ++i)
+    if (out.images[i].auto_link != 0) out.images[i].auto_link += link_base;
   add(out.maths, in.maths);
   add(out.quote_bars, in.quote_bars);
   add(out.note_bars, in.note_bars);
@@ -2424,6 +2470,53 @@ void LayoutEngine::inline_image_size(const InlineSpan& sp, float max_w,
   h = std::max(1.f, h);
 }
 
+// Pictures for text_image_urls under their paragraph: remote thumbnails
+// side by side, wrapping at the column edge; ones that failed to load are
+// left out (the address stays a link). A click follows the address.
+void LayoutEngine::layout_text_images(const std::vector<TextImageUrl>& urls,
+                                      const Node& node, float x, float& y,
+                                      float max_width, LayoutResult& out) {
+  const float dp = options_.px_scale;
+  const float gap = 6.f * dp;
+  const float max_h = 360.f * dp;
+  float cx = x;
+  float row_h = 0.f;
+  bool any = false;
+  for (const TextImageUrl& t : urls) {
+    float w = std::min(max_width, 320.f * dp);
+    float h = 180.f * dp;
+    if (images_) {
+      const Image& img = images_->thumb(t.url, image_base_, kRemoteThumbEdge);
+      if (!img.ok && !img.pending) continue;
+      if (img.ok && img.width > 0 && img.height > 0) {
+        const float sc = std::min({dp, max_width / img.width,
+                                   max_h / img.height});
+        w = img.width * sc;
+        h = img.height * sc;
+      }
+    }
+    if (!any) y += gap;
+    if (cx > x && cx + w > x + max_width) {
+      y += row_h + gap;
+      cx = x;
+      row_h = 0.f;
+    }
+    PositionedImage im{node.id, cx, y, w, h, t.url, image_base_};
+    im.thumb = kRemoteThumbEdge;
+    im.in_text = true;
+    im.span_index = t.span;
+    if (!t.link) {
+      out.auto_links.push_back(t.url);
+      im.auto_link = static_cast<uint32_t>(out.auto_links.size());
+    }
+    out.images.push_back(std::move(im));
+    cx += w + gap;
+    row_h = std::max(row_h, h);
+    any = true;
+  }
+  if (any) y += row_h + gap;
+}
+
 void LayoutEngine::layout_chrome_notice(const Document& doc, float x,
                                         float& y, float max_width,
                                         LayoutResult& out) {
@@ -2561,6 +2654,13 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     if (sp.kind == InlineKind::Math || sp.kind == InlineKind::Image ||
         sp.kind == InlineKind::FootnoteRef)
       plain_text = false;
+  // Pictures of image addresses in the text, under the lines (this layout
+  // only; the document keeps its text).
+  std::vector<TextImageUrl> text_images;
+  if (options_.auto_images && base_role != FontRole::Code &&
+      base_role != FontRole::SmallCode && block != BlockRole::CodeBlock)
+    text_images = text_image_urls(node);
+  if (!text_images.empty()) plain_text = false;
   auto fingerprint = [&]() {
     uint64_t h = 0xcbf29ce484222325ull;
     auto mix = [&](uint64_t v) {
@@ -2575,6 +2675,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     mix_f(max_width);
     mix_f(options_.line_spacing);
     mix(options_.auto_links);
+    mix(options_.auto_images);
     mix(static_cast<uint64_t>(base_role));
     mix(static_cast<uint64_t>(block));
     for (const InlineSpan& sp : node.spans) {
@@ -3161,6 +3262,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   if (line_lo < chars.size()) flush_line(chars.size(), true);
 
   y = baseline - metrics.ascender() + metrics.line_height() * 0.2f;
+  if (!text_images.empty())
+    layout_text_images(text_images, node, x, y, max_width, out);
 
   if (recording && skipped_here) {
     // Bigger than the band: keep its lines for the next layout.

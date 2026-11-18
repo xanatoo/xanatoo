@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Pictures for image addresses in text
+
+- Bare image URLs in text (Lemmy `pictrs` links and the like) and links
+  written as their address show the picture under their paragraph
+  (display-time, `LayoutOptions::auto_images`); View → "Show images of
+  image addresses" (also in Preferences) turns it off, saved in view.conf.
+  A click on the picture opens the image viewer. Checked in Xvfb against a
+  local HTTP image (shown, toggle off/on, click → viewer). Not covered:
+  real Lemmy threads with many pictures (thumbnails queue like any remote
+  image), per-page instead of global switch.
+
 ## Status (2026-11-18) — Gallery: Up goes straight back to the page
 
 - Up from `page//gallery//item:N` (Esc, toolbar Up, the top strip) now

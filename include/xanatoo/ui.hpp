@@ -262,6 +262,7 @@ enum class UiCommand {
   ToggleBookmarkMarks,      // view: wash over bookmarks inside the page
   ToggleAutoUpdates,         // Android update checks
   ToggleAutoLinks,          // view: plain-text http(s):// URLs become links
+  ToggleAutoImages,         // view: image URLs in text show the picture
   ToggleHoverPreview,       // split view: preview hovered links on the right
   ToggleReaderDefault,      // Preferences: reader mode for new views
   TogglePreferences,        // Edit → Preferences window
@@ -420,6 +421,7 @@ struct UiState {
   uint64_t annotation_note_created_gen = 0;
   bool hover_preview = false;
   bool auto_links = true;  // ViewSettings::auto_links
+  bool auto_images = true;  // ViewSettings::auto_images
   bool auto_updates = false;
   bool reader_default = false;  // ViewSettings::reader_mode
   bool reader = false;          // focused view hides the page chrome

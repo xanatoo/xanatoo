@@ -34,6 +34,10 @@ struct ViewSettings {
   // Bare http(s):// text becomes a clickable link at display time, in every
   // format (the document is not changed). On by default.
   bool auto_links = true;
+  // Bare http(s):// addresses of image files (and links whose text is such
+  // an address) also show the picture under their paragraph, at display
+  // time. On by default.
+  bool auto_images = true;
   // Android: check for new APKs on startup, only with the user’s consent.
   bool auto_updates = false;
   // Reader mode for views that were not switched themselves: web pages show

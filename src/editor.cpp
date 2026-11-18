@@ -2388,6 +2388,11 @@ std::optional<LinkHit> hit_test_link_ex(const Document& doc,
     hit.node = im.node;
     hit.span_index = im.span_index;
     hit.href = sp.href.empty() ? sp.src : sp.href;
+    if (im.auto_link != 0 && im.auto_link <= layout.auto_links.size()) {
+      hit.auto_link = im.auto_link;
+      hit.href = layout.auto_links[im.auto_link - 1];
+      hit.rel.clear();
+    }
     if (hit.href.empty()) continue;
     return hit;
   }

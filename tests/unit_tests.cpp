@@ -3002,6 +3002,73 @@ void test_layout_line_table_matches_fresh() {
 
 // Plain-text URLs in columns (laid out apart, then merged) keep their
 // own targets.
+void test_text_image_urls() {
+  using namespace xanatoo;
+  // Bare image addresses in text, bare-address links to images; not named
+  // links, not other addresses, not code, each once.
+  Document doc = parse_markup(
+      "See https://lemmy.today/pictrs/image/5099c45e.jpeg and "
+      "https://example.com/page, again https://lemmy.today/pictrs/image/"
+      "5099c45e.jpeg. <https://i.example/a.png> [named](https://i.example/b.png)"
+      " `https://i.example/c.png`\n");
+  NodeId para = INVALID_NODE;
+  for (NodeId id = 0; id < doc.next_id; ++id)
+    if (doc.get(id).kind == NodeKind::Paragraph) para = id;
+  EXPECT(para != INVALID_NODE);
+  if (para == INVALID_NODE) return;
+  const auto urls = text_image_urls(doc.get(para));
+  EXPECT_EQ(urls.size(), 2u);
+  if (urls.size() == 2) {
+    EXPECT_EQ(urls[0].url,
+              std::string("https://lemmy.today/pictrs/image/5099c45e.jpeg"));
+    EXPECT_EQ(urls[1].url, std::string("https://i.example/a.png"));
+    EXPECT(urls[1].link);
+  }
+}
+
+void test_layout_auto_images() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_auto_images (no font)\n");
+    return;
+  }
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  const std::string url = "https://lemmy.today/pictrs/image/x.jpeg";
+  doc.append_text(doc.create(NodeKind::Paragraph, root), "Look " + url);
+  doc.append_text(doc.create(NodeKind::Paragraph, root), "After");
+  auto layout = [&](bool on) {
+    LayoutEngine engine(fonts, nullptr);
+    LayoutOptions opts;
+    opts.auto_links = true;
+    opts.auto_images = on;
+    engine.set_options(opts);
+    return engine.layout(doc, 900.f);
+  };
+  const LayoutResult off = layout(false);
+  const LayoutResult on = layout(true);
+  EXPECT(off.images.empty());
+  EXPECT_EQ(on.images.size(), 1u);
+  if (on.images.size() != 1) return;
+  const PositionedImage& im = on.images[0];
+  EXPECT(im.in_text);
+  EXPECT_EQ(im.src, url);
+  EXPECT(im.auto_link != 0 && im.auto_link <= on.auto_links.size() &&
+         on.auto_links[im.auto_link - 1] == url);
+  // The next paragraph moves down below the picture.
+  float after_off = 0.f, after_on = 0.f;
+  for (const PositionedGlyph& g : off.glyphs) if (g.codepoint == 'A') after_off = g.y;
+  for (const PositionedGlyph& g : on.glyphs) if (g.codepoint == 'A') after_on = g.y;
+  EXPECT(after_on >= after_off + im.height);
+  EXPECT(im.y + im.height < after_on);
+  // A click on the picture follows the address.
+  const auto hit = hit_test_link_ex(doc, on, im.x + 2.f, im.y + 2.f, 0.f);
+  EXPECT(hit.has_value() && hit->href == url);
+}
+
 void test_layout_column_auto_links() {
   using namespace xanatoo;
   FontSet fonts;
@@ -6828,6 +6895,8 @@ int main() {
   test_layout_skips_lines_outside_band();
   test_layout_line_table_matches_fresh();
   test_layout_column_auto_links();
+  test_text_image_urls();
+  test_layout_auto_images();
   test_glyphs_in_band();
   test_layout_wrap_respects_max_width();
   test_layout_forced_wrap_after_regular_text();

@@ -67,6 +67,10 @@ struct PositionedImage {
   // its InlineKind::Image span. Not resizable; a click follows its link.
   bool in_text = false;
   size_t span_index = 0;
+  // > 0: a picture of an image address in the text (auto_images), shown
+  // under its paragraph; 1 + index into LayoutResult::auto_links, its
+  // target (`span_index` is then the span holding the address).
+  uint32_t auto_link = 0;
   // > 0: a fixed-layout Page (`src` = thumtoo location), drawn from tiles
   // over a scale-0 grid of page_w × page_h (app_pagetiles.cpp), never
   // through ImageCache. Not resizable.
@@ -239,6 +243,18 @@ struct LayoutViewport {
 // Call after reload so changed includes are picked up.
 void clear_external_doc_cache();
 
+// An image address in a block's text (LayoutOptions::auto_images): a bare
+// http(s):// URL of an image file in plain text (`link` false), or a link to
+// one whose text is a web address (`link` true: `span` is that link).
+struct TextImageUrl {
+  std::string url;
+  size_t span = 0;
+  bool link = false;
+};
+// Each address once, in text order; none that the block already shows as
+// an inline image.
+std::vector<TextImageUrl> text_image_urls(const Node& node);
+
 // Per-layout rendering options (from ViewSettings). Geometry only.
 struct LayoutOptions {
   float margin_x = 32.f;     // minimum left/right inset in px
@@ -249,6 +265,8 @@ struct LayoutOptions {
   bool justify = false;
   // Plain text URLs are laid out as links (ViewSettings::auto_links).
   bool auto_links = false;
+  // Image addresses in text show their picture (ViewSettings::auto_images).
+  bool auto_images = false;
   // Display scale for px lengths (style sheet px, margins).
   float px_scale = 1.f;
 
@@ -261,6 +279,7 @@ struct LayoutOptions {
     o.measure_chars = v.measure_chars;
     o.justify = v.justify;
     o.auto_links = v.auto_links;
+    o.auto_images = v.auto_images;
     o.px_scale = px_scale;
     return o;
   }
@@ -389,6 +408,10 @@ private:
   // max_w); remote ones from their thumbnail, a 1 em box while pending.
   void inline_image_size(const InlineSpan& sp, float max_w, float& w,
                          float& h, bool& remote);
+  // Pictures of a paragraph's image addresses, below it (auto_images).
+  void layout_text_images(const std::vector<TextImageUrl>& urls,
+                          const Node& node, float x, float& y,
+                          float max_width, LayoutResult& out);
 
   // The set formula of a Math span (null without a math font or on a parse
   // error); cached by source and style.
