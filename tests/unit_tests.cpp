@@ -75,6 +75,9 @@
 #include <set>
 #include <string_view>
 
+// forum_tests.cpp: adds its pass / fail counts.
+void test_forums(int& passed, int& failed);
+
 namespace {
 
 int g_failed = 0;
@@ -5846,6 +5849,13 @@ void test_wikipedia() {
   EXPECT_EQ(web_url_for("hn:newest"), "https://news.ycombinator.com/newest");
   EXPECT(is_hn_ref("hn:"));
   EXPECT(!is_hn_ref("https://news.ycombinator.com/"));
+  // Forum refs (forums.hpp) take part in the same mappings.
+  EXPECT_EQ(native_url_for("https://lobste.rs/s/abc/title"), "lobsters:s/abc");
+  EXPECT_EQ(web_url_for("fourchan:g/thread/1"), "https://boards.4chan.org/g/thread/1");
+  EXPECT_EQ(alternate_view_url("stackexchange:superuser.com/questions/5"),
+            "https://superuser.com/questions/5");
+  EXPECT_EQ(up_url("discourse:discourse.nixos.org/t/x/1"), "discourse:discourse.nixos.org");
+  EXPECT_EQ(up_url("fourchan:g/thread/1"), "fourchan:g/");
   EXPECT_EQ(native_url_for("https://old.reddit.com/r/linux/.json?after=x"),
             "reddit:r/linux/?after=x");
   EXPECT_EQ(native_url_for("https://www.reddit.com/r/linux/comments/abc/t/"),
@@ -6928,6 +6938,7 @@ int main() {
   test_text_selectors();
   test_bookmark_lines();
   test_math();
+  test_forums(g_passed, g_failed);
 
   std::printf("%d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

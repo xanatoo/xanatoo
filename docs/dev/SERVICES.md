@@ -295,6 +295,20 @@ read-only service clients. Every client is read-only: never post or log in.
   channel and search refs and comments. Parsers are pure and tested; never
   post or log in. See `docs/VIDEO_SITES.md`.
 
+## Forums (`forums.hpp`)
+
+- `src/forums.cpp` + `src/forum_<site>.cpp` (pure mappers) +
+  `src/forum_fetch.cpp` (network), gated by `XANATOO_FORUMS` (default ON;
+  needs TLS). Read-only Discourse / Lobsters / 4chan / Stack Exchange /
+  Bluesky / Flarum: `discourse:HOST/t/…`, `lobsters:s/ID`,
+  `fourchan:B/thread/N`, `stackexchange:HOST/questions/ID`,
+  `bsky:HANDLE/post/RKEY`, `flarum:HOST/d/ID`. See `docs/FORUMS.md`.
+- Shared builders in `src/forum_common.hpp` (`add_message` fills the Message
+  header slots, `start_document`, `add_pager`, `map_links`); new sites add
+  a mapper file, a `kSites` row and a `forum_fetch` case.
+- Ref schemes must start with a letter (`looks_like_local_path`): hence
+  `fourchan:`, not `4chan:`.
+
 ## Internet Archive
 
 - `src/archive.cpp`, no feature switch of its own (needs `XANATOO_HTTPS`).

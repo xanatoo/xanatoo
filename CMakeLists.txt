@@ -42,7 +42,7 @@ option(XANATOO_MINIMAL_PORT "Offline, dependency-light cross-platform build" ${_
 set(XANATOO_WASM_DEPS_ROOT "" CACHE PATH "Emscripten prefix with thumtoo's libraries")
 if(XANATOO_MINIMAL_PORT)
   set(_minimal_off FONTCONFIG SQLITE THUMTOO GEMINI NOSTR REDDIT LEMMY MATRIX HN YOUTUBE VIDEO
-                   EBOOKS FEEDS WEB WIKIPEDIA)
+                   FORUMS EBOOKS FEEDS WEB WIKIPEDIA)
   # Gopher/Spartan/Nex/Finger use plain TCP only (no TLS library). Keep them
   # available under MINIMAL_PORT except on Emscripten (no raw sockets).
   # Browser fetch (src/https_wasm.cpp) replaces sockets + TLS. Synchronous
@@ -145,6 +145,7 @@ option(XANATOO_MATRIX "Enable read-only Matrix rooms / directories (Client-Serve
 option(XANATOO_YOUTUBE "Enable YouTube channel / video / comment fetch (InnerTube, TLS HTTPS)" ON)
 option(XANATOO_VIDEO "Enable PeerTube / Odysee / Dailymotion fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_HN "Enable Hacker News fetch (Firebase + Algolia APIs, TLS HTTPS)" ON)
+option(XANATOO_FORUMS "Enable Discourse / Lobsters / 4chan / Stack Exchange / Bluesky / Flarum fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_EBOOKS "Enable Standard Ebooks / remote EPUB downloads (TLS HTTPS)" ON)
 option(XANATOO_FEEDS "Enable RSS / Atom feed fetch (TLS HTTPS)" ON)
 option(XANATOO_WEB "Open other http(s) pages in-app as reader views (TLS HTTPS)" ON)
@@ -242,6 +243,14 @@ add_executable(xanatoo
   src/matrix.cpp
   src/matrix_directory.cpp
   src/hackernews.cpp
+  src/forums.cpp
+  src/forum_discourse.cpp
+  src/forum_lobsters.cpp
+  src/forum_4chan.cpp
+  src/forum_stackexchange.cpp
+  src/forum_bluesky.cpp
+  src/forum_flarum.cpp
+  src/forum_fetch.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
@@ -363,7 +372,7 @@ endif()
 
 set(XANATOO_NEED_OPENSSL OFF)
 if(XANATOO_GEMINI OR XANATOO_NOSTR OR XANATOO_REDDIT OR XANATOO_LEMMY OR XANATOO_MATRIX OR
-   XANATOO_HN OR XANATOO_YOUTUBE OR XANATOO_VIDEO OR XANATOO_EBOOKS OR XANATOO_FEEDS OR XANATOO_WEB OR
+   XANATOO_HN OR XANATOO_FORUMS OR XANATOO_YOUTUBE OR XANATOO_VIDEO OR XANATOO_EBOOKS OR XANATOO_FEEDS OR XANATOO_WEB OR
    XANATOO_WIKIPEDIA)
   set(XANATOO_NEED_OPENSSL ON)
 endif()
@@ -497,6 +506,14 @@ if(XANATOO_HN)
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_HN=0)
   message(STATUS "Hacker News client: OFF")
+endif()
+
+if(XANATOO_FORUMS)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FORUMS=1)
+  message(STATUS "Forum clients: ON (HTTPS, ${XANATOO_TLS})")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FORUMS=0)
+  message(STATUS "Forum clients: OFF")
 endif()
 
 if(XANATOO_EBOOKS)
@@ -662,6 +679,7 @@ include(CTest)
 if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
 add_executable(xanatoo_tests
   tests/unit_tests.cpp
+  tests/forum_tests.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
   src/about.cpp
@@ -688,6 +706,13 @@ add_executable(xanatoo_tests
   src/matrix.cpp
   src/matrix_directory.cpp
   src/hackernews.cpp
+  src/forums.cpp
+  src/forum_discourse.cpp
+  src/forum_lobsters.cpp
+  src/forum_4chan.cpp
+  src/forum_stackexchange.cpp
+  src/forum_bluesky.cpp
+  src/forum_flarum.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
@@ -748,6 +773,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_LEMMY=0
   XANATOO_MATRIX=0
   XANATOO_HN=0
+  XANATOO_FORUMS=0
   XANATOO_YOUTUBE=0
   XANATOO_VIDEO=0
   XANATOO_EBOOKS=0

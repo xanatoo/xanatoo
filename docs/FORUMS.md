@@ -1,0 +1,82 @@
+# Forums (Discourse, Lobsters, 4chan, Stack Exchange, Bluesky, Flarum)
+
+Read-only, local-only clients for discussion sites with public JSON APIs,
+in the same shape as `hn:` and `lemmy:`: listings become a Thread of
+`Article` entries (Header = title link, Caption = counts / author / time),
+discussions a Thread of `Message` nodes. No accounts, no posting, no
+cookies. Gated by `XANATOO_FORUMS` (default ON, needs a TLS backend; off in
+the minimal port).
+
+Code: `include/xanatoo/forums.hpp` (refs + document builders),
+`src/forums.cpp` (refs, shared helpers), `src/forum_<site>.cpp` (pure JSON →
+Document mappers), `src/forum_fetch.cpp` (the only network code: API URLs,
+`forum_fetch`). Tested offline in `tests/forum_tests.cpp` with cut-down
+recorded replies.
+
+## Refs
+
+| Ref | Shows |
+|-----|-------|
+| `discourse:HOST` | latest topics (`/top`, `/categories`, `/c/SLUG/ID`; `?page=N`) |
+| `discourse:HOST/t/SLUG/ID[?page=N]` | topic (also `/t/ID`; `/t/SLUG/ID/N` opens the page with post N) |
+| `lobsters:` | hottest stories (`newest`, `active`, `t/TAG`, `~USER/stories`; `?page=N`) |
+| `lobsters:s/ID` | story + comments |
+| `fourchan:` | board list (work-safe boards first) |
+| `fourchan:BOARD/` | board catalog with thumbnails |
+| `fourchan:BOARD/thread/NO` | thread |
+| `stackexchange:HOST` | recent questions of a site (`/questions/tagged/TAG`; `?page=N`) |
+| `stackexchange:HOST/questions/ID[?page=N]` | question, answers by votes, comments |
+| `bsky:HANDLE[?cursor=C]` | author feed (handle or `did:plc:…`) |
+| `bsky:HANDLE/post/RKEY` | post thread: parents, the post, replies |
+| `flarum:HOST` | recent discussions (`?page=N`) |
+| `flarum:HOST/d/ID[-slug][?page=N]` | discussion |
+
+The 4chan prefix is `fourchan:` because a URI scheme must start with a
+letter: `4chan:g/` would be read as a local path.
+
+Discourse and Flarum run on any host, so their web URLs are never guessed;
+type the ref. Web pages of the fixed-host sites (lobste.rs,
+boards.4chan.org / 4channel.org, stackoverflow.com and the other Stack
+Exchange hosts, bsky.app) map to refs for the "Native view" toggle
+(`forum_ref_from_web_url`); `forum_web_url` goes back, `forum_up_ref` is Up
+(thread → listing → site).
+
+## Messages
+
+- Header slots as in HN (`types.hpp`, Message): author, date (with
+  `datetime`, linking the post's own ref + `#id:N`), reply-to `#id:N`, then
+  the score ("3 likes", "9 votes · accepted", "7 likes · 2 replies").
+- Indentation (`alt` = parent label) where the site has a reply tree
+  (Lobsters, Stack Exchange comments under their post, Bluesky replies);
+  flat sites (Discourse, 4chan, Flarum) only link the post answered.
+- Links inside posts stay native: same-thread post links become `#id:N`
+  (4chan quotelinks, Lobsters `/c/ID`, Flarum mentions, SE answer links),
+  other pages of the same site become refs.
+- Bluesky facets (UTF-8 byte ranges) become link spans; quoted posts are
+  block quotes (BlockQuote is a leaf, one per paragraph), images and video
+  posters are thumbnails, link cards a paragraph.
+
+## API notes
+
+- Discourse: `/latest.json` etc. (topic lists count pages from 0),
+  `/t/ID.json?page=P`, `/t/ID/N.json` for a post link (the page is worked
+  out from `post_stream.stream`, post numbers have gaps).
+- Lobsters: the web path + `.json`.
+- 4chan: `a.4cdn.org` (`boards.json`, `B/catalog.json`,
+  `B/thread/N.json`), images from `i.4cdn.org` (`TIMs.jpg` thumbnails).
+  Gone threads (404) point to the board archive.
+- Stack Exchange: API 2.3 with `filter=withbody`, three requests per
+  question page (question, answers, comments of all shown posts; a failed
+  comment request still shows the page). Anonymous quota is 300 requests
+  a day per IP.
+- Bluesky: the public AppView `public.api.bsky.app` (getAuthorFeed,
+  getPostThread; handles resolve through resolveHandle first).
+- Flarum: JSON:API `/api/discussions` and
+  `/api/posts?filter[discussion]=ID&sort=number`, 20 per page; only
+  `comment` posts are shown (renames, tag changes are left out).
+
+## Not done
+
+- NNTP / public-inbox (lore.kernel.org) — planned next.
+- Subscriptions for forum listings; search engines for them (the existing
+  `bluesky` search engine still links bsky.app web pages).

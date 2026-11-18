@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
+#pragma once
+
+// Read-only clients for discussion forums with public JSON APIs. Same shape
+// as hn: / lemmy: — listings become Thread + Article entries, discussions
+// Thread + Message nodes. No account, no posting. See docs/FORUMS.md.
+//
+//   discourse:HOST                     latest topics   (/latest, /top, /c/SLUG/ID)
+//   discourse:HOST/t/SLUG/ID[?page=N]  topic (also /t/ID; /t/SLUG/ID/N → #id:N)
+//   lobsters:                          hottest         (newest, active, t/TAG, ~USER)
+//   lobsters:s/ID[/slug]               story + comments
+//   fourchan:                          board list
+//   fourchan:BOARD/                    board catalog
+//   fourchan:BOARD/thread/NO           thread
+//   stackexchange:HOST                 recent questions (?page=N, /questions/tagged/TAG)
+//   stackexchange:HOST/questions/ID    question, answers and comments
+//   bsky:HANDLE[?cursor=C]             author feed     (handle or did:plc:…)
+//   bsky:HANDLE/post/RKEY              post thread
+//   flarum:HOST                        recent discussions (?page=N)
+//   flarum:HOST/d/ID[-slug][?page=N]   discussion
+//
+// Parsers are pure (JSON in, Document out) and tested with cut-down recorded
+// replies; only forum_fetch touches the network.
+
+#include "xanatoo/json_dom.hpp"
+#include "xanatoo/types.hpp"
+
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace xanatoo {
+
+enum class ForumSite { Discourse, Lobsters, FourChan, StackExchange, Bluesky, Flarum };
+
+struct ForumRef {
+  ForumSite site = ForumSite::Discourse;
+  std::string host;  // Discourse / Stack Exchange / Flarum: site host
+  // Path after the host (no leading '/', no query / fragment), e.g.
+  // "t/slug/123", "s/abc", "g/thread/1", "questions/42", "alice/post/3k".
+  // Bluesky: "HANDLE" or "HANDLE/post/RKEY".
+  std::string path;
+  int page = 1;          // ?page=N
+  std::string cursor;    // ?cursor=C (Bluesky feeds page by cursor)
+  std::string fragment;  // after '#', kept for the address
+};
+
+std::optional<ForumRef> parse_forum_ref(std::string_view ref);
+bool is_forum_ref(std::string_view ref);
+std::string forum_ref_string(const ForumRef& r);
+const char* forum_site_name(ForumSite s);
+// Equivalent web page ("" when there is none).
+std::string forum_web_url(const ForumRef& r);
+// Web page of a site with a fixed host (lobste.rs, boards.4chan.org, Stack
+// Exchange sites, bsky.app) → ref; "" otherwise. Discourse and Flarum run
+// on any host, so their refs are only ever written explicitly.
+std::string forum_ref_from_web_url(std::string_view url);
+// One level up ("" at the top): topic → forum, thread → board, …
+std::string forum_up_ref(const ForumRef& r);
+
+// ---- documents (pure) ----
+// Discourse: /latest.json-style topic list; /t/ID.json topic.
+Document discourse_list_document(const Json& reply, const ForumRef& ref);
+Document discourse_topic_document(const Json& reply, const ForumRef& ref);
+// Lobsters: an array of stories; one story with "comments".
+Document lobsters_list_document(const Json& reply, const ForumRef& ref);
+Document lobsters_story_document(const Json& reply, const ForumRef& ref);
+// fourchan: boards.json; BOARD/catalog.json; BOARD/thread/NO.json.
+Document fourchan_boards_document(const Json& reply);
+Document fourchan_catalog_document(const Json& reply, const ForumRef& ref);
+Document fourchan_thread_document(const Json& reply, const ForumRef& ref);
+// Stack Exchange API 2.3: /questions list; one question + its answers +
+// the comments of all of them (`comments` may be null).
+Document se_list_document(const Json& reply, const ForumRef& ref);
+Document se_question_document(const Json& question, const Json& answers,
+                              const Json* comments, const ForumRef& ref);
+// Bluesky AppView: getAuthorFeed; getPostThread.
+Document bsky_feed_document(const Json& reply, const ForumRef& ref);
+Document bsky_thread_document(const Json& reply, const ForumRef& ref);
+// Flarum JSON:API: /api/discussions; /api/discussions/ID (head) + /api/posts.
+Document flarum_list_document(const Json& reply, const ForumRef& ref);
+Document flarum_discussion_document(const Json& discussion, const Json& posts,
+                                    const ForumRef& ref);
+
+#if defined(XANATOO_FORUMS) && XANATOO_FORUMS
+std::optional<Document> forum_fetch(std::string_view ref,
+                                    std::string* err = nullptr);
+#endif
+
+}  // namespace xanatoo

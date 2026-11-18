@@ -28,6 +28,7 @@
 #include "xanatoo/wayback.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/lemmy.hpp"
+#include "xanatoo/forums.hpp"
 #include "xanatoo/matrix.hpp"
 #include "xanatoo/video_sites.hpp"
 #include "xanatoo/archive.hpp"
@@ -469,6 +470,13 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
 #if defined(XANATOO_VIDEO) && XANATOO_VIDEO
     out->service = xanatoo::video_site_name(xanatoo::parse_video_site_ref(url)->site);
     out->doc = xanatoo::video_site_fetch(url, &out->error);
+#endif
+  } else if (auto forum = xanatoo::parse_forum_ref(url)) {
+#if defined(XANATOO_FORUMS) && XANATOO_FORUMS
+    out->service = xanatoo::forum_site_name(forum->site);
+    out->doc = xanatoo::forum_fetch(url, &out->error);
+#else
+    (void)forum;
 #endif
   } else if (xanatoo::is_hn_ref(url)) {
 #if defined(XANATOO_HN) && XANATOO_HN
@@ -929,6 +937,13 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     return true;
 #else
     return no("Video sites need build with -DXANATOO_VIDEO=ON");
+#endif
+  }
+  if (xanatoo::is_forum_ref(url)) {
+#if defined(XANATOO_FORUMS) && XANATOO_FORUMS
+    return true;
+#else
+    return no("Forums need build with -DXANATOO_FORUMS=ON");
 #endif
   }
   if (xanatoo::is_hn_ref(url)) {

@@ -17,6 +17,18 @@
   up with the downloads in tests); other HTTP clients still use one
   connection per request; downloads of a page left behind keep running.
 
+## Status (2026-11-18) — Forum clients
+
+- Read-only native views for Discourse (`discourse:HOST`), Lobsters
+  (`lobsters:`), 4chan (`fourchan:` — a scheme cannot start with a digit),
+  Stack Exchange (`stackexchange:HOST`), Bluesky feeds / threads
+  (`bsky:HANDLE`) and Flarum (`flarum:HOST`); Services menu entries, Native
+  view toggle and Up for the fixed-host sites. `XANATOO_FORUMS`,
+  `docs/FORUMS.md`, offline tests in `tests/forum_tests.cpp`.
+- Checked live (scratch driver + Xvfb): every listing and thread kind.
+  9gag skipped (no API). Not done: subscriptions for forum listings, the
+  `bluesky` search engine still links web pages. Next: NNTP / public-inbox.
+
 ## Status (2026-11-18) — Pictures for image addresses in text
 
 - Bare image URLs in text (Lemmy `pictrs` links and the like) and links

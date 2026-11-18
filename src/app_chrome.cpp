@@ -17,6 +17,7 @@
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
 #include "xanatoo/hackernews.hpp"
+#include "xanatoo/forums.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/lemmy.hpp"
@@ -432,6 +433,11 @@ StatusLine compute_status(App& app) {
       label = "Matrix: ";
     else if (xanatoo::is_hn_ref(app.hover.href))
       label = "Hacker News: ";
+    else if (auto fr = xanatoo::parse_forum_ref(app.hover.href)) {
+      static std::string flabel;
+      flabel = std::string(xanatoo::forum_site_name(fr->site)) + ": ";
+      label = flabel.c_str();
+    }
     else if (xanatoo::is_youtube_ref(app.hover.href))
       label = "YouTube: ";
     else if (xanatoo::is_ia_ref(app.hover.href))

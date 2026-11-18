@@ -94,6 +94,11 @@ AboutSection services() {
   s.items.push_back({"Hacker News", XANATOO_HN,
                      "`hn:` lists and threads (Firebase + Algolia APIs)",
                      "hn:", "`-DXANATOO_HN=ON`"});
+  s.items.push_back({"Forums", XANATOO_FORUMS,
+                     "`discourse:host`, `lobsters:`, `fourchan:board/`, "
+                     "`stackexchange:host`, `bsky:handle` and `flarum:host` "
+                     "listings and threads (public JSON APIs)",
+                     "lobsters:", "`-DXANATOO_FORUMS=ON`"});
   s.items.push_back({"Reddit", XANATOO_REDDIT,
                      "`reddit:r/…` subreddits and threads (public .json)",
                      "reddit:r/linux/", "`-DXANATOO_REDDIT=ON`"});

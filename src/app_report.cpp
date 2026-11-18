@@ -115,6 +115,7 @@ std::string features() {
   add("web", XANATOO_WEB);
   add("wikipedia", XANATOO_WIKIPEDIA);
   add("hn", XANATOO_HN);
+  add("forums", XANATOO_FORUMS);
   add("youtube", XANATOO_YOUTUBE);
   add("video", XANATOO_VIDEO);
   add("reddit", XANATOO_REDDIT);

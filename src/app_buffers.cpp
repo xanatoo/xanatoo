@@ -22,6 +22,7 @@
 #include "xanatoo/feed.hpp"
 #include "xanatoo/file_url.hpp"
 #include "xanatoo/hackernews.hpp"
+#include "xanatoo/forums.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
@@ -186,7 +187,8 @@ bool is_in_app_remote_url(std::string_view s) {
          xanatoo::is_finger_url(s) || xanatoo::is_reddit_ref(s) ||
          xanatoo::is_lemmy_ref(s) || xanatoo::is_nostr_ref(s) ||
          xanatoo::is_matrix_ref(s) ||
-         xanatoo::is_hn_ref(s) || xanatoo::is_youtube_ref(s) ||
+         xanatoo::is_hn_ref(s) || xanatoo::is_forum_ref(s) ||
+         xanatoo::is_youtube_ref(s) ||
          xanatoo::is_video_site_ref(s) || xanatoo::is_ia_ref(s) ||
          xanatoo::is_ebook_url(s) || xanatoo::is_wayback_ref(s) ||
          xanatoo::is_feed_url(s) || xanatoo::is_wikipedia_ref(s) ||

@@ -3,6 +3,7 @@
 
 #include "xanatoo/native.hpp"
 
+#include "xanatoo/forums.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/matrix.hpp"
@@ -107,6 +108,7 @@ std::string web_url_for(std::string_view ref) {
   if (auto r = parse_youtube_ref(ref)) return youtube_web_url(*r);
   if (auto r = parse_video_site_ref(ref)) return video_site_web_url(*r);
   if (auto r = parse_ia_ref(ref)) return ia_web_url(*r);
+  if (auto r = parse_forum_ref(ref)) return forum_web_url(*r);
   if (std::string web = matrix_to_url(ref); !web.empty()) return web;
   if (auto r = parse_wikipedia_ref(ref)) {
     std::string url = wikipedia_page_url(*r);
@@ -125,6 +127,7 @@ std::string native_url_for(std::string_view url) {
   if (std::string r = video_site_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = ia_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = matrix_ref_from_url(url); !r.empty()) return r;
+  if (std::string r = forum_ref_from_web_url(url); !r.empty()) return r;
   return {};
 }
 
@@ -181,6 +184,7 @@ std::string up_url(std::string_view url) {
     if (up == "r/" || up == "user/") up.clear();
     return std::string(kRedditPrefix) + up;
   }
+  if (auto r = parse_forum_ref(url)) return forum_up_ref(*r);
   if (is_lemmy_ref(url)) {
     // Communities and posts sit under the instance, which has no native
     // view: up leaves for its web page.

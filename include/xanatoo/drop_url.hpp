@@ -47,6 +47,8 @@ inline std::string dropped_navigation_target(std::string_view text) {
       continue;
     }
     for (std::string_view scheme : {"hn:", "reddit:", "lemmy:", "matrix:",
+                                    "discourse:", "lobsters:", "fourchan:",
+                                    "stackexchange:", "bsky:", "flarum:",
                                     "nostr:", "wikipedia:", "feed:",
                                     "sitemap:", "search:", "db:",
                                     "db-original:", "draft:"})
