@@ -71,7 +71,10 @@ Rules:
   bytes from disk (which may predate unsaved edits) or the cached decoded text
   of a fetched HTTP/Gemini response. Service adapters that construct a tree
   directly, and other sources without a retained body, show an unavailable
-  notice instead. This is not a general binary/hex viewer.
+  notice instead. This is not a general binary/hex viewer. When the tree
+  holds text the format cannot express (invalid structure, such as text on
+  a section), the serialized views start with a warning note naming those
+  nodes.
 - At most one `#`, and it comes last.
 - Payloads are percent-encoded (`/`, `#`, `?`, `|`, `%`, spaces). `text:`
   stays encoded in `Selector::value`, since its grammar splits on `,` and `-`

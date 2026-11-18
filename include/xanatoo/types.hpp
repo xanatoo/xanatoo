@@ -206,4 +206,14 @@ struct Document {
   bool insert_after(NodeId after, NodeId child);
 };
 
+// An Image node's link target (an HTML <a> around a block <img>) is kept as
+// one empty Link span. Returns its href, or nullptr when the image's spans
+// are not exactly that. Both native formats store it as an `href`.
+const std::string* image_link_href(const Node& node);
+
+// Appends, in document order, the nodes reachable from the root that have
+// spans which `writes` says a serializer leaves out.
+void collect_unwritten_spans(const Document& doc, bool (*writes)(const Node&),
+                             std::vector<NodeId>& out);
+
 }  // namespace xanatoo

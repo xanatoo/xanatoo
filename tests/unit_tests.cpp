@@ -1744,6 +1744,55 @@ void test_source_view_text() {
   EXPECT(parse_xml(xml.text).root != INVALID_NODE);
   const auto missing = source_view_text(doc, SelectorKind::SourceRaw, std::nullopt);
   EXPECT(missing.text.find("unavailable") != std::string::npos);
+  EXPECT(sx.warning.empty());
+  EXPECT(xml.warning.empty());
+  EXPECT_EQ(source_view_document(xml).get(source_view_document(xml).root)
+                .children.size(), 1u);
+
+  // Text on a container is not representable: both pipes warn about it,
+  // naming the node, and the rendered view puts the warning first.
+  Document bad;
+  const NodeId bad_root = bad.create(NodeKind::Document);
+  const NodeId sec = bad.create(NodeKind::Section, bad_root);
+  bad.append_text(sec, "stray words");
+  for (SelectorKind k : {SelectorKind::SourceSexpr, SelectorKind::SourceXml}) {
+    const auto v = source_view_text(bad, k, std::nullopt);
+    EXPECT(v.text.find("stray") == std::string::npos);
+    EXPECT(v.warning.find("Invalid document structure") != std::string::npos);
+    EXPECT(v.warning.find("<section> #" + std::to_string(sec) + ": stray words") !=
+           std::string::npos);
+    const Document shown = source_view_document(v);
+    const auto& kids = shown.get(shown.root).children;
+    EXPECT_EQ(kids.size(), 2u);
+    if (kids.size() == 2) {
+      EXPECT_EQ(shown.get(kids[0]).kind, NodeKind::Note);
+      EXPECT_EQ(shown.get(kids[1]).kind, NodeKind::CodeBlock);
+    }
+  }
+}
+
+void test_sexpr_image_link() {
+  using namespace xanatoo;
+  Document a;
+  const NodeId root = a.create(NodeKind::Document);
+  const NodeId im = a.create(NodeKind::Image, root);
+  a.get(im).src = "thumb.jpg";
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = "https://example.org/full.html";
+  a.get(im).spans.push_back(link);
+  std::vector<NodeId> unwritten;
+  const std::string sx = serialize_sexpr(a, &unwritten);
+  EXPECT(unwritten.empty());
+  EXPECT(sx.find(":href \"https://example.org/full.html\"") != std::string::npos);
+  const Document b = parse_sexpr(sx);
+  const auto& kids = b.get(b.root).children;
+  EXPECT_EQ(kids.size(), 1u);
+  if (!kids.empty()) {
+    const std::string* href = image_link_href(b.get(kids[0]));
+    EXPECT(href && *href == "https://example.org/full.html");
+  }
+  EXPECT_EQ(serialize_sexpr(b), sx);
 }
 
 void test_markup_stretch_and_link() {
@@ -6952,6 +7001,7 @@ int main() {
   test_parse_document_sexpr_path();
   test_parse_document_xml_path();
   test_source_view_text();
+  test_sexpr_image_link();
   test_markup_stretch_and_link();
   test_markup_blockquote_code_table();
   test_markup_columns();

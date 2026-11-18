@@ -125,4 +125,29 @@ InlineSpan inline_math(std::string tex, bool display) {
   return s;
 }
 
+const std::string* image_link_href(const Node& node) {
+  if (node.kind != NodeKind::Image || node.spans.size() != 1) return nullptr;
+  const InlineSpan& sp = node.spans[0];
+  const bool plain_link = sp.kind == InlineKind::Link && sp.text.empty() &&
+      !sp.href.empty() && sp.marks == 0 && sp.role == InlineRole::Normal &&
+      sp.rel.empty() && sp.datetime.empty() && sp.target == INVALID_NODE &&
+      sp.src.empty() && sp.alt.empty() && !sp.width && !sp.height &&
+      !sp.display;
+  return plain_link ? &sp.href : nullptr;
+}
+
+void collect_unwritten_spans(const Document& doc, bool (*writes)(const Node&),
+                             std::vector<NodeId>& out) {
+  if (doc.root == INVALID_NODE) return;
+  std::vector<NodeId> stack{doc.root};
+  while (!stack.empty()) {
+    const NodeId id = stack.back();
+    stack.pop_back();
+    const Node& n = doc.get(id);
+    if (n.id != id) continue;
+    if (!n.spans.empty() && !writes(n)) out.push_back(id);
+    stack.insert(stack.end(), n.children.rbegin(), n.children.rend());
+  }
+}
+
 }  // namespace xanatoo

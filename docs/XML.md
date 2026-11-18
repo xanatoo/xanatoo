@@ -69,7 +69,9 @@ Every block may carry `nid` (the source document's numeric node identity),
 or `false`), `float`, `scale`, `colspan`, and `rowspan`, as appropriate to its
 node role. This is intentionally a direct serialization of the existing
 `Node` fields, rather than an independent XML document model. Defaults can be
-omitted; the exporter omits most default attributes. `<doc>` additionally
+omitted; the exporter omits most default attributes. An `<image>` may also
+carry `href`, its link target (an HTML `<a>` around a block `<img>`).
+`<doc>` additionally
 has `title`, `lang`, `author`, and may contain one `<front-matter>` text element
 to preserve Markdown YAML metadata without losing line breaks.
 
@@ -78,6 +80,13 @@ Inline tags may carry `role="metadata"`, `marks`, `href`, `rel`, `datetime`, `ta
 on blocks and `target` on inline spans preserve internal references even when
 node IDs are reassigned during import. These IDs are not stable cross-file
 anchors; `label` / `href` remain the human-facing references.
+
+Text is only allowed in text-bearing blocks. An importer that leaves inline
+text on a container node (a section, figure, …) produces a tree this format
+cannot hold: the exporter leaves that text out and reports the nodes
+(`serialize_xml`'s `unwritten`), and `//source-xml` / `//source-sexpr` show a
+warning naming them above the source, rather than failing or dropping it
+silently.
 
 Flat inline spans deliberately cannot nest (for example, `<em>one
 <strong>two</strong></em>` is invalid). This mirrors the present document

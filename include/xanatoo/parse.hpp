@@ -5,6 +5,7 @@
 #include "xanatoo/types.hpp"
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace xanatoo {
 
@@ -61,7 +62,12 @@ bool path_uses_sexpr(std::string_view path);
 bool looks_like_sexpr(std::string_view source);
 
 Document parse_sexpr(std::string_view source);
-std::string serialize_sexpr(const Document& doc);
+// `unwritten`, when given, receives the nodes whose inline spans the format
+// cannot hold (text on a container, as left by an importer) and so are not
+// in the output. Callers should warn about them rather than lose them
+// silently.
+std::string serialize_sexpr(const Document& doc,
+                            std::vector<NodeId>* unwritten = nullptr);
 
 // --- Experimental minimal XML document format ----------------------------
 //
@@ -73,7 +79,11 @@ std::string serialize_sexpr(const Document& doc);
 // See docs/XML.md for the exact vocabulary and round-trip rules.
 bool path_uses_xml(std::string_view path);
 Document parse_xml(std::string_view source);
-std::string serialize_xml(const Document& doc);
+// The element name a node is written as ("section", "image", …).
+const char* xml_element_name(const Node& node);
+// `unwritten` as for serialize_sexpr.
+std::string serialize_xml(const Document& doc,
+                          std::vector<NodeId>* unwritten = nullptr);
 
 // --- Gemini gemtext -------------------------------------------------------
 //

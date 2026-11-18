@@ -287,9 +287,13 @@ bool accepts_inline(NodeKind kind) {
   }
 }
 
-// Spans the export writes: containers cannot hold inline text in XML, so
-// stray spans on them (left by importers) are dropped, as the S-expression
-// writer does.
+// Whether write_node writes this node's spans: as inline content, or an
+// image's link as its href. Others cannot be held by the format and are
+// reported to the caller (serialize_xml's `unwritten`).
+bool xml_writes_spans(const Node& node) {
+  return accepts_inline(node.kind) || image_link_href(node) != nullptr;
+}
+
 bool exported_spans(const Node& node) {
   return accepts_inline(node.kind) && !node.spans.empty();
 }
@@ -358,6 +362,7 @@ void write_node(const Document& doc, NodeId id, std::string& out,
   if (node.height) attr(out, "height", std::to_string(node.height));
   if (!node.alt.empty()) attr(out, "alt", node.alt);
   if (!node.src.empty()) attr(out, "src", node.src);
+  if (const std::string* href = image_link_href(node)) attr(out, "href", *href);
   if (!node.expanded) attr(out, "expanded", "false");
   if (!node.summary.empty()) attr(out, "summary", node.summary);
   if (!node.float_side.empty()) attr(out, "float", node.float_side);
@@ -616,7 +621,13 @@ private:
     else if (key == "height") node.height = signed_number(value);
     else if (key == "alt") node.alt = value;
     else if (key == "src") node.src = value;
-    else if (key == "expanded") node.expanded = boolean(value);
+    else if (node.kind == NodeKind::Image && key == "href") {
+      if (!node.spans.empty()) fail("duplicate image href");
+      InlineSpan link;  // the image's link target (image_link_href)
+      link.kind = InlineKind::Link;
+      link.href = value;
+      if (!value.empty()) node.spans.push_back(std::move(link));
+    } else if (key == "expanded") node.expanded = boolean(value);
     else if (key == "summary") node.summary = value;
     else if (key == "float") node.float_side = value;
     else if (key == "scale") node.display_scale = scale(value);
@@ -750,15 +761,20 @@ bool path_uses_xml(std::string_view path) {
       (ext[3] == 'l' || ext[3] == 'L');
 }
 
+const char* xml_element_name(const Node& node) {
+  return block_tag(node);
+}
+
 Document parse_xml(std::string_view source) {
   return XmlReader(source).read();
 }
 
-std::string serialize_xml(const Document& doc) {
+std::string serialize_xml(const Document& doc, std::vector<NodeId>* unwritten) {
   if (doc.root == INVALID_NODE || doc.get(doc.root).kind != NodeKind::Document)
     throw std::invalid_argument("XML export: missing document root");
   std::string result;
   write_node(doc, doc.root, result, 0, true);
+  if (unwritten) collect_unwritten_spans(doc, xml_writes_spans, *unwritten);
   return result;
 }
 

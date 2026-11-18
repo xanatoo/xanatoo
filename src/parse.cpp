@@ -3077,6 +3077,11 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
       if (is_atom(e.kids[k], ":float")) {
         std::string side = sexpr_text(e.kids[k + 1]);
         if (side == "left" || side == "right") doc.get(n).float_side = side;
+      } else if (is_atom(e.kids[k], ":href")) {
+        InlineSpan link;
+        link.kind = InlineKind::Link;
+        link.href = sexpr_text(e.kids[k + 1]);
+        if (!link.href.empty()) doc.get(n).spans.push_back(std::move(link));
       }
     }
     if (scale > 0.05f && scale < 10.f) doc.get(n).display_scale = scale;
@@ -3633,6 +3638,10 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
         out += " :scale ";
         out += format_sexpr_float(node.display_scale);
       }
+      if (const std::string* href = image_link_href(node)) {
+        out += " :href ";
+        escape_sexpr_string(*href, out);
+      }
       out += ")";
       break;
     }
@@ -4118,9 +4127,36 @@ Document parse_sexpr(std::string_view source) {
   return doc;
 }
 
-std::string serialize_sexpr(const Document& doc) {
+namespace {
+
+// Whether serialize_sexpr_node writes this node's spans; keep in step with
+// its cases.
+bool sexpr_writes_spans(const Node& node) {
+  switch (node.kind) {
+    case NodeKind::Heading:
+    case NodeKind::Header:
+    case NodeKind::Paragraph:
+    case NodeKind::Note:
+    case NodeKind::CodeBlock:
+    case NodeKind::Term:
+    case NodeKind::Definition:
+    case NodeKind::Caption:
+    case NodeKind::BiblioEntry:
+    case NodeKind::BlockQuote:
+    case NodeKind::TableCell:
+    case NodeKind::ListItem: return true;
+    case NodeKind::Image: return image_link_href(node) != nullptr;
+    default: return false;
+  }
+}
+
+}  // namespace
+
+std::string serialize_sexpr(const Document& doc,
+                            std::vector<NodeId>* unwritten) {
   std::string out;
   if (doc.root != INVALID_NODE) serialize_sexpr_node(doc, doc.root, out, 0);
+  if (unwritten) collect_unwritten_spans(doc, sexpr_writes_spans, *unwritten);
   return out;
 }
 

@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Source views: image links, invalid-structure warning
+
+- `//source-xml` failed ("inline text on a container node") on HTML pages
+  with a linked block image (`<figure><a><img></a></figure>`): the importer
+  keeps the link as one empty Link span on the Image node, which neither
+  native format could hold (sexpr dropped it silently). Both now write it
+  (`<image href>`, `(img … :href)`) and read it back (`image_link_href`).
+- Other spans a format cannot hold are left out *and reported*
+  (`serialize_xml` / `serialize_sexpr` `unwritten`); the source views show
+  an "Invalid document structure" warning note naming the nodes.
+- Not done: the Markdown writer still loses image links.
+
 ## Status (2026-11-18) — Gallery Up strip and background
 
 - `//gallery` (the grid) has the Up strip too; in both views it is a thin

@@ -309,9 +309,9 @@ void test_rejections() {
   } catch (const std::invalid_argument&) {}
 }
 
-// Importers can leave text spans on container nodes; the S-expression
-// writer skips them, and the XML export must not fail on them either.
-void test_container_spans_skipped() {
+// Importers can leave text spans on container nodes. XML cannot hold them;
+// the export leaves them out and reports them, so callers can warn.
+void test_container_spans_reported() {
   Document a;
   const NodeId root = a.create(NodeKind::Document);
   const NodeId sec = a.create(NodeKind::Section, root);
@@ -321,16 +321,44 @@ void test_container_spans_skipped() {
   const NodeId fig = a.create(NodeKind::Figure, root);
   a.append_text(fig, "stray too");
   std::string xml;
+  std::vector<NodeId> unwritten;
   try {
-    xml = serialize_xml(a);
+    xml = serialize_xml(a, &unwritten);
   } catch (const std::invalid_argument&) {
     check(false, "XML export accepts spans on containers");
     return;
   }
-  check(xml.find("stray") == std::string::npos, "container spans are dropped");
+  check(xml.find("stray") == std::string::npos, "container spans are left out");
   check(xml.find("kept") != std::string::npos, "paragraph text is kept");
+  check(unwritten == std::vector<NodeId>{sec, fig}, "left-out spans are reported");
   const Document b = parse_xml(xml);
-  check(serialize_xml(b) == xml, "export without container spans round-trips");
+  std::vector<NodeId> none;
+  check(serialize_xml(b, &none) == xml && none.empty(),
+        "export without container spans round-trips");
+}
+
+// A linked block image (HTML <a><img></a>) keeps its target as href.
+void test_image_link() {
+  Document a;
+  const NodeId root = a.create(NodeKind::Document);
+  const NodeId im = a.create(NodeKind::Image, root);
+  a.get(im).src = "thumb.jpg";
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = "https://example.org/a&b";
+  a.get(im).spans.push_back(link);
+  std::vector<NodeId> unwritten;
+  const std::string xml = serialize_xml(a, &unwritten);
+  check(unwritten.empty(), "image link is written");
+  check(xml.find("href=\"https://example.org/a&amp;b\"") != std::string::npos,
+        "image link is an href attribute");
+  const Document b = parse_xml(xml);
+  const Node& bi = b.get(b.get(b.root).children.at(0));
+  const std::string* href = image_link_href(bi);
+  check(href && *href == "https://example.org/a&b", "image href reads back");
+  check(serialize_xml(b) == xml, "image href round-trips");
+  rejects([] { (void)parse_xml("<doc><p href=\"x\"/></doc>"); },
+          "href only on images");
 }
 
 }  // namespace
@@ -343,7 +371,8 @@ int main() {
   test_escapes_and_dispatch();
   test_float_scales();
   test_rejections();
-  test_container_spans_skipped();
+  test_container_spans_reported();
+  test_image_link();
   if (failures) {
     std::cerr << failures << " XML tests failed\n";
     return EXIT_FAILURE;

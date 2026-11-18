@@ -312,7 +312,8 @@ Use `float=left` or `float=right`. The optional `scale` attribute can appear
 in either order. Following text wraps around the image and its caption; on a
 narrow column the image returns to normal block flow. Inline images and
 collection cards do not float. In S-expressions the equivalent is
-`(img "harbour.jpg" :alt "A view of the harbour" :float right :scale 0.8)`.
+`(img "harbour.jpg" :alt "A view of the harbour" :float right :scale 0.8)`;
+a linked image adds `:href "…"` (XML: `<image … href="…"/>`).
 
 Figures and tables can float as a whole, including their captions. For
 example, use `:::figure float=left` or `:::table float=right` in Markdown,
