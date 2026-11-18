@@ -49,17 +49,27 @@ std::string size_text(long long bytes) {
   return std::to_string((bytes + 1023) / 1024) + " KB";
 }
 
+// A thumbnail linked to its full file: a click (and the gallery) shows the
+// original, not the small "s.jpg".
+void add_thumb(Document& doc, NodeId parent, const std::string& base,
+               const std::string& ext) {
+  NodeId im = doc.create(NodeKind::Image, parent);
+  doc.get(im).src = base + "s.jpg";
+  doc.get(im).float_side = "left";
+  if (ext.empty()) return;
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = base + ext;
+  doc.get(im).spans.push_back(std::move(link));
+}
+
 // Thumbnail + "file.jpg (500 KB, 800×600)" link to the full file.
 void add_file(Document& doc, NodeId parent, const Json& p, const std::string& board) {
   const std::string tim = tim_str(p);
   if (tim.empty()) return;
   const std::string base = "https://i.4cdn.org/" + board + "/" + tim;
   const std::string ext = str(p, "ext");
-  if (num(p, "filedeleted") == 0) {
-    NodeId im = doc.create(NodeKind::Image, parent);
-    doc.get(im).src = base + "s.jpg";
-    doc.get(im).float_side = "left";
-  }
+  if (num(p, "filedeleted") == 0) add_thumb(doc, parent, base, ext);
   NodeId cap = doc.create(NodeKind::Caption, parent);
   add_link(doc, cap, html_decode_entities(str(p, "filename")) + ext, base + ext,
            InlineRole::Metadata);
@@ -143,11 +153,8 @@ Document fourchan_catalog_document(const Json& reply, const ForumRef& ref) {
       NodeId art = doc.create(NodeKind::Article, thread);
       doc.get(art).label = no;
       const std::string tim = tim_str(t);
-      if (!tim.empty() && num(t, "filedeleted") == 0) {
-        NodeId im = doc.create(NodeKind::Image, art);
-        doc.get(im).src = "https://i.4cdn.org/" + board + "/" + tim + "s.jpg";
-        doc.get(im).float_side = "left";
-      }
+      if (!tim.empty() && num(t, "filedeleted") == 0)
+        add_thumb(doc, art, "https://i.4cdn.org/" + board + "/" + tim, str(t, "ext"));
       std::string text = html_to_plain(clean_comment(str(t, "com")));
       std::string sub = html_decode_entities(str(t, "sub"));
       if (sub.empty()) {

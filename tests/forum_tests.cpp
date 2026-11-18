@@ -6,6 +6,7 @@
 // Part of xanatoo_tests (test_forums is called from unit_tests.cpp).
 
 #include "xanatoo/forums.hpp"
+#include "xanatoo/gallery.hpp"
 #include "xanatoo/json_dom.hpp"
 
 #include <cstdio>
@@ -254,6 +255,12 @@ void test_fourchan() {
   for (const Node& n : t.nodes)
     thumb |= n.kind == NodeKind::Image && n.src == "https://i.4cdn.org/g/1794963393356146s.jpg";
   EXPECT(thumb);
+  // A click on the thumbnail (and the gallery) shows the full file.
+  bool full = false;
+  for (const auto& it : gallery_items(t, INVALID_NODE))
+    full |= it.thumb == "https://i.4cdn.org/g/1794963393356146s.jpg" &&
+            it.src == "https://i.4cdn.org/g/1794963393356146.jpg";
+  EXPECT(full);
 
   Json catalog = parse(R"([{"page":1,"threads":[{"no":5,"com":"no subject here","replies":2,
       "images":1,"time":1794963393}]}])");
@@ -307,7 +314,7 @@ void test_bluesky() {
       "record":{"text":"héllo @bob x.org","createdAt":"2026-11-13T22:03:00Z",
         "facets":[{"index":{"byteStart":7,"byteEnd":11},"features":[{"$type":"app.bsky.richtext.facet#mention","did":"did:plc:b"}]},
                   {"index":{"byteStart":12,"byteEnd":17},"features":[{"$type":"app.bsky.richtext.facet#link","uri":"https://x.org/"}]}]},
-      "embed":{"$type":"app.bsky.embed.images#view","images":[{"thumb":"https://cdn.example/t.jpg","alt":"a cat"}]},
+      "embed":{"$type":"app.bsky.embed.images#view","images":[{"thumb":"https://cdn.example/t.jpg","fullsize":"https://cdn.example/f@jpeg","alt":"a cat"}]},
       "likeCount":5,"replyCount":1},
     "replies":[{"$type":"app.bsky.feed.defs#threadViewPost","post":{
         "uri":"at://did:plc:c/app.bsky.feed.post/r1","author":{"did":"did:plc:c","handle":"carl.example"},
@@ -326,6 +333,9 @@ void test_bluesky() {
     EXPECT_EQ(post->spans[3].text, "5 likes · 1 reply");
   }
   if (reply) EXPECT_EQ(reply->alt, "3k");
+  const auto pics = gallery_items(d, INVALID_NODE);
+  EXPECT(pics.size() == 1 && pics[0].thumb == "https://cdn.example/t.jpg" &&
+         pics[0].src == "https://cdn.example/f@jpeg");
   // Parent first, then the post, then replies.
   if (root && post && reply) EXPECT(root->id < post->id && post->id < reply->id);
   std::string mention, link;

@@ -1417,6 +1417,10 @@ void test_path_helpers() {
   EXPECT(is_image_url("spartan://host/a.gif"));
   EXPECT(!is_image_url("mailto:a.png"));
   EXPECT(is_image_url("nex://host/pics/a.png"));
+  EXPECT(is_image_url(
+      "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:x/bafkrei@jpeg"));
+  EXPECT(!is_image_url("https://example.org/@jpeg/page"));
+  EXPECT(!is_image_url("https://example.org/user@example"));
 }
 
 void test_parse_org() {

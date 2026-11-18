@@ -104,12 +104,18 @@ void add_rich_text(Document& doc, NodeId parent, const std::string& text,
   }
 }
 
+// `full`: the original a click (and the gallery) shows; may be empty.
 void add_image(Document& doc, NodeId parent, const std::string& src,
-               const std::string& alt) {
+               const std::string& alt, const std::string& full = {}) {
   if (src.empty()) return;
   NodeId im = doc.create(NodeKind::Image, parent);
   doc.get(im).src = src;
   doc.get(im).alt = alt;
+  if (full.empty() || full == src) return;
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = full;
+  doc.get(im).spans.push_back(std::move(link));
 }
 
 void add_embed(Document& doc, NodeId parent, const Json& embed);
@@ -138,7 +144,7 @@ void add_embed(Document& doc, NodeId parent, const Json& embed) {
   const std::string type = str(embed, "$type");
   if (type == "app.bsky.embed.images#view") {
     for (const Json& im : arr(embed, "images"))
-      add_image(doc, parent, str(im, "thumb"), str(im, "alt"));
+      add_image(doc, parent, str(im, "thumb"), str(im, "alt"), str(im, "fullsize"));
   } else if (type == "app.bsky.embed.external#view") {
     const Json* ext = json_get(embed, "external");
     if (!ext) return;

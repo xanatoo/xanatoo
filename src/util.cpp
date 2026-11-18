@@ -150,6 +150,14 @@ bool is_image_url(std::string_view url) {
       ".svg", ".avif", ".tif", ".tiff", ".jxl"};
   for (std::string_view ext : kExts)
     if (path_ends_with_ci(path, ext)) return true;
+  // Image CDNs that name the format after an "@" (Bluesky:
+  // ".../feed_fullsize/plain/did:plc:x/bafk…@jpeg").
+  const size_t at = path.rfind('@');
+  if (at != std::string_view::npos && path.find('/', at) == std::string_view::npos) {
+    const std::string fmt = ascii_lower(std::string(path.substr(at + 1)));
+    for (std::string_view ext : kExts)
+      if (fmt == ext.substr(1)) return true;
+  }
   return false;
 }
 

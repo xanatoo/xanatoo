@@ -81,7 +81,7 @@ bool is_raster_image_path(std::string_view path);
 bool has_image_fetch_scheme(std::string_view url);
 
 // Link target that is an image file by its extension (query / fragment
-// ignored): URLs with has_image_fetch_scheme and local paths; other schemes
+// ignored; a CDN's "…@jpeg" format suffix counts too): URLs with has_image_fetch_scheme and local paths; other schemes
 // ("mailto:a.png") are not.
 bool is_image_url(std::string_view url);
 
