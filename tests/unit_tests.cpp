@@ -4471,6 +4471,30 @@ void test_inline_images_and_asides() {
   EXPECT(out.find(":::aside side=left\n") != std::string::npos);
   EXPECT_EQ(serialize_markup(parse_markup(out)), out);
 
+  // A lone linked image is a block image keeping its link target (as the
+  // HTML importer makes for <a><img></a>); attributes follow the link.
+  {
+    Document li = parse_markup(
+        "[![logo](logo.png)](https://example.org/){float=right}\n\n"
+        "[![a](a.png)](https://a.example) and text\n");
+    auto lk = kids_of(li, li.root);
+    EXPECT_EQ(lk.size(), 2u);
+    if (lk.size() == 2) {
+      const Node& im = li.get(lk[0]);
+      EXPECT(im.kind == NodeKind::Image);
+      EXPECT_EQ(im.src, "logo.png");
+      EXPECT_EQ(im.alt, "logo");
+      EXPECT_EQ(im.float_side, "right");
+      const std::string* href = image_link_href(im);
+      EXPECT(href && *href == "https://example.org/");
+      EXPECT(li.get(lk[1]).kind == NodeKind::Paragraph);
+    }
+    const std::string lo = serialize_markup(li);
+    EXPECT(lo.find("[![logo](logo.png)](https://example.org/){float=right}\n") !=
+           std::string::npos);
+    EXPECT_EQ(serialize_markup(parse_markup(lo)), lo);
+  }
+
   // Table cells take inline images.
   Document tb = parse_markup("| a | b |\n|---|---|\n| ![x](x.png) | y |\n");
   bool cell_img = false;

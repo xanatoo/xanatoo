@@ -10,6 +10,7 @@
 #include <charconv>
 #include <algorithm>
 #include <vector>
+#include <optional>
 #include <cstdio>
 #include <sstream>
 
@@ -601,6 +602,56 @@ void parse_inlines(Node& node, std::string_view text) {
   parse_inlines_at(node, text, 0);
 }
 
+
+// A block image line: ![alt](src) or [![alt](src)](href), then optional
+// whitespace-separated {float=left|right scale=N} in either order, and
+// nothing else.
+struct BlockImageLine {
+  std::string alt, src, href, float_side;
+  float scale = 1.f;
+};
+
+std::optional<BlockImageLine> block_image_line(std::string_view t) {
+  const bool linked = starts_with(t, "[![");
+  const size_t open = linked ? 1 : 0;
+  const size_t mid = t.find("](", open);
+  if (mid == std::string_view::npos) return std::nullopt;
+  size_t end = t.find(')', mid);
+  if (end == std::string_view::npos) return std::nullopt;
+  BlockImageLine im;
+  im.alt = std::string(t.substr(open + 2, mid - open - 2));
+  im.src = std::string(t.substr(mid + 2, end - (mid + 2)));
+  if (linked) {
+    if (t.substr(end + 1, 2) != "](") return std::nullopt;
+    const size_t hend = t.find(')', end + 3);
+    if (hend == std::string_view::npos) return std::nullopt;
+    im.href = std::string(t.substr(end + 3, hend - end - 3));
+    if (im.href.empty()) return std::nullopt;
+    end = hend;
+  }
+  std::string_view rest = t.substr(end + 1);
+  if (!rest.empty() && rest[0] == '{') {
+    const size_t bend = rest.find('}');
+    if (bend == std::string_view::npos) return im;  // unclosed: no attributes
+    std::istringstream attrs(std::string(rest.substr(1, bend - 1)));
+    std::string attr;
+    while (attrs >> attr) {
+      if (attr == "float=left") im.float_side = "left";
+      else if (attr == "float=right") im.float_side = "right";
+      else if (starts_with(attr, "scale=")) {
+        try {
+          const float scale = std::stof(attr.substr(6));
+          if (scale > 0.05f && scale < 10.f) im.scale = scale;
+        } catch (...) {}
+      }
+    }
+    rest = rest.substr(bend + 1);
+  }
+  trim_ascii(rest);
+  if (!rest.empty()) return std::nullopt;
+  return im;
+}
+
 }  // namespace
 
 Document parse_markup(std::string_view source) {
@@ -1170,44 +1221,22 @@ Document parse_markup(std::string_view source) {
       continue;
     }
 
-    // Image ![alt](src) optional {scale=1.5}
-    // A line that holds more than the image is a paragraph with an inline
-    // image in it.
-    if (starts_with(trimmed, "![")) {
-      size_t mid = trimmed.find("](");
-      size_t end = trimmed.find(')', mid == std::string_view::npos ? 0 : mid);
-      bool alone = end != std::string_view::npos;
-      if (alone) {
-        std::string_view rest = trimmed.substr(end + 1);
-        if (!rest.empty() && rest[0] == '{') {
-          size_t bend = rest.find('}');
-          rest = bend == std::string_view::npos ? std::string_view{}
-                                                : rest.substr(bend + 1);
-        }
-        trim_ascii(rest);
-        alone = rest.empty();
-      }
-      if (alone && mid != std::string_view::npos) {
+    // Image ![alt](src) optional {scale=1.5}; [![alt](src)](href) a linked
+    // one. A line that holds more than the image is a paragraph with an
+    // inline image in it.
+    if (starts_with(trimmed, "![") || starts_with(trimmed, "[![")) {
+      if (auto im = block_image_line(trimmed)) {
         NodeId n = doc.create(NodeKind::Image, current_parent());
-        doc.get(n).alt = std::string(trimmed.substr(2, mid - 2));
-        doc.get(n).src = std::string(trimmed.substr(mid + 2, end - (mid + 2)));
-        // Block image attributes are whitespace-separated, in either order.
-        if (end + 1 < trimmed.size() && trimmed[end + 1] == '{') {
-          size_t bend = trimmed.find('}', end + 2);
-          if (bend != std::string_view::npos) {
-            std::istringstream attrs(std::string(trimmed.substr(end + 2, bend - end - 2)));
-            std::string attr;
-            while (attrs >> attr) {
-              if (attr == "float=left") doc.get(n).float_side = "left";
-              else if (attr == "float=right") doc.get(n).float_side = "right";
-              else if (starts_with(attr, "scale=")) {
-                try {
-                  float scale = std::stof(attr.substr(6));
-                  if (scale > 0.05f && scale < 10.f) doc.get(n).display_scale = scale;
-                } catch (...) {}
-              }
-            }
-          }
+        Node& node = doc.get(n);
+        node.alt = std::move(im->alt);
+        node.src = std::move(im->src);
+        node.float_side = std::move(im->float_side);
+        node.display_scale = im->scale;
+        if (!im->href.empty()) {
+          InlineSpan link;  // the image's link target (image_link_href)
+          link.kind = InlineKind::Link;
+          link.href = std::move(im->href);
+          node.spans.push_back(std::move(link));
         }
         ++i;
         continue;
@@ -2210,12 +2239,19 @@ case NodeKind::Table: {
     }
 
     case NodeKind::Image: {
+      const std::string* href = image_link_href(node);
       out += pad;
+      if (href) out += "[";
       out += "![";
       out += node.alt;
       out += "](";
       out += node.src;
       out += ")";
+      if (href) {
+        out += "](";
+        out += *href;
+        out += ")";
+      }
       const bool scaled = node.display_scale > 0.05f &&
           (node.display_scale < 0.99f || node.display_scale > 1.01f);
       if (scaled || !node.float_side.empty()) {

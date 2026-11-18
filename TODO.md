@@ -12,7 +12,10 @@
 - Other spans a format cannot hold are left out *and reported*
   (`serialize_xml` / `serialize_sexpr` `unwritten`); the source views show
   an "Invalid document structure" warning note naming the nodes.
-- Not done: the Markdown writer still loses image links.
+- Markdown too: a lone `[![alt](src)](href){attrs}` line is a linked block
+  image, and the writer emits it. (A lone badge line used to be a paragraph
+  with an inline image; it is now a block image, like a lone `![…](…)`.)
+- Not done: gemtext and Org writers still lose image links.
 
 ## Status (2026-11-18) — Gallery Up strip and background
 

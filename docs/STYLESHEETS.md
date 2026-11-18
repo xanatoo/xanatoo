@@ -313,7 +313,9 @@ in either order. Following text wraps around the image and its caption; on a
 narrow column the image returns to normal block flow. Inline images and
 collection cards do not float. In S-expressions the equivalent is
 `(img "harbour.jpg" :alt "A view of the harbour" :float right :scale 0.8)`;
-a linked image adds `:href "…"` (XML: `<image … href="…"/>`).
+a linked image adds `:href "…"` (XML: `<image … href="…"/>`). In Markdown a
+lone linked image is written `[![alt](src)](href){float=right}`; with other
+text on its line it stays an inline image.
 
 Figures and tables can float as a whole, including their captions. For
 example, use `:::figure float=left` or `:::table float=right` in Markdown,
