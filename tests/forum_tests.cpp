@@ -236,7 +236,11 @@ void test_fourchan() {
      "com":"Previous: <a href=\"/g/thread/90#p90\" class=\"quotelink\">&gt;&gt;90</a><br>https://rentry.org/ldg-lazy<wbr>-guide",
      "tim":1794963393356146,"ext":".jpg","filename":"finished","fsize":575611,"w":1741,"h":1603},
     {"no":101,"resto":100,"name":"Anonymous","trip":"!!abc","time":1794963638,
-     "com":"<a href=\"#p100\" class=\"quotelink\">&gt;&gt;100</a><br>thanks"}]})");
+     "com":"<a href=\"#p100\" class=\"quotelink\">&gt;&gt;100</a><br>thanks"},
+    {"no":102,"resto":100,"name":"Anonymous","time":1794963700,
+     "com":"<a href=\"#p99\" class=\"quotelink\">&gt;&gt;99</a><br>gone"},
+    {"no":103,"resto":100,"name":"Anonymous","time":1794963800,
+     "com":"<a href=\"#p101\" class=\"quotelink\">&gt;&gt;101</a> <a href=\"#p102\" class=\"quotelink\">&gt;&gt;102</a>"}]})");
   Document t = fourchan_thread_document(thread, ref("fourchan:g/thread/100"));
   EXPECT_EQ(t.meta.title, "/ldg/ & co");
   const Node* op = message(t, "100");
@@ -247,6 +251,15 @@ void test_fourchan() {
     EXPECT_EQ(reply->spans[2].href, "#id:100");
     EXPECT_EQ(reply->summary, "2026-11-18 01:00 UTC");
   }
+  // Threaded by the first quotelink to an earlier post, depth-first.
+  if (op) EXPECT_EQ(op->alt, "");
+  if (reply) EXPECT_EQ(reply->alt, "100");
+  if (const Node* gone = message(t, "102")) EXPECT_EQ(gone->alt, "");  // >>99 not here
+  if (const Node* both = message(t, "103")) EXPECT_EQ(both->alt, "101");
+  std::string order;
+  for (const Node& n : t.nodes)
+    if (n.kind == NodeKind::Message) order += n.label + " ";
+  EXPECT_EQ(order, "100 101 103 102 ");
   EXPECT(has_href(t, "#id:100"));
   EXPECT(has_href(t, "fourchan:g/thread/90#id:90"));
   EXPECT(has_href(t, "https://i.4cdn.org/g/1794963393356146.jpg"));

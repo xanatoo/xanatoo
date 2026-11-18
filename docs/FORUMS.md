@@ -48,7 +48,9 @@ Exchange hosts, bsky.app) map to refs for the "Native view" toggle
   the score ("3 likes", "9 votes · accepted", "7 likes · 2 replies").
 - Indentation (`alt` = parent label) where the site has a reply tree
   (Lobsters, Stack Exchange comments under their post, Bluesky replies);
-  flat sites (Discourse, 4chan, Flarum) only link the post answered.
+  4chan builds one from each post's first quotelink to an earlier post of
+  the thread (others stay inline links) and emits posts depth-first;
+  flat sites (Discourse, Flarum) only link the post answered.
 - Links inside posts stay native: same-thread post links become `#id:N`
   (4chan quotelinks, Lobsters `/c/ID`, Flarum mentions, SE answer links),
   other pages of the same site become refs.

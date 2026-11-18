@@ -5,7 +5,8 @@
 // boards.json → board list, BOARD/catalog.json → one Article per thread,
 // BOARD/thread/NO.json → a flat Message list. Post HTML is small (br,
 // quote spans, quotelinks); ">>N" quotelinks become #id:N links and the
-// first one is the message's reply-to. Images show as thumbnails
+// first one to an earlier post is the message's reply-to: replies are
+// indented under it, in depth-first order. Images show as thumbnails
 // (i.4cdn.org/BOARD/TIMs.jpg) with a link to the full file.
 
 #include "forum_common.hpp"
@@ -13,6 +14,8 @@
 #include "xanatoo/util.hpp"
 
 #include <cstdio>
+#include <map>
+#include <vector>
 
 namespace xanatoo {
 
@@ -202,14 +205,39 @@ Document fourchan_thread_document(const Json& reply, const ForumRef& ref) {
       doc, title, "4chan",
       {{"Boards", chan_ref("")}, {"/" + board + "/", chan_ref(board)}}, "4chan");
   const std::string here = board + "/thread/" + op;
-  for (const Json& p : posts) {
+  // Threading: a post hangs under its first quotelink to an earlier post of
+  // this thread (none, a later or a missing post → top level). Posts are
+  // emitted depth-first so each reply follows its parent's subtree.
+  const size_t n = posts.size();
+  std::vector<std::string> coms(n), labels(n);
+  std::vector<size_t> parent(n, n);
+  std::vector<std::vector<size_t>> kids(n + 1);  // kids[n] = top level
+  std::map<std::string, size_t> index;
+  for (size_t i = 0; i < n; ++i) {
+    labels[i] = std::to_string(num(posts[i], "no"));
+    coms[i] = clean_comment(str(posts[i], "com"));
+    auto it = index.find(first_quote(coms[i]));
+    if (it != index.end()) parent[i] = it->second;
+    kids[parent[i]].push_back(i);
+    index.emplace(labels[i], i);
+  }
+  std::vector<size_t> order, stack(kids[n].rbegin(), kids[n].rend());
+  while (!stack.empty()) {
+    const size_t i = stack.back();
+    stack.pop_back();
+    order.push_back(i);
+    stack.insert(stack.end(), kids[i].rbegin(), kids[i].rend());
+  }
+  for (size_t i : order) {
+    const Json& p = posts[i];
     MsgHead h;
-    h.label = std::to_string(num(p, "no"));
+    h.label = labels[i];
     h.author = poster(p);
     h.iso = iso_from_unix(num(p, "time"));
     h.permalink = chan_ref(here, "id:" + h.label);
-    const std::string com = clean_comment(str(p, "com"));
-    h.reply_to = first_quote(com);
+    const std::string& com = coms[i];
+    if (parent[i] < n) h.reply_to = labels[parent[i]];
+    h.indent = true;
     NodeId msg = add_message(doc, thread, h);
     if (h.label == op) {
       const std::string sub = html_decode_entities(str(p, "sub"));
