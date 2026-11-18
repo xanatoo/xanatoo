@@ -110,7 +110,7 @@ Export via *File → Export as S-expression…* or *Export as Markdown…*.
 - **Drag left margin** — Reorder or reparent a block
 - **Drag column gutter** — Resize column widths
 - **Drag image corner** — Resize image
-- **Ctrl++** / **Ctrl+-** — Zoom text
+- **Ctrl++** / **Ctrl+-** — Zoom text (also Ctrl+wheel, keeping the text under the pointer in place)
 - **Click ▸/▾** — Expand / collapse stretchtext
 
 :::stretch summary="About stretchtext"

@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Ctrl+wheel zooms the text
+
+- Ctrl+wheel over a pane zooms the text one point per notch like a pinch:
+  `view_anchor_at` the pointer, then `zoom_by` (`on_mousewheel`,
+  `app_events.cpp`). Works in paged mode too; gallery and floats keep their
+  own wheel handling.
+
 ## Status (2026-11-18) — Context panel: hovered images
 
 - Hovering an image that is no link shows its original in the Context

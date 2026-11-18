@@ -206,6 +206,16 @@ static void on_mousewheel(App& app, SDL_Event& ev, bool imgui_mouse,
   int pi = pane_at(app, static_cast<float>(mxw), static_cast<float>(myw));
   if (gallery_wheel(app, pi, mxw, myw, ev.wheel.y)) return;
   Pane& p = app.panes[pi];
+  // Ctrl+wheel zooms the text like a pinch: the spot under the pointer stays.
+  if ((SDL_GetModState() & KMOD_CTRL) != 0) {
+    if (ev.wheel.y == 0) return;
+    const float mx = static_cast<float>(mxw), my = static_cast<float>(myw);
+    if (auto anchor =
+            view_anchor_at(app, p, local_x(app, mx, pi), content_y(app, my, pi)))
+      p.view_anchor = anchor;
+    zoom_by(app, ev.wheel.y > 0 ? 1 : -1);
+    return;
+  }
   if (p.pages.on) {  // a notch turns the page (not faster than a flip a beat)
     const Uint32 now = xanatoo::sdl::ticks();
     if (ev.wheel.y != 0 && now - app.page_turn_at > 140) {
