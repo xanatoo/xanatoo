@@ -202,19 +202,27 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
       xanatoo::sdl::draw_line(r, sq.x, sq.y + 1, sq.x + sq.w - 1, sq.y + 1);
     }
   }
-  // Shade box: a triangle pointing up rolls the window up to its title,
-  // pointing down rolls it out again. Greyed out where it does nothing.
+  // Shade box, direction-free (a docked panel may roll towards any side):
+  // a lone bold bar rolls the window up to its title; the same bar with
+  // two thin text lines under it rolls it out again. No side edges, so it
+  // never reads as the maximize square. Greyed out where it does nothing.
   if (w.shade_box) {
     const SDL_Rect sb = control_rect(1);
     draw_button_face(r, sb, false, w.shade_enabled && w.shade_hot);
     set(r, w.shade_enabled ? p.text : p.face_dark);
     const int a = std::max(2, px(4));
+    const int t = std::max(2, px(2));  // bar thickness
     const int cx = sb.x + sb.w / 2, cy = sb.y + sb.h / 2;
-    const int half = a / 2 + 1;  // rows of the triangle around the centre
-    for (int i = 0; i <= a; ++i) {
-      // Row i from the apex: width grows by one pixel each side.
-      const int y = w.shaded ? cy + half - i : cy - half + i;
-      xanatoo::sdl::draw_line(r, cx - i, y, cx + i, y);
+    const auto bar = [&](int y, int h) {
+      const SDL_Rect b{cx - a, y, a * 2 + 1, h};
+      xanatoo::sdl::fill_rect(r, &b);
+    };
+    if (w.shaded) {
+      bar(cy - a, t);
+      bar(cy, 1);
+      bar(cy + a, 1);
+    } else {
+      bar(cy - t / 2, t);
     }
   }
   // Resize grip (SE): diagonal ridges in light/dark pairs
