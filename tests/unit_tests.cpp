@@ -81,6 +81,7 @@ void test_forums(int& passed, int& failed);
 void test_nntp(int& passed, int& failed);
 // ui_help_tests.cpp: likewise.
 void test_ui_help(int& passed, int& failed);
+void test_sqlite_db(int& passed, int& failed);
 
 namespace {
 
@@ -7130,6 +7131,7 @@ int main() {
   test_forums(g_passed, g_failed);
   test_nntp(g_passed, g_failed);
   test_ui_help(g_passed, g_failed);
+  test_sqlite_db(g_passed, g_failed);
 
   std::printf("%d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

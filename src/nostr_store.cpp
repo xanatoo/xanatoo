@@ -22,7 +22,7 @@
 #define XANATOO_SQLITE 0
 #endif
 #if XANATOO_SQLITE
-#include <sqlite3.h>
+#include "xanatoo/sqlite_db.hpp"
 #endif
 
 namespace xanatoo {
@@ -39,19 +39,7 @@ bool hex_pubkey(std::string_view str) {
 
 #if XANATOO_SQLITE
 
-bool table_has_column(sqlite3* db, const char* table, const char* column) {
-  const std::string sql = std::string("PRAGMA table_info(") + table + ");";
-  sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &st, nullptr) != SQLITE_OK)
-    return false;
-  bool found = false;
-  while (sqlite3_step(st) == SQLITE_ROW) {
-    const char* name = reinterpret_cast<const char*>(sqlite3_column_text(st, 1));
-    if (name && column == std::string_view(name)) { found = true; break; }
-  }
-  sqlite3_finalize(st);
-  return found;
-}
+using sqlite::table_has_column;
 
 sqlite3* open_cache(bool writing) {
   if (writing && no_save()) return nullptr;
@@ -63,12 +51,14 @@ sqlite3* open_cache(bool writing) {
   if (writing ? (!cache_test_path.empty() ? false : !ensure_dir(dir)) :
                 !std::filesystem::exists(path, ec))
     return nullptr;
-  sqlite3* db = nullptr;
-  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
-    if (db) sqlite3_close(db);
-    return nullptr;
-  }
-  sqlite3_busy_timeout(db, 1500);
+  // Shared pragmas (WAL, busy timeout); the schema below keeps its own
+  // column-probing migration, which predates user_version.
+  sqlite::OpenOptions opt;
+  opt.mode = writing ? sqlite::OpenMode::Create
+           : no_save() ? sqlite::OpenMode::ReadOnly
+                       : sqlite::OpenMode::ReadWrite;
+  sqlite3* db = sqlite::open(path, opt);
+  if (!db) return nullptr;
   const bool old_events = !table_has_column(db, "events", "verification");
   const bool old_people = !table_has_column(db, "people", "profile_verification");
   const bool missing_groups = !table_has_column(db, "groups", "group_id");

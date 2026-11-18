@@ -9,7 +9,7 @@
 #define XANATOO_SQLITE 1
 #endif
 #if XANATOO_SQLITE
-#include <sqlite3.h>
+#include "xanatoo/sqlite_db.hpp"
 #endif
 
 #include <cstdio>
@@ -23,16 +23,9 @@ namespace {
 sqlite3* open_db(bool write) {
   std::string path = sidestore_path();
   if (path.empty()) return nullptr;
-  std::error_code ec;
-  if (write ? !ensure_dir(state_dir()) : !std::filesystem::exists(path, ec))
-    return nullptr;
-  sqlite3* db = nullptr;
-  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
-    if (db) sqlite3_close(db);
-    return nullptr;
-  }
-  char* err = nullptr;
-  const char* schema =
+  if (write && !ensure_dir(state_dir())) return nullptr;
+  // Step 0 is the schema from before versioning (all IF NOT EXISTS).
+  static const sqlite::Migrations kSteps = {
       "CREATE TABLE IF NOT EXISTS section_fold ("
       "  doc_key TEXT NOT NULL,"
       "  section_key TEXT NOT NULL,"
@@ -40,13 +33,13 @@ sqlite3* open_db(bool write) {
       "  PRIMARY KEY (doc_key, section_key)"
       ");"
       "CREATE TABLE IF NOT EXISTS annotation_layer_visibility ("
-      "  layer_id TEXT PRIMARY KEY, hidden INTEGER NOT NULL);";
-  if (sqlite3_exec(db, schema, nullptr, nullptr, &err) != SQLITE_OK) {
-    if (err) sqlite3_free(err);
-    sqlite3_close(db);
-    return nullptr;
-  }
-  return db;
+      "  layer_id TEXT PRIMARY KEY, hidden INTEGER NOT NULL);",
+  };
+  sqlite::OpenOptions opt;
+  opt.mode = write ? sqlite::OpenMode::Create
+           : no_save() ? sqlite::OpenMode::ReadOnly
+                       : sqlite::OpenMode::ReadWrite;
+  return sqlite::open_store(path, kSteps, opt);
 }
 #endif
 
@@ -105,93 +98,45 @@ void load_section_folds(std::string_view doc_key,
                         std::unordered_set<std::string>& folded_keys) {
   folded_keys.clear();
   if (doc_key.empty()) return;
-  sqlite3* db = open_db(false);
+  sqlite::Db db(open_db(false));
   if (!db) return;
-  sqlite3_stmt* st = nullptr;
-  const char* sql =
-      "SELECT section_key FROM section_fold WHERE doc_key = ? AND folded = 1;";
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) {
-    sqlite3_close(db);
-    return;
-  }
-  sqlite3_bind_text(st, 1, doc_key.data(), static_cast<int>(doc_key.size()),
-                    SQLITE_TRANSIENT);
-  while (sqlite3_step(st) == SQLITE_ROW) {
-    const char* k =
-        reinterpret_cast<const char*>(sqlite3_column_text(st, 0));
-    if (k) folded_keys.insert(k);
-  }
-  sqlite3_finalize(st);
-  sqlite3_close(db);
+  sqlite::Stmt st(db, "SELECT section_key FROM section_fold "
+                      "WHERE doc_key = ? AND folded = 1;", {doc_key});
+  while (st.row()) folded_keys.insert(st.text(0));
 }
 
 void save_section_fold(std::string_view doc_key, std::string_view section_key,
                        bool folded) {
   if (doc_key.empty() || section_key.empty() || no_save()) return;
-  sqlite3* db = open_db(true);
+  sqlite::Db db(open_db(true));
   if (!db) return;
-  if (folded) {
-    sqlite3_stmt* st = nullptr;
-    const char* sql =
-        "INSERT INTO section_fold(doc_key, section_key, folded) VALUES(?,?,1) "
-        "ON CONFLICT(doc_key, section_key) DO UPDATE SET folded = 1;";
-    if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) == SQLITE_OK) {
-      sqlite3_bind_text(st, 1, doc_key.data(), static_cast<int>(doc_key.size()),
-                        SQLITE_TRANSIENT);
-      sqlite3_bind_text(st, 2, section_key.data(),
-                        static_cast<int>(section_key.size()), SQLITE_TRANSIENT);
-      sqlite3_step(st);
-      sqlite3_finalize(st);
-    }
-  } else {
-    sqlite3_stmt* st = nullptr;
-    const char* sql =
-        "DELETE FROM section_fold WHERE doc_key = ? AND section_key = ?;";
-    if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) == SQLITE_OK) {
-      sqlite3_bind_text(st, 1, doc_key.data(), static_cast<int>(doc_key.size()),
-                        SQLITE_TRANSIENT);
-      sqlite3_bind_text(st, 2, section_key.data(),
-                        static_cast<int>(section_key.size()), SQLITE_TRANSIENT);
-      sqlite3_step(st);
-      sqlite3_finalize(st);
-    }
-  }
-  sqlite3_close(db);
+  sqlite::Stmt st(db, folded
+      ? "INSERT INTO section_fold(doc_key, section_key, folded) VALUES(?,?,1) "
+        "ON CONFLICT(doc_key, section_key) DO UPDATE SET folded = 1;"
+      : "DELETE FROM section_fold WHERE doc_key = ? AND section_key = ?;",
+      {doc_key, section_key});
+  st.run();
 }
 
 void load_hidden_annotation_layers(std::unordered_set<std::string>& hidden) {
   hidden.clear();
-  sqlite3* db = open_db(false);
+  sqlite::Db db(open_db(false));
   if (!db) return;
-  sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(db,
-          "SELECT layer_id FROM annotation_layer_visibility WHERE hidden = 1;",
-          -1, &st, nullptr) == SQLITE_OK) {
-    while (sqlite3_step(st) == SQLITE_ROW) {
-      const auto* text = sqlite3_column_text(st, 0);
-      if (text) hidden.emplace(reinterpret_cast<const char*>(text));
-    }
-  }
-  if (st) sqlite3_finalize(st);
-  sqlite3_close(db);
+  sqlite::Stmt st(db,
+      "SELECT layer_id FROM annotation_layer_visibility WHERE hidden = 1;");
+  while (st.row()) hidden.insert(st.text(0));
 }
 
 void save_annotation_layer_visibility(std::string_view layer_id, bool visible) {
   if (layer_id.empty() || no_save()) return;
-  sqlite3* db = open_db(true);
+  sqlite::Db db(open_db(true));
   if (!db) return;
-  sqlite3_stmt* st = nullptr;
-  const char* sql = visible
+  sqlite::Stmt st(db, visible
       ? "DELETE FROM annotation_layer_visibility WHERE layer_id = ?;"
       : "INSERT INTO annotation_layer_visibility(layer_id,hidden) VALUES(?,1) "
-        "ON CONFLICT(layer_id) DO UPDATE SET hidden=1;";
-  if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) == SQLITE_OK) {
-    sqlite3_bind_text(st, 1, layer_id.data(), static_cast<int>(layer_id.size()),
-                      SQLITE_TRANSIENT);
-    sqlite3_step(st);
-  }
-  if (st) sqlite3_finalize(st);
-  sqlite3_close(db);
+        "ON CONFLICT(layer_id) DO UPDATE SET hidden=1;",
+      {layer_id});
+  st.run();
 }
 
 #else

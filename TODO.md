@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Shared SQLite layer (history plan step 1)
+
+- `sqlite_db.hpp`: `open` (WAL, synchronous=NORMAL, busy timeout,
+  foreign keys; Create / ReadWrite / ReadOnly), `migrate` / `open_store`
+  (`user_version` steps in BEGIN IMMEDIATE; a newer file opens read-only
+  with a warning), `data_version`, RAII `Db` / `Stmt` / `Tx`.
+- revstore and sidestore ported (old schema = step 0), nostr_store opens
+  through it but keeps its own column migration.
+- `tests/sqlite_db_tests.cpp`; all 29 ctest targets pass.
+- Next: step 2, URL ring + bookmarks into `state_dir()/xanatoo.sqlite`.
+
 ## Plan (2026-11-18) — Browsing history graph, snapshots, shared SQLite
 
 - Plan only, nothing implemented: `docs/HISTORY.md`. Untangled into

@@ -9,7 +9,7 @@
 #define XANATOO_SQLITE 1
 #endif
 #if XANATOO_SQLITE
-#include <sqlite3.h>
+#include "xanatoo/sqlite_db.hpp"
 #endif
 
 #include <ctime>
@@ -61,7 +61,8 @@ sqlite3* db() {
     const std::string dir = state_dir();
     if (ensure_dir(dir)) path = dir + "/revisions.sqlite";
   }
-  const char* schema =
+  // Step 0 is the schema from before versioning (all IF NOT EXISTS).
+  static const sqlite::Migrations kSteps = {
       "CREATE TABLE IF NOT EXISTS objects ("
       "  id TEXT PRIMARY KEY, data BLOB NOT NULL);"
       "CREATE TABLE IF NOT EXISTS revisions ("
@@ -84,56 +85,21 @@ sqlite3* db() {
       // bytes and parsed tree survive later source changes or disappearance.
       "CREATE TABLE IF NOT EXISTS document_origins ("
       "  key TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE,"
-      "  original TEXT NOT NULL, raw TEXT NOT NULL);";
-  if (path.empty() || sqlite3_open(path.c_str(), &g_db) != SQLITE_OK ||
-      sqlite3_exec(g_db, schema, nullptr, nullptr, nullptr) != SQLITE_OK) {
-    if (g_db) sqlite3_close(g_db);
-    g_db = nullptr;
+      "  original TEXT NOT NULL, raw TEXT NOT NULL);",
+  };
+  g_db = path.empty() ? nullptr : sqlite::open_store(path, kSteps);
+  if (!g_db) {
     g_db_failed = true;
     return nullptr;
   }
   return g_db;
 }
 
-// Prepared statement with text parameters bound in order; finalised on scope
-// exit.
-struct Stmt {
-  sqlite3_stmt* st = nullptr;
-  Stmt(sqlite3* d, const char* sql, std::initializer_list<std::string_view> args) {
-    if (sqlite3_prepare_v2(d, sql, -1, &st, nullptr) != SQLITE_OK) {
-      st = nullptr;
-      return;
-    }
-    int i = 1;
-    for (std::string_view a : args)
-      sqlite3_bind_text(st, i++, a.data(), static_cast<int>(a.size()),
-                        SQLITE_TRANSIENT);
-  }
-  ~Stmt() {
-    if (st) sqlite3_finalize(st);
-  }
-  bool row() { return st && sqlite3_step(st) == SQLITE_ROW; }
-  bool run() { return st && sqlite3_step(st) == SQLITE_DONE; }
-  std::string text(int col) {
-    const auto* t = sqlite3_column_text(st, col);
-    return t ? std::string(reinterpret_cast<const char*>(t),
-                           static_cast<size_t>(sqlite3_column_bytes(st, col)))
-             : std::string();
-  }
-};
+using sqlite::Stmt;
 
 bool put_object(sqlite3* d, std::string_view id, std::string_view data) {
-  sqlite3_stmt* st = nullptr;
-  if (sqlite3_prepare_v2(d, "INSERT OR IGNORE INTO objects(id, data) VALUES(?,?);",
-                         -1, &st, nullptr) != SQLITE_OK)
-    return false;
-  sqlite3_bind_text(st, 1, id.data(), static_cast<int>(id.size()),
-                    SQLITE_TRANSIENT);
-  sqlite3_bind_blob(st, 2, data.data(), static_cast<int>(data.size()),
-                    SQLITE_TRANSIENT);
-  const bool ok = sqlite3_step(st) == SQLITE_DONE;
-  sqlite3_finalize(st);
-  return ok;
+  Stmt s(d, "INSERT OR IGNORE INTO objects(id, data) VALUES(?,?);");
+  return s.bind(1, id).bind_blob(2, data).run();
 }
 
 // Immutable revision record; its id is the content id of the canonical text.
@@ -185,23 +151,6 @@ bool set_head(sqlite3* d, std::string_view key, std::string_view latest,
   return s.run();
 }
 
-// BEGIN … COMMIT, rolled back unless commit() is reached.
-struct Txn {
-  sqlite3* d;
-  bool done = false;
-  bool started = false;
-  explicit Txn(sqlite3* db_) : d(db_) {
-    started = sqlite3_exec(d, "BEGIN IMMEDIATE;", nullptr, nullptr, nullptr) == SQLITE_OK;
-  }
-  bool commit() {
-    if (!started) return false;
-    done = sqlite3_exec(d, "COMMIT;", nullptr, nullptr, nullptr) == SQLITE_OK;
-    return done;
-  }
-  ~Txn() {
-    if (started && !done) sqlite3_exec(d, "ROLLBACK;", nullptr, nullptr, nullptr);
-  }
-};
 #endif
 
 }  // namespace
@@ -228,7 +177,7 @@ static DraftHead draft_from(Stmt& s) {
   h.content = s.text(2);
   h.base = s.text(3);
   h.title = s.text(4);
-  h.time = sqlite3_column_int64(s.st, 5);
+  h.time = s.int64(5);
   return h;
 }
 
@@ -255,9 +204,7 @@ std::optional<std::string> load_object(std::string_view id) {
   if (!d) return std::nullopt;
   Stmt s(d, "SELECT data FROM objects WHERE id = ?;", {id});
   if (!s.row()) return std::nullopt;
-  const void* p = sqlite3_column_blob(s.st, 0);
-  const int n = sqlite3_column_bytes(s.st, 0);
-  return std::string(static_cast<const char*>(p), p ? static_cast<size_t>(n) : 0);
+  return s.blob(0);
 }
 
 std::string put_draft(std::string_view key, std::string_view text,
@@ -266,8 +213,8 @@ std::string put_draft(std::string_view key, std::string_view text,
   if (!d || key.empty()) return {};
   const int64_t now = static_cast<int64_t>(std::time(nullptr));
   const std::string cid = content_id(text);
-  Txn txn(d);
-  if (!txn.started) return {};
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return {};
   const HeadRow h = head_row(d, key);
   std::string parent = h.latest;
   std::string base = h.base;
@@ -291,8 +238,8 @@ bool record_save(std::string_view key, std::string_view text) {
   if (!d || key.empty()) return false;
   const int64_t now = static_cast<int64_t>(std::time(nullptr));
   const std::string cid = content_id(text);
-  Txn txn(d);
-  if (!txn.started) return false;
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return false;
   const HeadRow h = head_row(d, key);
   if (!put_object(d, cid, text)) return false;
   const std::string rev = put_revision(d, key, h.latest, cid, "save", now);
@@ -319,7 +266,7 @@ std::optional<ObjectRevision> load_object_revision(std::string_view revision) {
   r.parent = s.text(1);
   r.kind = s.text(2);
   r.content = s.text(3);
-  r.time = sqlite3_column_int64(s.st, 4);
+  r.time = s.int64(4);
   auto body = load_object(r.content);
   if (!body) return std::nullopt;
   r.data = std::move(*body);
@@ -356,8 +303,8 @@ std::string commit_object_revision(std::string_view key,
                                    std::string_view expected_head) {
   sqlite3* d = db();
   if (!d || key.empty() || kind.empty()) return {};
-  Txn txn(d);
-  if (!txn.started) return {};
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return {};
   std::string current, current_kind;
   {
     Stmt previous(d, "SELECT revision, kind FROM object_heads WHERE key = ?;", {key});
@@ -402,7 +349,7 @@ std::optional<StoredDocument> stored_head(sqlite3* d, std::string_view key) {
   head.title = s.text(1);
   head.working = s.text(2);
   head.published = s.text(3);
-  head.time = sqlite3_column_int64(s.st, 4);
+  head.time = s.int64(4);
   return head;
 }
 
@@ -439,8 +386,8 @@ std::optional<StoredDocument> import_stored_document(
     std::string_view title) {
   sqlite3* d = db();
   if (!d || source.empty()) return std::nullopt;
-  Txn txn(d);
-  if (!txn.started) return std::nullopt;
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return std::nullopt;
   // First import wins. Never replace a known original or an edited working
   // head with a later fetch of the same URL or file path.
   Stmt previous(d, "SELECT key FROM document_origins WHERE source = ?;",
@@ -484,7 +431,7 @@ std::vector<StoredDocument> list_stored_documents() {
     h.title = s.text(1);
     h.working = s.text(2);
     h.published = s.text(3);
-    h.time = sqlite3_column_int64(s.st, 4);
+    h.time = s.int64(4);
     out.push_back(std::move(h));
   }
   return out;
@@ -495,8 +442,8 @@ std::optional<StoredDocument> save_stored_document(
     std::string_view expected_working, std::string_view title) {
   sqlite3* d = db();
   if (!d || !native_document_key(key)) return std::nullopt;
-  Txn txn(d);
-  if (!txn.started) return std::nullopt;
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return std::nullopt;
   auto head = stored_head(d, key);
   if ((head && head->working != expected_working) ||
       (!head && !expected_working.empty())) return std::nullopt;
@@ -537,8 +484,8 @@ std::optional<StoredDocument> publish_stored_document(
     std::string_view expected_published) {
   sqlite3* d = db();
   if (!d || !native_document_key(key)) return std::nullopt;
-  Txn txn(d);
-  if (!txn.started) return std::nullopt;
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return std::nullopt;
   auto head = stored_head(d, key);
   if (!head || head->working != expected_working ||
       head->published != expected_published) return std::nullopt;

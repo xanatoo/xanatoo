@@ -216,6 +216,7 @@ add_executable(xanatoo
   src/minibuffer.cpp
   src/sidestore.cpp
   src/revstore.cpp
+  src/sqlite_db.cpp
   src/annotations.cpp
   src/epub_import.cpp
   src/epub_native.cpp
@@ -698,6 +699,7 @@ add_executable(xanatoo_tests
   tests/forum_tests.cpp
   tests/nntp_tests.cpp
   tests/ui_help_tests.cpp
+  tests/sqlite_db_tests.cpp
   src/ui_help.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
@@ -706,6 +708,7 @@ add_executable(xanatoo_tests
   src/paths.cpp
   src/version.cpp
   src/revstore.cpp
+  src/sqlite_db.cpp
   src/sidestore.cpp
   src/annotations.cpp
   src/minibuffer.cpp
@@ -858,7 +861,7 @@ endif()
 if(XANATOO_SQLITE AND XANATOO_NEED_OPENSSL AND XANATOO_TLS STREQUAL "openssl")
   add_executable(xanatoo_nostr_group_store_tests
     tests/nostr_group_store_tests.cpp
-    src/nostr_store.cpp src/nostr_verify.cpp src/nostr.cpp
+    src/nostr_store.cpp src/nostr_verify.cpp src/nostr.cpp src/sqlite_db.cpp
     src/util.cpp src/paths.cpp)
   target_include_directories(xanatoo_nostr_group_store_tests PRIVATE
     include ${SDL2_INCLUDE_DIRS})

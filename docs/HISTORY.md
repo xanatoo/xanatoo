@@ -1,6 +1,7 @@
 # Browsing history, snapshots and shared state — plan
 
-Status: **plan** (2026-11-18), nothing implemented yet.
+Status (2026-11-18): **A step 1 done** (`sqlite_db.hpp`, the three stores
+ported); the rest is plan.
 
 The request bundles five ideas. They depend on each other only in one
 direction, so they can land as separate steps:
@@ -74,6 +75,16 @@ bookmarks (they reference each other, foreign keys want one file);
 `revisions.sqlite` stays separate (it can grow large and is the document
 store); `sidestore` folds move into the new file later. Caches stay in
 `cache_dir()`.
+
+Done: `include/xanatoo/sqlite_db.hpp` / `src/sqlite_db.cpp`
+(`open`, `migrate`, `open_store`, `data_version`, `Db`, `Stmt`, `Tx`),
+tests in `tests/sqlite_db_tests.cpp` (migration from an unversioned file,
+failed step rolls back, newer schema → read-only, reader during a write,
+busy writer, four threads with their own connections writing at once).
+`revstore` and `sidestore` use `open_store` with their old schema as step 0
+(existing files pass through it unchanged, then sit at user_version 1);
+`nostr_store` uses `open` for the pragmas but keeps its column-probing
+migration. Read-only paths under `--no-save` now open `ReadOnly`.
 
 First users (small, independent wins): `minibuf_hist_url` and bookmarks
 move into tables, which fixes the multi-process clobbering immediately.

@@ -140,6 +140,10 @@ behaviour is free functions ("systems") taking `App&`.
 
 - `sexpr.hpp`: header-only `SExprParser` (`parse_top` / `parse_all`) + `is_atom` /
   `is_form` / `sexpr_*` helpers; used by the `.sexp` format and style sheets.
+- `sqlite_db.hpp`: every SQLite store opens through `sqlite::open_store`
+  (WAL, busy timeout, `user_version` migrations; several processes share
+  the files) and uses its `Stmt` / `Tx` / `Db`; keep write transactions
+  short. `docs/HISTORY.md` "A".
 - `util.hpp`: `starts_with` / `ends_with` / `starts_with_ci`, `ascii_lower`
   (string or string_view), `trim_ascii` (string_view edges),
   `html_decode_entities` (named basics + numeric → UTF-8).
