@@ -604,6 +604,8 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::Subscriptions:
       return 0.f;  // ImGui list manages its own vertical scrolling.
     case WindowRole::Context:
+      if (app.context_has_doc && !app.context_image_src.empty())
+        return 0.f;  // a fitted picture
       if (app.context_has_doc)
         return std::max(0.f, app.context_layout.content_height - view_h + 40.f);
       return 0.f;  // ImGui text fallback

@@ -524,6 +524,94 @@ bool gallery_key(App& app, SDL_Keycode key, bool ctrl, bool alt, bool shift) {
   return true;
 }
 
+namespace {
+
+// A picture not drawable yet: "Loading …" with the download's progress, or
+// "Cannot load …", across the middle of `all`.
+void draw_image_wait(App& app, const SDL_Rect& all, int pad,
+                     const std::string& src, const xanatoo::Image& img) {
+  xanatoo::Font& font = app.ui_font;
+  const int avail_w = all.w - 2 * pad;
+  const bool remote = xanatoo::is_remote_image(src);
+  if (img.pending && remote) want_image_now(app, src);
+  const ImageLoadState st = img.pending && remote ? image_load_state(app, src)
+                                                  : ImageLoadState{};
+  std::string head = !img.pending  ? "Cannot load "
+                     : !remote     ? "Preparing "
+                     : st.queued   ? "Waiting to load "
+                                   : "Loading ";
+  const std::string msg = fit_text(font, head + src, avail_w);
+  const int msg_y = all.y + all.h / 2;
+  if (img.pending)
+    app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                           static_cast<float>(msg_y), msg, 200, 200, 205);
+  else
+    app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                           static_cast<float>(msg_y), msg, 220, 120, 120);
+  if (img.pending) {
+    const int bar_h = std::max(4, static_cast<int>(5.f * app.ui_scale));
+    const int bw = std::min(avail_w, static_cast<int>(480.f * app.ui_scale));
+    const int bar_y = msg_y - font.descender() + pad / 2;
+    draw_image_progress_bar(app, SDL_Rect{all.x + pad, bar_y, bw, bar_h}, st,
+                            xanatoo::Rgba{60, 60, 66, 255});
+    const std::string bytes =
+        xanatoo::transfer_label(st.received, st.expected, 0);
+    if (!bytes.empty())
+      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
+                             static_cast<float>(bar_y + bar_h + pad / 2 +
+                                                font.ascender()),
+                             bytes, 160, 160, 168);
+  }
+}
+
+std::string file_name_of(const std::string& src) {
+  return std::filesystem::path(src.substr(0, src.find_first_of("?#")))
+      .filename()
+      .string();
+}
+
+}  // namespace
+
+void draw_context_image(App& app, const SDL_Rect& all, const std::string& src,
+                        const std::string& base) {
+  if (all.w <= 0 || all.h <= 0) return;
+  xanatoo::sdl::set_clip_rect(app.sdl, &all);
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
+  const xanatoo::Rgba bg = xanatoo::gallery_view_style(app.style).paper;
+  SDL_SetRenderDrawColor(app.sdl, bg.r, bg.g, bg.b, 255);
+  xanatoo::sdl::fill_rect(app.sdl, &all);
+
+  xanatoo::Font& font = app.ui_font;
+  const int line = font.line_height();
+  const int pad = static_cast<int>(8.f * app.ui_scale);
+  const xanatoo::Image& img = app.images.get(src, base);
+  std::string caption = file_name_of(src);
+  if (caption.empty()) caption = src;
+  if (img.ok && img.texture && img.width > 0 && img.height > 0) {
+    const Area area{all.x + pad, all.y + pad, std::max(1, all.w - 2 * pad),
+                    std::max(1, all.h - 2 * pad - line)};
+    const float sc = fit_scale(area, img);
+    const float fw = img.width * sc, fh = img.height * sc;
+    SDL_Rect dst{static_cast<int>(area.cx() - fw / 2),
+                 static_cast<int>(area.cy() - fh / 2),
+                 std::max(1, static_cast<int>(fw)),
+                 std::max(1, static_cast<int>(fh))};
+    xanatoo::sdl::copy(app.sdl, img.texture, nullptr, &dst);
+    caption += "  (" + std::to_string(img.width) + "×" +
+               std::to_string(img.height) + " · " +
+               std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%)";
+  } else {
+    draw_image_wait(app, all, pad, src, img);
+  }
+  caption = fit_text(font, caption, all.w - 2 * pad);
+  const int cap_w = font.measure(caption);
+  app.renderer.draw_text(
+      font, static_cast<float>(all.x + (all.w - cap_w) / 2),
+      static_cast<float>(all.y + all.h - pad - line + font.ascender()),
+      caption, 235, 235, 235);
+  xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+}
+
 void draw_gallery_image(App& app, int pi) {
   Pane& p = app.panes[pi];
   const xanatoo::GalleryItem* item = current_item(p);
@@ -562,36 +650,7 @@ void draw_gallery_image(App& app, int pi) {
     dims = std::to_string(img.width) + "×" + std::to_string(img.height) +
            " · " + std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%";
   } else {
-    const bool remote = xanatoo::is_remote_image(item->src);
-    if (img.pending && remote) want_image_now(app, item->src);
-    const ImageLoadState st = img.pending && remote
-                                  ? image_load_state(app, item->src)
-                                  : ImageLoadState{};
-    std::string head = !img.pending  ? "Cannot load "
-                       : !remote     ? "Preparing "
-                       : st.queued   ? "Waiting to load "
-                                     : "Loading ";
-    const std::string msg = fit_text(font, head + item->src, avail_w);
-    const int msg_y = all.y + all.h / 2;
-    if (img.pending)
-      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                             static_cast<float>(msg_y), msg, 200, 200, 205);
-    else
-      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                             static_cast<float>(msg_y), msg, 220, 120, 120);
-    if (img.pending) {
-      const int bar_h = std::max(4, static_cast<int>(5.f * app.ui_scale));
-      const int bw = std::min(avail_w, static_cast<int>(480.f * app.ui_scale));
-      const int bar_y = msg_y - font.descender() + pad / 2;
-      draw_image_progress_bar(app, SDL_Rect{all.x + pad, bar_y, bw, bar_h}, st,
-                              xanatoo::Rgba{60, 60, 66, 255});
-      const std::string bytes = xanatoo::transfer_label(st.received, st.expected, 0);
-      if (!bytes.empty())
-        app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                               static_cast<float>(bar_y + bar_h + pad / 2 +
-                                                  font.ascender()),
-                               bytes, 160, 160, 168);
-    }
+    draw_image_wait(app, all, pad, item->src, img);
   }
 
   const std::string counter = std::to_string(gv.index + 1) + " / " +
@@ -600,11 +659,7 @@ void draw_gallery_image(App& app, int pi) {
       "←/→ step · wheel / pinch / + − zoom · 0 fit · 1 100% · drag pan · g grid · Esc page";
   const int base_y = bot - bottom + pad / 2 + font.ascender();
   std::string caption =
-      item->caption.empty()
-          ? std::filesystem::path(item->src.substr(0, item->src.find_first_of("?#")))
-                .filename()
-                .string()
-          : item->caption;
+      item->caption.empty() ? file_name_of(item->src) : item->caption;
   const int counter_w = font.measure(counter);
   if (!dims.empty()) caption += "  (" + dims + ")";
   caption = fit_text(font, caption, avail_w - 2 * counter_w - pad);

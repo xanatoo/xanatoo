@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Context panel: hovered images
+
+- Hovering an image that is no link shows its original in the Context
+  panel, fitted (never enlarged) on the gallery background with name,
+  size and scale below, like `//gallery//item:N` (`draw_context_image`).
+  Image-link targets use the same view now instead of a laid-out
+  thumbnail. Checked under Xvfb with a local image; remote ones load
+  through the image cache with the gallery's progress note.
+
 ## Status (2026-11-18) — Source views: image links, invalid-structure warning
 
 - `//source-xml` failed ("inline text on a container node") on HTML pages

@@ -1130,6 +1130,8 @@ void poll_fetches(App& app) {
               "page:" + (job.shared->final_url.empty() ? job.url
                                                        : job.shared->final_url);
           app.context_has_doc = true;
+          app.context_image_src.clear();
+          app.context_image_base.clear();
           app.context_needs_layout = true;
           app.context_scroll_to = xanatoo::INVALID_NODE;
           app.context_win.scroll = 0.f;

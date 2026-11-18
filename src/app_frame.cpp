@@ -4717,6 +4717,17 @@ void draw_context_window(App& app) {
     return;
   }
 
+  if (!app.context_image_src.empty()) {
+    app.context_win.scroll = 0.f;
+    if (!draw_floating_frame(app, app.context_win, title,
+                             float_active(app, app.context_win)))
+      return;
+    auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+    draw_context_image(app, SDL_Rect{cx, cy, cw, ch}, app.context_image_src,
+                       app.context_image_base);
+    return;
+  }
+
   if (app.context_needs_layout) layout_context(app);
 
   {

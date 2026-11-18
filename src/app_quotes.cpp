@@ -346,6 +346,8 @@ void refresh_context_panel(App& app) {
     }
     app.context_doc = src;
     app.context_source_key = key;
+    app.context_image_src.clear();
+    app.context_image_base.clear();
     app.context_has_doc = true;
     app.context_needs_layout = true;
     app.context_scroll_to = scroll_to;
@@ -365,22 +367,29 @@ void refresh_context_panel(App& app) {
     app.context_jump_pane = -1;
     app.context_jump_link = -1;
   };
+  // A picture: its original, drawn fitted into the panel like the
+  // gallery's single image (draw_context_image), not a laid-out page.
+  auto show_image = [&](const std::string& src, const std::string& base) {
+    app.context_kind = "Image";
+    app.context_title = src;
+    app.context_meta.clear();
+    app.context_body.clear();
+    app.context_can_jump = false;
+    app.context_jump_pane = -1;
+    app.context_jump_link = -1;
+    const std::string key = "image:" + base + "\n" + src;
+    if (!loaded(key)) set_doc(xanatoo::image_url_document(src), key);
+    app.context_image_src = src;
+    app.context_image_base = base;
+    app.context_pending_url.clear();
+  };
   auto load_remote = [&](const std::string& url) {
     // Remote images never go through fetch_page as HTML — same as navigate.
     if (xanatoo::is_image_address(url) ||
         (xanatoo::is_image_url(url) &&
          (xanatoo::starts_with_ci(url, "http://") ||
           xanatoo::starts_with_ci(url, "https://")))) {
-      app.context_kind = "Image";
-      app.context_title = url;
-      app.context_meta.clear();
-      app.context_body.clear();
-      app.context_can_jump = false;
-      app.context_jump_pane = -1;
-      app.context_jump_link = -1;
-      const std::string key = "image:" + url;
-      if (!loaded(key)) set_doc(xanatoo::image_url_document(url), key);
-      app.context_pending_url.clear();
+      show_image(url, {});
       return;
     }
     // Local PDF / DjVu / comic path (rare as "remote" but shared helper).
@@ -498,16 +507,7 @@ void refresh_context_panel(App& app) {
       }
       // Local image file: one-image document (ImageCache loads the pixels).
       if (xanatoo::is_image_url(t.url) || xanatoo::is_image_address(t.url)) {
-        app.context_kind = "Image";
-        app.context_title = t.url;
-        app.context_meta.clear();
-        app.context_body.clear();
-        app.context_can_jump = false;
-        app.context_jump_pane = -1;
-        app.context_jump_link = -1;
-        const std::string key = "image:" + t.url;
-        if (!loaded(key)) set_doc(xanatoo::image_url_document(t.url), key);
-        app.context_pending_url.clear();
+        show_image(t.url, {});
         return;
       }
       // The key names the exact content (buffer generation, file path and
@@ -588,6 +588,20 @@ void refresh_context_panel(App& app) {
           "Open it with the usual click, or use “Open Link in Trail View” "
           "from the context menu.";
     return;
+  }
+
+  // An image that is no link: its original at full resolution, as the
+  // gallery would show it. (A linked one previews its link target above.)
+  if (app.hover.image != xanatoo::INVALID_NODE && app.hover.image_pane >= 0 &&
+      app.hover.image_pane < kMaxViews) {
+    Pane& p = app.panes[app.hover.image_pane];
+    const xanatoo::Document& d = doc_of(app, p);
+    const std::string& src = d.get(app.hover.image).src;
+    if (!src.empty()) {
+      show_image(src, xanatoo::is_remote_image(src) ? std::string()
+                                                    : base_of(app, p));
+      return;
+    }
   }
 
   // Transclusion: host document focused on the embed.

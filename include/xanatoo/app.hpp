@@ -1053,6 +1053,11 @@ struct App {
   bool context_jump_to_source = true;
   bool context_has_doc = false;
   std::string context_source_key;  // identity of what is loaded; skip reload if same
+  // A picture preview (context_has_doc with an "image:" key): the panel
+  // draws this original fitted, like the gallery's single image, instead
+  // of laying out context_doc. Relative `src` resolves against `base`.
+  std::string context_image_src;
+  std::string context_image_base;
   std::string context_pending_url;  // remote/local page fetch in flight for Context
   xanatoo::Document context_doc;
   xanatoo::LayoutResult context_layout;
@@ -1857,6 +1862,11 @@ void gallery_zoom(App& app, int pi, float factor, float x, float y);
 bool gallery_pan(App& app, int pi, float dx, float dy);
 // Draw pane `pi`'s single image into its rect (instead of the document).
 void draw_gallery_image(App& app, int pi);
+// The Context panel's picture preview: the original of `src` (relative to
+// `base`) fitted into `r`, never enlarged, on the gallery background with
+// its name and size below (or the loading / failure note).
+void draw_context_image(App& app, const SDL_Rect& r, const std::string& src,
+                        const std::string& base);
 // The grid's Up strip (top edge, hover highlight), over the drawn page.
 void draw_gallery_grid_chrome(App& app, int pi);
 void release_gallery_textures(App& app);
