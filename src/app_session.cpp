@@ -258,7 +258,10 @@ void restore_session(App& app) {
         p.reader = (*v == "1");
       if (const std::string* v = get("paged" + std::to_string(pi)))
         p.paged = (*v == "1");
-      if (!navigate_pane(app, pi, *a, /*record_history=*/true)) continue;
+      app.visit_hint = xanatoo::VisitKind::Restore;
+      const bool opened = navigate_pane(app, pi, *a, /*record_history=*/true);
+      app.visit_hint.reset();
+      if (!opened) continue;
       if (const std::string* v = get("scroll" + std::to_string(pi)))
         if (!pane_paged(app, p)) {
           app.pending_scroll[pi].y = std::stof(*v);

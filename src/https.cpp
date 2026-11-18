@@ -580,6 +580,8 @@ bool stream_raw(const std::string& url, std::string_view agent,
       result.cf_mitigated = header_value(headers, "cf-mitigated");
       result.retry_after = header_value(headers, "retry-after");
       result.content_encoding = header_value(headers, "content-encoding");
+      result.etag = header_value(headers, "etag");
+      result.last_modified = header_value(headers, "last-modified");
       const std::string length = header_value(headers, "content-length");
       if (!length.empty()) {
         auto [p, ec] = std::from_chars(length.data(),

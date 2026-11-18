@@ -218,6 +218,7 @@ add_executable(xanatoo
   src/revstore.cpp
   src/sqlite_db.cpp
   src/statedb.cpp
+  src/visits.cpp
   src/annotations.cpp
   src/epub_import.cpp
   src/epub_native.cpp
@@ -711,6 +712,7 @@ add_executable(xanatoo_tests
   src/revstore.cpp
   src/sqlite_db.cpp
   src/statedb.cpp
+  src/visits.cpp
   src/sidestore.cpp
   src/annotations.cpp
   src/minibuffer.cpp

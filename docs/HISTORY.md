@@ -1,8 +1,7 @@
 # Browsing history, snapshots and shared state — plan
 
-Status (2026-11-18): **A done** (steps 1–2: `sqlite_db.hpp`, the three
-stores ported, bookmarks + input histories in `xanatoo.sqlite`); the rest
-is plan.
+Status (2026-11-18): **A done** (steps 1–2), **B + D recording done**
+(step 3: visits and observations in `xanatoo.sqlite`); C–F are plan.
 
 The request bundles five ideas. They depend on each other only in one
 direction, so they can land as separate steps:
@@ -158,7 +157,58 @@ default keep everything (rows are ~200 bytes; 100 visits/day ≈ 7 MB/year);
 a pref can cap by age.
 
 `App::visited` becomes a view of the last N visits; the session file stops
-storing it.
+storing it (with step 4, the panel rewrite).
+
+### Done (step 3)
+
+`include/xanatoo/visits.hpp` / `src/visits.cpp`, tables `pages`, `visits`,
+`observations` (statedb schema step 2, as above; `kind` values `nav`,
+`link`, `address`, `bookmark`, `history`, `new-tab`, `restore`,
+`external`, `reload`). Recording (`src/app_nav.cpp`):
+
+- `push_nav_history` → `record_visit`: the entry `nav_history_push` made
+  current gets a visit; its id is kept in `NavHistoryEntry::visit`, so the
+  next one from that view knows its source. Kind, in order: a followed
+  link (`NavLink` → `href`, `source_node`); the view's
+  `NavHistory::pending_kind`, moved there by `navigate_pane` from
+  `App::visit_hint` (set just around the call by the location bar / URL
+  prompt → `address`, or `bookmark` when the address is a bookmark;
+  History panel → `history`; command line → `external`; session restore →
+  `restore`, whose source is the latest earlier visit of the address, so
+  trails continue across restarts); a tab opened from a link
+  (`DocBuffer::origin_kind` / `origin_visit`, set by `open_link_in_tab`,
+  used when the tab is first shown); otherwise `nav` from the previous
+  visit. Starting kinds (`address`, `bookmark`, `history`, `external`)
+  have no source.
+- Back / Forward record nothing (they return to an entry that has its
+  visit). An entry without a visit (restored with the session) gets one
+  when its page arrives. Placeholders ("Loading …") are not visits; the
+  hint waits for the page.
+- Reload (`refetch_page` → `finish_navigate`, local Reload in
+  `app_frame.cpp`) → `record_reload_visit`: a `reload` visit whose source
+  is the reloaded one.
+- Each visit sets `leave_time` on the one the view showed before.
+- Start-up: no visits for the default document before a session restore
+  or for hidden views (`App::record_visits`).
+
+Observations: the fetch worker fills `FetchShared::observed` in
+`finish_fetch` (URL after redirects, time, status, and for web pages
+content type, `ETag`, `Last-Modified` from `HttpStreamHeaders`; `raw_hash`
+of the decoded body, `text_hash` = `document_text_hash`, size). It travels
+with the page (`show_doc_in_pane`, `DocBuffer::observed`, `CachedPage`,
+split previews) and is stored by the first visit (`observation_id`); an
+identical latest observation of the same URL is reused. Local files are
+observed at their visit (text hash, mtime in ms, size). Generated pages
+have none.
+
+Checked under Xvfb (isolated state): command line → link →
+F5 → location bar → quit → restart gives `external`, `link` (href, node,
+source 1), `reload` (source 2, same observation: same ETag and hashes),
+`address` (no source), `restore` (source 4, other process).
+
+Not yet: leave time on quit; a title for pages without `meta.title`;
+`about:` and other generated pages are visits without observation
+(intended); the exclude list.
 
 ## C. History panel: trail tree
 

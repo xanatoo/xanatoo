@@ -24,6 +24,7 @@
 #include "xanatoo/finger.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/html_page.hpp"
+#include "xanatoo/https.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wayback.hpp"
 #include "xanatoo/wikipedia.hpp"
@@ -360,6 +361,32 @@ void fetch_finger(const std::string& url, FetchShared& out) {
 
 
 // Worker thread body: everything here must stay off App.
+#if defined(XANATOO_WEB) && XANATOO_WEB
+void note_response(FetchShared& out, const xanatoo::HttpStreamHeaders& h) {
+  out.observed.status = h.status;
+  out.observed.content_type = h.content_type;
+  out.observed.etag = h.etag;
+  out.observed.last_modified = h.last_modified;
+}
+#endif
+
+// Worker side, once per fetch: what the page was (docs/HISTORY.md "D"),
+// hashed here rather than on the main thread, then hand over.
+void finish_fetch(FetchShared& out) {
+  if (out.doc) {
+    xanatoo::PageObservation& o = out.observed;
+    o.url = out.final_url;
+    o.time = xanatoo::now_epoch_ms();
+    if (out.http_status) o.status = out.http_status;
+    if (out.raw_source) {
+      o.raw_hash = "sha256:" + xanatoo::sha256_hex(*out.raw_source);
+      o.size = static_cast<int64_t>(out.raw_source->size());
+    }
+    o.text_hash = xanatoo::document_text_hash(*out.doc);
+  }
+  out.done.store(true, std::memory_order_release);
+}
+
 void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
                 bool allow_download) {
   out->final_url = url;
@@ -368,7 +395,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     out->service = "Pages";
     if (auto src = xanatoo::read_fixed_layout(url, &out->error))
       out->doc = xanatoo::fixed_layout_document(*src);
-    out->done.store(true, std::memory_order_release);
+    finish_fetch(*out);
     return;
   }
   // A search is its expanded URL, fetched like any page; the address stays.
@@ -377,7 +404,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     const auto plan = xanatoo::search_plan(url, xanatoo::load_engines());
     if (!plan) {
       out->error = "Unknown search engine: " + shown;
-      out->done.store(true, std::memory_order_release);
+      finish_fetch(*out);
       return;
     }
     if (xanatoo::is_json_search_kind(plan->kind)) {
@@ -386,7 +413,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
       out->doc = xanatoo::search_fetch(*plan, &out->error);
 #endif
       if (!out->doc && out->error.empty()) out->error = "no client for " + shown;
-      out->done.store(true, std::memory_order_release);
+      finish_fetch(*out);
       return;
     }
     fetch_page(xanatoo::search_target(url, xanatoo::load_engines()), out,
@@ -406,7 +433,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
       out->error = "Media records require HTTPS support";
 #endif
     }
-    out->done.store(true, std::memory_order_release);
+    finish_fetch(*out);
     return;
   }
   // Feeds first: /.rss, /feeds/… and /rss on Reddit / Lemmy / HN are feeds.
@@ -513,11 +540,15 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     // (the redirect carries the actual capture time).
     out->service = "Wayback Machine";
     std::string body;
+    xanatoo::HttpStreamHeaders response;
     out->doc = xanatoo::web_fetch(
         xanatoo::wayback_snapshot_url(*xanatoo::parse_wayback_ref(url)),
         &out->error, &out->final_url, &out->http_status, &body, nullptr,
-        nullptr, false);
-    if (out->doc) out->raw_source = std::move(body);
+        nullptr, false, &response);
+    if (out->doc) {
+      out->raw_source = std::move(body);
+      note_response(*out, response);
+    }
 #endif
   } else if (xanatoo::is_web_url(url)) {
 #if defined(XANATOO_WEB) && XANATOO_WEB
@@ -527,12 +558,16 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     pages.stop = &out->abandoned;
     // `pages` only where a PDF / DjVu / comic may be shown (allow_pages):
     // other previews and subscriptions must not transfer whole files.
+    xanatoo::HttpStreamHeaders response;
     out->doc = xanatoo::web_fetch(url, &out->error, &out->final_url,
                                   &out->http_status, &body,
                                   allow_download ? out->download.get() : nullptr,
                                   out->allow_pages ? &pages : nullptr,
-                                  out->force_download);
-    if (out->doc) out->raw_source = std::move(body);
+                                  out->force_download, &response);
+    if (out->doc) {
+      out->raw_source = std::move(body);
+      note_response(*out, response);
+    }
     // PDF / DjVu / comic answer: open the cached copy as pages; the
     // address stays the web URL.
     if (!out->doc && !pages.path.empty()) {
@@ -551,7 +586,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   if (out->download && out->download->phase.load() ==
                             xanatoo::DownloadPhase::Pending)
     out->download->phase.store(xanatoo::DownloadPhase::Skipped);
-  out->done.store(true, std::memory_order_release);
+  finish_fetch(*out);
 }
 
 // "page#id" → caret to the node labelled / titled "id".
@@ -584,7 +619,7 @@ void cache_page(App& app, const FetchJob& job) {
   c.push_back({job.url, job.shared->final_url, job.shared->content_path,
                *job.shared->doc,
                job.shared->raw_source,
-               xanatoo::sdl::ticks()});
+               xanatoo::sdl::ticks(), job.shared->observed});
   if (c.size() > kPageCacheMax) c.erase(c.begin());
 }
 
@@ -735,6 +770,7 @@ void finish_tab(App& app, const FetchJob& job) {
     r.error = "The page asks for input: " + r.input_meta;
   b->doc = r.doc ? std::move(*r.doc) : load_error_doc(job);
   b->raw_source = std::move(r.raw_source);
+  b->observed = r.doc ? r.observed : xanatoo::PageObservation{};
   b->path = r.doc ? r.final_url : job.url;
   b->content_path = r.doc ? r.content_path : std::string();
   b->placeholder = false;
@@ -759,6 +795,7 @@ void finish_navigate(App& app, const FetchJob& job) {
   const std::string service = r.service;
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
     app.panes[job.pane].nav.pending_link = {};
+    app.panes[job.pane].nav.pending_kind.reset();
     app.panes[job.pane].nav.restoring = -1;
     const std::string url =
         !r.final_url.empty() ? r.final_url : job.url;
@@ -769,6 +806,7 @@ void finish_navigate(App& app, const FetchJob& job) {
   }
   if (r.download && r.download->phase.load() != xanatoo::DownloadPhase::Skipped) {
     app.panes[job.pane].nav.pending_link = {};
+    app.panes[job.pane].nav.pending_kind.reset();
     app.panes[job.pane].nav.restoring = -1;
     app.downloads_panel_open = true;
     flash_status(app, "Download: " + r.download->name);
@@ -776,6 +814,7 @@ void finish_navigate(App& app, const FetchJob& job) {
   }
   if (r.input_status != 0) {
     app.panes[job.pane].nav.pending_link = {};
+    app.panes[job.pane].nav.pending_kind.reset();
     app.panes[job.pane].nav.restoring = -1;
     // Input request — open URL bar with query for the user to complete.
     std::string q = r.final_url;
@@ -789,6 +828,7 @@ void finish_navigate(App& app, const FetchJob& job) {
   }
   if (!r.doc) {
     app.panes[job.pane].nav.pending_link = {};
+    app.panes[job.pane].nav.pending_kind.reset();
     app.panes[job.pane].nav.restoring = -1;
     flash_status(app, service + " failed: " + r.error);
     std::cerr << service << ": " << r.error << "\n";
@@ -805,7 +845,7 @@ void finish_navigate(App& app, const FetchJob& job) {
     cache_page(app, job);
   }
   show_doc_in_pane(app, job.pane, std::move(*r.doc), r.final_url,
-                   std::move(r.raw_source), r.content_path);
+                   std::move(r.raw_source), r.content_path, r.observed);
   // Redirected: the sitemap lists the requested URL.
   if (job.url != r.final_url)
     note_page_seen(app, job.url, buf(app, app.panes[job.pane].buf).doc);
@@ -816,9 +856,14 @@ void finish_navigate(App& app, const FetchJob& job) {
     app.gemini_current_url = r.final_url;
     app.edit_mode = false;
   }
-  if (job.record_history)
+  if (job.record_history) {
     push_nav_history(app, job.pane,
                      pane_address(app, app.panes[job.pane]));
+  } else if (app.panes[job.pane].nav.pending_kind ==
+             xanatoo::VisitKind::Reload) {
+    app.panes[job.pane].nav.pending_kind.reset();
+    record_reload_visit(app, job.pane);
+  }
   char secs[32];
   std::snprintf(secs, sizeof(secs), "  (%.1f s)",
                 static_cast<double>(xanatoo::sdl::ticks() - job.started) / 1000.0);

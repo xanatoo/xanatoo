@@ -21,7 +21,13 @@
 #include <string_view>
 #include <vector>
 
+struct sqlite3;
+
 namespace xanatoo {
+
+// The shared connection, for other stores in the same file (visits.cpp);
+// nullptr without a database. Only defined in SQLite builds.
+sqlite3* statedb_connection();
 
 // Use `db_path` instead of the default database and `text_dir` instead of
 // state_dir() for the text files (tests). Empty = defaults. Closes an

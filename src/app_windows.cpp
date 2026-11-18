@@ -372,7 +372,9 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
       if (row >= 0 && row < static_cast<int>(app.visited.size())) {
         const std::string& url =
             app.visited[app.visited.size() - 1 - static_cast<size_t>(row)];
+        app.visit_hint = xanatoo::VisitKind::History;
         open_address(app, url);
+        app.visit_hint.reset();
       }
       break;
     }

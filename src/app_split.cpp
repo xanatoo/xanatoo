@@ -241,6 +241,7 @@ bool show_preview(App& app, const std::string& href) {
       }
       show = scratch_buffer(app, c->doc, c->final_url);
       buf(app, show).raw_source = c->raw_source;
+      buf(app, show).observed = c->observed;
       break;
     }
     case LinkKind::Doc: {
@@ -468,11 +469,13 @@ void commit_split_preview(App& app) {
     DocBuffer& sb = buf(app, pv.scratch);
     xanatoo::Document doc = std::move(sb.doc);
     auto raw_source = std::move(sb.raw_source);
+    xanatoo::PageObservation observed = std::move(sb.observed);
     const std::string label = sb.path;
     const xanatoo::Selection sel = r.sel;
     const float scroll = r.scroll_y;
     if (find_buf(app, pv.saved_buf)) r.buf = pv.saved_buf;
-    show_doc_in_pane(app, 1, std::move(doc), label, std::move(raw_source));
+    show_doc_in_pane(app, 1, std::move(doc), label, std::move(raw_source), {},
+                     std::move(observed));
     r.sel = sel;
     r.scroll_y = scroll;
     if (r.buf == pv.scratch) pv.scratch = kNoBuffer;  // became the page

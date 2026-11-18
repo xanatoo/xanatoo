@@ -18,7 +18,9 @@
 #include <fstream>
 
 #include "xanatoo/paths.hpp"
+#include "xanatoo/parse.hpp"
 #include "xanatoo/statedb.hpp"
+#include "xanatoo/visits.hpp"
 #if XANATOO_SQLITE
 #include "xanatoo/sqlite_db.hpp"
 #endif
@@ -302,6 +304,87 @@ void test_statedb() {
   fs::remove_all(dir, ec);
 }
 
+void test_visits() {
+  using namespace xanatoo;
+  // Text hash: whitespace and markup do not matter, words do.
+  const std::string a = document_text_hash(parse_document("# Title\n\nSome *text*  here.\n", "a.md"));
+  const std::string b = document_text_hash(parse_document("# Title\n\nSome text\nhere.\n", "b.md"));
+  const std::string c = document_text_hash(parse_document("# Title\n\nOther text here.\n", "c.md"));
+  EXPECT_EQ(a.substr(0, 7), "sha256:");
+  EXPECT_EQ(a, b);
+  EXPECT(a != c);
+  EXPECT(document_text_hash(Document{}).empty());
+  for (VisitKind k : {VisitKind::Nav, VisitKind::Link, VisitKind::NewTab,
+                      VisitKind::Reload, VisitKind::External})
+    EXPECT(parse_visit_kind(visit_kind_name(k)) == k);
+  EXPECT(!parse_visit_kind("bogus"));
+
+  TempDb t("visits");
+  statedb_use_path(t.str(), t.path.string() + ".d");
+  PageObservation o;
+  o.url = "https://a.example/x";
+  o.time = 1000;
+  o.status = 200;
+  o.etag = "\"v1\"";
+  o.text_hash = a;
+  const int64_t o1 = store_observation(o);
+  EXPECT(o1 > 0);
+  o.time = 2000;  // same content again: the same row
+  EXPECT_EQ(store_observation(o), o1);
+  o.text_hash = c;  // changed
+  const int64_t o2 = store_observation(o);
+  EXPECT(o2 > 0 && o2 != o1);
+  auto back = load_observation(o1);
+  EXPECT(back && back->etag == "\"v1\"" && back->text_hash == a);
+  EXPECT(!store_observation(PageObservation{}));
+
+  VisitRecord v;
+  v.address = "https://a.example/x";
+  v.time = 10;
+  v.kind = VisitKind::Address;
+  v.observation = o1;
+  v.title = "X";
+  const int64_t v1 = store_visit(v);
+  v.address = "https://a.example/y//id:intro";
+  v.time = 20;
+  v.kind = VisitKind::Link;
+  v.source = v1;
+  v.href = "y";
+  v.observation = 0;
+  v.title = "";
+  const int64_t v2 = store_visit(v);
+  EXPECT(v1 > 0 && v2 > v1);
+  store_visit_leave(v1, 20);
+  EXPECT_EQ(latest_visit_of("https://a.example/x"), v1);
+  EXPECT_EQ(latest_visit_of("https://nowhere/"), 0);
+  auto rv = recent_visits(10);
+  EXPECT_EQ(rv.size(), 2u);
+  if (rv.size() == 2) {
+    EXPECT_EQ(rv[0].id, v2);
+    EXPECT(rv[0].kind == VisitKind::Link);
+    EXPECT_EQ(rv[0].source, v1);
+    EXPECT_EQ(rv[0].href, "y");
+    EXPECT_EQ(rv[1].leave_time, 20);
+    EXPECT_EQ(rv[1].observation, o1);
+  }
+  EXPECT_EQ(recent_visits(10, 20).size(), 1u);
+  {
+    // Pages are per base address: the passage visit counts for /y.
+    Db raw(open(t.str()));
+    Stmt s(raw, "SELECT address, visit_count, title FROM pages ORDER BY id;");
+    EXPECT(s.row() && s.text(0) == "https://a.example/x" && s.text(2) == "X");
+    EXPECT(s.row() && s.text(0) == "https://a.example/y" && s.int64(1) == 1);
+  }
+  // --no-save records nothing.
+  set_no_save(true);
+  EXPECT_EQ(store_visit(v), 0);
+  set_no_save(false);
+  EXPECT_EQ(recent_visits(10).size(), 2u);
+  statedb_use_path({});
+  std::error_code ec;
+  fs::remove_all(t.path.string() + ".d", ec);
+}
+
 }  // namespace
 #endif
 
@@ -312,6 +395,7 @@ void test_sqlite_db(int& passed, int& failed) {
   test_connections();
   test_concurrent_writers();
   test_statedb();
+  test_visits();
 #endif
   passed += g_passed;
   failed += g_failed;

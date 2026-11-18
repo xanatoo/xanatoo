@@ -58,18 +58,21 @@ Document plain_text_document(std::string_view text);
 // cache_dir()/documents/ instead of Downloads; web_fetch then returns
 // nullopt with `pages->path` set and the caller opens that file.
 // `force_download`: every 200 answer goes to Downloads ("Download Link").
+struct HttpStreamHeaders;  // https.hpp
 struct WebPagesFile {
   std::string path;  // local copy, set once complete
   std::string name;  // file name the server gave (document title)
   const std::atomic<bool>* stop = nullptr;  // the view gave up waiting
 };
+// `response` (may be null) receives the final answer's headers.
 std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   std::string* final_url = nullptr,
                                   int* http_status = nullptr,
                                   std::string* raw_source = nullptr,
                                   DownloadProgress* download = nullptr,
                                   WebPagesFile* pages = nullptr,
-                                  bool force_download = false);
+                                  bool force_download = false,
+                                  HttpStreamHeaders* response = nullptr);
 #endif
 
 }  // namespace xanatoo

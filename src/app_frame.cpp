@@ -989,7 +989,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       xanatoo::platform_release_keyboard(app.window);  // URL typed; page is read-only
       if (!arg.empty()) {
         const std::string kw = search_from_location(app, arg);
+        app.visit_hint = find_bookmark(app, arg) ? xanatoo::VisitKind::Bookmark
+                                                 : xanatoo::VisitKind::Address;
         navigate_to_url(app, kw.empty() ? arg : kw);
+        app.visit_hint.reset();
       }
       break;
     case C::StopLoading:
@@ -1783,11 +1786,14 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       xanatoo::clear_external_doc_cache();
       buf(app, p.buf).doc = load_doc(app, rpath);
       buf(app, p.buf).dirty = false;
+      buf(app, p.buf).observed = {};  // observed afresh by the visit
+      buf(app, p.buf).observation_id = 0;
       attach_draft(app, p.buf);
       buf(app, p.buf).history.reset(
           buf(app, p.buf).doc, p.sel);
       refresh_views_of_buf(app, p.buf, -1, true);
       drop_height_hints_for_buf(app, p.buf);
+      if (cmd != C::RevertToSaved) record_reload_visit(app, app.focus);
       reset_blink(app);
       update_title(app);
       app.needs_layout = true;

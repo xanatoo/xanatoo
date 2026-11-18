@@ -389,7 +389,8 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   std::string* raw_source,
                                   DownloadProgress* download,
                                   WebPagesFile* pages,
-                                  bool force_download) {
+                                  bool force_download,
+                                  HttpStreamHeaders* response) {
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
       "; +https://github.com/xanatoo/xanatoo)";
@@ -469,6 +470,7 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
     return std::nullopt;
   }
   if (final_url) *final_url = fin;
+  if (response) *response = headers;
   if (copy.active) {
     if (!copy.finish(err)) return std::nullopt;
     pages->path = copy.path;

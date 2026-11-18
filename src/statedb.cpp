@@ -104,6 +104,34 @@ const sqlite::Migrations kSteps = {
     "CREATE TABLE input_history ("
     "  ring TEXT NOT NULL, entry TEXT NOT NULL, time INTEGER NOT NULL,"
     "  PRIMARY KEY (ring, entry));",
+    // Browsing history (visits.hpp, docs/HISTORY.md B / D). Visits and
+    // observations are insert-only (leave_time aside).
+    "CREATE TABLE pages ("
+    "  id INTEGER PRIMARY KEY, address TEXT NOT NULL UNIQUE,"
+    "  title TEXT NOT NULL DEFAULT '', first_seen INTEGER NOT NULL,"
+    "  last_seen INTEGER NOT NULL, visit_count INTEGER NOT NULL DEFAULT 0);"
+    "CREATE TABLE observations ("
+    "  id INTEGER PRIMARY KEY, url TEXT NOT NULL, time INTEGER NOT NULL,"
+    "  status INTEGER NOT NULL DEFAULT 0, content_type TEXT NOT NULL DEFAULT '',"
+    "  etag TEXT NOT NULL DEFAULT '', last_modified TEXT NOT NULL DEFAULT '',"
+    "  raw_hash TEXT NOT NULL DEFAULT '', text_hash TEXT NOT NULL DEFAULT '',"
+    "  size INTEGER NOT NULL DEFAULT -1,"
+    "  snapshot TEXT, archive_url TEXT);"
+    "CREATE INDEX observations_url ON observations(url, time);"
+    "CREATE TABLE visits ("
+    "  id INTEGER PRIMARY KEY,"
+    "  page INTEGER NOT NULL REFERENCES pages(id),"
+    "  address TEXT NOT NULL, time INTEGER NOT NULL,"
+    "  leave_time INTEGER,"
+    "  source INTEGER REFERENCES visits(id) ON DELETE SET NULL,"
+    "  kind TEXT NOT NULL, href TEXT NOT NULL DEFAULT '',"
+    "  source_node TEXT NOT NULL DEFAULT '',"
+    "  observation INTEGER REFERENCES observations(id) ON DELETE SET NULL,"
+    "  window TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '');"
+    "CREATE INDEX visits_time ON visits(time);"
+    "CREATE INDEX visits_page ON visits(page);"
+    "CREATE INDEX visits_source ON visits(source);"
+    "CREATE INDEX visits_address ON visits(address, time);",
 };
 
 bool imported(sqlite3* d, const std::string& what) {
@@ -147,7 +175,9 @@ void import_text_files(sqlite3* d) {
   tx.commit();
 }
 
-sqlite3* db() {
+}  // namespace
+
+sqlite3* statedb_connection() {
   if (g_db) return g_db;
   if (g_db_failed) return nullptr;
   std::string path = g_db_path;
@@ -168,6 +198,9 @@ sqlite3* db() {
   g_data_version = sqlite::data_version(g_db);
   return g_db;
 }
+
+namespace {
+sqlite3* db() { return statedb_connection(); }
 #endif
 
 }  // namespace

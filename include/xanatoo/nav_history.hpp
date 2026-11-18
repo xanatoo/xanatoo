@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "xanatoo/editor.hpp"
+#include "xanatoo/visits.hpp"
 
 namespace xanatoo::app {
 
@@ -29,6 +30,7 @@ struct NavHistoryEntry {
   xanatoo::Selection sel{};
   float scroll = 0.f;
   NavLink via;
+  int64_t visit = 0;  // its row in the visit log (visits.hpp), 0 = none
 };
 
 struct NavHistory {
@@ -36,6 +38,8 @@ struct NavHistory {
   int pos = -1;
   int restoring = -1;  // Back/Forward destination waiting for a page load
   NavLink pending_link;  // source of an asynchronous new navigation
+  // How the pending navigation was asked for (App::visit_hint).
+  std::optional<xanatoo::VisitKind> pending_kind;
 };
 
 inline void nav_history_capture(NavHistory& h, std::string_view visible,

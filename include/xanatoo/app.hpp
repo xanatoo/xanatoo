@@ -122,6 +122,13 @@ struct DocBuffer {
   // images and links resolve against it (`content_file`). Empty = `path`.
   std::string content_path;
   std::optional<std::string> raw_source;  // HTTP/Gemini body before parsing
+  // What the fetch returned (visits.hpp); empty for local / generated
+  // pages. `observation_id`: its row once a visit stored it (0 = not yet).
+  xanatoo::PageObservation observed;
+  int64_t observation_id = 0;
+  // A tab opened from a link: how its first visit was reached.
+  std::optional<xanatoo::VisitKind> origin_kind;
+  int64_t origin_visit = 0;
   bool dirty = false;
   xanatoo::History history;
   // Shows a "Loading …" stand-in until a background fetch replaces it.
@@ -588,6 +595,7 @@ struct FetchShared {
   int http_status = 0;    // non-200 answer whose body is in `doc`
   std::string final_url;  // page URL after redirects (buffer path)
   std::string content_path;  // local file of the document (DocBuffer::content_path)
+  xanatoo::PageObservation observed;  // set with `doc` (finish_fetch)
   const char* service = "";
   // Gemini 10/11: the server asks for input (meta = prompt text).
   int input_status = 0;
@@ -642,6 +650,7 @@ struct CachedPage {
   xanatoo::Document doc;
   std::optional<std::string> raw_source;
   Uint32 ticks = 0;
+  xanatoo::PageObservation observed;
 };
 
 // Sitemap panel (app_sitemap.cpp): the path tree of the focused page's
@@ -1044,6 +1053,13 @@ struct App {
   std::vector<xanatoo::AnnotationLayerRevision> annotation_history_cache;
   uint64_t bookmarks_gen = 1;  // bumped by every change of `bookmarks`
   uint64_t shared_state_poll_ms = 0;  // last poll_shared_state check
+  // How the next navigation was asked for (visits.hpp): set right before
+  // navigate_to_url / open_address by the chrome; navigate_pane moves it
+  // into the view's NavHistory::pending_kind.
+  std::optional<xanatoo::VisitKind> visit_hint;
+  // False while start-up shows stand-in pages (the default document before
+  // a session restore replaces it): no visits are recorded then.
+  bool record_visits = true;
   std::string bookmark_menu;   // bookmark of the open margin-icon menu
   bool history_panel_open = false;
   bool styles_panel_open = false;
@@ -1597,6 +1613,9 @@ void update_touch(App& app);
 // ---- nav ----
 // Records `url` as the page view `pi` now shows (its trail + session log).
 void push_nav_history(App& app, int pi, const std::string& url);
+// The page in view `pi` was loaded again (Reload): a Reload visit whose
+// source is the visit it replaces, with the new observation.
+void record_reload_visit(App& app, int pi);
 // Keep the current history stop's view position up to date; also finish
 // restores deferred until an asynchronously fetched page arrives.
 void sync_nav_history(App& app);
@@ -1735,7 +1754,8 @@ bool middle_click_float(App& app, int mx, int my);
 void show_doc_in_pane(App& app, int pi, xanatoo::Document doc,
                       const std::string& label,
                       std::optional<std::string> raw_source = std::nullopt,
-                      std::string content_path = {});
+                      std::string content_path = {},
+                      xanatoo::PageObservation observed = {});
 // Links in pane `pi` resolve against that pane's page (gemini relative URLs).
 std::string link_base_url(App& app, int pi);
 void open_transclude_in_other_pane(App& app);

@@ -240,9 +240,17 @@ bool app_init(App& app) {
     app.stick_cursor_on = true;
     note_stick_use(app);
   }
+  // Visits only for what the command line asked for in a shown view; the
+  // default document before a session restore is no visit.
+  const bool from_cli = !app.opt.file_path.empty();
   for (int pi = 0; pi < kCentreViews; ++pi)
-    if (const DocBuffer* b = find_buf(app, app.panes[pi].buf))
+    if (const DocBuffer* b = find_buf(app, app.panes[pi].buf)) {
+      app.record_visits =
+          from_cli && pi < (app.buffers.size() > 1 ? 2 : 1);
+      app.panes[pi].nav.pending_kind = xanatoo::VisitKind::External;
       push_nav_history(app, pi, b->path);
+    }
+  app.record_visits = true;
   // A remote URL or passage given on the command line loads through the navigator
   // (the pane's buffer starts as a "Loading…" placeholder).
   for (int pi = 0; pi < (app.buffers.size() > 1 ? 2 : 1); ++pi) {
@@ -255,7 +263,9 @@ bool app_init(App& app) {
     std::string u = std::move(b.path);
     b.path.clear();
     app.focus = pi;
+    app.visit_hint = xanatoo::VisitKind::External;
     navigate_to_url(app, std::move(u));
+    app.visit_hint.reset();
     break;
   }
   app.focus = 0;

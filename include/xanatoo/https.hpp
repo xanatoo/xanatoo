@@ -48,6 +48,8 @@ struct HttpStreamHeaders {
   std::string cf_mitigated;    // cf-mitigated: challenge (Cloudflare bot check)
   std::string retry_after;     // Retry-After: (rate limiting)
   std::string content_encoding; // as sent; the body arrives already decoded
+  std::string etag;            // ETag: / Last-Modified: as sent (history
+  std::string last_modified;   // observations, docs/HISTORY.md "D")
 };
 using HttpHeaderCallback = std::function<bool(const HttpStreamHeaders&)>;
 using HttpBodyCallback = std::function<bool(std::string_view)>;

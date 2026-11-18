@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Visit graph and observations (history plan step 3)
+
+- Every page shown in a view is a visit in `xanatoo.sqlite` (`visits`,
+  `pages`), linked to the visit it came from, with its kind (link,
+  address, bookmark, history, new-tab, restore, external, reload, nav),
+  href / node of the followed link, leave time and view id. Session
+  restore links to the previous run's visit. Back / Forward add nothing.
+- Every fetch records an observation (status, content type, ETag,
+  Last-Modified, raw-body hash, document text hash, size), computed on the
+  worker; identical ones are reused. Local files: text hash + mtime.
+- `visits.hpp` / `visits.cpp`; recording in `app_nav.cpp`
+  (`record_visit`, `record_reload_visit`); details `docs/HISTORY.md`.
+- Tests (`tests/sqlite_db_tests.cpp`: text hash, kinds, observation reuse,
+  visits / pages, --no-save); checked end to end under Xvfb.
+- Next: step 4, History panel as a trail tree from the visit log.
+
 ## Status (2026-11-18) — Bookmarks and input histories in SQLite (history plan step 2)
 
 - `statedb.hpp`: `state_dir()/xanatoo.sqlite` holds bookmarks and the
@@ -19,7 +35,7 @@
   200 + 3 ring entries imported once; all stores at schema 1, WAL).
   Not checked by hand: a bookmark added in one window appearing in the
   other's menu (covered by the data_version unit test only).
-- Next: step 3, visits + observations (`docs/HISTORY.md` B, D).
+- Next: step 3 (done, see above).
 
 ## Status (2026-11-18) — Shared SQLite layer (history plan step 1)
 
