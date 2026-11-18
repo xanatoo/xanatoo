@@ -187,12 +187,6 @@ bool write_file_atomic(const std::string& path, std::string_view content) {
   return true;
 }
 
-std::string bookmarks_path() {
-  std::string dir = state_dir();
-  if (dir.empty()) return {};
-  return (fs::path(dir) / "bookmarks").string();
-}
-
 std::optional<Bookmark> parse_bookmark_line(std::string_view line) {
   std::vector<std::string_view> fields;
   for (size_t at = 0;;) {
@@ -234,31 +228,6 @@ std::string format_bookmark_line(const Bookmark& b) {
   };
   return b.address + field("title", b.title) + field("quote", b.quote) +
          field("at", b.created);
-}
-
-std::vector<Bookmark> load_bookmarks() {
-  std::vector<Bookmark> out;
-  std::string path = bookmarks_path();
-  if (path.empty()) return out;
-  std::ifstream in(path);
-  if (!in) return out;
-  std::string line;
-  while (std::getline(in, line))
-    if (auto b = parse_bookmark_line(line)) out.push_back(std::move(*b));
-  return out;
-}
-
-bool save_bookmarks(const std::vector<Bookmark>& entries) {
-  if (no_save()) return true;
-  std::string path = bookmarks_path();
-  if (path.empty()) return false;
-  std::string text =
-      "# xanatoo bookmarks — one address per line, then optional\n"
-      "# tab-separated title= / quote= / at= fields\n";
-  for (const auto& e : entries) {
-    if (!e.address.empty()) text += format_bookmark_line(e) + '\n';
-  }
-  return write_file_atomic(path, text);
 }
 
 void utf8_pop_back(std::string& s) {

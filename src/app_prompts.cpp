@@ -24,6 +24,7 @@
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/statedb.hpp"
 #include "xanatoo/util.hpp"
 
 namespace fs = std::filesystem;
@@ -103,13 +104,11 @@ void minibuf_begin(App& app, const std::string& initial) {
 }
 
 void minibuf_commit_path_hist(App& app) {
-  xanatoo::push_minibuffer_history(app.minibuf_hist_path, app.minibuf.text);
-  xanatoo::save_minibuffer_history("path", app.minibuf_hist_path);
+  xanatoo::record_input_history("path", app.minibuf_hist_path, app.minibuf.text);
 }
 
 void minibuf_commit_url_hist(App& app) {
-  xanatoo::push_minibuffer_history(app.minibuf_hist_url, app.minibuf.text);
-  xanatoo::save_minibuffer_history("url", app.minibuf_hist_url);
+  xanatoo::record_input_history("url", app.minibuf_hist_url, app.minibuf.text);
 }
 
 void minibuf_sync_out(App& app) {

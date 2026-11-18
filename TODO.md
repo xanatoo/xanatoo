@@ -2,6 +2,25 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Bookmarks and input histories in SQLite (history plan step 2)
+
+- `statedb.hpp`: `state_dir()/xanatoo.sqlite` holds bookmarks and the
+  url / path input rings as single-row writes, so two running xanatoo no
+  longer overwrite each other's bookmarks / history (the text files were
+  rewritten whole). Old files imported once, then kept; `bookmarks` stays
+  as an export rewritten after each change. `poll_shared_state` picks up
+  other processes' changes (`data_version`, once a second).
+- Dropped `load_bookmarks` / `save_bookmarks` / `bookmarks_path` (util)
+  and `load_` / `save_minibuffer_history` (minibuffer); callers use
+  `stored_bookmarks`, `store_bookmark_add` / `_remove`,
+  `stored_input_history`, `record_input_history`.
+- Tests in `tests/sqlite_db_tests.cpp`; checked with a copy of the real
+  state dir and two instances started together under Xvfb (34 bookmarks,
+  200 + 3 ring entries imported once; all stores at schema 1, WAL).
+  Not checked by hand: a bookmark added in one window appearing in the
+  other's menu (covered by the data_version unit test only).
+- Next: step 3, visits + observations (`docs/HISTORY.md` B, D).
+
 ## Status (2026-11-18) — Shared SQLite layer (history plan step 1)
 
 - `sqlite_db.hpp`: `open` (WAL, synchronous=NORMAL, busy timeout,
@@ -11,7 +30,7 @@
 - revstore and sidestore ported (old schema = step 0), nostr_store opens
   through it but keeps its own column migration.
 - `tests/sqlite_db_tests.cpp`; all 29 ctest targets pass.
-- Next: step 2, URL ring + bookmarks into `state_dir()/xanatoo.sqlite`.
+- Next: step 2 (done, see above).
 
 ## Plan (2026-11-18) — Browsing history graph, snapshots, shared SQLite
 

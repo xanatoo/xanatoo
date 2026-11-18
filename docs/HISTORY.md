@@ -1,7 +1,8 @@
 # Browsing history, snapshots and shared state — plan
 
-Status (2026-11-18): **A step 1 done** (`sqlite_db.hpp`, the three stores
-ported); the rest is plan.
+Status (2026-11-18): **A done** (steps 1–2: `sqlite_db.hpp`, the three
+stores ported, bookmarks + input histories in `xanatoo.sqlite`); the rest
+is plan.
 
 The request bundles five ideas. They depend on each other only in one
 direction, so they can land as separate steps:
@@ -86,7 +87,19 @@ busy writer, four threads with their own connections writing at once).
 `nostr_store` uses `open` for the pragmas but keeps its column-probing
 migration. Read-only paths under `--no-save` now open `ReadOnly`.
 
-First users (small, independent wins): `minibuf_hist_url` and bookmarks
+Done (step 2): `include/xanatoo/statedb.hpp` / `src/statedb.cpp`,
+`state_dir()/xanatoo.sqlite` with `meta`, `bookmarks` (rowid = order
+added) and `input_history` (ring, entry; rowid = recency, re-recording
+replaces the row). Add / remove / record are single-row writes. On first
+open the text files are imported once (`meta` marker `import.<file>`, in
+one transaction, so simultaneous starters import once) and kept; the
+bookmarks file is rewritten from the database after each change as a
+readable export. `poll_shared_state` (once a second, not while a prompt
+is open) reloads bookmarks and rings when `data_version` says another
+process committed. `--no-save` opens the database read-only. Without
+SQLite the text files remain the store.
+
+Originally planned as first users: `minibuf_hist_url` and bookmarks
 move into tables, which fixes the multi-process clobbering immediately.
 The text files stay as import (once) and export (File → Export bookmarks).
 

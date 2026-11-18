@@ -111,7 +111,10 @@ captures the current position and completes deferred restores after fetching.
 link clicks pass their `NavLink` through `navigate_to_url`; same-document
 anchors use `navigate_anchor_link` so Back can return to the source. `App::visited`
 is only the session log for the History panel. `push_nav_history` additionally
-adds normal visits to the persistent `minibuf_hist_url` ring, shared with the
+adds normal visits to the persistent `minibuf_hist_url` ring
+(`record_input_history`, stored with the bookmarks in
+`state_dir()/xanatoo.sqlite` by `statedb.hpp`; `poll_shared_state` reloads
+both when another process changed them), shared with the
 location bar's local suggestions (`urlbar_suggestions.hpp`, also matches open
 tabs and bookmarks). Only in Trail mode do the
 centre panes share one trail instead (`App::split_history`, levels = left

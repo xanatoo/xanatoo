@@ -56,11 +56,8 @@ struct Minibuffer {
 // Expand leading ~/ to $HOME (or leave unchanged).
 std::string expand_user_path(std::string_view path);
 
-// Load/save one history line per entry (newest last). Caps at max_entries.
-std::vector<std::string> load_minibuffer_history(std::string_view name);
-void save_minibuffer_history(std::string_view name,
-                             const std::vector<std::string>& entries,
-                             size_t max_entries = 200);
+// In-memory ring (newest last), capped at max_entries. Persisted through
+// statedb.hpp (stored_input_history / record_input_history).
 void push_minibuffer_history(std::vector<std::string>& hist,
                              std::string_view entry, size_t max_entries = 200);
 

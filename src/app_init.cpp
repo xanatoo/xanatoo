@@ -21,6 +21,7 @@
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/statedb.hpp"
 #include "xanatoo/util.hpp"
 
 namespace fs = std::filesystem;
@@ -160,9 +161,9 @@ bool app_init(App& app) {
   app.cursor_sizeall = xanatoo::sdl::create_system_cursor(SystemCursor::Move);
   app.cursor_current = app.cursor_arrow;
   app.caret_blink_start = xanatoo::sdl::ticks();
-  app.minibuf_hist_path = load_minibuffer_history("path");
-  app.minibuf_hist_url = load_minibuffer_history("url");
-  app.bookmarks = load_bookmarks();
+  app.minibuf_hist_path = xanatoo::stored_input_history("path");
+  app.minibuf_hist_url = xanatoo::stored_input_history("url");
+  app.bookmarks = xanatoo::stored_bookmarks();
   app.subscriptions = load_subscriptions();
   app.annotation_layers = xanatoo::list_annotation_layers();
   xanatoo::load_hidden_annotation_layers(app.hidden_annotation_layers);

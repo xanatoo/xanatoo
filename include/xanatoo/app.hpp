@@ -1043,6 +1043,7 @@ struct App {
   std::string annotation_history_cached_head;
   std::vector<xanatoo::AnnotationLayerRevision> annotation_history_cache;
   uint64_t bookmarks_gen = 1;  // bumped by every change of `bookmarks`
+  uint64_t shared_state_poll_ms = 0;  // last poll_shared_state check
   std::string bookmark_menu;   // bookmark of the open margin-icon menu
   bool history_panel_open = false;
   bool styles_panel_open = false;
@@ -1614,6 +1615,9 @@ bool nav_step(App& app, int dir);
 bool is_bookmarked(App& app, const std::string& url);
 void add_bookmark(App& app, xanatoo::Bookmark b);
 void remove_bookmark(App& app, const std::string& url);
+// Picks up bookmarks / input histories another xanatoo process changed in
+// the shared state database (statedb.hpp); checks about once a second.
+void poll_shared_state(App& app);
 bool is_inapp_doc_href(App& app, const std::string& href);
 std::string resolve_doc_href(App& app, const std::string& href,
                              const std::string& base_path = {});

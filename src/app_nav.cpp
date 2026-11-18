@@ -29,6 +29,7 @@
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
 #include "xanatoo/native.hpp"
+#include "xanatoo/statedb.hpp"
 #include "xanatoo/util.hpp"
 
 namespace fs = std::filesystem;
@@ -48,8 +49,7 @@ void push_nav_history(App& app, int pi, const std::string& raw) {
   // ring. A single line per address, most recent last, honours --no-save.
   if (url.find('\n') == std::string::npos &&
       url.find('\r') == std::string::npos) {
-    xanatoo::push_minibuffer_history(app.minibuf_hist_url, url);
-    xanatoo::save_minibuffer_history("url", app.minibuf_hist_url);
+    xanatoo::record_input_history("url", app.minibuf_hist_url, url);
   }
   split_history_note(app, pi, raw);  // no-op unless split browsing (paths)
   Pane& p = app.panes[pi];
@@ -228,9 +228,9 @@ void add_bookmark(App& app, xanatoo::Bookmark b) {
     return;
   }
   const std::string what = b.quote.empty() ? b.address : "“" + b.quote + "”";
-  app.bookmarks.push_back(std::move(b));
+  app.bookmarks.push_back(b);
   ++app.bookmarks_gen;
-  if (xanatoo::save_bookmarks(app.bookmarks))
+  if (xanatoo::store_bookmark_add(b, app.bookmarks))
     flash_status(app, "Bookmarked " + what);
   else
     flash_status(app, "Bookmark added (could not persist to disk)");
@@ -243,14 +243,34 @@ void remove_bookmark(App& app, const std::string& url) {
     flash_status(app, "Not in bookmarks");
     return;
   }
+  const std::string stored = it->address;
   app.bookmarks.erase(it);
   ++app.bookmarks_gen;
-  if (xanatoo::save_bookmarks(app.bookmarks))
+  if (xanatoo::store_bookmark_remove(stored, app.bookmarks))
     flash_status(app, "Removed bookmark");
   else
     flash_status(app, "Bookmark removed (could not persist to disk)");
 }
 
+void poll_shared_state(App& app) {
+  // An open prompt may be stepping through a ring: wait until it closes.
+  const uint64_t now = xanatoo::sdl::ticks();
+  if (prompt_active(app) || now - app.shared_state_poll_ms < 1000) return;
+  app.shared_state_poll_ms = now;
+  if (!xanatoo::statedb_changed_elsewhere()) return;
+  std::vector<xanatoo::Bookmark> marks = xanatoo::stored_bookmarks();
+  auto same = [](const xanatoo::Bookmark& a, const xanatoo::Bookmark& b) {
+    return a.address == b.address && a.title == b.title &&
+           a.quote == b.quote && a.created == b.created;
+  };
+  if (!std::equal(marks.begin(), marks.end(), app.bookmarks.begin(),
+                  app.bookmarks.end(), same)) {
+    app.bookmarks = std::move(marks);
+    ++app.bookmarks_gen;
+  }
+  app.minibuf_hist_url = xanatoo::stored_input_history("url");
+  app.minibuf_hist_path = xanatoo::stored_input_history("path");
+}
 
 static bool is_smallnet_url(std::string_view u) {
   return xanatoo::is_gemini_url(u) || xanatoo::is_gopher_url(u) ||

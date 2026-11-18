@@ -345,31 +345,6 @@ std::string expand_user_path(std::string_view path) {
   return std::string(path);
 }
 
-std::vector<std::string> load_minibuffer_history(std::string_view name) {
-  std::vector<std::string> out;
-  std::string dir = state_dir();
-  if (dir.empty()) return out;
-  std::ifstream in(dir + "/minibuf-" + std::string(name) + ".history");
-  std::string line;
-  while (std::getline(in, line)) {
-    if (line.empty() || line[0] == '#') continue;
-    out.push_back(line);
-  }
-  return out;
-}
-
-void save_minibuffer_history(std::string_view name,
-                             const std::vector<std::string>& entries,
-                             size_t max_entries) {
-  if (no_save()) return;
-  std::string dir = state_dir();
-  if (dir.empty()) return;
-  size_t start = entries.size() > max_entries ? entries.size() - max_entries : 0;
-  std::string text;
-  for (size_t i = start; i < entries.size(); ++i) text += entries[i] + '\n';
-  write_file_atomic(dir + "/minibuf-" + std::string(name) + ".history", text);
-}
-
 void push_minibuffer_history(std::vector<std::string>& hist,
                              std::string_view entry, size_t max_entries) {
   if (entry.empty()) return;

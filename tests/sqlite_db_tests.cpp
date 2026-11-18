@@ -15,6 +15,10 @@
 #include <thread>
 #include <vector>
 
+#include <fstream>
+
+#include "xanatoo/paths.hpp"
+#include "xanatoo/statedb.hpp"
 #if XANATOO_SQLITE
 #include "xanatoo/sqlite_db.hpp"
 #endif
@@ -216,6 +220,88 @@ void test_concurrent_writers() {
   EXPECT_EQ(user_version(db), 1);
 }
 
+std::string slurp(const fs::path& p) {
+  std::ifstream in(p);
+  return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+void test_statedb() {
+  using xanatoo::Bookmark;
+  TempDb t("state");
+  const fs::path dir = t.path.string() + ".d";
+  std::error_code ec;
+  fs::remove_all(dir, ec);
+  fs::create_directories(dir);
+  // Old text files, imported once on first open.
+  {
+    std::ofstream(dir / "bookmarks")
+        << "# comment\nhttps://a.example/\ttitle=A\n"
+           "https://b.example/x//p:2\ttitle=B\tquote=Bee\tat=2026-01-02\n";
+    std::ofstream(dir / "minibuf-url.history") << "https://one/\nhttps://two/\n";
+  }
+  xanatoo::statedb_use_path(t.str(), dir.string());
+  auto marks = xanatoo::stored_bookmarks();
+  EXPECT_EQ(marks.size(), 2u);
+  if (marks.size() == 2) {
+    EXPECT_EQ(marks[0].title, "A");
+    EXPECT_EQ(marks[1].quote, "Bee");
+    EXPECT_EQ(marks[1].created, "2026-01-02");
+  }
+  auto url = xanatoo::stored_input_history("url");
+  EXPECT(url == (std::vector<std::string>{"https://one/", "https://two/"}));
+  EXPECT(xanatoo::stored_input_history("path").empty());
+
+  // Single-row changes; the bookmarks file is rewritten as an export.
+  Bookmark c{"https://c.example/", "C", "", "2026-11-18"};
+  marks.push_back(c);
+  EXPECT(xanatoo::store_bookmark_add(c, marks));
+  EXPECT(xanatoo::store_bookmark_remove("https://a.example/", marks));
+  marks = xanatoo::stored_bookmarks();
+  EXPECT_EQ(marks.size(), 2u);
+  if (marks.size() == 2) {
+    EXPECT_EQ(marks[0].title, "B");
+    EXPECT_EQ(marks[1].title, "C");
+  }
+  const std::string exported = slurp(dir / "bookmarks");
+  EXPECT(exported.find("https://c.example/\ttitle=C") != std::string::npos);
+  EXPECT(exported.find("a.example") == std::string::npos);
+
+  // Ring: re-recording moves to the end; capped.
+  std::vector<std::string> hist = url;
+  xanatoo::record_input_history("url", hist, "https://one/", 3);
+  xanatoo::record_input_history("url", hist, "https://three/", 3);
+  xanatoo::record_input_history("url", hist, "https://four/", 3);
+  const std::vector<std::string> want = {"https://one/", "https://three/",
+                                         "https://four/"};
+  EXPECT(hist == want);
+  EXPECT(xanatoo::stored_input_history("url", 3) == want);
+
+  // Another process writes: noticed once, and its rows are visible.
+  EXPECT(!xanatoo::statedb_changed_elsewhere());
+  {
+    Db other(open(t.str()));
+    EXPECT(exec(other, "INSERT INTO bookmarks(address, title, time) "
+                       "VALUES('https://d.example/', 'D', 0);"));
+  }
+  EXPECT(xanatoo::statedb_changed_elsewhere());
+  EXPECT(!xanatoo::statedb_changed_elsewhere());
+  EXPECT_EQ(xanatoo::stored_bookmarks().size(), 3u);
+
+  // Reopening does not import the text files again.
+  xanatoo::statedb_use_path(t.str(), dir.string());
+  EXPECT_EQ(xanatoo::stored_bookmarks().size(), 3u);
+
+  // --no-save: reads, never writes.
+  xanatoo::set_no_save(true);
+  xanatoo::statedb_use_path(t.str(), dir.string());
+  EXPECT(xanatoo::store_bookmark_remove("https://d.example/", {}));
+  EXPECT_EQ(xanatoo::stored_bookmarks().size(), 3u);
+  xanatoo::set_no_save(false);
+
+  xanatoo::statedb_use_path({});
+  fs::remove_all(dir, ec);
+}
+
 }  // namespace
 #endif
 
@@ -225,6 +311,7 @@ void test_sqlite_db(int& passed, int& failed) {
   test_statements();
   test_connections();
   test_concurrent_writers();
+  test_statedb();
 #endif
   passed += g_passed;
   failed += g_failed;

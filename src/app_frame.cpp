@@ -5140,6 +5140,7 @@ void run_frame(App& app) {
   sync_nav_history(app);  // apply Back/Forward restore after remote loads
   autosave_drafts(app);
   autosave_session(app);
+  poll_shared_state(app);
   update_split_preview(app);
   update_sitemap(app);
   update_related_sites(app);

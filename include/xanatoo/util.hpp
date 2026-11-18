@@ -118,9 +118,6 @@ bool is_valid_utf8(std::string_view s);
 // <path>. False, with an error naming the path on stderr, on failure.
 bool write_file_atomic(const std::string& path, std::string_view content);
 
-// Full path to the bookmarks file under state_dir().
-std::string bookmarks_path();
-
 // One bookmark: an address (docs/PASSAGES.md), which may name a passage, and
 // what it showed when it was made.
 struct Bookmark {
@@ -138,10 +135,6 @@ std::string format_bookmark_line(const Bookmark& b);
 // "Section — “quote”" for a passage, else the title or the address.
 std::string bookmark_label(const Bookmark& b);
 
-// Load bookmarks (blank lines and # comments ignored).
-std::vector<Bookmark> load_bookmarks();
-
-// Save bookmarks (atomically; nothing with --no-save). False on I/O error.
-bool save_bookmarks(const std::vector<Bookmark>& entries);
+// Stored in statedb.hpp (stored_bookmarks, store_bookmark_add / _remove).
 
 }  // namespace xanatoo
