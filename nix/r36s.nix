@@ -237,6 +237,7 @@ let
       "-DXANATOO_SPARTAN=ON"
       "-DXANATOO_NEX=ON"
       "-DXANATOO_FINGER=ON"
+      "-DXANATOO_NNTP=ON"
       "-DXANATOO_R36S=ON"
       # No libvips in the ArkOS sysroot: stb_image decodes, BMP thumbnails.
       "-DXANATOO_THUMTOO=OFF"

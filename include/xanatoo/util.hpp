@@ -110,6 +110,8 @@ std::string detect_charset(std::string_view content_type,
 // Latin-1 / Windows-1252 / undeclared bytes are converted. Other code
 // pages are returned unchanged.
 std::string to_utf8(std::string body, std::string_view charset);
+// Well-formed UTF-8 (structure only: lead bytes and continuation bytes).
+bool is_valid_utf8(std::string_view s);
 
 // Write a config / state file atomically (gamepkgstd DIR-14): <path>.tmp
 // in the same directory (created if missing), flushed, renamed over

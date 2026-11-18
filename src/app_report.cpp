@@ -122,6 +122,7 @@ std::string features() {
   add("lemmy", XANATOO_LEMMY);
   add("nostr", XANATOO_NOSTR);
   add("gemini", XANATOO_GEMINI);
+  add("nntp", XANATOO_NNTP);
   add("feeds", XANATOO_FEEDS);
   add("ebooks", XANATOO_EBOOKS);
   add("thumtoo", XANATOO_THUMTOO);

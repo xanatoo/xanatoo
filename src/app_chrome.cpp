@@ -18,6 +18,7 @@
 #include "xanatoo/feed.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/forums.hpp"
+#include "xanatoo/nntp.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/lemmy.hpp"
@@ -433,6 +434,8 @@ StatusLine compute_status(App& app) {
       label = "Matrix: ";
     else if (xanatoo::is_hn_ref(app.hover.href))
       label = "Hacker News: ";
+    else if (xanatoo::is_nntp_url(app.hover.href))
+      label = "Usenet: ";
     else if (auto fr = xanatoo::parse_forum_ref(app.hover.href)) {
       static std::string flabel;
       flabel = std::string(xanatoo::forum_site_name(fr->site)) + ": ";

@@ -22,6 +22,7 @@ inline constexpr ExampleEntry kExamples[] = {
     {nullptr, nullptr},
     {"Directory (links and feeds)", "directory.md"},
     {"Finger (public hosts)", "finger.md"},
+    {"Usenet (news servers)", "usenet.md"},
     {"Books and long reads", "books.md"},
     {"Ted Nelson and Xanadu (reading list)", "ted-nelson-bibliography.md"},
     {"Feeds (RSS / Atom)", "feeds.md"},

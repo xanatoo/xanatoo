@@ -4,6 +4,7 @@
 #include "xanatoo/native.hpp"
 
 #include "xanatoo/forums.hpp"
+#include "xanatoo/nntp.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/matrix.hpp"
@@ -159,6 +160,7 @@ std::string up_url(std::string_view url) {
       return {};
     return "/" + up;
   }
+  if (auto r = parse_nntp_url(url)) return nntp_up_url(*r);
   if (size_t sep = url.find("://"); sep != std::string_view::npos) {
     const size_t path_at = url.find_first_of("/?#", sep + 3);
     if (path_at == std::string_view::npos) return {};

@@ -39,6 +39,7 @@ Native views (no HTML scraping) — see also [Books](books.md) and
 - [Gopher: Floodgap](gopher://gopher.floodgap.com/1/) · [SDF](gopher://sdf.org/1/)
 - [Spartan: mozz.us](spartan://spartan.mozz.us/)
 - [Nex: nightfall.city](nex://nightfall.city/)
+- [Usenet: news servers](usenet.md) — [Gmane mailing lists](news://news.gmane.io/gmane.*) · [comp.lang.c](news:comp.lang.c) · [Tildeverse](news://news.tilde.club/)
 - [Finger: public hosts](finger.md) — [random@happynetbox](finger://random@happynetbox.com) · [plan.cat](finger://reiver@plan.cat) · [tilde.town](finger://tilde.town/)
 - [Standard Ebooks](https://standardebooks.org/ebooks) · [Project Gutenberg today](https://www.gutenberg.org/cache/epub/feeds/today.rss)
 

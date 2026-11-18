@@ -295,6 +295,22 @@ read-only service clients. Every client is read-only: never post or log in.
   channel and search refs and comments. Parsers are pure and tested; never
   post or log in. See `docs/VIDEO_SITES.md`.
 
+## Usenet / NNTP (`nntp.hpp`)
+
+- `src/nntp.cpp` (pure: refs, wildmat, LIST / OVER lines, RFC 5322 dates,
+  RFC 2047 headers, MIME bodies, documents) + `src/nntp_fetch.cpp`
+  (network), gated by `XANATOO_NNTP` (default ON, plain TCP like Gopher;
+  `nntps:` / `snews:` need TLS and verify certificates). Offline tests in
+  `tests/nntp_tests.cpp`. Builds documents with the forum helpers
+  (`forum_common.hpp`). See `docs/NNTP.md`.
+- One connection per page: greeting, `MODE READER`, the reader commands,
+  `QUIT`. Never AUTHINFO or POST; 480 becomes "needs a login to read".
+- Refs keep RFC 5538's shape; links into threads are
+  `nntp://host/group/N#id:N` so the page lands on the article. Message-IDs
+  are percent-encoded with `/` escaped (no `//` reaches the locator).
+- `up_url` asks `nntp_up_url` before the generic `://` rule (article →
+  group → hierarchy → server).
+
 ## Forums (`forums.hpp`)
 
 - `src/forums.cpp` + `src/forum_<site>.cpp` (pure mappers) +

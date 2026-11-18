@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Usenet / NNTP reader
+
+- Read-only, anonymous NNTP client (`XANATOO_NNTP`, plain TCP; `nntps:`
+  over TLS): `news://host/` hierarchies (folded above 300 groups),
+  `news://host/comp.lang.*` wildmats, `news://host/GROUP` recent threads
+  (OVER, 150 per page), `nntp://host/GROUP/N` the thread around N,
+  `news://host/MSGID`, hostless `news:GROUP` on nntp.csiph.com (gmane.* on
+  news.gmane.io). RFC 2047 headers, MIME / QP / base64 bodies, flowed text,
+  quotes as BlockQuotes, git patches as code. `docs/NNTP.md`,
+  `tests/nntp_tests.cpp`.
+- Server list `examples/usenet.md` (Help → Examples, Services menu, the
+  directory): every listed server probed; marked by what works without an
+  account. Services menu: Usenet servers page and Gmane.
+- Checked live (scratch driver + Xvfb): group lists on csiph (45k groups),
+  gmane.*, tilde.club; comp.lang.c threads; gmane git patch thread;
+  Message-ID page; nntps on csiph / mixmin / paganini; login-only servers
+  report "needs a login to read". Not done: AUTHINFO, posting, read marks.
+
 ## Status (2026-11-18) — Ctrl+wheel zooms the text
 
 - Ctrl+wheel over a pane zooms the text one point per notch like a pinch:
@@ -74,7 +92,8 @@
   `docs/FORUMS.md`, offline tests in `tests/forum_tests.cpp`.
 - Checked live (scratch driver + Xvfb): every listing and thread kind.
   9gag skipped (no API). Not done: subscriptions for forum listings, the
-  `bluesky` search engine still links web pages. Next: NNTP / public-inbox.
+  `bluesky` search engine still links web pages. Next: public-inbox
+  (NNTP itself is done, see above).
 
 ## Status (2026-11-18) — Pictures for image addresses in text
 

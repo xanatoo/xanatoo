@@ -23,6 +23,7 @@
 #include "xanatoo/file_url.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/forums.hpp"
+#include "xanatoo/nntp.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/wikipedia.hpp"
@@ -184,7 +185,8 @@ static bool web_in_app(std::string_view s) {
 bool is_in_app_remote_url(std::string_view s) {
   return xanatoo::is_gemini_url(s) || xanatoo::is_gopher_url(s) ||
          xanatoo::is_spartan_url(s) || xanatoo::is_nex_url(s) ||
-         xanatoo::is_finger_url(s) || xanatoo::is_reddit_ref(s) ||
+         xanatoo::is_finger_url(s) || xanatoo::is_nntp_url(s) ||
+         xanatoo::is_reddit_ref(s) ||
          xanatoo::is_lemmy_ref(s) || xanatoo::is_nostr_ref(s) ||
          xanatoo::is_matrix_ref(s) ||
          xanatoo::is_hn_ref(s) || xanatoo::is_forum_ref(s) ||

@@ -79,6 +79,7 @@ Exchange hosts, bsky.app) map to refs for the "Native view" toggle
 
 ## Not done
 
-- NNTP / public-inbox (lore.kernel.org) — planned next.
+- public-inbox (lore.kernel.org). Usenet / NNTP is its own client:
+  `docs/NNTP.md`.
 - Subscriptions for forum listings; search engines for them (the existing
   `bluesky` search engine still links bsky.app web pages).

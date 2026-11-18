@@ -122,6 +122,11 @@ AboutSection services() {
                      "search:wikipedia:xanadu", ""});
   s.items.push_back({"Gemini", XANATOO_GEMINI, "`gemini://` capsules",
                      "gemini://geminiprotocol.net/", "`-DXANATOO_GEMINI=ON`"});
+  s.items.push_back({"Usenet (NNTP)", XANATOO_NNTP,
+                     "`news://server/group` threads, group lists and "
+                     "articles over NNTP (`nntps://` with TLS); anonymous "
+                     "reading only",
+                     "examples/usenet.md", "`-DXANATOO_NNTP=ON`"});
   s.items.push_back({"RSS / Atom feeds", XANATOO_FEEDS,
                      "feed URLs, `feed:` finds a page's feed",
                      "examples/feeds.md", "`-DXANATOO_FEEDS=ON`"});

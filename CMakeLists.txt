@@ -71,7 +71,7 @@ if(XANATOO_MINIMAL_PORT)
   # Plain TCP (BSD sockets) is available on Unix-like hosts. Windows
   # minimal builds stay offline; Emscripten has no raw TCP.
   if(EMSCRIPTEN OR WIN32)
-    foreach(_feature GOPHER SPARTAN NEX FINGER)
+    foreach(_feature GOPHER SPARTAN NEX FINGER NNTP)
       set(XANATOO_${_feature} OFF CACHE BOOL
           "Small-net TCP not enabled on this minimal target" FORCE)
     endforeach()
@@ -137,6 +137,7 @@ option(XANATOO_GOPHER "Enable gopher:// network client (plain TCP)" ON)
 option(XANATOO_SPARTAN "Enable spartan:// network client (plain TCP)" ON)
 option(XANATOO_NEX "Enable nex:// network client (plain TCP)" ON)
 option(XANATOO_FINGER "Enable finger:// network client (plain TCP)" ON)
+option(XANATOO_NNTP "Enable news: / nntp: Usenet reader (plain TCP, nntps: with TLS)" ON)
 # Nostr read-only client (WSS + OpenSSL). Maps notes to Thread/Message nodes.
 option(XANATOO_NOSTR "Enable Nostr note/thread fetch (TLS WebSocket)" ON)
 option(XANATOO_REDDIT "Enable Reddit .json fetch (TLS HTTPS)" ON)
@@ -251,6 +252,8 @@ add_executable(xanatoo
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
   src/forum_fetch.cpp
+  src/nntp.cpp
+  src/nntp_fetch.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
@@ -378,7 +381,7 @@ if(XANATOO_GEMINI OR XANATOO_NOSTR OR XANATOO_REDDIT OR XANATOO_LEMMY OR XANATOO
 endif()
 set(XANATOO_NEED_TCP OFF)
 if(XANATOO_NEED_OPENSSL OR XANATOO_GOPHER OR XANATOO_SPARTAN OR XANATOO_NEX OR
-   XANATOO_FINGER)
+   XANATOO_FINGER OR XANATOO_NNTP)
   set(XANATOO_NEED_TCP ON)
 endif()
 if(XANATOO_NEED_TCP AND NOT EMSCRIPTEN)
@@ -447,6 +450,13 @@ if(XANATOO_FINGER)
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_FINGER=0)
   message(STATUS "Finger protocol client: OFF")
+endif()
+if(XANATOO_NNTP)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_NNTP=1)
+  message(STATUS "NNTP (Usenet) client: ON")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_NNTP=0)
+  message(STATUS "NNTP (Usenet) client: OFF")
 endif()
 
 if(XANATOO_NOSTR)
@@ -680,6 +690,7 @@ if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
 add_executable(xanatoo_tests
   tests/unit_tests.cpp
   tests/forum_tests.cpp
+  tests/nntp_tests.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
   src/about.cpp
@@ -711,6 +722,7 @@ add_executable(xanatoo_tests
   src/forum_lobsters.cpp
   src/forum_4chan.cpp
   src/forum_stackexchange.cpp
+  src/nntp.cpp
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
   src/youtube.cpp
@@ -774,6 +786,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_MATRIX=0
   XANATOO_HN=0
   XANATOO_FORUMS=0
+  XANATOO_NNTP=0
   XANATOO_YOUTUBE=0
   XANATOO_VIDEO=0
   XANATOO_EBOOKS=0

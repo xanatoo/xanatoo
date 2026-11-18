@@ -77,6 +77,8 @@
 
 // forum_tests.cpp: adds its pass / fail counts.
 void test_forums(int& passed, int& failed);
+// nntp_tests.cpp: likewise.
+void test_nntp(int& passed, int& failed);
 
 namespace {
 
@@ -7124,6 +7126,7 @@ int main() {
   test_bookmark_lines();
   test_math();
   test_forums(g_passed, g_failed);
+  test_nntp(g_passed, g_failed);
 
   std::printf("%d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

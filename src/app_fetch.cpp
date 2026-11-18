@@ -29,6 +29,7 @@
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/forums.hpp"
+#include "xanatoo/nntp.hpp"
 #include "xanatoo/matrix.hpp"
 #include "xanatoo/video_sites.hpp"
 #include "xanatoo/archive.hpp"
@@ -433,6 +434,11 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   } else if (xanatoo::is_finger_url(url)) {
 #if defined(XANATOO_FINGER) && XANATOO_FINGER
     fetch_finger(url, *out);
+#endif
+  } else if (xanatoo::is_nntp_url(url)) {
+#if defined(XANATOO_NNTP) && XANATOO_NNTP
+    out->service = "Usenet";
+    out->doc = xanatoo::nntp_fetch(url, &out->error);
 #endif
   } else if (xanatoo::is_nostr_ref(url)) {
 #if defined(XANATOO_NOSTR) && XANATOO_NOSTR
@@ -888,6 +894,15 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     return true;
 #else
     return no("finger:// needs build with -DXANATOO_FINGER=ON");
+#endif
+  }
+  if (xanatoo::is_nntp_url(url)) {
+#if defined(XANATOO_NNTP) && XANATOO_NNTP
+    if (!xanatoo::parse_nntp_url(url))
+      return no("not a usable news: / nntp: address");
+    return true;
+#else
+    return no("Usenet needs build with -DXANATOO_NNTP=ON");
 #endif
   }
   if (xanatoo::is_nostr_ref(url)) {

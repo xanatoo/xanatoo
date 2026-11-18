@@ -391,6 +391,8 @@ std::string charset_token(std::string_view s, size_t at) {
 
 }  // namespace
 
+bool is_valid_utf8(std::string_view s) { return valid_utf8(s); }
+
 std::string detect_charset(std::string_view content_type,
                            std::string_view body) {
   std::string ct = ascii_lower(std::string(content_type));

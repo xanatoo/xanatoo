@@ -58,7 +58,7 @@ reader mode; many of these are heavy in a full browser.
 ## Small and alternative networks
 
 - [Gemini protocol](gemini://geminiprotocol.net/) · [Gopher Floodgap](gopher://gopher.floodgap.com/1/)
-- [Spartan](spartan://spartan.mozz.us/) · [Nex](nex://nightfall.city/) · [Finger hosts](../finger.md)
+- [Spartan](spartan://spartan.mozz.us/) · [Nex](nex://nightfall.city/) · [Finger hosts](../finger.md) · [Usenet servers](../usenet.md)
 - [Tildeverse](https://tildeverse.org/) · [SDF](https://sdf.org/) · [Raw Text Club](https://rawtext.club/)
 
 ## A note on “top sites”
