@@ -235,9 +235,12 @@ page//gallery#item:7             the grid, scrolled to the 7th card
   `page//gallery//item:N` (a card: `page//<collection>//gallery//item:N`) in
   the same view, with a history entry; Back returns to the page. Stepping
   (←/→, swipe, edge zones) replaces that entry instead of adding one, so Back
-  never walks through the images one by one.
+  never walks through the images one by one. Single steps wrap around:
+  Next on the last image shows the first, Prev on the first the last
+  (Home / End do not wrap).
 - The Prev / Next edge zones light up the same way on hover: a radial glow
-  from the middle of the left / right edge with ◀ / ▶.
+  from the middle of the left / right edge with ◀ / ▶, or ↺ / ↻ when the
+  step wraps around to the other end.
 - Up (Esc, the toolbar Up, the top strip — a band in the middle of the
   view's top edge, in the grid as well, lit by a radial glow and ▲ while
   hovered): image → straight back to the

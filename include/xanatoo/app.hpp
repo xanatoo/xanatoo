@@ -1934,7 +1934,7 @@ std::string gallery_up_address(App& app, Pane& p);
 void open_gallery_item(App& app, int pi,
                        std::vector<xanatoo::Selector> scope_pipes, int index);
 // Single image: next / previous image (replaces the history entry).
-void gallery_step(App& app, int pi, int delta);
+void gallery_step(App& app, int pi, int delta, bool wrap = false);
 // Input for single-image views. Pointer events go to the image view under
 // the pointer, keys to the focused one. True = consumed.
 bool gallery_pointer_down(App& app, int pi, int x, int y, int button);

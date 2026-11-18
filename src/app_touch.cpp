@@ -341,7 +341,7 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
           gallery_pointer_up(app);
         } else if (!zoomed && std::abs(dx) >= 48.f * app.ui_scale &&
                    std::abs(dx) > std::abs(dy)) {
-          gallery_step(app, t.pane, dx < 0 ? 1 : -1);  // swipe
+          gallery_step(app, t.pane, dx < 0 ? 1 : -1, true);  // swipe
         }
       }
       break;

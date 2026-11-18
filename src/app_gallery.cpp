@@ -233,8 +233,9 @@ void draw_up_strip(App& app, const SDL_Rect& strip) {
 
 // The hovered Prev / Next zone: the same glow as the Up one (as deep, as
 // long as the Up strip is wide, up to the view height), from the middle of
-// the view's left or right edge, with ◀ / ▶.
-void draw_side_glow(App& app, const SDL_Rect& all, bool next) {
+// the view's left or right edge, with ◀ / ▶, or ↺ / ↻ when the step wraps
+// around to the other end of the gallery.
+void draw_side_glow(App& app, const SDL_Rect& all, bool next, bool wraps) {
   const SDL_Rect up = up_strip(app, all, side_width(all));
   const int band = up.h;
   const int depth = band * 2;
@@ -243,7 +244,7 @@ void draw_side_glow(App& app, const SDL_Rect& all, bool next) {
   const int y = all.y + (all.h - len) / 2;
   const SDL_Rect bx{next ? all.x + all.w - band : all.x, y, band, len};
   draw_glow(app, next ? GlowEdge::Right : GlowEdge::Left, {x, y, depth, len},
-            bx, next ? "▶" : "◀");
+            bx, wraps ? (next ? "↻" : "↺") : (next ? "▶" : "◀"));
 }
 
 // A 3×3 grid of squares on a dark disc-ish square; brighter when hovered.
@@ -338,14 +339,16 @@ void open_gallery_item(App& app, int pi,
   navigate_pane(app, pi, xanatoo::format_locator(loc), true);
 }
 
-void gallery_step(App& app, int pi, int delta) {
+void gallery_step(App& app, int pi, int delta, bool wrap) {
   Pane& p = app.panes[pi];
   if (!pane_image_view(p) || p.locator.pipes.empty() ||
       p.locator.pipes.back().kind != xanatoo::SelectorKind::Item)
     return;
   GalleryView& gv = p.gallery;
   const int n = static_cast<int>(gv.items.size());
-  const int to = std::clamp(gv.index + delta, 0, n - 1);
+  if (n <= 0) return;
+  const int to = wrap ? ((gv.index + delta) % n + n) % n
+                      : std::clamp(gv.index + delta, 0, n - 1);
   if (to == gv.index) return;
   // A slide show: the history keeps one entry for the gallery, Back leaves.
   const std::string before = pane_address(app, p);
@@ -424,8 +427,8 @@ bool gallery_pointer_down(App& app, int pi, int x, int y, int button) {
   switch (zone_at(app, app.panes[pi], x, y)) {
     case Zone::Up: gallery_up(app, pi); break;
     case Zone::Grid: gallery_grid(app, pi); break;
-    case Zone::Prev: gallery_step(app, pi, -1); break;
-    case Zone::Next: gallery_step(app, pi, 1); break;
+    case Zone::Prev: gallery_step(app, pi, -1, true); break;
+    case Zone::Next: gallery_step(app, pi, 1, true); break;
     case Zone::None:
       gv.drag = true;
       gv.drag_x = x;
@@ -492,14 +495,14 @@ bool gallery_key(App& app, SDL_Keycode key, bool ctrl, bool alt, bool shift) {
     case SDLK_SPACE:
     case SDLK_PAGEDOWN:
     case SDLK_n:
-      gallery_step(app, pi, shift && key == SDLK_SPACE ? -1 : 1);
+      gallery_step(app, pi, shift && key == SDLK_SPACE ? -1 : 1, true);
       break;
     case SDLK_LEFT:
     case SDLK_UP:
     case SDLK_BACKSPACE:
     case SDLK_PAGEUP:
     case SDLK_p:
-      gallery_step(app, pi, -1);
+      gallery_step(app, pi, -1, true);
       break;
     case SDLK_HOME:
       gallery_step(app, pi, -gv->index);
@@ -696,8 +699,12 @@ void draw_gallery_image(App& app, int pi) {
                                                   : Zone::None;
   draw_grid_button(app, grid_button(app, all), z == Zone::Grid);
   if (z == Zone::Up) draw_up_strip(app, up_strip(app, all, side_width(all)));
-  if (z == Zone::Prev || z == Zone::Next)
-    draw_side_glow(app, all, z == Zone::Next);
+  if (z == Zone::Prev || z == Zone::Next) {
+    const bool next = z == Zone::Next;
+    const int last = static_cast<int>(gv.items.size()) - 1;
+    draw_side_glow(app, all, next,
+                   last > 0 && gv.index == (next ? last : 0));
+  }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 }
 

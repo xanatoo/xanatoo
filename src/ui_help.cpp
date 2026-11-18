@@ -612,8 +612,8 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@gallery-image", "Gallery image",
      "Wheel or pinch zooms, drag pans; ←/→ step, Esc goes back to the "
      "grid."},
-    {"@gallery-prev", "Previous image", "Click to show the previous image (←)."},
-    {"@gallery-next", "Next image", "Click to show the next image (→)."},
+    {"@gallery-prev", "Previous image", "Click to show the previous image (←); on the first one ↺ wraps around to the last."},
+    {"@gallery-next", "Next image", "Click to show the next image (→); on the last one ↻ wraps around to the first."},
     {"@gallery-up", "Up strip",
      "Click to go back: from an image to the grid, from the grid to the "
      "page."},
