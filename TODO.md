@@ -15,7 +15,12 @@
 - Markdown too: a lone `[![alt](src)](href){attrs}` line is a linked block
   image, and the writer emits it. (A lone badge line used to be a paragraph
   with an inline image; it is now a block image, like a lone `![…](…)`.)
-- Not done: gemtext and Org writers still lose image links.
+- Org and gemtext lost block images altogether. Org now writes
+  `#+ATTR_HTML: :alt …` + `[[file:a.png]]` / `[[href][file:a.png]]` and
+  reads a paragraph that is only such a link back as an image (also fixed
+  the inline image writer's invalid `[[href][[[src]]]]`); gemtext writes
+  `=> src alt`, then `=> href` for a linked one (one-way: gemtext has no
+  images).
 
 ## Status (2026-11-18) — Gallery Up strip and background
 

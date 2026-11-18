@@ -4096,6 +4096,24 @@ static void serialize_gemtext_node(const Document& doc, NodeId id, std::string& 
     case NodeKind::HorizontalRule:
       out += "\n";
       break;
+    case NodeKind::Image: {
+      // Gemtext has no images: a link line to the file (clients may show
+      // it), then one to the image's link target.
+      if (n.src.empty()) break;
+      out += "=> ";
+      gemtext_escape_line(out, n.src);
+      if (!n.alt.empty()) {
+        out.push_back(' ');
+        gemtext_escape_line(out, n.alt);
+      }
+      out.push_back('\n');
+      if (const std::string* href = image_link_href(n)) {
+        out += "=> ";
+        gemtext_escape_line(out, *href);
+        out.push_back('\n');
+      }
+      break;
+    }
     case NodeKind::Footnote: {
       // Gemtext has no notes: "[key] text", one line per paragraph.
       std::string line = "[" + n.label + "]";

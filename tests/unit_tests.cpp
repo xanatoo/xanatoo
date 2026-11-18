@@ -1423,6 +1423,53 @@ void test_path_helpers() {
   EXPECT(!is_image_url("https://example.org/user@example"));
 }
 
+// Block images (and their link targets) survive Org and gemtext.
+void test_org_gemtext_images() {
+  using namespace xanatoo;
+  Document d;
+  const NodeId root = d.create(NodeKind::Document);
+  const NodeId a = d.create(NodeKind::Image, root);
+  d.get(a).src = "pics/a.png";
+  d.get(a).alt = "A picture";
+  const NodeId b = d.create(NodeKind::Image, root);
+  d.get(b).src = "https://cdn.example/logo.png";
+  InlineSpan link;
+  link.kind = InlineKind::Link;
+  link.href = "https://example.org/";
+  d.get(b).spans.push_back(link);
+
+  const std::string org = serialize_org(d);
+  EXPECT(org.find("#+ATTR_HTML: :alt A picture\n[[file:pics/a.png]]\n") !=
+         std::string::npos);
+  EXPECT(org.find("[[https://example.org/][https://cdn.example/logo.png]]") !=
+         std::string::npos);
+  const Document back = parse_org(org);
+  const auto& kids = back.get(back.root).children;
+  EXPECT_EQ(kids.size(), 2u);
+  if (kids.size() == 2) {
+    const Node& ia = back.get(kids[0]);
+    EXPECT(ia.kind == NodeKind::Image);
+    EXPECT_EQ(ia.src, "pics/a.png");
+    EXPECT_EQ(ia.alt, "A picture");
+    EXPECT(image_link_href(ia) == nullptr);
+    const Node& ib = back.get(kids[1]);
+    EXPECT(ib.kind == NodeKind::Image);
+    EXPECT_EQ(ib.src, "https://cdn.example/logo.png");
+    const std::string* href = image_link_href(ib);
+    EXPECT(href && *href == "https://example.org/");
+  }
+  EXPECT_EQ(serialize_org(back), org);
+  // A link with a text description stays a link.
+  const Document txt = parse_org("[[https://example.org/a.png][the picture]]\n");
+  const auto& tk = txt.get(txt.root).children;
+  EXPECT(tk.size() == 1 && txt.get(tk[0]).kind == NodeKind::Paragraph);
+
+  const std::string gmi = serialize_gemtext(d);
+  EXPECT_EQ(gmi, "=> pics/a.png A picture\n"
+                 "=> https://cdn.example/logo.png\n"
+                 "=> https://example.org/\n");
+}
+
 void test_parse_org() {
   using namespace xanatoo;
   Document doc = parse_org(
@@ -7025,6 +7072,7 @@ int main() {
   test_parse_document_sexpr_path();
   test_parse_document_xml_path();
   test_source_view_text();
+  test_org_gemtext_images();
   test_sexpr_image_link();
   test_markup_stretch_and_link();
   test_markup_blockquote_code_table();

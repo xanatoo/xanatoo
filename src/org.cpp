@@ -17,6 +17,20 @@ bool path_uses_org(std::string_view path) {
 
 namespace {
 
+// An Org link path without its "file:" prefix.
+std::string org_link_path(std::string_view target) {
+  if (starts_with_ci(target, "file:")) target.remove_prefix(5);
+  return std::string(target);
+}
+
+// An image path as an Org link target: URLs as they are, local paths as
+// file: links (a bare relative name would be a fuzzy text search).
+std::string org_image_target(std::string_view src) {
+  if (src.find("://") != std::string_view::npos || starts_with_ci(src, "file:"))
+    return std::string(src);
+  return "file:" + std::string(src);
+}
+
 bool is_ws(char c) {
   return c == ' ' || c == '\t';
 }
@@ -403,15 +417,38 @@ Document parse_org(std::string_view source) {
   // Flush a paragraph buffer (into the open footnote definition, if any)
   std::string para_buf;
   NodeId para_footnote = INVALID_NODE;
+  std::string pending_alt;  // #+ATTR_HTML: :alt … for the next image
   auto flush_para = [&]() {
     const NodeId fn = para_footnote;
     para_footnote = INVALID_NODE;
+    std::string alt = std::move(pending_alt);
+    pending_alt.clear();
     if (para_buf.empty()) return;
     NodeId n = doc.create(NodeKind::Paragraph,
                           fn != INVALID_NODE ? fn : current_parent());
     // If parent is ListItem, body is under the item
     parse_org_inlines(doc.get(n), trim_view(para_buf));
     para_buf.clear();
+    // A paragraph that is only a link to an image file shows that image
+    // (as Org does); a description that is one is a linked image.
+    Node& p = doc.get(n);
+    if (p.spans.size() == 1 && p.spans[0].kind == InlineKind::Link) {
+      const std::string href = org_link_path(p.spans[0].href);
+      const std::string desc = org_link_path(p.spans[0].text);
+      const bool bare = p.spans[0].text == p.spans[0].href;
+      if (bare ? is_image_url(href) : is_image_url(desc)) {
+        p.kind = NodeKind::Image;
+        p.src = bare ? href : desc;
+        p.alt = std::move(alt);
+        p.spans.clear();
+        if (!bare) {
+          InlineSpan link;  // the image's link target (image_link_href)
+          link.kind = InlineKind::Link;
+          link.href = href;
+          p.spans.push_back(std::move(link));
+        }
+      }
+    }
   };
 
   auto ensure_list = [&](int indent, bool ordered) -> NodeId {
@@ -580,6 +617,19 @@ Document parse_org(std::string_view source) {
       continue;
     }
 
+    // #+ATTR_HTML: :alt TEXT [:key …] for the image that follows
+    if (starts_with_ci(t, "#+ATTR_HTML:")) {
+      std::string_view attrs = std::string_view(t).substr(12);
+      const size_t at = attrs.find(":alt ");
+      if (at != std::string_view::npos) {
+        std::string_view v = attrs.substr(at + 5);
+        const size_t next = v.find(" :");
+        pending_alt = std::string(trim_view(v.substr(0, next)));
+      }
+      ++i;
+      continue;
+    }
+
     // Other #+ lines ignored
     if (starts_with(t, "#+")) {
       ++i;
@@ -735,9 +785,10 @@ void ser_inlines_org(const Node& node, std::string& out) {
         break;
       case InlineKind::Image:
         // Org shows a bare link to an image file as the image.
+        // A linked one has the image as its description.
         out += "[[";
-        out += sp.href.empty() ? sp.src : sp.href;
-        if (!sp.href.empty()) out += "][[[" + sp.src + "]]]";
+        out += sp.href.empty() ? org_image_target(sp.src) : sp.href;
+        if (!sp.href.empty()) out += "][" + org_image_target(sp.src);
         out += "]]";
         break;
       case InlineKind::FootnoteRef:
@@ -851,6 +902,21 @@ void ser_node_org(const Document& doc, NodeId id, std::string& out,
       ser_inlines_org(node, out);
       out += "\n\n";
       break;
+
+    case NodeKind::Image: {
+      if (node.src.empty()) break;
+      if (!node.alt.empty()) {
+        out += "#+ATTR_HTML: :alt ";
+        for (char c : node.alt) out.push_back(c == '\n' ? ' ' : c);
+        out += "\n";
+      }
+      const std::string* href = image_link_href(node);
+      out += "[[";
+      out += href ? *href : org_image_target(node.src);
+      if (href) out += "][" + org_image_target(node.src);
+      out += "]]\n\n";
+      break;
+    }
 
     case NodeKind::Footnote: {
       // Org definitions end at a blank line: paragraphs share one block.
