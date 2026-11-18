@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 // Remote images: ImageCache queues the http(s) / gemini / spartan / gopher /
-// nex sources layout asks for;
+// nex sources layout asks for (the ones on screen first, want_image_now);
 // a few detached workers download each one into cache_dir()/images/ and
 // prebuild its inline thumbnail (stb builds; thumtoo makes it on request),
 // then the main thread marks it done and relayouts (the image's size
@@ -36,6 +36,10 @@ namespace fs = std::filesystem;
 namespace xanatoo::app {
 
 namespace {
+
+// Arrivals closer together than this share one relayout (a page with
+// hundreds of thumbnails would otherwise relayout every frame).
+constexpr Uint32 kImageRelayoutMs = 150;
 
 #ifndef __EMSCRIPTEN__
 constexpr int kMaxWorkers = 4;
@@ -115,8 +119,10 @@ bool download_image(const std::string& url) {
     }
   } else {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
-    auto r = xanatoo::https_get_follow(url, xanatoo::user_agent("image fetch"),
-                                       &err);
+    // Pooled: a page's images mostly come from one host, and a TLS
+    // handshake per thumbnail costs more than the thumbnail.
+    auto r = xanatoo::https_get_follow_pooled(
+        url, xanatoo::user_agent("image fetch"), &err);
     if (!r || r->status != 200 || r->body.empty()) {
       std::cerr << "image: " << url << ": "
                 << (r ? http_status_error(r->status) : err) << "\n";
@@ -170,6 +176,10 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
 
 }  // namespace
 
+void want_image_now(App& app, const std::string& url) {
+  app.images_on_screen.push_back(url);
+}
+
 void poll_images(App& app) {
   std::vector<std::pair<std::string, bool>> done;
 #ifdef __EMSCRIPTEN__
@@ -177,12 +187,24 @@ void poll_images(App& app) {
   // remote requests as unavailable without scheduling any workers.
   for (std::string& url : app.images.take_requests())
     done.emplace_back(std::move(url), false);
+  app.images_on_screen.clear();
 #else
   ImageFetchShared& sh = *app.image_fetch;
   {
     std::lock_guard<std::mutex> lock(sh.mutex);
     for (std::string& url : app.images.take_requests())
       sh.queue.push_back(std::move(url));
+    // What is on screen goes first (in draw order); the rest keeps its
+    // document order behind it.
+    std::vector<std::string>& seen = app.images_on_screen;
+    auto front = sh.queue.begin();
+    for (const std::string& url : seen) {
+      auto it = std::find(front, sh.queue.end(), url);
+      if (it == sh.queue.end()) continue;
+      std::rotate(front, it, it + 1);
+      ++front;
+    }
+    seen.clear();
     while (sh.workers < kMaxWorkers &&
            static_cast<size_t>(sh.workers) < sh.queue.size()) {
       ++sh.workers;
@@ -192,8 +214,13 @@ void poll_images(App& app) {
   }
 #endif
   const bool thumbs = app.images.poll();
-  if (done.empty() && !thumbs) return;
   for (const auto& [url, ok] : done) app.images.remote_done(url, ok);
+  if (!done.empty() || thumbs) app.image_relayout_due = true;
+  if (!app.image_relayout_due) return;
+  const Uint32 now = xanatoo::sdl::ticks();
+  if (now - app.image_relayout_at < kImageRelayoutMs) return;
+  app.image_relayout_due = false;
+  app.image_relayout_at = now;
   // Placeholders became images (or vanished): heights changed.
   keep_views(app);
   for (Pane& p : app.panes) p.height_cache.clear();
@@ -269,6 +296,7 @@ void draw_image_loading(App& app, int pi, const SDL_Rect& clip,
                                     : app.images.get(im.src, im.base);
     if (img.ok && img.texture) continue;
     const bool remote = xanatoo::is_remote_image(im.src);
+    if (img.pending && remote) want_image_now(app, im.src);
     const ImageLoadState st =
         img.pending && remote ? image_load_state(app, im.src) : ImageLoadState{};
     // Tiny (inline icons): a bar along the bottom edge, no words.

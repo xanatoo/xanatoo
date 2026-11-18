@@ -3,6 +3,7 @@
 
 #include "xanatoo/https.hpp"
 #include "xanatoo/tcp.hpp"
+#include "xanatoo/http_framing.hpp"
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/inflate.hpp"
 #include "xanatoo/net_address.hpp"
@@ -13,13 +14,19 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <memory>
+#include <mutex>
+#include <pthread.h>
+#include <signal.h>
 #include <poll.h>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -47,6 +54,7 @@ public:
     }
     const int fd = xanatoo::tcp_connect(url.host, url.port, err, security.public_only);
     if (fd < 0) return false;
+    fd_ = fd;
     secure_ = url.secure;
     if (secure_) return tls_.connect(fd, url.host, err, security.verify_tls);
     plain_fd_ = fd;
@@ -81,6 +89,14 @@ public:
     }
   }
 
+  // An idle kept-alive connection the server has not closed: nothing to
+  // read (a close or TLS close_notify would be readable).
+  bool idle_alive() const {
+    if (fd_ < 0 || (secure_ && !tls_.connected())) return false;
+    pollfd p{fd_, POLLIN, 0};
+    return ::poll(&p, 1, 0) == 0;
+  }
+
   // Reason for the last failed read() (empty if unknown).
   std::string last_error() const {
     if (secure_) return tls_.last_error();
@@ -89,6 +105,7 @@ public:
 
 private:
   int read_errno_ = 0;
+  int fd_ = -1;        // the socket (owned by tls_ or plain_fd_)
   int plain_fd_ = -1;
   bool secure_ = false;
   TlsStream tls_;
@@ -128,44 +145,104 @@ std::string dechunk(const std::string& in) {
   return out;
 }
 
-}  // namespace
+// Kept-alive connections between requests (https_get_follow_pooled): a few
+// idle ones per host, shared by all threads, dropped after kPoolIdle.
+constexpr auto kPoolIdle = std::chrono::seconds(20);
+constexpr size_t kPoolMax = 16;
 
-std::optional<HttpResult> https_request(std::string_view method,
-                                        std::string_view url,
-                                        std::string_view user_agent,
-                                        std::string_view extra_headers,
-                                        std::string_view body_in,
-                                        std::string* err,
-                                        HttpRequestSecurity security) {
-  const auto parsed = parse_http_url(url);
-  if (!parsed) {
-    if (err) *err = "invalid http(s) URL";
-    return std::nullopt;
+struct IdleConnection {
+  std::string key;
+  std::unique_ptr<HttpConnection> conn;
+  std::chrono::steady_clock::time_point since;
+};
+
+struct ConnectionPool {
+  std::mutex mutex;
+  std::vector<IdleConnection> idle;  // oldest first
+};
+
+// Never destroyed: detached image workers may still use it at exit.
+ConnectionPool& connection_pool() {
+  static auto* pool = new ConnectionPool;
+  return *pool;
+}
+
+std::string pool_key(const HttpUrl& url, const HttpRequestSecurity& sec) {
+  return std::string(url.secure ? "s:" : "p:") + url.host + ":" +
+         std::to_string(url.port) + (sec.verify_tls ? ":v" : ":n") +
+         (sec.public_only ? ":public" : "");
+}
+
+std::unique_ptr<HttpConnection> take_idle(const std::string& key) {
+  for (;;) {
+    std::unique_ptr<HttpConnection> conn;
+    std::vector<IdleConnection> expired;  // closed outside the lock
+    {
+      ConnectionPool& pool = connection_pool();
+      std::lock_guard<std::mutex> lock(pool.mutex);
+      const auto now = std::chrono::steady_clock::now();
+      auto& idle = pool.idle;
+      for (auto it = idle.begin(); it != idle.end();) {
+        if (now - it->since > kPoolIdle) {
+          expired.push_back(std::move(*it));
+          it = idle.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      for (auto it = idle.rbegin(); it != idle.rend(); ++it) {
+        if (it->key != key) continue;
+        conn = std::move(it->conn);
+        idle.erase(std::next(it).base());
+        break;
+      }
+    }
+    if (!conn || conn->idle_alive()) return conn;
   }
-  HttpConnection conn;
-  if (!conn.open(*parsed, err, security)) return std::nullopt;
+}
 
-  std::ostringstream req;
-  const bool custom_accept = ascii_lower(extra_headers).find("accept:") !=
-      std::string::npos;
-  req << method << " " << parsed->target << " HTTP/1.1\r\n"
-      << "Host: " << parsed->authority << "\r\n"
-      << "User-Agent: " << user_agent << "\r\n";
-  if (!custom_accept) req << "Accept: application/json, text/plain, */*\r\n";
-  req << "Accept-Language: en-US,en;q=0.9\r\n"
-      << "Connection: close\r\n";
-  if (!extra_headers.empty()) req << extra_headers;
-  if (!body_in.empty())
-    req << "Content-Length: " << body_in.size() << "\r\n";
-  req << "\r\n";
-  if (!body_in.empty()) req << body_in;
-  std::string req_s = req.str();
+void put_idle(const std::string& key, std::unique_ptr<HttpConnection> conn) {
+  IdleConnection dropped;
+  ConnectionPool& pool = connection_pool();
+  std::lock_guard<std::mutex> lock(pool.mutex);
+  if (pool.idle.size() >= kPoolMax) {
+    dropped = std::move(pool.idle.front());
+    pool.idle.erase(pool.idle.begin());
+  }
+  pool.idle.push_back({key, std::move(conn), std::chrono::steady_clock::now()});
+}
+
+// A write to a connection the server already closed raises SIGPIPE, which
+// would end the program; blocked, the write fails with EPIPE instead.
+void block_sigpipe_in_this_thread() {
+  thread_local bool blocked = false;
+  if (blocked) return;
+  blocked = true;
+  sigset_t set;
+  sigemptyset(&set);
+  sigaddset(&set, SIGPIPE);
+  pthread_sigmask(SIG_BLOCK, &set, nullptr);
+}
+
+struct Exchange {
+  std::optional<HttpResult> result;
+  bool nothing = false;   // write failed or closed before any byte arrived
+  bool reusable = false;  // complete, and the server keeps the connection
+};
+
+// Send `req` over `conn` and read the response, up to its end (framing) or
+// the connection closing.
+Exchange exchange(HttpConnection& conn, const std::string& req_s,
+                  const HttpRequestSecurity& security, std::string* err) {
+  Exchange ex;
   if (!conn.write_all(req_s.data(), req_s.size())) {
     if (err) *err = "HTTP write failed";
-    return std::nullopt;
+    ex.nothing = true;
+    return ex;
   }
 
   std::string data;
+  HttpResponseFraming framing;
   char buf[4096];
   meter_expect(-1);
   bool metered_headers = false;
@@ -174,7 +251,7 @@ std::optional<HttpResult> https_request(std::string_view method,
     if (n <= 0) break;
     if (transfer_cancelled()) {
       if (err) *err = transfer_cancelled_error();
-      return std::nullopt;
+      return ex;
     }
     data.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));
@@ -199,14 +276,26 @@ std::optional<HttpResult> https_request(std::string_view method,
     }
     if (data.size() > security.max_response_bytes) {
       if (err) *err = "HTTP response exceeds size limit";
-      return std::nullopt;
+      return ex;
     }
+    if (framing.update(data)) break;
+  }
+  if (data.empty()) {
+    if (err) *err = "connection closed without a response";
+    ex.nothing = true;
+    return ex;
+  }
+  if (framing.complete()) {
+    // Bytes past the end would belong to no request: do not reuse.
+    ex.reusable = framing.reusable() && data.size() == framing.size();
+    data.resize(framing.size());
   }
 
   size_t hdr_end = data.find("\r\n\r\n");
   if (hdr_end == std::string::npos) {
     if (err) *err = "malformed HTTP response";
-    return std::nullopt;
+    ex.reusable = false;
+    return ex;
   }
   std::string headers = data.substr(0, hdr_end);
   HttpResult out;
@@ -246,24 +335,69 @@ std::optional<HttpResult> https_request(std::string_view method,
   if (auto decoded = decode_content_encoding(header_val("content-encoding"),
                                              out.body))
     out.body = std::move(*decoded);
-  return out;
+  ex.result = std::move(out);
+  return ex;
 }
 
-std::optional<HttpResult> https_get(std::string_view url,
-                                    std::string_view user_agent,
-                                    std::string* err) {
-  return https_request("GET", url, user_agent, {}, {}, err);
+std::optional<HttpResult> request_impl(std::string_view method,
+                                       std::string_view url,
+                                       std::string_view user_agent,
+                                       std::string_view extra_headers,
+                                       std::string_view body_in,
+                                       std::string* err,
+                                       const HttpRequestSecurity& security,
+                                       bool pooled) {
+  const auto parsed = parse_http_url(url);
+  if (!parsed) {
+    if (err) *err = "invalid http(s) URL";
+    return std::nullopt;
+  }
+
+  std::ostringstream req;
+  const bool custom_accept = ascii_lower(extra_headers).find("accept:") !=
+      std::string::npos;
+  req << method << " " << parsed->target << " HTTP/1.1\r\n"
+      << "Host: " << parsed->authority << "\r\n"
+      << "User-Agent: " << user_agent << "\r\n";
+  if (!custom_accept) req << "Accept: application/json, text/plain, */*\r\n";
+  req << "Accept-Language: en-US,en;q=0.9\r\n";
+  if (!pooled) req << "Connection: close\r\n";
+  if (!extra_headers.empty()) req << extra_headers;
+  if (!body_in.empty())
+    req << "Content-Length: " << body_in.size() << "\r\n";
+  req << "\r\n";
+  if (!body_in.empty()) req << body_in;
+  const std::string req_s = req.str();
+
+  if (pooled) block_sigpipe_in_this_thread();
+  const std::string key = pooled ? pool_key(*parsed, security) : std::string();
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    std::unique_ptr<HttpConnection> conn;
+    if (pooled && attempt == 0) conn = take_idle(key);
+    const bool reused = conn != nullptr;
+    if (!conn) {
+      if (err) err->clear();
+      conn = std::make_unique<HttpConnection>();
+      if (!conn->open(*parsed, err, security)) return std::nullopt;
+    }
+    Exchange ex = exchange(*conn, req_s, security, err);
+    // The server closed the idle connection meanwhile: once more, fresh.
+    if (reused && ex.nothing) continue;
+    if (pooled && ex.reusable) put_idle(key, std::move(conn));
+    return std::move(ex.result);
+  }
+  return std::nullopt;
 }
 
-std::optional<HttpResult> https_get_follow(std::string_view url,
-                                           std::string_view user_agent,
-                                           std::string* err,
-                                           std::string* final_url) {
+std::optional<HttpResult> get_follow(std::string_view url,
+                                     std::string_view user_agent,
+                                     std::string* err, std::string* final_url,
+                                     bool pooled) {
   std::string current(url);
   std::optional<HttpResult> resp;
   bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
-    resp = https_get(current, user_agent, err);
+    resp = request_impl("GET", current, user_agent, {}, {}, err, {}, pooled);
     if (!resp || resp->status < 300 || resp->status >= 400 ||
         resp->location.empty())
       break;
@@ -283,6 +417,39 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
     *err = "HTTPS redirect to plaintext HTTP; HTTPS upgrade failed: " + *err;
   if (final_url) *final_url = current;
   return resp;
+}
+
+}  // namespace
+
+std::optional<HttpResult> https_request(std::string_view method,
+                                        std::string_view url,
+                                        std::string_view user_agent,
+                                        std::string_view extra_headers,
+                                        std::string_view body_in,
+                                        std::string* err,
+                                        HttpRequestSecurity security) {
+  return request_impl(method, url, user_agent, extra_headers, body_in, err,
+                      security, false);
+}
+
+std::optional<HttpResult> https_get(std::string_view url,
+                                    std::string_view user_agent,
+                                    std::string* err) {
+  return https_request("GET", url, user_agent, {}, {}, err);
+}
+
+std::optional<HttpResult> https_get_follow(std::string_view url,
+                                           std::string_view user_agent,
+                                           std::string* err,
+                                           std::string* final_url) {
+  return get_follow(url, user_agent, err, final_url, false);
+}
+
+std::optional<HttpResult> https_get_follow_pooled(std::string_view url,
+                                                  std::string_view user_agent,
+                                                  std::string* err,
+                                                  std::string* final_url) {
+  return get_follow(url, user_agent, err, final_url, true);
 }
 
 namespace {

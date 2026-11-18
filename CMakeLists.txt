@@ -222,6 +222,7 @@ add_executable(xanatoo
   src/cli.cpp
   src/paths.cpp
   src/http_url.cpp
+  src/http_framing.cpp
   src/version.cpp
   src/gemini.cpp
   src/gopher.cpp
@@ -857,6 +858,10 @@ add_executable(xanatoo_http_url_tests
 )
 target_include_directories(xanatoo_http_url_tests PRIVATE include)
 add_test(NAME http_url_tests COMMAND xanatoo_http_url_tests)
+add_executable(xanatoo_http_framing_tests
+  tests/http_framing_tests.cpp src/http_framing.cpp)
+target_include_directories(xanatoo_http_framing_tests PRIVATE include)
+add_test(NAME http_framing_tests COMMAND xanatoo_http_framing_tests)
 add_executable(xanatoo_gemini_tofu_tests
   tests/gemini_tofu_tests.cpp src/gemini_tofu.cpp)
 target_include_directories(xanatoo_gemini_tofu_tests PRIVATE include)

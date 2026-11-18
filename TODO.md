@@ -2,6 +2,21 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Image loading order and keep-alive
+
+- Remote images on screen jump the download queue (`want_image_now` from
+  the placeholders and the gallery viewer); before, the queue was plain
+  document order, so the end of a 300-image 4chan thread waited ~16 s and
+  then filled all at once. Now ~0.5 s (Xvfb, cold cache).
+- Image downloads reuse HTTP(S) connections (`https_get_follow_pooled`,
+  `HttpResponseFraming`): the whole thread loads in ~4 s instead of ~15 s.
+  Checked against a local server sending chunked / Content-Length bodies
+  and dropping reused connections (retried fresh, files byte-identical).
+- Relayouts after image arrivals are batched (≤ one per 150 ms).
+- Not done: thumtoo's thumbnail queue has no on-screen priority (it kept
+  up with the downloads in tests); other HTTP clients still use one
+  connection per request; downloads of a page left behind keep running.
+
 ## Status (2026-11-18) — Pictures for image addresses in text
 
 - Bare image URLs in text (Lemmy `pictrs` links and the like) and links

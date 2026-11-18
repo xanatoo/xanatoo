@@ -170,6 +170,14 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
   return https_get(url, agent, err);
 }
 
+// The browser reuses its connections by itself.
+std::optional<HttpResult> https_get_follow_pooled(std::string_view url,
+                                                  std::string_view agent,
+                                                  std::string* err,
+                                                  std::string* final_url) {
+  return https_get_follow(url, agent, err, final_url);
+}
+
 bool https_get_follow_stream(std::string_view url, std::string_view agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,

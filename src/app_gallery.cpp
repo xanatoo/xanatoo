@@ -421,6 +421,7 @@ void draw_gallery_image(App& app, int pi) {
            " · " + std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%";
   } else {
     const bool remote = xanatoo::is_remote_image(item->src);
+    if (img.pending && remote) want_image_now(app, item->src);
     const ImageLoadState st = img.pending && remote
                                   ? image_load_state(app, item->src)
                                   : ImageLoadState{};

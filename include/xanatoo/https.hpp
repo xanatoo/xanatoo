@@ -80,4 +80,12 @@ std::optional<HttpResult> https_get_follow(std::string_view url,
                                            std::string* err = nullptr,
                                            std::string* final_url = nullptr);
 
+// https_get_follow over kept-alive connections (a few idle ones per host,
+// shared by all threads, closed after 20 s): for many small requests to one
+// server, such as the image fetcher's. Blocks SIGPIPE in the calling thread
+// (a write to a connection the server closed then fails instead).
+std::optional<HttpResult> https_get_follow_pooled(
+    std::string_view url, std::string_view user_agent,
+    std::string* err = nullptr, std::string* final_url = nullptr);
+
 }  // namespace xanatoo

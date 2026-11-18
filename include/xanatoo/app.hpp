@@ -1183,6 +1183,11 @@ struct App {
   uint64_t next_fetch_id = 1;
   std::shared_ptr<ImageFetchShared> image_fetch =
       std::make_shared<ImageFetchShared>();
+  // Waiting remote images drawn this frame (want_image_now), in draw order.
+  std::vector<std::string> images_on_screen;
+  // Arrived images not yet relaid out, and when the last such relayout ran.
+  bool image_relayout_due = false;
+  Uint32 image_relayout_at = 0;
   // Fixed-layout page tiles (app_pagetiles.cpp): loaders, views, textures.
   std::shared_ptr<PageTiles> page_tiles;
   std::vector<CachedPage> page_cache;
@@ -1861,9 +1866,13 @@ void draw_page_tiles(App& app, int pi, const SDL_Rect& clip, float draw_scroll);
 void release_page_tiles(App& app);
 
 // ---- remote images (app_images.cpp) ----
-// Start downloads ImageCache asked for and apply finished ones (relayout).
-// Once per frame, after layout.
+// Start downloads ImageCache asked for and apply finished ones (relayout,
+// at most every 150 ms while images keep arriving). Once per
+// frame, after layout. Images marked with want_image_now jump the queue.
 void poll_images(App& app);
+// Remote image `url` is on screen and still waiting: the next poll_images
+// moves it to the front of the download queue (main thread, every frame).
+void want_image_now(App& app, const std::string& url);
 // Download state of remote image `url` (main thread).
 ImageLoadState image_load_state(App& app, const std::string& url);
 // Progress over the visible image placeholders of view `pi` (still

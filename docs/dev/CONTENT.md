@@ -244,9 +244,15 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - An Image whose `src` has `has_image_fetch_scheme` (http(s), gemini,
   spartan, gopher, nex) is remote: `ImageCache` never fetches,
   it queues the URL (`take_requests`) and returns a `pending` placeholder;
-  `poll_images` (app_images.cpp) downloads it (`https_get_follow`, or the
-  small-net client in `fetch_smallnet_image`), stores it with
-  `store_remote_image` and calls `remote_done`.
+  `poll_images` (app_images.cpp) downloads it on 4 workers
+  (`https_get_follow_pooled`: kept-alive connections, or the small-net
+  client in `fetch_smallnet_image`), stores it with `store_remote_image`
+  and calls `remote_done`.
+- Queue order: document order (layout asks for every image of a page), but
+  waiting images that are drawn (`draw_image_loading`, the `//gallery`
+  viewer) call `want_image_now`, and the next `poll_images` moves them to
+  the front, so a view far down a long thread fills first. Arrivals share
+  one relayout at most every 150 ms (`kImageRelayoutMs`).
 - Small-net pages that are pictures: `show_fetched_image` (app_fetch.cpp)
   sniffs the bytes with `looks_like_image` (Nex answers, Gopher binary items
   such as `I` / `g`, Gemini / Spartan answers with a non-text MIME type),
