@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Plan (2026-11-18) — Browsing history graph, snapshots, shared SQLite
+
+- Plan only, nothing implemented: `docs/HISTORY.md`. Untangled into
+  A shared SQLite layer (WAL, busy timeout, `user_version` migrations,
+  `data_version` refresh across processes), B visit graph (visits as nodes,
+  `source` visit + link kind as edge), C History panel as a time-ordered
+  `git log --graph` trail tree, D observations (etag / last-modified /
+  raw hash / canonical text hash per fetch), E snapshots in revstore's
+  content-addressed objects (bookmarks first, `address@observation`,
+  Wayback fallback), F `history:graph` view with page thumbnails.
+- Next: step 1 (`sqlite_db.hpp`, port the three stores), step 2 (URL ring
+  + bookmarks into SQLite: today two processes clobber each other's text
+  files), then B+D recording, then C.
+
 ## Status (2026-11-18) — Help panel
 
 - Shift+F1 / Panels → Help Panel: a dockable panel (docked right) explaining
