@@ -292,6 +292,13 @@ float LayoutEngine::clear_floats(float x, float w, float y) const {
   return out;
 }
 
+void LayoutEngine::contain_floats(size_t first, float& y) {
+  if (first >= floats_.size()) return;
+  for (size_t i = first; i < floats_.size(); ++i)
+    y = std::max(y, floats_[i].bottom);
+  floats_.resize(first);
+}
+
 void LayoutEngine::layout_children_sequential(
     const Document& doc, const std::vector<NodeId>& children, float x, float& y,
     float max_width, LayoutResult& out) {
@@ -1168,7 +1175,11 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         if (article) gap(after(BlockRole::Article));
         break;
       }
+      const size_t first_float = floats_.size();
       layout_children_sequential(doc, body, x + inset, y, max_width - inset, out);
+      // An Article holds its floats (its page gap must not run under one);
+      // sections let an infobox float on past their end.
+      if (article) contain_floats(first_float, y);
       y += after(BlockRole::Section);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       if (article) gap(after(BlockRole::Article));
@@ -1402,8 +1413,12 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         if (bs.has_color) g.color = bs.color;
       }
       y += 4.f;
+      // A message card holds its pictures: a floated thumbnail never runs
+      // into the next message.
+      const size_t first_float = floats_.size();
       for (NodeId child : node.children)
         layout_node(doc, child, body_x, y, body_w, out);
+      contain_floats(first_float, y);
       out.message_cards.push_back(
           {{id, x + indent, start_y, max_width - indent, y - start_y},
            alt_card});

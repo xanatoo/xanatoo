@@ -4534,6 +4534,39 @@ void test_inline_images_and_asides() {
     EXPECT_EQ(aligned.get(ak[1]).float_side, "left");
   }
 
+  // A message card (and an Article) holds its floated thumbnail: the next
+  // message starts below the picture, not beside it (4chan posts).
+  for (NodeKind box : {NodeKind::Message, NodeKind::Article}) {
+    Document chan;
+    NodeId croot = chan.create(NodeKind::Document);
+    NodeId cthread = chan.create(NodeKind::Thread, croot);
+    NodeId first = chan.create(box, cthread);
+    chan.get(first).src = "Anonymous";
+    NodeId thumb = chan.create(NodeKind::Image, first);
+    chan.get(thumb).src = "thumb.png";
+    chan.get(thumb).float_side = "left";
+    chan.append_text(chan.create(NodeKind::Paragraph, first), "short");
+    NodeId second = chan.create(box, cthread);
+    chan.get(second).src = "Anonymous";
+    chan.append_text(chan.create(NodeKind::Paragraph, second), "next");
+    auto find_box = [](const LayoutResult& l, NodeId id) -> const LayoutBox* {
+      for (const auto& b : l.boxes) if (b.node == id) return &b;
+      return nullptr;
+    };
+    LayoutResult cl = engine.layout(chan, 900.f);
+    const PositionedImage* pic = nullptr;
+    for (const auto& im : cl.images)
+      if (im.node == thumb) pic = &im;
+    const LayoutBox* fb = find_box(cl, first);
+    const LayoutBox* sb = find_box(cl, second);
+    EXPECT(pic && fb && sb);
+    if (pic && fb && sb) {
+      EXPECT(pic->height > 100.f);  // the placeholder: taller than "short"
+      EXPECT(fb->y + fb->height >= pic->y + pic->height);
+      EXPECT(sb->y >= pic->y + pic->height);
+    }
+  }
+
   // HTML spans are table-wide: a cell covers slots in subsequent rows,
   // and rowspan=0 ends at the current row group, not the next tbody.
   Document spans;

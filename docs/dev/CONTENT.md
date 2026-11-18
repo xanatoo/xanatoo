@@ -175,6 +175,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `placement float` is the HTML-compatible float: floats live in
   `LayoutEngine::floats_` for one layout() call, text lines take the band
   `float_band` leaves free, boxed blocks (`clears_floats`) start below.
+  Message cards and Articles hold their floats (`contain_floats`, like
+  CSS `display: flow-root`): they grow to the picture's bottom and the
+  float ends with them; Sections do not (an infobox floats on past them).
   Never let a block that draws a full-width fill run under a float.
 - Side box text uses `LayoutEngine::small_` (`FontRole::Small*`,
   `small_role`) and `ctx_role_` (the box role's text colour); never

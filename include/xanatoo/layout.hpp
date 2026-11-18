@@ -378,6 +378,9 @@ private:
   void float_band(float top, float bottom, float& x, float& w) const;
   // y below every float that reaches into [x, x + w) at y.
   float clear_floats(float x, float w, float y) const;
+  // A box that contains its floats (CSS `display: flow-root`): y below the
+  // floats added since `first`, which then end with the box.
+  void contain_floats(size_t first, float& y);
   void layout_aside(const Document& doc, const Node& node, float x, float& y,
                     float max_width, LayoutResult& out);
   // Page margins of the current layout() call: [x, x + w) left of and
