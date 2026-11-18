@@ -231,8 +231,12 @@ page//gallery#item:7             the grid, scrolled to the 7th card
   the same view, with a history entry; Back returns to the page. Stepping
   (←/→, swipe, edge zones) replaces that entry instead of adding one, so Back
   never walks through the images one by one.
-- Up (Esc): image → grid at its card → the page at what the gallery was of
-  (`page//id:photos//gallery` → `page#photos`). View → Image Gallery
+- Up (Esc, the toolbar Up, the top strip): image → straight back to the
+  page, scrolled to the image when the gallery was of the whole page or one
+  collection (`gallery_up_address`); otherwise the page at what the gallery
+  was of (`page//id:photos//gallery` → `page#photos`). The grid is not a
+  level on the way: the image view's top-right button (or `g`) opens it as
+  `page//gallery#item:N`, and Up from there goes to the page as well. View → Image Gallery
   (Ctrl+Alt+I) toggles it for what the view shows.
 - An http(s) image address on its own (`is_image_address`) is a page of
   just that image (`image_url_document`) and opens as

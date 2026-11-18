@@ -1826,6 +1826,10 @@ void apply_gallery_locator(App& app, int pi, xanatoo::Locator loc, bool keep);
 GalleryView* pane_gallery(Pane& p);
 // The pane shows a single gallery image (not the grid).
 bool pane_image_view(const Pane& p);
+// Up from a single image: the page it is in, at the image when the gallery
+// was of the whole page or one collection (the grid is the corner button /
+// `g`). "" when the pane shows no single image.
+std::string gallery_up_address(App& app, Pane& p);
 // Navigate pane `pi` to `//gallery//item:N` of the page it shows, with the
 // pipes `scope_pipes` before `//gallery` (a cut or a Collection).
 void open_gallery_item(App& app, int pi,

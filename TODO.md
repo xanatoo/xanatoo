@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-18) — Gallery: Up goes straight back to the page
+
+- Up from `page//gallery//item:N` (Esc, toolbar Up, the top strip) now
+  returns to the page, at the image (`gallery_up_address`) when the gallery
+  was of the whole page or one collection; `locator_up` drops
+  `//gallery//item:N` in one step. The grid is a button in the image view's
+  top-right corner (or `g`) → `page//gallery#item:N`.
+
 ## Status (2026-11-18) — Image loading progress
 
 - Image placeholders in documents show "Loading image…" with bytes and a

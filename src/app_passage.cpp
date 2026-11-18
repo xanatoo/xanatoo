@@ -440,7 +440,7 @@ void apply_gallery_locator(App& app, int pi, xanatoo::Locator loc, bool keep) {
   p.layout = {};
   drop_height_hints_for_buf(app, p.buf);
   if (point >= 0 && static_cast<size_t>(point) < gv.cards.size()) {
-    // Back from an image: the grid at its card.
+    // From an image (its grid button): the grid at its card.
     const xanatoo::Selection home = p.sel;
     force_full_pane_layout(app, p);
     p.sel.focus = {gv.cards[static_cast<size_t>(point)], 0, 0};

@@ -3516,11 +3516,16 @@ void test_gallery() {
   EXPECT(l.pipes[2].kind == SelectorKind::Item);
   EXPECT_EQ(l.pipes[2].value, "3");
   EXPECT_EQ(format_locator(l), "book.md//id:photos//gallery//item:3");
-  // Up: image → grid at its card → the cut it was the gallery of.
-  EXPECT(xanatoo::locator_up(l));
-  EXPECT_EQ(format_locator(l), "book.md//id:photos//gallery#item:3");
+  // Up: image → straight to the cut it was the gallery of (the grid is
+  // not a level of its own); grid at its card → the same.
   EXPECT(xanatoo::locator_up(l));
   EXPECT_EQ(format_locator(l), "book.md#photos");
+  l = parse_locator("book.md//id:photos//gallery#item:3");
+  EXPECT(xanatoo::locator_up(l));
+  EXPECT_EQ(format_locator(l), "book.md#photos");
+  l = parse_locator("book.md//gallery//item:2");
+  EXPECT(xanatoo::locator_up(l));
+  EXPECT_EQ(format_locator(l), "book.md");
   l = parse_locator("https://example.org/a//gallery");
   EXPECT_EQ(l.base, "https://example.org/a");
   EXPECT(l.pipes.size() == 1 && l.pipes[0].kind == SelectorKind::Gallery);

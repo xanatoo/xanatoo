@@ -405,6 +405,14 @@ std::string format_locator(const Locator& loc) {
 }
 
 bool locator_up(Locator& loc) {
+  // A single image: straight back to the page, at what the gallery was of
+  // (the grid is a corner button, not a level of its own).
+  if (const size_t n = loc.pipes.size();
+      n >= 2 && loc.pipes[n - 1].kind == SelectorKind::Item &&
+      loc.pipes[n - 2].kind == SelectorKind::Gallery) {
+    loc.pipes.pop_back();
+    loc.point.reset();
+  }
   // The grid (at an image): the page, at what the gallery was of.
   if (!loc.pipes.empty() && loc.pipes.back().kind == SelectorKind::Gallery &&
       (!loc.point || loc.point->kind == SelectorKind::Item)) {

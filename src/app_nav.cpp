@@ -572,6 +572,7 @@ std::string home_page(App& app) {
 
 std::string page_up_url(App& app) {
   Pane& fp = focused_pane(app);
+  if (std::string g = gallery_up_address(app, fp); !g.empty()) return g;
   // Out of a passage first: its context needs no load.
   if (xanatoo::Locator loc = xanatoo::parse_locator(pane_address(app, fp));
       xanatoo::locator_up(loc))

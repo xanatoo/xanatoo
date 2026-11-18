@@ -38,16 +38,24 @@ const xanatoo::GalleryItem* current_item(Pane& p) {
 }
 
 // Edge zones: narrow full-height sides step, the middle of the top strip
-// goes back to the grid.
-enum class Zone { None, Up, Prev, Next };
+// goes up to the page, the button in the top right corner to the grid.
+enum class Zone { None, Up, Prev, Next, Grid };
 int side_width(const SDL_Rect& r) {
   return std::min(std::max(40, r.w / 8), std::max(1, r.w / 3));
 }
 int top_height(const SDL_Rect& r) { return std::max(48, r.h / 7); }
 
-Zone zone_at(const Pane& p, int x, int y) {
+// The grid button, in the top right corner (over the Next strip).
+SDL_Rect grid_button(const App& app, const SDL_Rect& r) {
+  const int d = static_cast<int>(36.f * app.ui_scale);
+  const int m = static_cast<int>(8.f * app.ui_scale);
+  return {r.x + r.w - m - d, r.y + m, d, d};
+}
+
+Zone zone_at(const App& app, const Pane& p, int x, int y) {
   const SDL_Rect r = view_rect(p);
   if (!in_rect(r, x, y)) return Zone::None;
+  if (in_rect(grid_button(app, r), x, y)) return Zone::Grid;
   const int side = side_width(r);
   if (x - r.x < side) return Zone::Prev;
   if (x - r.x >= r.w - side) return Zone::Next;
@@ -97,11 +105,28 @@ const xanatoo::Image* loaded_image(App& app, Pane& p) {
   return &img;
 }
 
-// Up out of the single image: the grid, at its card.
+// Up out of the gallery: the page (gallery_up_address), else one level.
 void gallery_up(App& app, int pi) {
-  xanatoo::Locator loc = xanatoo::parse_locator(pane_address(app, app.panes[pi]));
-  if (xanatoo::locator_up(loc))
-    navigate_pane(app, pi, xanatoo::format_locator(loc), true);
+  std::string to = gallery_up_address(app, app.panes[pi]);
+  if (to.empty()) {
+    xanatoo::Locator loc =
+        xanatoo::parse_locator(pane_address(app, app.panes[pi]));
+    if (!xanatoo::locator_up(loc)) return;
+    to = xanatoo::format_locator(loc);
+  }
+  navigate_pane(app, pi, to, true);
+}
+
+// The single image's grid: `//gallery#item:N`.
+void gallery_grid(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  if (!pane_image_view(p)) return;
+  xanatoo::Locator loc = xanatoo::parse_locator(pane_address(app, p));
+  if (loc.pipes.empty() || loc.pipes.back().kind != xanatoo::SelectorKind::Item)
+    return;
+  loc.point = std::move(loc.pipes.back());
+  loc.pipes.pop_back();
+  navigate_pane(app, pi, xanatoo::format_locator(loc), true);
 }
 
 void toggle_window_fullscreen(App& app) {
@@ -117,7 +142,40 @@ int image_view_at(App& app, int x, int y) {
   return in_rect(view_rect(app.panes[pi]), x, y) ? pi : -1;
 }
 
+// A 3×3 grid of squares on a dark disc-ish square; brighter when hovered.
+void draw_grid_button(App& app, const SDL_Rect& b, bool hot) {
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(app.sdl, 0, 0, 0, hot ? 190 : 120);
+  xanatoo::sdl::fill_rect(app.sdl, &b);
+  const int inset = b.w / 4;
+  const int cell = std::max(2, (b.w - 2 * inset) / 3);
+  const int gap = std::max(1, cell / 4);
+  const int sq = std::max(1, cell - gap);
+  const Uint8 c = hot ? 250 : 200;
+  SDL_SetRenderDrawColor(app.sdl, c, c, c, 255);
+  for (int row = 0; row < 3; ++row)
+    for (int col = 0; col < 3; ++col) {
+      const SDL_Rect r{b.x + inset + col * cell, b.y + inset + row * cell, sq,
+                       sq};
+      xanatoo::sdl::fill_rect(app.sdl, &r);
+    }
+}
+
 }  // namespace
+
+std::string gallery_up_address(App& app, Pane& p) {
+  if (!pane_image_view(p)) return {};
+  xanatoo::Locator loc = xanatoo::parse_locator(pane_address(app, p));
+  if (!xanatoo::locator_up(loc)) return {};
+  // The whole page: at the image itself, not just the collection it is in.
+  const xanatoo::GalleryItem& item =
+      p.gallery.items[static_cast<size_t>(p.gallery.index)];
+  const xanatoo::Document& d = buf(app, p.buf).doc;
+  if (loc.pipes.empty() && item.node != xanatoo::INVALID_NODE &&
+      item.node <= d.nodes.size())
+    loc.point = xanatoo::node_selector(d, item.node);
+  return xanatoo::format_locator(loc);
+}
 
 GalleryView* pane_gallery(Pane& p) {
   if (p.gallery.buf == kNoBuffer || p.gallery.buf != p.buf ||
@@ -209,8 +267,9 @@ bool gallery_pointer_down(App& app, int pi, int x, int y, int button) {
   app.key_focus = KeyFocus::Document;
   if (button != SDL_BUTTON_LEFT) return true;
   GalleryView& gv = app.panes[pi].gallery;
-  switch (zone_at(app.panes[pi], x, y)) {
+  switch (zone_at(app, app.panes[pi], x, y)) {
     case Zone::Up: gallery_up(app, pi); break;
+    case Zone::Grid: gallery_grid(app, pi); break;
     case Zone::Prev: gallery_step(app, pi, -1); break;
     case Zone::Next: gallery_step(app, pi, 1); break;
     case Zone::None:
@@ -270,6 +329,9 @@ bool gallery_key(App& app, SDL_Keycode key, bool ctrl, bool alt, bool shift) {
     case SDLK_ESCAPE:
     case SDLK_q:
       gallery_up(app, pi);
+      break;
+    case SDLK_g:
+      gallery_grid(app, pi);
       break;
     case SDLK_RIGHT:
     case SDLK_DOWN:
@@ -392,7 +454,7 @@ void draw_gallery_image(App& app, int pi) {
   const std::string counter = std::to_string(gv.index + 1) + " / " +
                               std::to_string(gv.items.size());
   const std::string hint =
-      "←/→ step · wheel / pinch / + − zoom · 0 fit · 1 100% · drag pan · Esc grid";
+      "←/→ step · wheel / pinch / + − zoom · 0 fit · 1 100% · drag pan · g grid · Esc page";
   const int base_y = bot - bottom + pad / 2 + font.ascender();
   std::string caption =
       item->caption.empty()
@@ -418,9 +480,10 @@ void draw_gallery_image(App& app, int pi) {
   // Hover hints: the edge zone under the pointer shows its icon.
   int mx = 0, my = 0;
   xanatoo::sdl::mouse_position(&mx, &my);
-  const Zone z = image_view_at(app, mx, my) == pi ? zone_at(p, mx, my)
+  const Zone z = image_view_at(app, mx, my) == pi ? zone_at(app, p, mx, my)
                                                   : Zone::None;
-  if (z != Zone::None) {
+  draw_grid_button(app, grid_button(app, all), z == Zone::Grid);
+  if (z != Zone::None && z != Zone::Grid) {
     const int side = side_width(all);
     SDL_Rect zr;
     const char* glyph;
