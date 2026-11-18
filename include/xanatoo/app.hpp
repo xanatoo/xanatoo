@@ -881,8 +881,9 @@ struct App {
   // the sheets found in style_dirs() for the toolbar / View menu.
   xanatoo::DocStyle style;
   std::vector<xanatoo::StyleEntry> styles;
-  // White radial glow (alpha only), stretched under gallery edge-zone icons.
-  SDL_Texture* gallery_glow = nullptr;
+  // White radial glows (alpha only) from the top / left / right edge,
+  // stretched under gallery edge-zone icons.
+  SDL_Texture* gallery_glow[3] = {};
   // Body font file: --font beats the sheet's body family, which beats
   // XANATOO_FONT (a packaging default, e.g. the Nix wrapper).
   std::string font_path;      // --font

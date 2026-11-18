@@ -49,7 +49,7 @@ int side_width(const SDL_Rect& r) {
 // The Up strip: thin, so it hides little of the picture (or the grid's
 // first row) under it; `inset` is left free at both ends.
 SDL_Rect up_strip(const App& app, const SDL_Rect& r, int inset) {
-  const int h = std::max(16, static_cast<int>(22.f * app.ui_scale));
+  const int h = std::max(32, static_cast<int>(44.f * app.ui_scale));
   return {r.x + inset, r.y, std::max(1, r.w - 2 * inset), std::min(h, r.h)};
 }
 
@@ -171,17 +171,29 @@ int image_view_at(App& app, int x, int y) {
   return in_rect(view_rect(app.panes[pi]), x, y) ? pi : -1;
 }
 
-// The glow texture: white, alpha falling off from the middle of its top
-// edge (an ellipse touching the other three edges), smooth to zero.
-SDL_Texture* glow_texture(App& app) {
-  if (app.gallery_glow) return app.gallery_glow;
-  constexpr int W = 128, H = 48;
+// The glow textures: white, alpha falling off from the middle of one edge
+// (top for Up, left / right for Prev / Next; an ellipse touching the other
+// three edges), smooth to zero.
+enum class GlowEdge { Top = 0, Left = 1, Right = 2 };
+SDL_Texture* glow_texture(App& app, GlowEdge edge) {
+  SDL_Texture*& slot = app.gallery_glow[static_cast<int>(edge)];
+  if (slot) return slot;
+  const bool top = edge == GlowEdge::Top;
+  const int W = top ? 128 : 48, H = top ? 48 : 128;
   std::vector<Uint8> px(static_cast<size_t>(W * H * 4));
   for (int y = 0; y < H; ++y)
     for (int x = 0; x < W; ++x) {
-      const float dx = (x + 0.5f - W / 2.f) / (W / 2.f);
-      const float dy = (y + 0.5f) / static_cast<float>(H);
-      const float t = std::max(0.f, 1.f - std::sqrt(dx * dx + dy * dy));
+      float along, depth;  // along the edge (-1..1), away from it (0..1)
+      if (top) {
+        along = (x + 0.5f - W / 2.f) / (W / 2.f);
+        depth = (y + 0.5f) / static_cast<float>(H);
+      } else {
+        along = (y + 0.5f - H / 2.f) / (H / 2.f);
+        const float fx = (x + 0.5f) / static_cast<float>(W);
+        depth = edge == GlowEdge::Left ? fx : 1.f - fx;
+      }
+      const float t =
+          std::max(0.f, 1.f - std::sqrt(along * along + depth * depth));
       Uint8* q = &px[static_cast<size_t>((y * W + x) * 4)];
       q[0] = q[1] = q[2] = 255;
       q[3] = static_cast<Uint8>(255.f * t * t * (3.f - 2.f * t) + 0.5f);
@@ -191,26 +203,45 @@ SDL_Texture* glow_texture(App& app) {
   if (!t) return nullptr;
   SDL_UpdateTexture(t, nullptr, px.data(), W * 4);
   SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
-  app.gallery_glow = t;
+  slot = t;
   return t;
 }
 
-// The hovered Up strip: a radial glow hanging from the top edge with ▲ in
-// its middle (nothing while the pointer is elsewhere).
-void draw_up_strip(App& app, const SDL_Rect& strip) {
-  if (SDL_Texture* glow = glow_texture(app)) {
-    // Taller than the strip so the light fades out just below it.
-    const SDL_Rect dst{strip.x, strip.y, strip.w, strip.h * 2};
+// A glow over `dst` hanging from `edge`, with `glyph` centred in `band`
+// (the part of it nearest the edge).
+void draw_glow(App& app, GlowEdge edge, const SDL_Rect& dst,
+               const SDL_Rect& band, const std::string& glyph) {
+  if (SDL_Texture* glow = glow_texture(app, edge)) {
     SDL_SetTextureAlphaMod(glow, 110);
     xanatoo::sdl::copy(app.sdl, glow, nullptr, &dst);
   }
   xanatoo::Font& font = app.ui_font;
-  const std::string g = "▲";
-  const float gx = static_cast<float>(strip.x + (strip.w - font.measure(g)) / 2);
-  const float gy = static_cast<float>(strip.y + (strip.h - font.line_height()) / 2 +
+  const float gx = static_cast<float>(band.x + (band.w - font.measure(glyph)) / 2);
+  const float gy = static_cast<float>(band.y + (band.h - font.line_height()) / 2 +
                                       font.ascender());
-  app.renderer.draw_text(font, gx + 1.f, gy + 1.f, g, 0, 0, 0);
-  app.renderer.draw_text(font, gx, gy, g, 250, 250, 250);
+  app.renderer.draw_text(font, gx + 1.f, gy + 1.f, glyph, 0, 0, 0);
+  app.renderer.draw_text(font, gx, gy, glyph, 250, 250, 250);
+}
+
+// The hovered Up strip: a radial glow hanging from the top edge with ▲ in
+// its middle (nothing while the pointer is elsewhere); taller than the strip
+// so the light fades out just below it.
+void draw_up_strip(App& app, const SDL_Rect& strip) {
+  draw_glow(app, GlowEdge::Top, {strip.x, strip.y, strip.w, strip.h * 2},
+            strip, "▲");
+}
+
+// The hovered Prev / Next zone: the same glow, as deep as the Up one, from
+// the middle of the view's left or right edge, with ◀ / ▶.
+void draw_side_glow(App& app, const SDL_Rect& all, bool next) {
+  const int band = up_strip(app, all, 0).h;
+  const int depth = band * 2;
+  const int len = std::max(1, std::min(all.h, depth * 4));
+  const int x = next ? all.x + all.w - depth : all.x;
+  const int y = all.y + (all.h - len) / 2;
+  const SDL_Rect bx{next ? all.x + all.w - band : all.x, y, band, len};
+  draw_glow(app, next ? GlowEdge::Right : GlowEdge::Left, {x, y, depth, len},
+            bx, next ? "▶" : "◀");
 }
 
 // A 3×3 grid of squares on a dark disc-ish square; brighter when hovered.
@@ -248,8 +279,10 @@ GalleryStyleScope::~GalleryStyleScope() {
 }
 
 void release_gallery_textures(App& app) {
-  if (app.gallery_glow) SDL_DestroyTexture(app.gallery_glow);
-  app.gallery_glow = nullptr;
+  for (SDL_Texture*& t : app.gallery_glow) {
+    if (t) SDL_DestroyTexture(t);
+    t = nullptr;
+  }
 }
 
 void draw_gallery_grid_chrome(App& app, int pi) {
@@ -592,24 +625,8 @@ void draw_gallery_image(App& app, int pi) {
                                                   : Zone::None;
   draw_grid_button(app, grid_button(app, all), z == Zone::Grid);
   if (z == Zone::Up) draw_up_strip(app, up_strip(app, all, side_width(all)));
-  if (z == Zone::Prev || z == Zone::Next) {
-    const int side = side_width(all);
-    const SDL_Rect zr{z == Zone::Prev ? all.x : all.x + all.w - side, all.y,
-                      side, all.h};
-    const char* glyph = z == Zone::Prev ? "◀" : "▶";
-    SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(app.sdl, 255, 255, 255, 22);
-    xanatoo::sdl::fill_rect(app.sdl, &zr);
-    const int d = static_cast<int>(40.f * app.ui_scale);
-    const int cx = zr.x + zr.w / 2, cy = zr.y + zr.h / 2;
-    SDL_Rect bg{cx - d / 2, cy - d / 2, d, d};
-    SDL_SetRenderDrawColor(app.sdl, 0, 0, 0, 150);
-    xanatoo::sdl::fill_rect(app.sdl, &bg);
-    const std::string g = glyph;
-    app.renderer.draw_text(
-        font, static_cast<float>(cx - font.measure(g) / 2),
-        static_cast<float>(cy - line / 2 + font.ascender()), g, 240, 240, 240);
-  }
+  if (z == Zone::Prev || z == Zone::Next)
+    draw_side_glow(app, all, z == Zone::Next);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 }
 

@@ -236,7 +236,9 @@ page//gallery#item:7             the grid, scrolled to the 7th card
   the same view, with a history entry; Back returns to the page. Stepping
   (←/→, swipe, edge zones) replaces that entry instead of adding one, so Back
   never walks through the images one by one.
-- Up (Esc, the toolbar Up, the top strip — a thin band in the middle of the
+- The Prev / Next edge zones light up the same way on hover: a radial glow
+  from the middle of the left / right edge with ◀ / ▶.
+- Up (Esc, the toolbar Up, the top strip — a band in the middle of the
   view's top edge, in the grid as well, lit by a radial glow and ▲ while
   hovered): image → straight back to the
   page, scrolled to the image when the gallery was of the whole page or one
