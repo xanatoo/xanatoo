@@ -130,6 +130,8 @@ let
       APP_SRC_DIR = "${appSrc}";
       FREETYPE_SRC = "${pkgs.freetype.src}";
       DEJAVU_DIR = "${pkgs.dejavu_fonts}/share/fonts/truetype";
+      # Mozilla's roots (follows nixpkgs); old Android stores lack ISRG Root X1.
+      CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       FREETYPE_MK = "${../mk/android/freetype/Android.mk}";
       SQLITE_SRC = sqliteAmalgamation;
       SQLITE_MK = "${../mk/android/sqlite/Android.mk}";

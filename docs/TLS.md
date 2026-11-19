@@ -33,8 +33,17 @@ falling back to plaintext.
   `NIX_SSL_CERT_FILE`, followed by common Linux CA bundles; if none exist,
   attempts `SSL_CERT_DIR`, Android Conscrypt's
   `/apex/com.android.conscrypt/cacerts`, `/system/etc/security/cacerts`, then
-  `/etc/ssl/certs`. The parsed roots are cached across connections. This
-  requires a build with `MBEDTLS_FS_IO` enabled.
+  `/etc/ssl/certs`. Then it adds the bundled Mozilla roots from
+  `data_file("certs/ca-bundle.crt")` when present (the APK ships nixpkgs'
+  `cacert`): old Android stores are frozen — Android 5 lacks ISRG Root X1
+  (Let's Encrypt, added in 7.1.1), and Mbed TLS checks the expired DST Root
+  CA X3 cross-sign strictly, unlike Android's Java stack. The parsed roots
+  are cached across connections. This requires a build with `MBEDTLS_FS_IO`
+  enabled.
+- **Mbed TLS errors** spell out the verify flags ("not correctly signed by
+  the trusted CA", "validity has expired", "CN does not match", "validity
+  starts in the future" — a wrong device clock) and, for an untrusted
+  chain, the issuer it ends at, i.e. the missing root.
 
 ## Gemini trust on first use
 

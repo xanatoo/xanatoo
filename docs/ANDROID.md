@@ -93,7 +93,9 @@ ClientHello). The Android module builds with `MBEDTLS_NO_PLATFORM_ENTROPY` +
 HTTPS and Nostr WSS now verify the certificate chain and requested hostname;
 the Mbed TLS backend loads Android CA files from
 `/apex/com.android.conscrypt/cacerts` or `/system/etc/security/cacerts`
-(and desktop/Nix CA bundle paths). If the system CA store cannot be read,
+(and desktop/Nix CA bundle paths), plus the bundled Mozilla roots in the
+APK's `certs/ca-bundle.crt` (needed on Android < 7.1.1 for Let's Encrypt
+sites). If neither can be read,
 the connection fails instead of proceeding unverified. This needs device
 testing on Fire OS 5 and newer Android releases. Gemini accepts self-signed
 certificates via persistent TOFU fingerprints; first contact is unauthenticated

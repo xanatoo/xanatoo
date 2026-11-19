@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Android: bundled CA roots, verify diagnostics
+
+- Android 5 tablet: "TLS handshake failed: X509 - Certificate verification
+  failed". Its frozen store lacks ISRG Root X1 (Let's Encrypt, Android
+  7.1.1+); the DST Root CA X3 cross-sign expired 2021 and Mbed TLS checks it
+  strictly. The APK now ships nixpkgs' `cacert` as `certs/ca-bundle.crt`,
+  which `tls_mbedtls.cpp` adds to the system store.
+- Mbed TLS errors now name the verify flags (untrusted CA / expired / not
+  yet valid / CN mismatch) and, for an untrusted chain, the issuer it ends
+  at. Checked on desktop with a store minus ISRG roots (fails naming ISRG
+  Root X1, passes with the bundle) and badssl.com expired / wrong-host.
+- Open: confirm on the Android 5 tablet and Fire OS 5; the bundle follows
+  nixpkgs, so refresh the flake lock for releases.
+
 ## Status (2026-11-19) — Touch ends hover
 
 - Lifting the last finger now calls `pointer_leave`: `app.hover` is reset,

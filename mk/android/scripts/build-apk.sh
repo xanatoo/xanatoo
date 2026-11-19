@@ -14,6 +14,8 @@
 #      scripts/rasterize_icons.py, FORMAT.md), DEJAVU_DIR (TTFs bundled as
 #      fonts/: same faces as desktop, and glyphs Roboto lacks — ▸ ▾ ☐ ☑;
 #      plus data/fonts/latinmodern-math.otf for TeX math),
+#      CA_BUNDLE (Mozilla roots PEM → certs/ca-bundle.crt, added to the
+#      device store by tls_mbedtls.cpp: old Androids lack today's roots),
 #      FREETYPE_SRC (tarball), SQLITE_SRC (dir with sqlite3.c/.h), SQLITE_MK,
 #      MBEDTLS_SRC (source tree), MBEDTLS_MK, THUMTOO_MK, IMAGELIBS (dir
 #      with <abi>/lib/libimagedeps.a + <abi>/include per ABI),
@@ -93,7 +95,7 @@ chmod -R u+rwX src
 # Data files → assets/xanatoo/ + MANIFEST (stamp line, then one path per
 # line; SDL can read assets but not list them).
 A=assets/xanatoo
-mkdir -p "$A/examples" "$A/styles" "$A/icons" "$A/fonts"
+mkdir -p "$A/examples" "$A/styles" "$A/icons" "$A/fonts" "$A/certs"
 for f in DejaVuSans DejaVuSans-Bold DejaVuSans-Oblique DejaVuSans-BoldOblique \
          DejaVuSerif DejaVuSerif-Bold DejaVuSerif-Italic DejaVuSerif-BoldItalic \
          DejaVuSansMono DejaVuSansMono-Bold DejaVuSansMono-Oblique \
@@ -106,6 +108,7 @@ cp "$APP_SRC_DIR"/data/fonts/latinmodern-math.otf \
 cp -r "$APP_SRC_DIR"/examples/. "$A/examples/"
 cp "$APP_SRC_DIR"/styles/*.xss "$A/styles/"
 cp "$APP_SRC_DIR"/FORMAT.md "$A/"
+cp "$CA_BUNDLE" "$A/certs/ca-bundle.crt"
 python3 "$APP_SRC_DIR"/scripts/rasterize_icons.py "$APP_SRC_DIR"/icons/svg "$A/icons" 64
 chmod -R u+rwX assets
 files="$(cd "$A" && find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort)"

@@ -7,6 +7,8 @@
 
 #include "xanatoo/tls.hpp"
 
+#include "xanatoo/paths.hpp"
+
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/error.h>
@@ -20,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
+#include <string_view>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -84,6 +87,12 @@ std::string certificate_time(const mbedtls_x509_time& time) {
 // Loading hundreds of Android CA files once per HTTPS image/request is
 // prohibitively expensive. The parsed chain is read-only after construction
 // and shared by all verified TLS connections.
+//
+// The system store comes first; the bundled Mozilla roots
+// (data_file("certs/ca-bundle.crt"), shipped in the APK) are added on top.
+// Old Android releases froze their store years ago: Android 5 lacks ISRG
+// Root X1 (Let's Encrypt, added in 7.1.1) and Mbed TLS, unlike the platform
+// stack, rejects the expired DST Root CA X3 cross-sign.
 struct SystemTrust {
   mbedtls_x509_crt chain;
   bool available = false;
@@ -91,38 +100,38 @@ struct SystemTrust {
   SystemTrust() {
     mbedtls_x509_crt_init(&chain);
 #if defined(MBEDTLS_FS_IO)
+    if (load_system()) available = true;
+    const std::string bundled = data_file("certs/ca-bundle.crt");
+    if (!bundled.empty() &&
+        mbedtls_x509_crt_parse_file(&chain, bundled.c_str()) >= 0)
+      available = true;
+#endif
+  }
+
+#if defined(MBEDTLS_FS_IO)
+  // The first system store that parses (files, then hashed directories).
+  bool load_system() {
     for (const char* variable : {"SSL_CERT_FILE", "NIX_SSL_CERT_FILE"}) {
       const char* path = std::getenv(variable);
-      if (path && *path && mbedtls_x509_crt_parse_file(&chain, path) >= 0) {
-        available = true;
-        return;
-      }
+      if (path && *path && mbedtls_x509_crt_parse_file(&chain, path) >= 0)
+        return true;
     }
     for (const char* path : {"/etc/ssl/certs/ca-certificates.crt",
                              "/etc/ssl/cert.pem",
                              "/etc/pki/tls/certs/ca-bundle.crt"}) {
-      if (mbedtls_x509_crt_parse_file(&chain, path) >= 0) {
-        available = true;
-        return;
-      }
+      if (mbedtls_x509_crt_parse_file(&chain, path) >= 0) return true;
     }
-    for (const char* variable : {"SSL_CERT_DIR"}) {
-      const char* path = std::getenv(variable);
-      if (path && *path && mbedtls_x509_crt_parse_path(&chain, path) >= 0) {
-        available = true;
-        return;
-      }
-    }
+    if (const char* path = std::getenv("SSL_CERT_DIR");
+        path && *path && mbedtls_x509_crt_parse_path(&chain, path) >= 0)
+      return true;
     for (const char* path : {"/apex/com.android.conscrypt/cacerts",
                              "/system/etc/security/cacerts",
                              "/etc/ssl/certs"}) {
-      if (mbedtls_x509_crt_parse_path(&chain, path) >= 0) {
-        available = true;
-        return;
-      }
+      if (mbedtls_x509_crt_parse_path(&chain, path) >= 0) return true;
     }
-#endif
+    return false;
   }
+#endif
 
   ~SystemTrust() { mbedtls_x509_crt_free(&chain); }
 };
@@ -130,6 +139,34 @@ struct SystemTrust {
 SystemTrust& system_trust() {
   static SystemTrust trust;  // C++11 thread-safe initialization
   return trust;
+}
+
+// Why verification failed, for the error message: the reasons from the
+// verify flags ("not correctly signed by the trusted CA", "expired", ...)
+// and, for an untrusted chain, where it ends: the root the store lacks.
+std::string verify_detail(uint32_t flags, const std::string& chain_top) {
+  std::string out;
+  if (flags != 0) {
+    char buf[512];
+    if (mbedtls_x509_crt_verify_info(buf, sizeof(buf), "", flags) > 0) {
+      std::string_view text(buf);
+      while (!text.empty()) {
+        const size_t nl = text.find('\n');
+        const std::string_view line = text.substr(0, nl);
+        if (!line.empty()) {
+          if (!out.empty()) out += "; ";
+          out += line;
+        }
+        if (nl == std::string_view::npos) break;
+        text.remove_prefix(nl + 1);
+      }
+    }
+  }
+  if ((flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED) && !chain_top.empty()) {
+    if (!out.empty()) out += "; ";
+    out += "chain ends at issuer " + chain_top;
+  }
+  return out;
 }
 
 }  // namespace
@@ -143,6 +180,7 @@ struct TlsStream::Impl {
   bool live = false;  // contexts initialised (free them in close())
   bool ok = false;    // handshake done
   std::string last_error;
+  std::string chain_top;  // issuer of the topmost presented certificate
 };
 
 const std::string& TlsStream::last_error() const { return impl_->last_error; }
@@ -160,8 +198,11 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
   close();
   Impl& m = *impl_;
   m.fd = fd;
-  auto fail = [&](const std::string& what, int rc) {
-    if (err) *err = what + ": " + error_text(rc) + " (" + host + ")";
+  auto fail = [&](const std::string& what, int rc,
+                  const std::string& detail = {}) {
+    if (err)
+      *err = what + ": " + error_text(rc) +
+             (detail.empty() ? "" : ": " + detail) + " (" + host + ")";
     close();
     return false;
   };
@@ -196,6 +237,17 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
     }
     mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_REQUIRED);
     mbedtls_ssl_conf_ca_chain(&m.conf, &roots.chain, nullptr);
+    m.chain_top.clear();
+    mbedtls_ssl_conf_verify(
+        &m.conf,
+        [](void* ctx, mbedtls_x509_crt* crt, int, uint32_t*) {
+          // Called top of the chain first, so the first call names the root
+          // (or the last intermediate the server sent).
+          auto& top = *static_cast<std::string*>(ctx);
+          if (top.empty()) top = certificate_name(&crt->issuer);
+          return 0;
+        },
+        &m.chain_top);
   } else {
     mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_NONE);
   }
@@ -207,8 +259,15 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
   mbedtls_ssl_set_bio(&m.ssl, &m.fd, send_cb, recv_cb, nullptr);
 
   while ((rc = mbedtls_ssl_handshake(&m.ssl)) != 0) {
-    if (rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE)
-      return fail("TLS handshake failed", rc);
+    if (rc == MBEDTLS_ERR_SSL_WANT_READ || rc == MBEDTLS_ERR_SSL_WANT_WRITE)
+      continue;
+    if (rc == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
+      const std::string why =
+          verify_detail(mbedtls_ssl_get_verify_result(&m.ssl), m.chain_top);
+      if (!why.empty())
+        return fail("TLS handshake failed", rc, why);
+    }
+    return fail("TLS handshake failed", rc);
   }
   if (verify_peer && mbedtls_ssl_get_verify_result(&m.ssl) != 0) {
     if (err) *err = "TLS certificate or hostname verification failed (" + host + ")";
