@@ -385,10 +385,12 @@ void refresh_context_panel(App& app) {
   };
   auto load_remote = [&](const std::string& url) {
     // Remote images never go through fetch_page as HTML — same as navigate.
-    if (xanatoo::is_image_address(url) ||
-        (xanatoo::is_image_url(url) &&
-         (xanatoo::starts_with_ci(url, "http://") ||
-          xanatoo::starts_with_ci(url, "https://")))) {
+    // Unless the URL cache knows the address serves a page.
+    if (may_be_image(url) &&
+        (xanatoo::is_image_address(url) ||
+         (xanatoo::is_image_url(url) &&
+          (xanatoo::starts_with_ci(url, "http://") ||
+           xanatoo::starts_with_ci(url, "https://"))))) {
       show_image(url, {});
       return;
     }
@@ -506,7 +508,8 @@ void refresh_context_panel(App& app) {
         return;
       }
       // Local image file: one-image document (ImageCache loads the pixels).
-      if (xanatoo::is_image_url(t.url) || xanatoo::is_image_address(t.url)) {
+      if ((xanatoo::is_image_url(t.url) || xanatoo::is_image_address(t.url)) &&
+          may_be_image(t.url)) {
         show_image(t.url, {});
         return;
       }

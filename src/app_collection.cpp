@@ -143,7 +143,7 @@ bool click_collection_card(App& app, int pi, float lx, float my) {
       }
     // Plain document images are for editing (resize handle), not viewing.
     if (im.thumb <= 0 && link.empty()) continue;
-    if (!link.empty() && !xanatoo::is_image_url(link)) {
+    if (!link.empty() && (!xanatoo::is_image_url(link) || !may_be_image(link))) {
       navigate_to_url(app, link);
       return true;
     }
@@ -153,7 +153,8 @@ bool click_collection_card(App& app, int pi, float lx, float my) {
 }
 
 bool open_link_image(App& app, int pi, const std::string& href) {
-  if (!xanatoo::is_image_url(href)) return false;
+  // Named like a picture and not known to serve a page (url_cache_kind).
+  if (!xanatoo::is_image_url(href) || !may_be_image(href)) return false;
   // Relative links of a Gemini page are gemini:// resources.
   if (!link_base_url(app, pi).empty() && !xanatoo::starts_with_ci(href, "http"))
     return false;

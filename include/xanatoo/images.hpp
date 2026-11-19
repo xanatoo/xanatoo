@@ -24,12 +24,13 @@ struct Image {
 };
 
 // Remote (http(s) / gemini / spartan / gopher / nex) image sources are downloaded by the app's image
-// fetcher (app_images.cpp) into cache_dir()/images/ and then served like
+// fetcher (app_images.cpp) into the URL cache (url_cache.hpp,
+// cache_dir()/urls/) and then served like
 // local files. ImageCache itself never touches the network: it queues the
 // URLs it is asked for (take_requests) and reports them pending until the
 // fetcher calls remote_done.
 bool is_remote_image(std::string_view src);
-// Download target of a remote image (cache_dir()/images/<hash>).
+// Download target of a remote image: its URL cache body file.
 std::string remote_image_path(std::string_view url);
 // Write the downloaded `bytes` of `url` to its cache file (atomically, via
 // "<path>.part"); false without a cache directory or on a write error.

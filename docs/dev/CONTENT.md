@@ -294,14 +294,32 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Layout draws remote images from their `kRemoteThumbEdge` thumbnail
   (`layout_remote_image`); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: a `has_image_fetch_scheme` URL or local
-  path by extension; an image address is never fetched as a page, so no
-  Content-Type is seen: pages named like their file — MediaWiki
-  `/wiki/File:X.jpg` in any namespace / language, GitHub and GitLab
-  `blob` views — are excluded by `is_file_description_page`)
+  path by extension)
   show that image in the page's `//gallery` (`open_link_image`, checked
   before split / external handling), never the system browser; one not
   among the page's images opens as `URL//gallery//item:1`
   (`is_image_address` / `image_url_document`, `gallery.hpp`).
+- An http(s) name is only a guess ("/wiki/File:X.jpg" is a web page): the
+  answer's Content-Type decides. **URL cache** (`url_cache.hpp`): every
+  `web_fetch` answer and remote image download is kept under
+  `cache_dir()` — bytes in `urls/<FNV hash>` (also `remote_image_path`),
+  metadata (final URL, status, Content-Type, ETag, Last-Modified, time,
+  size) in `urls.sqlite`, keyed by requested and final URL.
+  `url_cache_kind` → Image / Other / Unknown (non-200 answers: Unknown).
+  - Navigation (`opens_as_image`, app_buffers.cpp): an image-named http(s)
+    address skips the fetch only when the cache says image; otherwise the
+    web fetcher loads it (`is_web_url` no longer excludes image names) and
+    an `image/*` answer (`content_type_is_image`) becomes
+    `image_url_document` read from the cache, shown as
+    `//gallery//item:1` (`finish_navigate`).
+  - Page galleries stay optimistic (`may_be_image`: anything not known as
+    Other): the image worker downloads; a text/html answer is recorded and
+    `gallery_image_was_page` sends views showing it to the page, replacing
+    the image's history entry. Next time the cache routes the link straight
+    to the page.
+  - Pruned at start: `urls/` by size (512 MiB), rows after ~6 months; the
+    old `images/` directory is emptied. Small-net images still store bytes
+    only (their fetchers sniff them).
 - No posting or secret-key management in v1. Publication transport options
   (WebDAV, static export, Nostr, IPFS) are sketched in `docs/PUBLISHING.md`.
 

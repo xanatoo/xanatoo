@@ -42,6 +42,7 @@
 #include "xanatoo/search_results.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/url_cache.hpp"
 
 namespace xanatoo::app {
 
@@ -850,8 +851,16 @@ void finish_navigate(App& app, const FetchJob& job) {
   if (job.url != r.final_url)
     note_page_seen(app, job.url, buf(app, app.panes[job.pane].buf).doc);
   jump_to_url_fragment(app, job.pane, job.url);
-  if (job.locator.has_selectors())
-    apply_locator(app, job.pane, job.locator);
+  xanatoo::Locator loc = job.locator;
+  // An image/* answer (an address that did not look like one, or was not
+  // known to be one yet): that image in its one-image gallery, as
+  // navigate_pane shows a known image address.
+  if (!http_error && !loc.has_selectors() &&
+      xanatoo::content_type_is_image(r.observed.content_type))
+    loc.pipes = {{xanatoo::SelectorKind::Gallery, {}},
+                 {xanatoo::SelectorKind::Item, xanatoo::gallery_item_value(0)}};
+  if (loc.has_selectors())
+    apply_locator(app, job.pane, loc);
   if (xanatoo::is_gemini_url(r.final_url)) {
     app.gemini_current_url = r.final_url;
     app.edit_mode = false;

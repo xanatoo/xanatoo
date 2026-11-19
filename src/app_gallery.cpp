@@ -361,6 +361,24 @@ void gallery_step(App& app, int pi, int delta, bool wrap) {
     h.entries[static_cast<size_t>(h.pos)].url = pane_address(app, p);
 }
 
+void gallery_image_was_page(App& app, const std::string& url) {
+  for (int pi : live_views(app)) {
+    Pane& p = app.panes[pi];
+    if (!pane_image_view(p) ||
+        p.gallery.items[static_cast<size_t>(p.gallery.index)].src != url)
+      continue;
+    // The click meant "go to url": its page replaces the image entry.
+    const std::string shown = pane_address(app, p);
+    NavHistory& h = p.nav;
+    if (h.pos >= 0 && h.pos < static_cast<int>(h.entries.size()) &&
+        h.entries[static_cast<size_t>(h.pos)].url == shown) {
+      h.entries.erase(h.entries.begin() + h.pos);
+      --h.pos;
+    }
+    navigate_pane(app, pi, url, /*record_history=*/true);
+  }
+}
+
 void gallery_zoom(App& app, int pi, float factor, float px, float py) {
   Pane& p = app.panes[pi];
   if (!pane_image_view(p)) return;

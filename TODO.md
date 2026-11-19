@@ -2,6 +2,29 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — URL cache: Content-Type, not the name, decides
+
+- Bug: `https://en.wikipedia.org/wiki/File:X.jpg` went to the image
+  viewer by its ".jpg" and failed (and with only `is_image_url` patched,
+  to the system browser, as `is_web_url` also refused image names).
+- New persistent URL cache (`url_cache.hpp`): bodies in
+  `cache_dir()/urls/`, metadata (status, Content-Type, ETag,
+  Last-Modified, final URL, time, size) in `cache_dir()/urls.sqlite`.
+  Every web fetch and remote image download records there; remote images
+  now live in `urls/` (old `images/` emptied by pruning).
+- Image-named http(s) addresses are fetched unless known to be images;
+  `image/*` answers open in the gallery, HTML as a page. Gallery clicks
+  stay optimistic and switch to the page when the download is HTML.
+  Details: `docs/dev/CONTENT.md` (images).
+- Checked under Xvfb: direct File: URL → page; gallery link → page, Back
+  → source page, second click → page without image download; Example.jpg
+  → one fetch, gallery. Test: `test_url_cache`.
+- Possible follow-ups: conditional requests (If-None-Match /
+  If-Modified-Since) and offline reading from the cached bodies; reuse the
+  body the image worker already got when switching to the page; small-net
+  answers into the metadata too; ImageCache could skip decoding bodies the
+  cache knows are not images.
+
 ## Status (2026-11-19) — Wikipedia / Grokipedia citations as footnotes
 
 - `html_link_footnotes` (`src/html_footnotes.cpp`, run at the end of

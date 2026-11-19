@@ -613,13 +613,16 @@ struct FetchShared {
 };
 
 // Remote image downloads (app_images.cpp): URLs ImageCache asked for,
-// fetched by a few worker threads into cache_dir()/images/.
+// fetched by a few worker threads into the URL cache (cache_dir()/urls/).
 struct PageTiles;  // app_pagetiles.cpp
 
 struct ImageFetchShared {
   std::mutex mutex;
   std::deque<std::string> queue;
   std::vector<std::pair<std::string, bool>> done;  // url, ok
+  // Of those, the ones that answered with something other than a picture
+  // (a web page): views showing them switch to the page (poll_images).
+  std::vector<std::string> pages;
   int workers = 0;
   // Downloads in progress (url → its worker's meter), for the placeholders'
   // progress bars; a worker adds its entry when it starts the URL.
@@ -1359,6 +1362,16 @@ std::string resolve_open_path(App& app, std::string path);
 xanatoo::Document load_doc(App& app, std::string path);
 std::string parent_dir(const std::string& path);
 bool is_in_app_remote_url(std::string_view s);
+// An image address (`is_image_address`, by its name) to open straight in
+// the image viewer, without fetching it as a page first. For http(s) the
+// name is only a guess: true only when the URL cache saw an image/* answer
+// there (a web build fetches every other one and lets the Content-Type
+// decide, so "/wiki/File:X.jpg" becomes the page it is).
+bool opens_as_image(std::string_view url);
+// Not known to serve something other than a picture (url_cache_kind): a
+// link named like an image may still go to a page's gallery, which
+// switches to the page should the download turn out to be one.
+bool may_be_image(std::string_view url);
 // Foreign content — fetched pages, imported HTML / EPUB, anything under
 // cache_dir() — is read-only: browsed, never edited or saved in place.
 bool is_foreign_path(std::string_view path);
@@ -1952,6 +1965,11 @@ void open_gallery_item(App& app, int pi,
                        std::vector<xanatoo::Selector> scope_pipes, int index);
 // Single image: next / previous image (replaces the history entry).
 void gallery_step(App& app, int pi, int delta, bool wrap = false);
+// The image download of `url` answered with a web page (an address named
+// like a picture, "/wiki/File:X.jpg"): every view showing it as its single
+// gallery image opens that page instead, in place of the image's history
+// entry.
+void gallery_image_was_page(App& app, const std::string& url);
 // Input for single-image views. Pointer events go to the image view under
 // the pointer, keys to the focused one. True = consumed.
 bool gallery_pointer_down(App& app, int pi, int x, int y, int button);

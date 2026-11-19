@@ -46,6 +46,7 @@
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/url_cache.hpp"
 
 namespace fs = std::filesystem;
 
@@ -111,7 +112,7 @@ xanatoo::Document load_doc(App& app, std::string path) {
   if (path.empty()) {
     return xanatoo::parse_document(xanatoo::fallback_document(), {});
   }
-  if (xanatoo::is_image_address(path)) return xanatoo::image_url_document(path);
+  if (opens_as_image(path)) return xanatoo::image_url_document(path);
   if (xanatoo::is_pandoc_path(path)) {
     std::string md = resolve_open_path(app, path);
     if (md.empty()) {
@@ -197,6 +198,23 @@ bool is_in_app_remote_url(std::string_view s) {
          xanatoo::is_sitemap_ref(s) || xanatoo::is_search_ref(s) ||
          xanatoo::is_media_ref(s) ||
          web_in_app(s);
+}
+
+bool may_be_image(std::string_view url) {
+  return xanatoo::url_cache_kind(url) != xanatoo::UrlKind::Other;
+}
+
+bool opens_as_image(std::string_view url) {
+  if (!xanatoo::is_image_address(url)) return false;
+  const bool http = xanatoo::starts_with_ci(url, "http://") ||
+                    xanatoo::starts_with_ci(url, "https://");
+  if (!http) return true;  // small-net fetchers sniff the bytes themselves
+  switch (xanatoo::url_cache_kind(url)) {
+    case xanatoo::UrlKind::Image: return true;
+    case xanatoo::UrlKind::Other: return false;
+    case xanatoo::UrlKind::Unknown: break;
+  }
+  return !web_in_app(url);  // no web fetcher: the image viewer it is
 }
 
 bool is_foreign_path(std::string_view path) {

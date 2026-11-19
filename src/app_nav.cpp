@@ -850,7 +850,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
     return open_page(app, pi, std::move(target), record_history);
   xanatoo::Locator loc = xanatoo::parse_locator(target);
   // An image address on its own is that image in its one-image gallery.
-  if (xanatoo::is_image_address(loc.base) && !loc.has_selectors()) {
+  if (opens_as_image(loc.base) && !loc.has_selectors()) {
     loc.pipes = {{xanatoo::SelectorKind::Gallery, {}},
                  {xanatoo::SelectorKind::Item, xanatoo::gallery_item_value(0)}};
     target = xanatoo::format_locator(loc);
@@ -959,8 +959,10 @@ static bool open_page(App& app, int pi, std::string target,
     return true;
   }
   // A remote image: a page of just that image (no fetch; the image cache
-  // downloads it like any remote image).
-  if (xanatoo::is_image_address(target)) {
+  // downloads it like any remote image). Only when known to be one: other
+  // http(s) addresses named like a picture are fetched below and their
+  // Content-Type decides (finish_navigate).
+  if (opens_as_image(target)) {
     if (!stash_or_confirm(app, p.buf)) return false;
     show_doc_in_pane(app, pi, xanatoo::image_url_document(target), target);
     if (record_history) push_nav_history(app, pi, target);

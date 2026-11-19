@@ -3,7 +3,8 @@
 
 // Remote images: ImageCache queues the http(s) / gemini / spartan / gopher /
 // nex sources layout asks for (the ones on screen first, want_image_now);
-// a few detached workers download each one into cache_dir()/images/ and
+// a few detached workers download each one into the URL cache
+// (url_cache.hpp, cache_dir()/urls/) and
 // prebuild its inline thumbnail (stb builds; thumtoo makes it on request),
 // then the main thread marks it done and relayouts (the image's size
 // changes from placeholder to real). Thumbnails finished by thumtoo also
@@ -26,6 +27,7 @@
 #include "xanatoo/spartan.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/url_cache.hpp"
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
 #include "xanatoo/version.hpp"
@@ -43,7 +45,8 @@ constexpr Uint32 kImageRelayoutMs = 150;
 
 #ifndef __EMSCRIPTEN__
 constexpr int kMaxWorkers = 4;
-constexpr uint64_t kImageCacheBytes = 256ull * 1024 * 1024;
+constexpr uint64_t kUrlCacheBytes = 512ull * 1024 * 1024;
+constexpr int64_t kUrlCacheRowAgeMs = 180ll * 24 * 3600 * 1000;  // ~6 months
 constexpr uint64_t kThumbCacheBytes = 128ull * 1024 * 1024;
 // Web PDFs / DjVu / comics shown as pages (html_page.cpp `PagesCopy`).
 constexpr uint64_t kDocumentCacheBytes = 1024ull * 1024 * 1024;
@@ -106,7 +109,10 @@ bool fetch_smallnet_image(const std::string& url, std::string& body,
 }
 
 // Download `url` to its cache file and build the inline thumbnail.
-bool download_image(const std::string& url) {
+// `page`: the answer was not a picture (an HTML page named like one,
+// "/wiki/File:X.jpg"); the URL cache remembers it either way.
+bool download_image(const std::string& url, bool& page) {
+  page = false;
   std::string body;
   std::string err;
   if (!xanatoo::starts_with_ci(url, "http://") &&
@@ -121,8 +127,24 @@ bool download_image(const std::string& url) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
     // Pooled: a page's images mostly come from one host, and a TLS
     // handshake per thumbnail costs more than the thumbnail.
+    std::string final_url;
     auto r = xanatoo::https_get_follow_pooled(
-        url, xanatoo::user_agent("image fetch"), &err);
+        url, xanatoo::user_agent("image fetch"), &err, &final_url);
+    if (r && r->status == 200 && !xanatoo::content_type_is_image(r->content_type) &&
+        !xanatoo::looks_like_image(r->body)) {
+      // Kept as what it is: the page, which navigation then fetches as one.
+      const std::string_view bytes = r->body;
+      xanatoo::url_cache_put({url, final_url, r->status, r->content_type},
+                             r->body.size() < 12 * 1024 * 1024 ? &bytes
+                                                               : nullptr);
+      std::cerr << "image: " << url << ": not an image ("
+                << (r->content_type.empty() ? "no type" : r->content_type)
+                << ")\n";
+      const std::string type = xanatoo::ascii_lower(
+          r->content_type.substr(0, r->content_type.find(';')));
+      page = type == "text/html" || type == "application/xhtml+xml";
+      return false;
+    }
     if (!r || r->status != 200 || r->body.empty()) {
       std::cerr << "image: " << url << ": "
                 << (r ? http_status_error(r->status) : err) << "\n";
@@ -133,7 +155,17 @@ bool download_image(const std::string& url) {
       std::cerr << "image: " << url << ": too large\n";
       return false;
     }
-    body = std::move(r->body);
+    // The URL cache writes the bytes where ImageCache reads them.
+    const std::string_view bytes = r->body;
+    if (!xanatoo::url_cache_put({url, final_url, r->status, r->content_type},
+                                &bytes))
+      return false;
+#if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
+    return true;
+#else
+    return xanatoo::build_thumb_file(xanatoo::remote_image_path(url),
+                                     xanatoo::kRemoteThumbEdge);
+#endif
 #else
     return false;
 #endif
@@ -163,12 +195,14 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
       sh->active[url] = meter;
     }
     bool ok = false;
+    bool page = false;
     {
       xanatoo::TransferMeterScope scope(meter.get());
-      ok = download_image(url);
+      ok = download_image(url, page);
     }
     std::lock_guard<std::mutex> lock(sh->mutex);
     sh->active.erase(url);
+    if (page) sh->pages.push_back(url);
     sh->done.emplace_back(std::move(url), ok);
   }
 }
@@ -182,6 +216,7 @@ void want_image_now(App& app, const std::string& url) {
 
 void poll_images(App& app) {
   std::vector<std::pair<std::string, bool>> done;
+  std::vector<std::string> pages;  // "images" that were web pages
 #ifdef __EMSCRIPTEN__
   // No network or pthreads in the offline web edition. Complete queued
   // remote requests as unavailable without scheduling any workers.
@@ -211,10 +246,12 @@ void poll_images(App& app) {
       std::thread(image_worker, app.image_fetch).detach();
     }
     done.swap(sh.done);
+    pages.swap(sh.pages);
   }
 #endif
   const bool thumbs = app.images.poll();
   for (const auto& [url, ok] : done) app.images.remote_done(url, ok);
+  for (const std::string& url : pages) gallery_image_was_page(app, url);
   if (!done.empty() || thumbs) app.image_relayout_due = true;
   if (!app.image_relayout_due) return;
   const Uint32 now = xanatoo::sdl::ticks();
@@ -344,7 +381,11 @@ void prune_image_caches() {
   const std::string dir = cache_dir();
   if (dir.empty()) return;
   std::thread([dir] {
-    prune_cache_dir((fs::path(dir) / "images").string(), kImageCacheBytes);
+    // Downloaded URLs (images, pages; url_cache.hpp): bodies by size,
+    // metadata rows by age. images/ held them before the URL cache.
+    prune_cache_dir((fs::path(dir) / "urls").string(), kUrlCacheBytes);
+    xanatoo::url_cache_prune_rows(kUrlCacheRowAgeMs);
+    prune_cache_dir((fs::path(dir) / "images").string(), 0);
     prune_cache_dir((fs::path(dir) / "thumbs").string(), kThumbCacheBytes);
     prune_cache_dir((fs::path(dir) / "documents").string(), kDocumentCacheBytes);
   }).detach();

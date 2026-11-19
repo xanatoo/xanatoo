@@ -210,6 +210,7 @@ add_executable(xanatoo
   src/org.cpp
   src/editor.cpp
   src/images.cpp
+  src/url_cache.cpp
   src/ui.cpp
   src/ui_help.cpp
   src/util.cpp
@@ -782,6 +783,7 @@ add_executable(xanatoo_tests
   src/math_layout.cpp
   src/math_font.cpp
   src/images.cpp
+  src/url_cache.cpp
 )
 target_include_directories(xanatoo_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include

@@ -67,6 +67,7 @@
 #include <cstdlib>
 #include <iostream>
 #include "xanatoo/transfer_meter.hpp"
+#include "xanatoo/url_cache.hpp"
 #include "xanatoo/markdown_body.hpp"
 #include "xanatoo/quote_links.hpp"
 #include "xanatoo/related_sites.hpp"
@@ -3942,6 +3943,72 @@ void test_gallery_linked_inline_thumb() {
             0);
 }
 
+// The URL cache remembers what an address served, across runs: a name
+// like "File:X.jpg" may be a web page, only the Content-Type tells.
+void test_url_cache() {
+  using namespace xanatoo;
+  namespace fs = std::filesystem;
+  EXPECT(content_type_is_image("image/jpeg"));
+  EXPECT(content_type_is_image(" Image/PNG ; q=1"));
+  EXPECT(content_type_is_image("image/svg+xml"));
+  EXPECT(!content_type_is_image("text/html; charset=UTF-8"));
+  EXPECT(!content_type_is_image("image/x-icon"));
+  EXPECT(!content_type_is_image(""));
+  const fs::path cache = fs::temp_directory_path() /
+      ("xanatoo-url-cache-" + std::to_string(process_id()));
+  fs::remove_all(cache);
+  set_dir_override(DirKind::Cache, cache.string());
+  const std::string page =
+      "https://en.wikipedia.org/wiki/File:Sovietsky_Soyuz_1_June_1942.jpg";
+  EXPECT(url_cache_kind(page) == UrlKind::Unknown);
+  EXPECT(!url_cache_find(page));
+  // Body file: stable per URL, under cache_dir()/urls/; images read it.
+  const std::string body_path = url_cache_body_path(page);
+  EXPECT(starts_with(body_path, (cache / "urls").string() + "/"));
+  EXPECT_EQ(remote_image_path(page), body_path);
+  EXPECT(url_cache_body_path(page + "x") != body_path);
+  const std::string_view html = "<!doctype html><title>File</title>";
+  EXPECT(url_cache_put({page, {}, 200, "text/html; charset=UTF-8",
+                        "\"e1\"", "Tue, 01 Jan 2026 00:00:00 GMT"},
+                       &html));
+#if XANATOO_SQLITE
+  EXPECT(url_cache_kind(page) == UrlKind::Other);
+  const auto e = url_cache_find(page);
+  EXPECT(e && e->final_url == page && e->status == 200 &&
+         e->etag == "\"e1\"" &&
+         e->last_modified == "Tue, 01 Jan 2026 00:00:00 GMT" &&
+         e->size == static_cast<int64_t>(html.size()) && e->fetched > 0);
+#endif
+  {
+    std::ifstream in(body_path, std::ios::binary);
+    std::string got((std::istreambuf_iterator<char>(in)),
+                    std::istreambuf_iterator<char>());
+    EXPECT_EQ(got, std::string(html));
+  }
+  // A redirect is known under both addresses, with the bytes at each.
+  const std::string from = "https://x.org/a.jpg";
+  const std::string to = "https://cdn.x.org/a.jpg";
+  const std::string_view jpeg = "\xff\xd8\xff\xe0rest";
+  EXPECT(url_cache_put({from, to, 200, "image/jpeg"}, &jpeg));
+  EXPECT(fs::file_size(url_cache_body_path(to)) == jpeg.size());
+#if XANATOO_SQLITE
+  EXPECT(url_cache_kind(from) == UrlKind::Image);
+  EXPECT(url_cache_kind(to) == UrlKind::Image);
+  EXPECT_EQ(url_cache_find(from)->final_url, to);
+  // An error answer says nothing about what the address serves.
+  EXPECT(url_cache_put({"https://x.org/gone.png", {}, 404, "text/html"}));
+  EXPECT(url_cache_kind("https://x.org/gone.png") == UrlKind::Unknown);
+  // A newer answer replaces the old one.
+  EXPECT(url_cache_put({page, {}, 200, "image/jpeg"}));
+  EXPECT(url_cache_kind(page) == UrlKind::Image);
+  url_cache_prune_rows(-60 * 1000);  // older than a minute from now: all
+  EXPECT(url_cache_kind(page) == UrlKind::Unknown);
+#endif
+  url_cache_close();
+  set_dir_override(DirKind::Cache, {});
+  fs::remove_all(cache);
+}
+
 void test_image_address() {
   EXPECT(xanatoo::is_image_address("https://cdn.x.org/c/0012-01_1200.jpg"));
   EXPECT(xanatoo::is_image_address("http://x.org/a.PNG?w=3"));
@@ -3952,22 +4019,6 @@ void test_image_address() {
   EXPECT(!xanatoo::is_image_address("finger://x.org/a.png"));
   EXPECT(xanatoo::is_image_address("nex://x.org/a.jpg"));
   EXPECT(!xanatoo::is_image_address("nex://x.org/a.txt"));
-  // Pages about a file, named like the file: web pages, not images.
-  EXPECT(!xanatoo::is_image_address(
-      "https://en.wikipedia.org/wiki/File:Sovietsky_Soyuz_1_June_1942.jpg"));
-  EXPECT(!xanatoo::is_image_address("https://de.wikipedia.org/wiki/Datei:A.png"));
-  EXPECT(!xanatoo::is_image_address(
-      "https://commons.wikimedia.org/wiki/File%3AA_b.JPG"));
-  EXPECT(!xanatoo::is_image_address("https://x.fandom.com/wiki/File:A.png"));
-  EXPECT(!xanatoo::is_image_address("https://github.com/u/r/blob/main/a.png"));
-  EXPECT(!xanatoo::is_image_address("https://gitlab.com/u/r/-/blob/main/a.png"));
-  EXPECT(xanatoo::is_image_address(
-      "https://commons.wikimedia.org/wiki/Special:FilePath/A.jpg"));
-  EXPECT(xanatoo::is_image_address(
-      "https://upload.wikimedia.org/wikipedia/commons/a/ab/A.jpg"));
-  EXPECT(xanatoo::is_image_address("https://x.org/wiki/images/a/ab/A.png"));
-  EXPECT(xanatoo::is_image_address("https://x.org/u/r/blob/main/a.png"));
-  EXPECT(xanatoo::is_image_address("https://github.com/u/r/raw/main/a.png"));
   EXPECT(xanatoo::is_remote_image("nex://x.org/a.jpg"));
   EXPECT(xanatoo::looks_like_image(std::string_view("\x89PNG\r\n\x1a\n\0\0", 10)));
   EXPECT(xanatoo::looks_like_image("\xff\xd8\xff\xe0rest"));
@@ -6034,7 +6085,11 @@ void test_html_page() {
   EXPECT(is_web_url("http://example.org/a/b.html?x=1"));
   EXPECT(is_web_url("https://example.org/paper.PDF")); // MIME routes to download
   EXPECT(is_web_url("https://example.org/archive.zip"));
-  EXPECT(!(is_web_url("https://example.org/i.png?w=10")));
+  // Named like a picture: still fetched, the Content-Type decides (an
+  // image/* answer opens in the image viewer, url_cache.hpp).
+  EXPECT(is_web_url("https://example.org/i.png?w=10"));
+  EXPECT(is_web_url(
+      "https://en.wikipedia.org/wiki/File:Sovietsky_Soyuz_1_June_1942.jpg"));
   EXPECT(!(is_web_url("gemini://example.org/")));
   EXPECT(path_uses_html("/tmp/A.HTM"));
   EXPECT(!(path_uses_html("a.md")));
@@ -7316,6 +7371,7 @@ int main() {
   test_locator();
   test_gallery();
   test_gallery_linked_inline_thumb();
+  test_url_cache();
   test_image_address();
   test_text_selectors();
   test_bookmark_lines();

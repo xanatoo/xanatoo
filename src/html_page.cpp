@@ -10,6 +10,8 @@
 #include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/gallery.hpp"
+#include "xanatoo/url_cache.hpp"
 
 #if defined(XANATOO_WEB) && XANATOO_WEB
 #include "xanatoo/https.hpp"
@@ -137,21 +139,11 @@ bool path_uses_html(std::string_view path) {
 }
 
 bool is_web_url(std::string_view s) {
-  if (!is_remote(s)) return false;
-  // Raster images still go to the image viewer. Other URLs must reach the
-  // web fetcher so the *response* MIME (or Content-Disposition) can decide
-  // between rendering and downloading, even for .pdf/.zip/... links.
-  size_t host = s.find("://") + 3;
-  size_t slash = s.find('/', host);
-  if (slash == std::string_view::npos) return true;
-  std::string_view path = s.substr(slash);
-  path = path.substr(0, path.find_first_of("?#"));
-  static constexpr std::array<std::string_view, 9> kImages = {
-      ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
-      ".ico", ".bmp", ".tiff"};
-  for (std::string_view ext : kImages)
-    if (path_ends_with_ci(path, ext)) return false;
-  return true;
+  // Every http(s) address, whatever its name ends in: the *response* MIME
+  // (or Content-Disposition) decides between a page, a picture (image/*,
+  // shown in the image viewer) and a download, even for .jpg / .pdf / .zip
+  // links. "/wiki/File:X.jpg" is a web page.
+  return is_remote(s);
 }
 
 std::string html_page_title(std::string_view html) {
@@ -404,9 +396,16 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
   DownloadFile file;
   bool downloading = false;
   PagesCopy copy;
+  bool image = false;  // a picture: shown, not offered as a download
   const bool ok = https_get_follow_stream(url, kUserAgent,
       [&](const HttpStreamHeaders& h) {
         headers = h;
+        if (h.status == 200 && !force_download &&
+            !ascii_lower(h.content_disposition).starts_with("attachment") &&
+            content_type_is_image(h.content_type)) {
+          image = true;
+          return true;
+        }
         // PDF / DjVu / comic: shown as pages, not saved to Downloads.
         if (h.status == 200 && pages && !force_download &&
             copy.begin(url, h.content_type, h.content_disposition, err))
@@ -454,7 +453,9 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
           download->received.fetch_add(bytes.size(), std::memory_order_relaxed);
         } else {
           if (body_bytes.size() + bytes.size() > 12 * 1024 * 1024) {
-            if (err) *err = "page exceeds 12 MiB text limit";
+            if (err)
+              *err = image ? "image exceeds 12 MiB"
+                           : "page exceeds 12 MiB text limit";
             return false;
           }
           body_bytes.append(bytes);
@@ -473,6 +474,20 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
   }
   if (final_url) *final_url = fin;
   if (response) *response = headers;
+  // What the address served, kept across runs (url_cache.hpp): the body
+  // too unless it went to a file of its own (pages, download).
+  {
+    UrlCacheEntry seen{url, fin, headers.status, headers.content_type,
+                       headers.etag, headers.last_modified};
+    const std::string_view bytes = body_bytes;
+    url_cache_put(std::move(seen),
+                  copy.active || downloading ? nullptr : &bytes);
+  }
+  if (image) {
+    // The image viewer reads the bytes from the URL cache just written.
+    if (http_status) *http_status = 0;
+    return image_url_document(url);
+  }
   if (copy.active) {
     if (!copy.finish(err)) return std::nullopt;
     pages->path = copy.path;

@@ -13,6 +13,7 @@
 #include "xanatoo/image_backend.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/url_cache.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -294,18 +295,7 @@ bool store_remote_image(std::string_view url, std::string_view bytes) {
 }
 
 std::string remote_image_path(std::string_view url) {
-  // FNV-1a: stable across builds, unlike std::hash.
-  uint64_t h = 1469598103934665603ull;
-  for (unsigned char c : url) {
-    h ^= c;
-    h *= 1099511628211ull;
-  }
-  char name[32];
-  std::snprintf(name, sizeof(name), "%016llx",
-                static_cast<unsigned long long>(h));
-  const std::string cache = cache_dir();
-  if (cache.empty()) return {};
-  return (fs::path(cache) / "images" / name).string();
+  return url_cache_body_path(url);  // the URL cache keeps the bytes
 }
 
 void prune_cache_dir(const std::string& dir, uint64_t max_bytes) {
