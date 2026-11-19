@@ -37,6 +37,15 @@ void compile_sdl_render_api(SDL_Window* window, SDL_Renderer* renderer, SDL_Text
   sdl::set_fullscreen(window, false);
   sdl::start_text_input(window);
   sdl::stop_text_input(window);
+  {
+    sdl::AudioOut out;
+    if (sdl::open_audio_out(out, 44100, 2, [](void*, float*, int) {}, nullptr)) {
+      sdl::pause_audio_out(out, false);
+      sdl::flush_audio_out(out);
+      (void)sdl::audio_out_open(out);
+      sdl::close_audio_out(out);
+    }
+  }
   sdl::Gamepad* pad = sdl::open_first_gamepad();
   (void)sdl::gamepad_name(pad);
   (void)sdl::gamepad_id(pad);

@@ -13,6 +13,7 @@
 #include <cstdio>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
@@ -262,7 +263,11 @@ StatusLine compute_status(App& app) {
   std::string& label = st.text;
   StatusTone& tone = st.tone;
   tone = StatusTone::Hint;
-  if (prompt_active(app)) {
+  if (std::string over = audio_hover_text(app, static_cast<int>(app.mouse_x), static_cast<int>(app.mouse_y));
+      !over.empty() && !prompt_active(app)) {
+    label = std::move(over);
+    tone = StatusTone::Info;
+  } else if (prompt_active(app)) {
     const Prompt& pr = app.prompt;
     tone = StatusTone::Prompt;
     const std::string shown_or_dots = pr.text.empty() ? "…" : pr.text;
@@ -472,6 +477,8 @@ StatusLine compute_status(App& app) {
       label = "Search: ";
     else if (xanatoo::is_media_ref(app.hover.href))
       label = "Media: ";
+    else if (xanatoo::is_audio_url(app.hover.href))
+      label = "Play: ";
     else if (app.hover.href.rfind("http://", 0) == 0 ||
              app.hover.href.rfind("https://", 0) == 0)
       label = "Web: ";
@@ -571,6 +578,11 @@ void draw_status_bar(App& app) {
   SDL_Rect left{bar.x + 3, bar.y + 3, bar.w - 6 - (stats_w ? stats_w + 3 : 0),
                 bar_h - 5};
   SDL_Rect right{bar.x + bar.w - 3 - stats_w, left.y, stats_w, left.h};
+  // The sound player's well comes first (audio_well_rect).
+  if (const SDL_Rect well = audio_well_rect(app); well.w > 0) {
+    left.x += well.w + 3;
+    left.w -= well.w + 3;
+  }
 
   th::Rgb ink = p.text_dim;
   th::Rgb well = p.face;
@@ -611,6 +623,7 @@ void draw_status_bar(App& app) {
                          static_cast<float>(ty), st.text, ink.r, ink.g, ink.b);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 
+  draw_audio_well(app);
   if (stats_w) {
     th::bevel(app.sdl, right, th::Bevel::Sunken);
     app.renderer.draw_text(font, static_cast<float>(right.x + pad_x),

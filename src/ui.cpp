@@ -2749,6 +2749,23 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                               : UiCommand::FocusSearchBar;
       if (ImGui::MenuItem("History", "Ctrl+Shift+H", state.history_open))
         cmd = UiCommand::ToggleHistory;
+      ImGui::Separator();
+      // The status line's sound player (a link to an audio file starts it).
+      if (ImGui::BeginMenu("Sound", state.audio)) {
+        if (ImGui::MenuItem(state.audio_playing ? "Pause" : "Play"))
+          cmd = UiCommand::AudioToggle;
+        if (ImGui::MenuItem("Back 10 s")) {
+          cmd = UiCommand::AudioSkip;
+          result.arg = "-10";
+        }
+        if (ImGui::MenuItem("Forward 30 s")) {
+          cmd = UiCommand::AudioSkip;
+          result.arg = "30";
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Stop")) cmd = UiCommand::AudioStop;
+        ImGui::EndMenu();
+      }
       ImGui::EndMenu();
     }
     force_menu("Bookmarks");

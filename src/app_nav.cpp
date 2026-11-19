@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/file_url.hpp"
@@ -632,6 +633,10 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
     }
     case LinkKind::External:
       if (open_link_image(app, pi, t.url)) return;
+      if (xanatoo::is_audio_url(t.url)) {
+        play_audio(app, t.url);
+        return;
+      }
       flash_status(app, "Opening " + t.url);
       xanatoo::open_external_url(t.url);
       return;
@@ -833,6 +838,10 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   while (!target.empty() && (target.back() == ' ' || target.back() == '\t'))
     target.pop_back();
   if (target.empty()) return false;
+  // Sound files play in the status line's player; the page stays.
+  if (const xanatoo::Locator audio = xanatoo::parse_locator(target);
+      xanatoo::is_audio_url(audio.base) && !audio.has_selectors())
+    return play_audio(app, audio.base);
   Pane& p = app.panes[pi];
   if (record_history) {
     const std::string shown = pane_address(app, p);
@@ -1189,7 +1198,8 @@ void activate_at_caret(App& app) {
         if (!resolved.empty()) abs = resolved;
       }
       if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
-          xanatoo::is_image_address(abs)) {
+          xanatoo::is_image_address(abs) ||
+        (xanatoo::is_audio_url(abs) && !is_inapp_doc_href(app, abs))) {
         navigate_to_url(app, std::move(abs), true,
                         NavLink{*href, {}, hit->node, hit->span_index});
       } else if (is_inapp_doc_href(app, abs)) {

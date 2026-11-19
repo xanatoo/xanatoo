@@ -11,6 +11,7 @@
 // where they are made, in the same format.
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/version.hpp"
 
@@ -451,6 +452,7 @@ void print_startup_report(App& app) {
                           mapped(libs, "libvips")));
 #endif
   out.push_back("imgui: " IMGUI_VERSION);
+  out.push_back("audio decoders: " + xanatoo::audio_decoder_versions());
 
   out.push_back("video: " + video_line(app));
   out.push_back("renderer: " + renderer_line(app));

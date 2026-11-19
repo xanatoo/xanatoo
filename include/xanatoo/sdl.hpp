@@ -806,4 +806,121 @@ inline void stop_text_input(SDL_Window* window) {
 #endif
 }
 
+// Sound output (app_audio.cpp): a float32 stream at the source's rate and
+// channel count; SDL converts to the device. `fill` runs on SDL's audio
+// thread and must write `frames` × channels floats. The AudioOut must stay
+// where it is while open (SDL holds its address).
+using AudioFill = void (*)(void* user, float* out, int frames);
+struct AudioOut {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  SDL_AudioStream* stream = nullptr;
+  float* scratch = nullptr;  // SDL3 asks for bytes, we hand it floats
+  int scratch_frames = 0;
+#else
+  SDL_AudioDeviceID dev = 0;
+#endif
+  AudioFill fill = nullptr;
+  void* user = nullptr;
+  int channels = 0;
+};
+
+inline bool audio_out_open(const AudioOut& out) {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  return out.stream != nullptr;
+#else
+  return out.dev != 0;
+#endif
+}
+
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+inline void audio_out_callback(void* user, SDL_AudioStream* stream,
+                               int additional, int /*total*/) {
+  auto* out = static_cast<AudioOut*>(user);
+  const int frame_bytes = static_cast<int>(sizeof(float)) * out->channels;
+  int frames = additional / frame_bytes;
+  while (frames > 0) {
+    const int n = frames < out->scratch_frames ? frames : out->scratch_frames;
+    out->fill(out->user, out->scratch, n);
+    SDL_PutAudioStreamData(stream, out->scratch, n * frame_bytes);
+    frames -= n;
+  }
+}
+#else
+inline void audio_out_callback(void* user, Uint8* stream, int len) {
+  auto* out = static_cast<AudioOut*>(user);
+  out->fill(out->user, reinterpret_cast<float*>(stream),
+            len / static_cast<int>(sizeof(float)) / out->channels);
+}
+#endif
+
+// Opens the default playback device, paused. False with SDL_GetError() set.
+inline bool open_audio_out(AudioOut& out, int rate, int channels,
+                           AudioFill fill, void* user) {
+  out.fill = fill;
+  out.user = user;
+  out.channels = channels;
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
+    return false;
+  out.scratch_frames = 2048;
+  out.scratch = new float[static_cast<size_t>(out.scratch_frames) * channels];
+  const SDL_AudioSpec spec{SDL_AUDIO_F32, channels, rate};
+  out.stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                         &spec, audio_out_callback, &out);
+  if (!out.stream) {
+    delete[] out.scratch;
+    out.scratch = nullptr;
+    return false;
+  }
+  return true;
+#else
+  if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+    return false;
+  SDL_AudioSpec want{};
+  want.freq = rate;
+  want.format = AUDIO_F32SYS;
+  want.channels = static_cast<Uint8>(channels);
+  want.samples = 2048;
+  want.callback = audio_out_callback;
+  want.userdata = &out;
+  SDL_AudioSpec have{};
+  out.dev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+  return out.dev != 0;
+#endif
+}
+
+inline void pause_audio_out(AudioOut& out, bool pause) {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  if (!out.stream) return;
+  if (pause)
+    SDL_PauseAudioStreamDevice(out.stream);
+  else
+    SDL_ResumeAudioStreamDevice(out.stream);
+#else
+  if (out.dev) SDL_PauseAudioDevice(out.dev, pause ? 1 : 0);
+#endif
+}
+
+// Drops what the device still holds (after a seek); the callback refills it.
+inline void flush_audio_out(AudioOut& out) {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  if (out.stream) SDL_ClearAudioStream(out.stream);
+#else
+  (void)out;  // SDL2 keeps no queue of its own in callback mode
+#endif
+}
+
+// Stops the callback (it is not running when this returns) and closes.
+inline void close_audio_out(AudioOut& out) {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  if (out.stream) SDL_DestroyAudioStream(out.stream);
+  out.stream = nullptr;
+  delete[] out.scratch;
+  out.scratch = nullptr;
+#else
+  if (out.dev) SDL_CloseAudioDevice(out.dev);
+  out.dev = 0;
+#endif
+}
+
 }  // namespace xanatoo::sdl

@@ -215,6 +215,9 @@ enum class UiCommand {
   ToggleOutline,
   ToggleBacklinks,
   ToggleSitemap,  // site structure panel of the focused web page
+  AudioToggle,        // sound player: play / pause
+  AudioStop,          // sound player: stop and hide
+  AudioSkip,          // sound player: arg = seconds forward (negative: back)
   ToggleSearchBar,    // show / hide the search bar (Ctrl+K focuses it)
   FocusSearchBar,     // show the search bar and focus its field
   Search,             // search bar committed (arg = what was typed)
@@ -449,6 +452,8 @@ struct UiState {
   bool sitemap = false;
   bool page_panel = false;
   bool searchbar = false;  // the search bar row is shown
+  bool audio = false;          // the sound player is shown
+  bool audio_playing = false;  // … and playing (not paused / ended)
   std::vector<UiSearchEngine> search_engines;
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service

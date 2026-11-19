@@ -9,6 +9,7 @@
 
 #include "xanatoo/about.hpp"
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/image_backend.hpp"
 #include "xanatoo/math_font.hpp"
@@ -223,6 +224,19 @@ AboutSection images() {
   return s;
 }
 
+AboutSection sound() {
+  AboutSection s{"Sound", {}, {}};
+  s.items.push_back({"Audio links", true,
+                     "MP3, FLAC, Ogg Vorbis and WAV play in the status line (" +
+                         xanatoo::audio_decoder_versions() + ")",
+                     "examples/sound.md", {}});
+  s.items.push_back({"Remote audio", kHttps, "http(s) audio links download, then play",
+                     {}, "a network service"});
+  s.items.push_back({"Opus, AAC, video", false, "not decoded yet; mpv links on video pages",
+                     {}, {}});
+  return s;
+}
+
 AboutSection libraries(App& app) {
   AboutSection s{"Platform", {}, {}};
   std::string sdl = xanatoo::sdl::runtime_version() + " on " + SDL_GetPlatform();
@@ -272,7 +286,7 @@ AboutSection libraries(App& app) {
 void open_about_page(App& app) {
   xanatoo::AboutInfo info;
   info.version = xanatoo::version_string();
-  info.sections = {services(), formats(), images(), libraries(app)};
+  info.sections = {services(), formats(), images(), sound(), libraries(app)};
   show_doc_in_pane(app, app.focus,
                    xanatoo::parse_document(xanatoo::about_markdown(info), {}),
                    kAboutPage);

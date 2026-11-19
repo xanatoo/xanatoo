@@ -298,6 +298,7 @@ void app_shutdown(App& app) {
   // unsaved edits as drafts.
   for (const DocBuffer& b : app.buffers) stash_draft(app, b.id);
   save_session(app);
+  shutdown_audio(app);
   xanatoo::sdl::stop_text_input(app.window);
   release_pane_rasters(app);
   release_gallery_textures(app);

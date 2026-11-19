@@ -39,7 +39,7 @@ Read the matching notes before working in an area:
 | Area | Notes |
 |------|-------|
 | Source map (which file is which system), views / panes / tiling, navigation, buffers, prompts, drafts, key focus, floating windows and docks | `docs/dev/APP.md` |
-| Section tree, layout virtualization, HTML mapping, web pages / reader mode, tables, inline images and asides, collections, site maps, pandoc import, images / thumtoo, style sheet details | `docs/dev/CONTENT.md` |
+| Section tree, layout virtualization, HTML mapping, web pages / reader mode, tables, inline images and asides, collections, site maps, pandoc import, images / thumtoo, audio player, style sheet details | `docs/dev/CONTENT.md` |
 | TLS / HTTPS helpers, service refs, HN, feeds, Wikipedia, Reddit, Lemmy, Matrix, Nostr, Gemini, YouTube, video sites, Internet Archive, Wayback, similar websites (Related Sites), ebooks, link directory | `docs/dev/SERVICES.md` |
 | Versioning, Windows / Emscripten ports, SDL3 transition, Android, website (`website/`) and CI downloads | `docs/dev/PLATFORM.md` |
 

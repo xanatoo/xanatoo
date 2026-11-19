@@ -283,12 +283,18 @@ add_executable(xanatoo
   src/quote_links.cpp
   src/markdown_body.cpp
   src/native.cpp
+  src/audio.cpp
+  src/audio_codecs.cpp
+  src/app_audio.cpp
   # Vendored Dear ImGui (MIT) — menu bar / toolbar shell
   external/imgui/imgui.cpp
   external/imgui/imgui_draw.cpp
   external/imgui/imgui_tables.cpp
   external/imgui/imgui_widgets.cpp
 )
+
+# Vendored decoders (dr_mp3 / dr_flac / dr_wav / stb_vorbis): not our warnings.
+set_source_files_properties(src/audio_codecs.cpp PROPERTIES COMPILE_OPTIONS "-w")
 
 if(XANATOO_SDL3)
   target_sources(xanatoo PRIVATE src/imgui_sdl3.cpp)
@@ -707,6 +713,7 @@ add_executable(xanatoo_tests
   tests/ui_help_tests.cpp
   tests/sqlite_db_tests.cpp
   tests/history_trail_tests.cpp
+  tests/audio_tests.cpp
   src/ui_help.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
@@ -784,6 +791,8 @@ add_executable(xanatoo_tests
   src/math_font.cpp
   src/images.cpp
   src/url_cache.cpp
+  src/audio.cpp
+  src/audio_codecs.cpp
 )
 target_include_directories(xanatoo_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -820,6 +829,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_FONTCONFIG=$<BOOL:${XANATOO_FONTCONFIG}>
   XANATOO_SQLITE=$<BOOL:${XANATOO_SQLITE}>
   "XANATOO_STYLE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/styles\""
+  "XANATOO_TEST_DATA=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\""
   "XANATOO_VERSION=\"${PROJECT_VERSION_FULL}\""
 )
 add_test(NAME unit_tests COMMAND xanatoo_tests)

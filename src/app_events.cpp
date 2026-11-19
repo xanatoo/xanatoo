@@ -15,6 +15,7 @@
 
 #include "xanatoo/file_url.hpp"
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/drop_url.hpp"
@@ -553,7 +554,8 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
           if (!resolved.empty()) abs = resolved;
         }
         if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
-            xanatoo::is_image_address(abs)) {
+            xanatoo::is_image_address(abs) ||
+        (xanatoo::is_audio_url(abs) && !is_inapp_doc_href(app, abs))) {
           navigate_to_url(app, std::move(abs), true,
                           NavLink{*href, {}, hit->node, hit->span_index});
           return;
@@ -864,6 +866,9 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
 static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
                                bool imgui_keys) {
   if (static_cast<float>(ev.button.y) < app.ui_top) return;
+  if (ev.button.button == SDL_BUTTON_LEFT && !imgui_mouse &&
+      audio_press(app, ev.button.x, ev.button.y))
+    return;
   if (ev.button.y >= app.win_h - status_bar_h) return;
   switch (ev.button.button) {
     case SDL_BUTTON_LEFT:

@@ -685,6 +685,22 @@ struct SiteCache {
   uint64_t seen_gen = 0;
 };
 
+// Sound player (app_audio.cpp, docs/dev/CONTENT.md "Audio"): one file at a
+// time, its controls in the status line. Opening a link to an audio file
+// starts it; the page stays.
+struct AudioShared;  // decoder + sound device, shared with SDL's audio thread
+struct AudioLoad;    // worker reading / downloading and opening the file
+enum class AudioState : uint8_t { Idle, Loading, Playing, Paused, Ended, Failed };
+struct AudioPlayer {
+  AudioState state = AudioState::Idle;
+  std::string url;    // address being played (base, as opened)
+  std::string title;  // from the file's tags, else its name
+  std::string error;  // Failed: why
+  double duration = 0;  // seconds; 0 = unknown
+  std::shared_ptr<AudioShared> play;
+  std::shared_ptr<AudioLoad> load;
+};
+
 // Search bar (app_search.cpp). The engine in use is
 // ViewSettings::search_engine (saved in view.conf).
 struct SearchBar {
@@ -1231,6 +1247,7 @@ struct App {
   ReplyDraft reply;
   SitemapPanel sitemap;
   SearchBar search;
+  AudioPlayer audio;
   FloatWindow pg = make_float_panel(WindowRole::Page, 60, 110, 260, 420);
   PagePanel page;
   Hover hover;
@@ -2134,6 +2151,29 @@ std::tuple<int, int, int, int> page_client_rect(App& app);
 float page_max_scroll(App& app);
 void click_page(App& app, int mx, int my);
 bool page_key(App& app, SDL_Keycode sym);
+
+// ---- sound player (app_audio.cpp) ----
+// Start playing `url` (local path, file: URL or http(s) address) in place
+// of what plays now. True = started loading.
+bool play_audio(App& app, const std::string& url);
+void audio_toggle(App& app);        // play / pause (replay once ended)
+void audio_stop(App& app);          // stop and hide the player
+void audio_seek(App& app, double seconds);  // to this position
+void audio_skip(App& app, double delta);    // forward (+) / back (-)
+double audio_position(const App& app);      // seconds
+// Per frame: finished loads start playing, the end of the file is noted.
+void update_audio(App& app);
+void shutdown_audio(App& app);
+// The player's well in the status line (w = 0 when the player is hidden) and
+// its parts; drawing and clicks share these.
+enum class AudioPart : uint8_t { None, Toggle, Seek, Stop };
+SDL_Rect audio_well_rect(const App& app);
+AudioPart audio_part_at(const App& app, int x, int y, double* frac = nullptr);
+void draw_audio_well(App& app);
+// A press in the status line: true when the player took it.
+bool audio_press(App& app, int x, int y);
+// Status-line hover text for the player's parts ("" = not over it).
+std::string audio_hover_text(const App& app, int x, int y);
 
 // ---- search bar (app_search.cpp) ----
 void init_search(App& app);

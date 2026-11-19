@@ -337,3 +337,33 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `$XDG_CACHE_HOME/thumtoo`, shared with galapix / biltoo.
 - Without it (unit tests) stb_image decodes (PNG / JPEG / GIF / BMP) and
   thumbnails are BMPs under `cache_dir()/thumbs/`.
+
+## Audio
+
+- `audio.hpp` (pure, unit-tested on `tests/data/audio`): `sniff_audio` by
+  magic (RIFF/WAVE, `fLaC`, Ogg + `\x01vorbis` / `OpusHead`, ID3v2 or MP3
+  frame sync), `open_audio` from bytes in memory → interleaved float
+  frames (`audio_read`, `audio_seek`), length and title (ID3v2 TIT2,
+  Vorbis / FLAC comments). Decoders are vendored single files in
+  `external/` (dr_mp3, dr_flac, dr_wav, stb_vorbis), compiled in
+  `src/audio_codecs.cpp` without our warnings. MP3 opens with a seek table
+  (one header scan), so seeking does not decode from the start.
+- `is_audio_url` (.mp3 .ogg .oga .flac .wav .opus; local, `file:`, http(s))
+  is checked at the top of `navigate_pane`: an audio address calls
+  `play_audio` and never becomes a page or a download. Link clicks reach
+  it through the usual paths (relative links resolve beside the page first;
+  remote ones go to `navigate_to_url` even without the web client).
+- Player (`app_audio.cpp`, `App::audio`): `play_audio` loads on a detached
+  worker (`AudioLoad`: file read or `https_get_follow_stream` into memory,
+  512 MiB cap, progress, cancel), then `update_audio` moves the decoder into
+  `AudioShared`, which owns the `sdl::AudioOut` (sdl.hpp bridge: SDL2
+  callback device / SDL3 device stream, F32 at the file's rate and
+  channels, SDL converts). The callback reads the decoder under
+  `AudioShared::m`; seeks take the same lock. End of file pauses the device
+  (`AudioState::Ended`); Play replays from the start.
+- Controls: a well at the left of the status line (`audio_well_rect`,
+  parts by `audio_part_at`, shared by `draw_audio_well`, `audio_press`
+  — mouse and touch — and `audio_hover_text`). Go → Sound has
+  play / pause, back 10 s / forward 30 s, stop (`UiCommand::Audio*`).
+- Not yet: Opus (needs libopus), AAC / video (FFmpeg, Android
+  `AMediaCodec`, the browser), streaming playback before the download ends.

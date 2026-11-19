@@ -2,6 +2,29 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Sound: MP3 / FLAC / Ogg Vorbis / WAV links play
+
+- Plan (from the media question): audio first with small vendored decoders
+  on SDL's own audio output; video / AAC later behind a decoder interface
+  (FFmpeg on desktop, Android `AMediaExtractor` + `AMediaCodec`, browser
+  on WASM), mpv links stay the fallback.
+- Done: `audio.hpp` (dr_mp3 / dr_flac / dr_wav / stb_vorbis in `external/`,
+  sniffing by content, titles from ID3v2 / Vorbis / FLAC tags, MP3 seek
+  table), `sdl::AudioOut` (SDL2 callback device / SDL3 device stream),
+  player `app_audio.cpp`: an audio link (local, `file:`, http(s)) plays in a
+  well at the left of the status line (play / pause, click-to-seek bar,
+  title + time, stop); Go → Sound; `examples/sound.md` with three
+  synthesised clips; About → Sound; report line "audio decoders".
+  Details: `docs/dev/CONTENT.md` "Audio".
+- Checked under Xvfb (SDL_AUDIODRIVER=dummy): all three example formats,
+  end of file, seek by click, replay, stop, menu. Test: `test_audio`
+  (fixtures in `tests/data/audio`); `checks.sdl3-api` builds the bridge.
+- Not checked: real sound output by ear, Android, WASM, Windows.
+- Next: Opus (libopusfile, optional); start remote files while they
+  download; keyboard shortcuts for the player; an inline player for
+  audio links / `<audio>` in pages; podcast enclosures in feeds; then the
+  video / AAC decoder interface.
+
 ## Status (2026-11-19) — URL cache: Content-Type, not the name, decides
 
 - Bug: `https://en.wikipedia.org/wiki/File:X.jpg` went to the image

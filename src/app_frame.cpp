@@ -207,6 +207,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.has_site = sitemap_button_shown(app);
 #endif
   ui_state.searchbar = app.search.open;
+  ui_state.audio = app.audio.state != AudioState::Idle;
+  ui_state.audio_playing = app.audio.state == AudioState::Playing;
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
@@ -833,6 +835,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ToggleOutline ||
         c == C::ToggleBacklinks || c == C::ToggleSitemap || c == C::TogglePage ||
         c == C::ToggleSearchBar || c == C::FocusSearchBar || c == C::Search ||
+        c == C::AudioToggle || c == C::AudioStop || c == C::AudioSkip ||
         c == C::SelectSearchEngine || c == C::ToggleSearchEngine ||
         c == C::SearchSite ||
         c == C::SitemapPrev || c == C::SitemapNext ||
@@ -2411,6 +2414,15 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::ToggleSearchBar:
       toggle_search_bar(app);
+      break;
+    case C::AudioToggle:
+      audio_toggle(app);
+      break;
+    case C::AudioStop:
+      audio_stop(app);
+      break;
+    case C::AudioSkip:
+      audio_skip(app, std::atof(arg.c_str()));
       break;
     case C::FocusSearchBar:
       show_search_bar(app);
@@ -5128,6 +5140,7 @@ void run_frame(App& app) {
   poll_fetches(app);
   poll_download_folder_picks(app);
   poll_subscriptions(app);
+  update_audio(app);
   sync_nav_history(app);  // apply Back/Forward restore after remote loads
   autosave_drafts(app);
   autosave_session(app);
