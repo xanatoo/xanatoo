@@ -645,7 +645,11 @@ struct FetchJob {
   std::string url;
   xanatoo::Locator locator;  // Navigate: selectors to show once it landed
   bool record_history = true;
-  BufferId buf = kNoBuffer;  // Tab: the "Loading …" buffer to fill
+  // Tab: the "Loading …" buffer to fill. Navigate: the buffer `pane` showed
+  // when the load began; a view that switched tabs since leaves the job
+  // behind as a Tab job for that buffer (`left_view`, retarget_fetches).
+  BufferId buf = kNoBuffer;
+  bool left_view = false;  // Tab: replaces the page in `buf` (not a stand-in)
   Uint32 started = 0;
   std::shared_ptr<FetchShared> shared;
 };
@@ -1896,6 +1900,10 @@ void accept_gemini_cert(App& app, const std::string& key);
 void reject_gemini_cert(App& app, const std::string& key);
 // Remove the pin: the next visit trusts what the server presents then.
 void forget_gemini_cert(App& app, const std::string& key);
+// A view that switched tabs leaves its running navigation to the tab it
+// started in (a background Tab job); switching back takes it up again.
+// Called by poll_fetches.
+void retarget_fetches(App& app);
 // Drop pane `pi`'s running navigation (-1: all navigations). True if any.
 bool cancel_fetches(App& app, int pi = -1);
 void cancel_preview_fetch(App& app);

@@ -750,9 +750,15 @@ void add_http_banner(xanatoo::Document& doc, const FetchJob& job) {
 void finish_tab(App& app, const FetchJob& job) {
   FetchShared& r = *job.shared;
   DocBuffer* b = find_buf(app, job.buf);
-  if (!b || !b->placeholder) return;
+  if (!b || (!b->placeholder && !job.left_view)) return;
+  // A view's load left behind by a tab switch replaces that tab's page:
+  // unsaved edits go to a draft first.
+  if (job.left_view && !b->placeholder && !stash_draft(app, job.buf)) {
+    flash_status(app, "Not loaded (unsaved edits in that tab): " + job.url);
+    return;
+  }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
-    remove_buffer(app, job.buf);
+    if (b->placeholder) remove_buffer(app, job.buf);
     const std::string url =
         !r.final_url.empty() ? r.final_url : job.url;
     start_download(app, url);
@@ -761,7 +767,7 @@ void finish_tab(App& app, const FetchJob& job) {
     return;
   }
   if (r.download && r.download->phase.load() != xanatoo::DownloadPhase::Skipped) {
-    remove_buffer(app, job.buf);
+    if (b->placeholder) remove_buffer(app, job.buf);
     app.downloads_panel_open = true;
     flash_status(app, "Download: " + r.download->name);
     return;
@@ -774,6 +780,9 @@ void finish_tab(App& app, const FetchJob& job) {
   b->observed = r.doc ? r.observed : xanatoo::PageObservation{};
   b->path = r.doc ? r.final_url : job.url;
   b->content_path = r.doc ? r.content_path : std::string();
+  b->observation_id = 0;
+  b->origin_kind.reset();
+  b->origin_visit = 0;
   b->placeholder = false;
   b->dirty = false;
   const std::string path = b->path;
@@ -1073,7 +1082,8 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.pane = pane;
   job.url = url;
   job.record_history = record_history;
-  job.buf = tab_buf;
+  job.buf = purpose == FetchPurpose::Navigate && pane >= 0
+                ? app.panes[pane].buf : tab_buf;
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
@@ -1145,6 +1155,7 @@ void poll_fetches(App& app) {
             xanatoo::DownloadPhase::Skipped &&
         !d->announced.exchange(true))
       app.downloads_panel_open = true;
+  retarget_fetches(app);
   // Collect first: finishing a job can start or cancel others.
   std::vector<FetchJob> done;
   for (auto it = app.fetches.begin(); it != app.fetches.end();) {
@@ -1243,6 +1254,39 @@ void poll_fetches(App& app) {
       it = app.downloads.erase(it);
     else
       ++it;
+  }
+}
+
+void retarget_fetches(App& app) {
+  // A view that switched to another tab leaves its load behind: the page
+  // goes to the tab it was opened from, not the one now shown.
+  for (FetchJob& j : app.fetches) {
+    if (j.purpose != FetchPurpose::Navigate || j.buf == kNoBuffer ||
+        app.panes[j.pane].buf == j.buf)
+      continue;
+    Pane& p = app.panes[j.pane];
+    p.nav.pending_link = {};
+    p.nav.pending_kind.reset();
+    p.nav.restoring = -1;
+    j.purpose = FetchPurpose::Tab;
+    j.pane = -1;
+    j.left_view = true;
+  }
+  // Back on that tab before the page arrived: the view loads it again.
+  for (FetchJob& j : app.fetches) {
+    if (!j.left_view || j.purpose != FetchPurpose::Tab) continue;
+    for (int pi : live_views(app)) {
+      if (app.panes[pi].buf != j.buf) continue;
+      const bool busy = std::any_of(
+          app.fetches.begin(), app.fetches.end(), [&](const FetchJob& o) {
+            return o.purpose == FetchPurpose::Navigate && o.pane == pi;
+          });
+      if (busy) continue;
+      j.purpose = FetchPurpose::Navigate;
+      j.pane = pi;
+      j.left_view = false;
+      break;
+    }
   }
 }
 
