@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Played media is in the history
+
+- Sound / video that goes to the Media panel is a visit
+  (`record_media_visit`): link (source = the page, href), typed /
+  bookmark / History panel / command line kinds as for pages; leave time
+  when stopped, replaced or on quit. Also listed in the History menu and
+  the URL ring. The view keeps its page and its visit.
+- Checked under Xvfb (isolated state): command-line file, two link
+  clicks, replay from the History menu (`address`) and the History panel
+  (`history`, source = picked visit), leave times.
+- Known: the visit title is the file name; tag titles arrive later and
+  are not written back.
+
 ## Status (2026-11-19) — .txt keeps its lines
 
 - `.txt` files read as plain text, not Markdown: blank-line separated

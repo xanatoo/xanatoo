@@ -367,6 +367,7 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `play_audio` and never becomes a page or a download. Link clicks reach
   it through the usual paths (relative links resolve beside the page first;
   remote ones go to `navigate_to_url` even without the web client).
+  Played files are visits (`record_media_visit`, `docs/HISTORY.md` "B").
 - Player (`app_audio.cpp`, `App::audio`): `play_audio` loads on a detached
   worker (`AudioLoad`: file read or `https_get_follow_stream` into memory,
   512 MiB cap, progress, cancel), then `update_audio` moves the decoder into

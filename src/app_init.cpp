@@ -223,7 +223,8 @@ bool app_init(App& app) {
     };
     startup(p0);
     if (!p1.empty()) startup(p1);
-    if (!media_arg.empty()) play_audio(app, media_arg);
+    if (!media_arg.empty() && play_audio(app, media_arg))
+      record_media_visit(app, -1, media_arg, xanatoo::VisitKind::External);
   }
   for (const auto& b : app.buffers) app.tab_order.push_back(b.id);
   update_title(app);

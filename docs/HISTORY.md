@@ -194,6 +194,14 @@ storing it (with step 4, the panel rewrite).
 - Each visit sets `leave_time` on the one the view showed before.
 - Start-up: no visits for the default document before a session restore
   or for hidden views (`App::record_visits`).
+- Sound and video handed to the Media panel (`navigate_pane`, an external
+  link, a file on the command line) → `record_media_visit`: a visit of its
+  own with the same kinds and sources (a clicked link's source is the page
+  that stays in the view); `window` is the view, or `<id>/media` from the
+  command line; no observation. The view's entry keeps its visit. Its id
+  is `AudioPlayer::visit`; `close_player` (stop, another file, quit) sets
+  its `leave_time`. The address also joins `App::visited` (History menu)
+  and the URL ring.
 
 Observations: the fetch worker fills `FetchShared::observed` in
 `finish_fetch` (URL after redirects, time, status, and for web pages

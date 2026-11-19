@@ -713,6 +713,7 @@ struct AudioPlayer {
   SDL_Texture* video_tex = nullptr;
   int tex_w = 0, tex_h = 0;      // size of video_tex
   int video_w = 0, video_h = 0;  // display size; 0 = sound only
+  int64_t visit = 0;  // its visit in the log (record_media_visit), 0 = none
 };
 
 // Search bar (app_search.cpp). The engine in use is
@@ -1725,6 +1726,12 @@ void push_nav_history(App& app, int pi, const std::string& url);
 // The page in view `pi` was loaded again (Reload): a Reload visit whose
 // source is the visit it replaces, with the new observation.
 void record_reload_visit(App& app, int pi);
+// `url` went to the Media panel (play_audio) from view `pi` (-1: none,
+// e.g. the command line): a visit of its own, reached from the page the
+// view shows (which stays), so the History panel lists what was played.
+void record_media_visit(App& app, int pi, const std::string& url,
+                        std::optional<xanatoo::VisitKind> hint,
+                        int64_t from = 0, const NavLink& via = {});
 // Keep the current history stop's view position up to date; also finish
 // restores deferred until an asynchronously fetched page arrives.
 void sync_nav_history(App& app);

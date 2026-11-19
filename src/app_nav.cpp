@@ -161,10 +161,10 @@ void record_reload_visit(App& app, int pi) {
   record_visit(app, pi, false, 0, xanatoo::VisitKind::Reload);
 }
 
-void push_nav_history(App& app, int pi, const std::string& raw) {
-  if (raw.empty() || pi < 0 || pi >= kMaxViews) return;
-  // Local paths are stored as file: URLs, like pane_address shows them.
-  const std::string url = canonical_address(raw);
+namespace {
+
+// The recent addresses (History menu, session) and the URL bar's ring.
+void note_visited_address(App& app, const std::string& url) {
   if (app.visited.empty() || app.visited.back() != url) {
     app.visited.push_back(url);
     if (static_cast<int>(app.visited.size()) > kMaxNavHistory)
@@ -176,6 +176,52 @@ void push_nav_history(App& app, int pi, const std::string& raw) {
       url.find('\r') == std::string::npos) {
     xanatoo::record_input_history("url", app.minibuf_hist_url, url);
   }
+}
+
+}  // namespace
+
+void record_media_visit(App& app, int pi, const std::string& url,
+                        std::optional<xanatoo::VisitKind> hint, int64_t from,
+                        const NavLink& via) {
+  using xanatoo::VisitKind;
+  if (url.empty()) return;
+  note_visited_address(app, canonical_address(url));
+  if (xanatoo::no_save() || !app.record_visits) return;
+  const bool in_view = pi >= 0 && pi < kMaxViews;
+  const int64_t prev = in_view ? current_visit(app.panes[pi]) : 0;
+  xanatoo::VisitRecord v;
+  if (!via.href.empty()) {
+    v.kind = VisitKind::Link;
+    v.source = prev;
+    v.href = via.href;
+    if (via.node != xanatoo::INVALID_NODE)
+      v.source_node = std::to_string(via.node);
+  } else if (hint) {
+    v.kind = *hint;
+    if (*hint == VisitKind::History && from)
+      v.source = from;  // continues the picked visit's trail
+    else if (!xanatoo::visit_kind_starts_trail(*hint))
+      v.source = prev;
+  } else {
+    v.kind = VisitKind::Nav;
+    v.source = prev;
+  }
+  v.address = canonical_address(url);
+  v.time = xanatoo::now_epoch_ms();
+  v.title = app.audio.title;
+  v.window = xanatoo::visit_instance_id() + "/" +
+             (in_view ? std::to_string(pi) : std::string("media"));
+  if (const int64_t id = xanatoo::store_visit(v)) {
+    app.audio.visit = id;  // left when the player stops or plays another
+    history_changed(app);
+  }
+}
+
+void push_nav_history(App& app, int pi, const std::string& raw) {
+  if (raw.empty() || pi < 0 || pi >= kMaxViews) return;
+  // Local paths are stored as file: URLs, like pane_address shows them.
+  const std::string url = canonical_address(raw);
+  note_visited_address(app, url);
   split_history_note(app, pi, raw);  // no-op unless split browsing (paths)
   Pane& p = app.panes[pi];
   NavHistory& h = p.nav;
@@ -634,7 +680,9 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
     case LinkKind::External:
       if (open_link_image(app, pi, t.url)) return;
       if (xanatoo::is_playable_url(t.url)) {
-        play_audio(app, t.url);
+        if (play_audio(app, t.url))
+          record_media_visit(app, pi, t.url, std::nullopt, 0,
+                             NavLink{href, {}, xanatoo::INVALID_NODE, 0});
         return;
       }
       flash_status(app, "Opening " + t.url);
@@ -840,8 +888,11 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   if (target.empty()) return false;
   // Sound files play in the status line's player; the page stays.
   if (const xanatoo::Locator audio = xanatoo::parse_locator(target);
-      xanatoo::is_playable_url(audio.base) && !audio.has_selectors())
-    return play_audio(app, audio.base);
+      xanatoo::is_playable_url(audio.base) && !audio.has_selectors()) {
+    if (!play_audio(app, audio.base)) return false;
+    if (record_history) record_media_visit(app, pi, audio.base, hint, from, via);
+    return true;
+  }
   Pane& p = app.panes[pi];
   if (record_history) {
     const std::string shown = pane_address(app, p);

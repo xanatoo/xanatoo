@@ -21,6 +21,7 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/audio.hpp"
@@ -168,6 +169,8 @@ double now_s() {
 }
 
 void close_player(AudioPlayer& a) {
+  if (a.visit) xanatoo::store_visit_leave(a.visit, xanatoo::now_epoch_ms());
+  a.visit = 0;
   if (a.load) a.load->cancel.store(true);
   a.load.reset();
   a.play.reset();  // closes the device (the callback has stopped) first
@@ -490,7 +493,9 @@ bool play_audio(App& app, const std::string& url_in) {
 void audio_toggle(App& app) {
   AudioPlayer& a = app.audio;
   if (a.state == AudioState::Failed && !a.url.empty()) {
+    const int64_t visit = std::exchange(a.visit, 0);  // the same visit
     play_audio(app, a.url);  // try again
+    app.audio.visit = visit;
     return;
   }
   if (!have_media(a)) return;
