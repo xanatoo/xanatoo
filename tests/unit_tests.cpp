@@ -5459,7 +5459,7 @@ void test_search() {
     EXPECT(!e.name.empty() && !e.badge.empty());
     EXPECT(starts_with(e.url, "https://") || starts_with(e.url, "youtube:") ||
            starts_with(e.url, "peertube:") || starts_with(e.url, "odysee:") ||
-           starts_with(e.url, "dailymotion:"));
+           starts_with(e.url, "dailymotion:") || starts_with(e.url, "lesswrong:"));
     const size_t at = e.url.find("%s");
     EXPECT(at != std::string::npos && e.url.find("%s", at + 2) == std::string::npos);
     EXPECT(is_search_ref(search_ref(e.id, "x")));
@@ -5472,6 +5472,9 @@ void test_search() {
   EXPECT_EQ(engine_for_address("hn:item?id=1", eng), "hn");
   EXPECT_EQ(engine_for_address("https://news.ycombinator.com/item?id=1", eng), "hn");
   EXPECT_EQ(engine_for_address("wikipedia:Xanadu", eng), "wikipedia");
+  EXPECT_EQ(engine_for_address("lesswrong:posts/abc", eng), "lesswrong");
+  EXPECT_EQ(search_target("search:lesswrong:rss+feed", eng),
+            "lesswrong:search?query=rss+feed");
   EXPECT_EQ(engine_for_address("wikipedia:de:Xanadu", eng), "wikipedia-de");
   EXPECT_EQ(engine_for_address("https://de.wikipedia.org/wiki/X", eng), "wikipedia-de");
   EXPECT_EQ(engine_for_address("https://fr.wikipedia.org/wiki/X", eng), "wikipedia");

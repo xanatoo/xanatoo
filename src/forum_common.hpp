@@ -30,6 +30,8 @@ std::string short_time(std::string_view iso);
 std::string count(long long n, std::string_view one, std::string_view many);
 // Percent-encode a query value (unreserved characters kept).
 std::string url_encode(std::string_view s);
+// JSON / GraphQL string literal with quotes.
+std::string json_quote(std::string_view s);
 
 void add_text(Document& doc, NodeId node, const std::string& text,
               InlineKind kind = InlineKind::Text);
@@ -92,6 +94,7 @@ std::optional<Document> fourchan_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> se_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> flarum_fetch(const ForumRef& ref, std::string* err);
+std::optional<Document> lesswrong_fetch(const ForumRef& ref, std::string* err);
 #endif
 
 }  // namespace xanatoo::forum

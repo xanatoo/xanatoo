@@ -2,13 +2,14 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
 // Forum refs (discourse: / lobsters: / fourchan: / stackexchange: / bsky: /
-// flarum:), their web forms and the shared document helpers. The site
+// flarum: / lesswrong:), their web forms and the shared document helpers. The site
 // mappers live in forum_<site>.cpp, the network side in forum_fetch.cpp.
 
 #include "xanatoo/forums.hpp"
 
 #include "forum_common.hpp"
 #include "xanatoo/html_min.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/time.hpp"
 #include "xanatoo/util.hpp"
 
@@ -35,6 +36,7 @@ constexpr SiteInfo kSites[] = {
     {ForumSite::StackExchange, "stackexchange:", true, "Stack Exchange"},
     {ForumSite::Bluesky, "bsky:", false, "Bluesky"},
     {ForumSite::Flarum, "flarum:", true, "Flarum"},
+    {ForumSite::LessWrong, "lesswrong:", false, "LessWrong"},
 };
 
 const SiteInfo& info(ForumSite s) {
@@ -118,6 +120,14 @@ bool cursor_ok(std::string_view c) {
   return true;
 }
 
+// A query value as typed ('+' is a blank).
+std::string decode_query(std::string_view v) {
+  std::string plus(v);
+  for (char& c : plus)
+    if (c == '+') c = ' ';
+  return percent_decode(plus);
+}
+
 bool all_digits(std::string_view s) {
   if (s.empty()) return false;
   for (char c : s)
@@ -155,6 +165,7 @@ std::optional<ForumRef> parse_forum_ref(std::string_view s) {
     r.page = page_of(query);
     r.cursor = query_value(query, "cursor");
     if (!cursor_ok(r.cursor)) r.cursor.clear();
+    r.query = decode_query(query_value(query, "query"));
     r.fragment = std::string(frag);
     if (si.site == ForumSite::Bluesky && r.path.empty()) return std::nullopt;
     return r;
@@ -179,9 +190,16 @@ std::string forum_ref_string(const ForumRef& r) {
         r.path.find('/') == std::string::npos)
       out += "/";
   }
-  if (r.page > 1) out += "?page=" + std::to_string(r.page);
-  if (!r.cursor.empty())
-    out += (r.page > 1 ? "&cursor=" : "?cursor=") + r.cursor;
+  char sep = '?';
+  auto param = [&](const char* key, const std::string& value) {
+    out += sep;
+    out += key;
+    out += "=" + value;
+    sep = '&';
+  };
+  if (!r.query.empty()) param("query", forum::url_encode(r.query));
+  if (r.page > 1) param("page", std::to_string(r.page));
+  if (!r.cursor.empty()) param("cursor", r.cursor);
   if (!r.fragment.empty()) out += "#" + r.fragment;
   return out;
 }
@@ -208,6 +226,17 @@ std::string forum_web_url(const ForumRef& r) {
       break;
     case ForumSite::Bluesky:
       url = "https://bsky.app/profile/" + r.path;
+      break;
+    case ForumSite::LessWrong:
+      url = "https://www.lesswrong.com/";
+      if (r.path == "new") url += "allPosts?sortedBy=new";
+      else if (r.path == "top") url += "allPosts?sortedBy=top&timeframe=allTime";
+      else if (r.path == "curated") url += "allPosts?filter=curated&sortedBy=new";
+      else if (r.path == "search") url += "search?query=" + forum::url_encode(r.query);
+      else url += r.path;
+      // A comment's own page on the site.
+      if (starts_with(r.path, "posts/") && starts_with(r.fragment, "id:"))
+        url += "?commentId=" + r.fragment.substr(3);
       break;
   }
   return url;
@@ -291,6 +320,37 @@ std::string forum_ref_from_web_url(std::string_view url) {
     }
     return forum_ref_string(r);
   }
+  if (host == "lesswrong.com" || host == "www.lesswrong.com") {
+    r.site = ForumSite::LessWrong;
+    r.page = 1;
+    r.fragment.clear();
+    auto name = [](std::string_view s) {
+      if (s.empty()) return false;
+      for (char c : s)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_'))
+          return false;
+      return true;
+    };
+    if (seg.empty() || (seg.size() == 1 && seg[0].empty())) {
+      r.path.clear();
+    } else if (seg[0] == "posts" && seg.size() >= 2 && name(seg[1])) {
+      r.path = "posts/" + std::string(seg[1]);
+      if (seg.size() >= 3 && name(seg[2])) r.path += "/" + std::string(seg[2]);
+      if (std::string c = query_value(query, "commentId"); name(c)) r.fragment = "id:" + c;
+    } else if (seg[0] == "users" && seg.size() == 2 && name(seg[1])) {
+      r.path = "users/" + std::string(seg[1]);
+    } else if ((seg[0] == "w" || seg[0] == "tag") && seg.size() == 2 && name(seg[1])) {
+      r.path = "w/" + std::string(seg[1]);
+    } else if (seg.size() == 1 && seg[0] == "quicktakes") {
+      r.path = "quicktakes";
+    } else if (seg.size() == 1 && seg[0] == "search") {
+      r.path = "search";
+      r.query = decode_query(query_value(query, "query"));
+    } else {
+      return {};
+    }
+    return forum_ref_string(r);
+  }
   if (host == "bsky.app" || host == "www.bsky.app") {
     r.site = ForumSite::Bluesky;
     r.page = 1;
@@ -309,6 +369,7 @@ std::string forum_up_ref(const ForumRef& r) {
   ForumRef up = r;
   up.page = 1;
   up.cursor.clear();
+  up.query.clear();
   up.fragment.clear();
   const std::string& p = r.path;
   if (r.site == ForumSite::Bluesky) {
@@ -366,6 +427,25 @@ std::string short_time(std::string_view iso) {
 
 std::string count(long long n, std::string_view one, std::string_view many) {
   return std::to_string(n) + " " + std::string(n == 1 || n == -1 ? one : many);
+}
+
+std::string json_quote(std::string_view s) {
+  static const char* kHex = "0123456789abcdef";
+  std::string o = "\"";
+  for (char c : s) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (c == '"' || c == '\\') {
+      o += '\\';
+      o += c;
+    } else if (u < 0x20) {
+      o += "\\u00";
+      o += kHex[u >> 4];
+      o += kHex[u & 15];
+    } else {
+      o += c;
+    }
+  }
+  return o + "\"";
 }
 
 std::string url_encode(std::string_view s) {

@@ -19,6 +19,11 @@
 //   bsky:HANDLE/post/RKEY              post thread
 //   flarum:HOST                        recent discussions (?page=N)
 //   flarum:HOST/d/ID[-slug][?page=N]   discussion
+//   lesswrong:                         frontpage       (new, top, curated, quicktakes)
+//   lesswrong:posts/ID[/slug]          post + comments
+//   lesswrong:users/SLUG               profile + posts
+//   lesswrong:w/SLUG                   tag / wiki page + posts
+//   lesswrong:search?query=Q           posts, tags and users found
 //
 // Parsers are pure (JSON in, Document out) and tested with cut-down recorded
 // replies; only forum_fetch touches the network.
@@ -32,7 +37,9 @@
 
 namespace xanatoo {
 
-enum class ForumSite { Discourse, Lobsters, FourChan, StackExchange, Bluesky, Flarum };
+enum class ForumSite {
+  Discourse, Lobsters, FourChan, StackExchange, Bluesky, Flarum, LessWrong
+};
 
 struct ForumRef {
   ForumSite site = ForumSite::Discourse;
@@ -43,6 +50,7 @@ struct ForumRef {
   std::string path;
   int page = 1;          // ?page=N
   std::string cursor;    // ?cursor=C (Bluesky feeds page by cursor)
+  std::string query;     // ?query=Q, decoded (LessWrong search)
   std::string fragment;  // after '#', kept for the address
 };
 
@@ -82,6 +90,18 @@ Document bsky_thread_document(const Json& reply, const ForumRef& ref);
 Document flarum_list_document(const Json& reply, const ForumRef& ref);
 Document flarum_discussion_document(const Json& discussion, const Json& posts,
                                     const ForumRef& ref);
+// LessWrong: whole GraphQL replies ({"data": …}); /api/search multi-query
+// reply (array: posts, tags, users). Listings ask for this many entries.
+constexpr size_t kLessWrongPageSize = 30;
+Document lesswrong_list_document(const Json& reply, const ForumRef& ref);
+Document lesswrong_quicktakes_document(const Json& reply, const ForumRef& ref);
+// data.post.result + data.comments.results in one reply.
+Document lesswrong_post_document(const Json& reply, const ForumRef& ref);
+Document lesswrong_user_document(const Json& user, const Json& posts,
+                                 const ForumRef& ref);
+Document lesswrong_tag_document(const Json& tag, const Json& posts,
+                                const ForumRef& ref);
+Document lesswrong_search_document(const Json& reply, const ForumRef& ref);
 
 #if defined(XANATOO_FORUMS) && XANATOO_FORUMS
 std::optional<Document> forum_fetch(std::string_view ref,

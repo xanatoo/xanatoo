@@ -325,9 +325,14 @@ read-only service clients. Every client is read-only: never post or log in.
 - `src/forums.cpp` + `src/forum_<site>.cpp` (pure mappers) +
   `src/forum_fetch.cpp` (network), gated by `XANATOO_FORUMS` (default ON;
   needs TLS). Read-only Discourse / Lobsters / 4chan / Stack Exchange /
-  Bluesky / Flarum: `discourse:HOST/t/…`, `lobsters:s/ID`,
+  Bluesky / Flarum / LessWrong: `discourse:HOST/t/…`, `lobsters:s/ID`,
   `fourchan:B/thread/N`, `stackexchange:HOST/questions/ID`,
-  `bsky:HANDLE/post/RKEY`, `flarum:HOST/d/ID`. See `docs/FORUMS.md`.
+  `bsky:HANDLE/post/RKEY`, `flarum:HOST/d/ID`, `lesswrong:posts/ID`.
+  See `docs/FORUMS.md`.
+- LessWrong asks GraphQL by POST (`lw_query` in `forum_fetch.cpp`, a
+  GraphQL `errors` reply without `data` becomes the error text); search
+  is `lesswrong:search?query=Q` (`ForumRef::query`, decoded) over the
+  site's `/api/search`, also the `lw` search engine.
 - Shared builders in `src/forum_common.hpp` (`add_message` fills the Message
   header slots, `start_document`, `add_pager`, `map_links`); new sites add
   a mapper file, a `kSites` row and a `forum_fetch` case.

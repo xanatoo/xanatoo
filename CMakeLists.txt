@@ -146,7 +146,7 @@ option(XANATOO_MATRIX "Enable read-only Matrix rooms / directories (Client-Serve
 option(XANATOO_YOUTUBE "Enable YouTube channel / video / comment fetch (InnerTube, TLS HTTPS)" ON)
 option(XANATOO_VIDEO "Enable PeerTube / Odysee / Dailymotion fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_HN "Enable Hacker News fetch (Firebase + Algolia APIs, TLS HTTPS)" ON)
-option(XANATOO_FORUMS "Enable Discourse / Lobsters / 4chan / Stack Exchange / Bluesky / Flarum fetch (public JSON APIs, TLS HTTPS)" ON)
+option(XANATOO_FORUMS "Enable Discourse / Lobsters / 4chan / Stack Exchange / Bluesky / Flarum / LessWrong fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_EBOOKS "Enable Standard Ebooks / remote EPUB downloads (TLS HTTPS)" ON)
 option(XANATOO_FEEDS "Enable RSS / Atom feed fetch (TLS HTTPS)" ON)
 option(XANATOO_WEB "Open other http(s) pages in-app as reader views (TLS HTTPS)" ON)
@@ -259,6 +259,7 @@ add_executable(xanatoo
   src/forum_stackexchange.cpp
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
+  src/forum_lesswrong.cpp
   src/forum_fetch.cpp
   src/nntp.cpp
   src/nntp_fetch.cpp
@@ -786,6 +787,7 @@ add_executable(xanatoo_tests
   src/nntp.cpp
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
+  src/forum_lesswrong.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp

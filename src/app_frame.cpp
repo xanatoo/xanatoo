@@ -381,6 +381,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         {"Stack Overflow", "stackexchange:stackoverflow.com", false, false},
         {"Discourse (NixOS)", "discourse:discourse.nixos.org", false, false},
         {"Flarum (community)", "flarum:discuss.flarum.org", false, false},
+        {"LessWrong", "lesswrong:", false, false},
         {"4chan (boards)", "fourchan:", false, false},
         {"Bluesky (@bsky.app)", "bsky:bsky.app", false, false},
         {"Reddit (r/popular)", "reddit:r/popular/", false, false},

@@ -1,4 +1,4 @@
-# Forums (Discourse, Lobsters, 4chan, Stack Exchange, Bluesky, Flarum)
+# Forums (Discourse, Lobsters, 4chan, Stack Exchange, Bluesky, Flarum, LessWrong)
 
 Read-only, local-only clients for discussion sites with public JSON APIs,
 in the same shape as `hn:` and `lemmy:`: listings become a Thread of
@@ -30,6 +30,11 @@ recorded replies.
 | `bsky:HANDLE/post/RKEY` | post thread: parents, the post, replies |
 | `flarum:HOST` | recent discussions (`?page=N`) |
 | `flarum:HOST/d/ID[-slug][?page=N]` | discussion |
+| `lesswrong:` | frontpage ("magic" sort; `new`, `top`, `curated`, `quicktakes`; `?page=N`) |
+| `lesswrong:posts/ID[/slug]` | post + all comments as a reply tree (best first) |
+| `lesswrong:users/SLUG` | profile (karma, counts, bio) + posts, newest first |
+| `lesswrong:w/SLUG` | tag / wiki page: description + posts by relevance |
+| `lesswrong:search?query=Q[&page=N]` | posts found, plus matching tags and users |
 
 The 4chan prefix is `fourchan:` because a URI scheme must start with a
 letter: `4chan:g/` would be read as a local path.
@@ -37,7 +42,8 @@ letter: `4chan:g/` would be read as a local path.
 Discourse and Flarum run on any host, so their web URLs are never guessed;
 type the ref. Web pages of the fixed-host sites (lobste.rs,
 boards.4chan.org / 4channel.org, stackoverflow.com and the other Stack
-Exchange hosts, bsky.app) map to refs for the "Native view" toggle
+Exchange hosts, bsky.app, lesswrong.com: `/posts/ID/slug?commentId=C` →
+`#id:C`, `/users/`, `/w/` and `/tag/`, `/quicktakes`, `/search`) map to refs for the "Native view" toggle
 (`forum_ref_from_web_url`); `forum_web_url` goes back, `forum_up_ref` is Up
 (thread → listing → site).
 
@@ -77,9 +83,26 @@ Exchange hosts, bsky.app) map to refs for the "Native view" toggle
   `/api/posts?filter[discussion]=ID&sort=number`, 20 per page; only
   `comment` posts are shown (renames, tag changes are left out).
 
+- LessWrong (ForumMagnum): GraphQL `POST /graphql` with literal arguments
+  (`json_quote`d), `input: {terms: {view, limit, offset, …}}` as the RSS
+  feed uses (posts views `magic`, `new`, `top`, `curated`, `userPosts` +
+  `userId`, `tagRelevance` + `tagId`; comments `postCommentsTop` limit 1000,
+  `shortformFrontpage`). A post and its comments come in one request (big
+  threads ≈ 1 MB, a few seconds); users and tags resolve the slug to an id
+  first. 30 per page; the site caps offsets at 2000 (page ≤ 60). Search is
+  the site's own Algolia-style `POST /api/search` with three queries
+  (`posts`, `tags`, `users` indexes; words are OR-ed, relevance order).
+  Unofficial references: the "Secrets of the LessWrong RSS Feed" post and
+  Wei Dai's GraphQL gist; the code is ForumMagnum on GitHub. Not shown:
+  sequences, the RSS-only views, karma thresholds, comment-only user pages,
+  the Alignment Forum / EA Forum (same software, other hosts).
+- The `lesswrong` search engine (keyword `lw`) opens
+  `lesswrong:search?query=…`.
+
 ## Not done
 
 - public-inbox (lore.kernel.org). Usenet / NNTP is its own client:
   `docs/NNTP.md`.
-- Subscriptions for forum listings; search engines for them (the existing
-  `bluesky` search engine still links bsky.app web pages).
+- Subscriptions for forum listings; search engines for them except
+  LessWrong (the existing `bluesky` search engine still links bsky.app web
+  pages).

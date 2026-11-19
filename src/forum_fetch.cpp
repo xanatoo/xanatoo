@@ -4,7 +4,9 @@
 // Network side of the forum clients: which API URLs a ref needs, then the
 // pure document mappers of forum_<site>.cpp. One request per page except
 // Stack Exchange questions (question, answers, comments), Bluesky threads
-// by handle (resolveHandle first) and Flarum discussions (head + posts).
+// by handle (resolveHandle first), Flarum discussions (head + posts) and
+// LessWrong user / tag pages (the id of the slug first). LessWrong asks
+// its GraphQL API by POST.
 
 #include "forum_common.hpp"
 
@@ -15,6 +17,7 @@
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
@@ -248,6 +251,157 @@ std::optional<Document> flarum_fetch(const ForumRef& ref, std::string* err) {
   return flarum_discussion_document(*head, *posts, ref);
 }
 
+namespace {
+
+const char* const kLwPostFields =
+    "_id slug title postedAt baseScore commentCount url question "
+    "user { slug displayName } coauthors { slug displayName } tags { name slug }";
+const char* const kLwCommentFields =
+    "_id parentCommentId postedAt baseScore deleted descendentCount "
+    "user { slug displayName } contents { html }";
+
+// POST `body` (JSON) to LessWrong; the reply parsed.
+std::optional<Json> lw_post(const std::string& url, const std::string& body,
+                            std::string* err) {
+  static const std::string agent = user_agent("read-only forum client");
+  std::cerr << "Forums: POST " << url << "\n";
+  std::string e;
+  auto resp = https_request("POST", url, agent,
+                            "Content-Type: application/json\r\n"
+                            "Accept: application/json\r\n",
+                            body, &e);
+  if (!resp) {
+    if (err) *err = e;
+    return std::nullopt;
+  }
+  auto json = json_parse(resp->body);
+  if (resp->status != 200 && !(json && json_get(*json, "errors"))) {
+    if (err) *err = http_status_error(resp->status, url);
+    return std::nullopt;
+  }
+  if (!json && err) *err = url + " sent a reply that is not JSON";
+  return json;
+}
+
+// One GraphQL query; GraphQL errors without data fail.
+std::optional<Json> lw_query(const std::string& query, std::string* err) {
+  auto reply = lw_post("https://www.lesswrong.com/graphql",
+                       "{\"query\":" + json_quote(query) + "}", err);
+  if (!reply) return std::nullopt;
+  const Json* data = json_get(*reply, "data");
+  if (!data || data->type != Json::Type::Object) {
+    std::string msg = json_string(json_path(*reply, "errors/0/message"));
+    if (err) *err = "LessWrong: " + (msg.empty() ? std::string("no data in the reply") : msg);
+    return std::nullopt;
+  }
+  return reply;
+}
+
+// posts(input: {terms: {view: …, limit, offset, <extra>}}).
+std::string lw_posts_query(const std::string& view, int page, const std::string& extra) {
+  return "{ posts(input: {terms: {view: " + json_quote(view) +
+         ", limit: " + std::to_string(kLessWrongPageSize) +
+         ", offset: " + std::to_string((page - 1) * static_cast<int>(kLessWrongPageSize)) +
+         extra + "}}) { results { " + kLwPostFields + " } } }";
+}
+
+bool lw_name(std::string_view s) {
+  if (s.empty() || s.size() > 200) return false;
+  for (char c : s)
+    if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_'))
+      return false;
+  return true;
+}
+
+}  // namespace
+
+std::optional<Document> lesswrong_fetch(const ForumRef& ref, std::string* err) {
+  const auto seg = segments(ref.path);
+  const int page = std::min(ref.page, 60);  // LessWrong caps offsets at 2000
+  if (ref.path.empty() || ref.path == "new" || ref.path == "top" ||
+      ref.path == "curated") {
+    const std::string view = ref.path.empty() ? "magic" : ref.path;
+    auto reply = lw_query(lw_posts_query(view, page, {}), err);
+    if (!reply) return std::nullopt;
+    return lesswrong_list_document(*reply, ref);
+  }
+  if (ref.path == "quicktakes") {
+    auto reply = lw_query(
+        "{ comments(input: {terms: {view: \"shortformFrontpage\", limit: " +
+            std::to_string(kLessWrongPageSize) + ", offset: " +
+            std::to_string((page - 1) * static_cast<int>(kLessWrongPageSize)) +
+            "}}) { results { " + kLwCommentFields + " post { _id slug title } } } }",
+        err);
+    if (!reply) return std::nullopt;
+    return lesswrong_quicktakes_document(*reply, ref);
+  }
+  if (seg[0] == "posts" && seg.size() >= 2 && lw_name(seg[1])) {
+    const std::string id = json_quote(seg[1]);
+    auto reply = lw_query(
+        "{ post(input: {selector: {_id: " + id + "}}) { result { " + kLwPostFields +
+            " contents { html } } } comments(input: {terms: {view: \"postCommentsTop\", "
+            "postId: " + id + ", limit: 1000}}) { results { " + kLwCommentFields + " } } }",
+        err);
+    if (!reply) return std::nullopt;
+    return lesswrong_post_document(*reply, ref);
+  }
+  if (seg[0] == "users" && seg.size() == 2 && lw_name(seg[1])) {
+    auto user = lw_query("{ user(input: {selector: {slug: " + json_quote(seg[1]) +
+                             "}}) { result { _id slug displayName karma postCount "
+                             "commentCount createdAt biography { html } } } }",
+                         err);
+    if (!user) return std::nullopt;
+    const std::string uid = json_string(json_path(*user, "data/user/result/_id"));
+    Json posts;
+    if (!uid.empty()) {
+      auto p = lw_query(lw_posts_query("userPosts", page,
+                                       ", userId: " + json_quote(uid) + ", sortedBy: \"new\""),
+                        err);
+      if (!p) return std::nullopt;
+      posts = std::move(*p);
+    }
+    return lesswrong_user_document(*user, posts, ref);
+  }
+  if (seg[0] == "w" && seg.size() == 2 && lw_name(seg[1])) {
+    auto tag = lw_query("{ tags(input: {terms: {view: \"tagBySlug\", slug: " +
+                            json_quote(seg[1]) +
+                            "}}) { results { _id name slug postCount description { html } } } }",
+                        err);
+    if (!tag) return std::nullopt;
+    const std::string tid = json_string(json_path(*tag, "data/tags/results/0/_id"));
+    Json posts;
+    if (!tid.empty()) {
+      auto p = lw_query(lw_posts_query("tagRelevance", page, ", tagId: " + json_quote(tid)),
+                        err);
+      if (!p) return std::nullopt;
+      posts = std::move(*p);
+    }
+    return lesswrong_tag_document(*tag, posts, ref);
+  }
+  if (ref.path == "search") {
+    if (ref.query.empty()) {
+      if (err) *err = "LessWrong search needs a query: lesswrong:search?query=WORDS";
+      return std::nullopt;
+    }
+    const std::string q = json_quote(ref.query);
+    auto index = [&](const char* name, int hits, int pg) {
+      return std::string("{\"indexName\":\"") + name + "\",\"params\":{\"query\":" + q +
+             ",\"hitsPerPage\":" + std::to_string(hits) +
+             ",\"page\":" + std::to_string(pg) + "}}";
+    };
+    const std::string body = "[" + index("posts", kLessWrongPageSize, page - 1) + "," +
+                             index("tags", 10, 0) + "," + index("users", 10, 0) + "]";
+    auto reply = lw_post("https://www.lesswrong.com/api/search", body, err);
+    if (!reply) return std::nullopt;
+    if (reply->type != Json::Type::Array) {
+      if (err) *err = "LessWrong search sent an unexpected reply";
+      return std::nullopt;
+    }
+    return lesswrong_search_document(*reply, ref);
+  }
+  return bad(ref, err);
+}
+
 }  // namespace forum
 
 std::optional<Document> forum_fetch(std::string_view ref, std::string* err) {
@@ -263,6 +417,7 @@ std::optional<Document> forum_fetch(std::string_view ref, std::string* err) {
     case ForumSite::StackExchange: return forum::se_fetch(*r, err);
     case ForumSite::Bluesky: return forum::bsky_fetch(*r, err);
     case ForumSite::Flarum: return forum::flarum_fetch(*r, err);
+    case ForumSite::LessWrong: return forum::lesswrong_fetch(*r, err);
   }
   return std::nullopt;
 }

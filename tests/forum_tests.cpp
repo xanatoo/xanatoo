@@ -434,6 +434,97 @@ void test_flarum() {
   EXPECT(count_kind(l, NodeKind::Article) == 1);
 }
 
+
+void test_lesswrong() {
+  // Refs and their web forms.
+  EXPECT(is_forum_ref("lesswrong:"));
+  EXPECT_EQ(forum_ref_string(ref("lesswrong:search?query=rss+feed&page=2")),
+            "lesswrong:search?query=rss%20feed&page=2");
+  EXPECT_EQ(ref("lesswrong:search?query=a%26b").query, "a&b");
+  EXPECT_EQ(forum_web_url(ref("lesswrong:posts/abc/slug#id:c1")),
+            "https://www.lesswrong.com/posts/abc/slug?commentId=c1");
+  EXPECT_EQ(forum_web_url(ref("lesswrong:new")), "https://www.lesswrong.com/allPosts?sortedBy=new");
+  EXPECT_EQ(forum_web_url(ref("lesswrong:search?query=a%20b")),
+            "https://www.lesswrong.com/search?query=a%20b");
+  EXPECT_EQ(forum_up_ref(ref("lesswrong:posts/abc")), "lesswrong:");
+  EXPECT_EQ(forum_ref_from_web_url("https://www.lesswrong.com/"), "lesswrong:");
+  EXPECT_EQ(forum_ref_from_web_url(
+                "https://www.lesswrong.com/posts/dzF8vSdDtmWjCBBDr/secrets?commentId=8iGJ9"),
+            "lesswrong:posts/dzF8vSdDtmWjCBBDr/secrets#id:8iGJ9");
+  EXPECT_EQ(forum_ref_from_web_url("https://lesswrong.com/users/brendan-long"),
+            "lesswrong:users/brendan-long");
+  EXPECT_EQ(forum_ref_from_web_url("https://www.lesswrong.com/tag/ai"), "lesswrong:w/ai");
+  EXPECT_EQ(forum_ref_from_web_url("https://www.lesswrong.com/search?query=x+y"),
+            "lesswrong:search?query=x%20y");
+  EXPECT_EQ(forum_ref_from_web_url("https://www.lesswrong.com/library"), "");
+
+  // A post with a reply tree (flat, best first) and links back to the site.
+  Json post = parse(R"({"data":{"post":{"result":{"_id":"P1","slug":"s","title":"Secrets",
+      "postedAt":"2026-02-23T20:12:06.950Z","baseScore":36,"commentCount":3,"url":null,
+      "question":false,"user":{"slug":"brendan-long","displayName":"Brendan Long"},"coauthors":[],
+      "tags":[{"name":"Practical","slug":"practical"}],
+      "contents":{"html":"<p>See <a href=\"https://www.lesswrong.com/posts/P1/s?commentId=C2\">this</a> and <a href=\"/posts/Q9/other\">that</a>.</p>"}}},
+    "comments":{"results":[
+      {"_id":"C1","parentCommentId":null,"postedAt":"2026-02-24T08:10:50Z","baseScore":8,"deleted":false,
+       "user":{"slug":"jim","displayName":"jim"},"contents":{"html":"<p>top</p>"}},
+      {"_id":"C3","parentCommentId":null,"postedAt":"2026-02-24T09:00:00Z","baseScore":2,"deleted":true,
+       "user":null,"contents":{"html":""}},
+      {"_id":"C2","parentCommentId":"C1","postedAt":"2026-02-24T10:00:00Z","baseScore":1,"deleted":false,
+       "user":{"slug":"ann","displayName":"Ann"},"contents":{"html":"<p>reply</p>"}}]}}})");
+  Document d = lesswrong_post_document(post, ref("lesswrong:posts/P1/s"));
+  const Node* top = message(d, "P1");
+  const Node* c1 = message(d, "C1");
+  const Node* c2 = message(d, "C2");
+  const Node* c3 = message(d, "C3");
+  EXPECT(top && c1 && c2 && c3);
+  if (c1) EXPECT_EQ(c1->alt, "P1");
+  if (c2) EXPECT_EQ(c2->alt, "C1");
+  if (c3) EXPECT_EQ(c3->src, "[deleted]");
+  // Depth first: C2 right after its parent C1, before C3.
+  std::string order;
+  for (const Node& n : d.nodes)
+    if (n.kind == NodeKind::Message) order += n.label + ",";
+  EXPECT_EQ(order, "P1,C1,C2,C3,");
+  EXPECT(has_href(d, "#id:C2"));
+  EXPECT(has_href(d, "lesswrong:posts/Q9/other"));
+  EXPECT(has_href(d, "lesswrong:users/brendan-long"));
+  EXPECT(has_href(d, "lesswrong:w/practical"));
+  EXPECT(has_href(d, "lesswrong:posts/P1/s#id:C1"));  // comment date
+  EXPECT(all_text(d).find("36 karma") != std::string::npos);
+
+  // Listing: one entry per post, linkpost host, no pager below a full page.
+  Json list = parse(R"({"data":{"posts":{"results":[{"_id":"A","slug":"a","title":"T",
+      "postedAt":"2026-11-19T14:33:52Z","baseScore":171,"commentCount":7,
+      "url":"https://www.example.org/p","question":true,
+      "user":{"slug":"so8res","displayName":"So8res"},"coauthors":[{"slug":"x","displayName":"X"}],
+      "tags":[{"name":"AI","slug":"ai"}]}]}}})");
+  Document l = lesswrong_list_document(list, ref("lesswrong:"));
+  EXPECT(count_kind(l, NodeKind::Article) == 1);
+  EXPECT(has_href(l, "lesswrong:posts/A/a"));
+  EXPECT(has_href(l, "lesswrong:users/x"));
+  EXPECT(!has_href(l, "lesswrong:?page=2"));
+  const std::string lt = all_text(l);
+  EXPECT(lt.find("(example.org)") != std::string::npos);
+  EXPECT(lt.find("[Question] T") != std::string::npos);
+
+  // Search: posts, tags and users of one multi-query reply.
+  Json found = parse(R"([{"hits":[{"objectID":"P1","slug":"s","title":"Secrets","url":null,
+      "baseScore":36,"commentCount":6,"postedAt":"2026-02-23T20:12:06.950Z",
+      "authorSlug":"brendan-long","authorDisplayName":"Brendan Long","tags":[]}],
+      "nbHits":40,"nbPages":2,"page":0},
+    {"hits":[{"name":"RSS","slug":"rss"}]},{"hits":[{"displayName":"Ann","slug":"ann"}]}])");
+  Document f = lesswrong_search_document(found, ref("lesswrong:search?query=rss"));
+  EXPECT(has_href(f, "lesswrong:posts/P1/s"));
+  EXPECT(has_href(f, "lesswrong:w/rss"));
+  EXPECT(has_href(f, "lesswrong:users/ann"));
+  EXPECT(has_href(f, "lesswrong:search?query=rss&page=2"));
+  EXPECT(all_text(f).find("40 posts found") != std::string::npos);
+
+  // Unknown user: a note, no crash.
+  Document u = lesswrong_user_document(parse(R"({"data":{"user":{"result":null}}})"), Json{},
+                                       ref("lesswrong:users/nobody"));
+  EXPECT(all_text(u).find("No such user.") != std::string::npos);
+}
 }  // namespace
 
 void test_forums(int& passed, int& failed) {
@@ -444,6 +535,7 @@ void test_forums(int& passed, int& failed) {
   test_stackexchange();
   test_bluesky();
   test_flarum();
+  test_lesswrong();
   passed += g_passed;
   failed += g_failed;
 }

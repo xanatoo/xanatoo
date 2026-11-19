@@ -97,8 +97,9 @@ AboutSection services() {
                      "hn:", "`-DXANATOO_HN=ON`"});
   s.items.push_back({"Forums", XANATOO_FORUMS,
                      "`discourse:host`, `lobsters:`, `fourchan:board/`, "
-                     "`stackexchange:host`, `bsky:handle` and `flarum:host` "
-                     "listings and threads (public JSON APIs)",
+                     "`stackexchange:host`, `bsky:handle`, `flarum:host` and "
+                     "`lesswrong:` listings and threads (public JSON / GraphQL "
+                     "APIs; LessWrong search)",
                      "lobsters:", "`-DXANATOO_FORUMS=ON`"});
   s.items.push_back({"Reddit", XANATOO_REDDIT,
                      "`reddit:r/…` subreddits and threads (public .json)",

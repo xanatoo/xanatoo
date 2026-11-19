@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — LessWrong client (`lesswrong:`)
+
+- New forum site in `forums.hpp` / `forum_lesswrong.cpp`: frontpage, new,
+  top, curated, quick takes, posts with the whole comment tree, user and
+  tag pages, search (`lesswrong:search?query=…`, engine `lw`). GraphQL
+  `POST /graphql`, search over `/api/search`. lesswrong.com web URLs map to
+  refs (Native view, links inside posts). Services menu entry. Unit tests
+  in `forum_tests.cpp` (refs, tree order, listing, search).
+- Checked under Xvfb: frontpage, a post with nested comments, `lw rss
+  feed`, `users/brendan-long`, `quicktakes`, `w/ai?page=2`.
+- Known: no sequences, no subscriptions / RSS mapping, no karma threshold;
+  search words are OR-ed by the site; MathJax in posts not checked.
+
 ## Status (2026-11-19) — What a page says about itself (<link rel>)
 
 - `page_links.hpp`: icons, relations, OpenSearch, canonical, hreflang from

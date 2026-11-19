@@ -276,6 +276,9 @@ std::vector<SearchEngine> builtin_table() {
        {"peertube:", "sepiasearch.org"}},
       {"odysee", "Odysee", "od", "Od", "odysee:search?s=%s", "page", "+",
        {"odysee:", "odysee.com"}},
+      {"lesswrong", "LessWrong", "lw", "LW", "lesswrong:search?query=%s",
+       "page", "+",
+       {"lesswrong:", "lesswrong.com"}},
       {"dailymotion", "Dailymotion", "dm", "DM",
        "dailymotion:search?search=%s", "page", "+",
        {"dailymotion:", "dailymotion.com"}},
@@ -344,7 +347,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"curlie", 0xc2410c},     {"youtube", 0xff0000},
       {"peertube", 0xf1680d},  {"odysee", 0xe50054},
       {"dailymotion", 0x0066dc}, {"duckduckgo", 0xde5833},
-      {"grokipedia", 0x111111},
+      {"grokipedia", 0x111111},  {"lesswrong", 0x5f9b65},
       {"freeserp", 0x5b21b6},  {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)
