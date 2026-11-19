@@ -113,6 +113,9 @@ enum class UiCommand {
   HistoryAction,   // arg = action on the right-clicked History row
                    // (HistoryPanel::menu_id): open / open-tab / open-other /
                    // copy / remove
+  MediaAction,     // arg = action of the Media panel's seek bar menu
+                   // (App::media_menu): bookmark-time / unbookmark-time /
+                   // bookmark-file / unbookmark-file / seek / copy-time
   OpenReply,       // right-clicked Message: start a mock reply draft
   JumpQuote,       // context menu quote link; arg = index into the items
   ContextJump,     // Context panel: jump to hovered quote source
@@ -543,6 +546,13 @@ struct UiState {
     bool from_db = false;  // a logged visit (else a session address)
     bool rewinds = true;   // ViewSettings::history_rewinds (Shift flips)
   } history_menu;
+  // The Media panel's open right-click menu (empty title: none).
+  struct MediaMenu {
+    std::string title, time;     // the file, and the position as m:ss
+    bool time_bookmarked = false;  // a bookmark at that position
+    bool file_bookmarked = false;
+    bool seekable = false;
+  } media_menu;
   bool styles_open = false;
   bool styles_manager_open = false;
   int styles_manager_x = 0, styles_manager_y = 0, styles_manager_w = 0,
@@ -696,6 +706,8 @@ public:
   void open_download_menu(float x, float y);
   // The menu of a History panel row (UiState::history_menu).
   void open_history_menu(float x, float y);
+  // The Media panel's seek bar menu (UiState::media_menu).
+  void open_media_menu(float x, float y);
 
   UiFrameResult begin_frame(const UiState& state);
   // Finalize ImGui's command lists before native panels are painted. Each
@@ -747,6 +759,7 @@ private:
   bool bookmark_menu_open_ = false;
   bool download_menu_open_ = false;
   bool history_menu_open_ = false;
+  bool media_menu_open_ = false;
   float context_x_ = 0.f;
   float context_y_ = 0.f;
   float tile_menu_x_ = 0.f;

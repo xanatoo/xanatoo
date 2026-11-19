@@ -185,7 +185,8 @@ void record_media_visit(App& app, int pi, const std::string& url,
                         const NavLink& via) {
   using xanatoo::VisitKind;
   if (url.empty()) return;
-  note_visited_address(app, canonical_address(url));
+  const std::string address = canonical_media_address(url);
+  note_visited_address(app, address);
   if (xanatoo::no_save() || !app.record_visits) return;
   const bool in_view = pi >= 0 && pi < kMaxViews;
   const int64_t prev = in_view ? current_visit(app.panes[pi]) : 0;
@@ -206,7 +207,7 @@ void record_media_visit(App& app, int pi, const std::string& url,
     v.kind = VisitKind::Nav;
     v.source = prev;
   }
-  v.address = canonical_address(url);
+  v.address = address;
   v.time = xanatoo::now_epoch_ms();
   v.title = app.audio.title;
   v.window = xanatoo::visit_instance_id() + "/" +
@@ -922,11 +923,15 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   while (!target.empty() && (target.back() == ' ' || target.back() == '\t'))
     target.pop_back();
   if (target.empty()) return false;
-  // Sound files play in the status line's player; the page stays.
-  if (const xanatoo::Locator audio = xanatoo::parse_locator(target);
-      xanatoo::is_playable_url(audio.base) && !audio.has_selectors()) {
-    if (!play_audio(app, audio.base)) return false;
-    if (record_history) record_media_visit(app, pi, audio.base, hint, from, via);
+  // Sound files play in the Media panel; the page stays. A Media Fragments
+  // time (`#t=30`) is where it starts.
+  if (const xanatoo::MediaAddress media = xanatoo::split_media_address(target);
+      xanatoo::is_playable_url(media.base) &&
+      !xanatoo::parse_locator(media.base).has_selectors()) {
+    const std::string addr =
+        media.start ? xanatoo::media_time_address(media.base, *media.start) : media.base;
+    if (!play_audio(app, addr)) return false;
+    if (record_history) record_media_visit(app, pi, addr, hint, from, via);
     return true;
   }
   Pane& p = app.panes[pi];

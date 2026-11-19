@@ -196,7 +196,8 @@ bool app_init(App& app) {
     // A sound or video file plays in the Media panel; the tab shows its
     // folder (the default page for a remote one), never its bytes as text.
     std::string media_arg;
-    if (xanatoo::is_playable_url(p0) && !xanatoo::parse_locator(p0).has_selectors()) {
+    if (xanatoo::is_playable_url(p0) &&
+        !xanatoo::parse_locator(xanatoo::split_media_address(p0).base).has_selectors()) {
       media_arg = p0;
       p0.clear();
       if (!xanatoo::starts_with_ci(media_arg, "http://") &&

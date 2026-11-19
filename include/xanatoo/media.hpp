@@ -19,6 +19,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -34,6 +35,21 @@ bool needs_media_backend(std::string_view url);
 // A link the player takes in this build: built-in audio, or with a backend
 // video and the other audio formats.
 bool is_playable_url(std::string_view url);
+
+// Media Fragments URI, temporal dimension (W3C): `#t=10`, `#t=1:02.5`,
+// `#t=npt:10,20` (only the start is used), also as one `&` part of the
+// fragment and percent-encoded (`#t%3D10`, as format_locator writes it).
+// The start in seconds; nullopt when the fragment names no time.
+std::optional<double> parse_media_time(std::string_view fragment);
+// An address split at a time fragment: `x.mp4#t=30` → {"x.mp4", 30}.
+// Without one the address is the base, unchanged (other fragments stay).
+struct MediaAddress {
+  std::string base;
+  std::optional<double> start;
+};
+MediaAddress split_media_address(std::string_view address);
+// `base#t=12.5`: seconds rounded to tenths, without trailing zeros.
+std::string media_time_address(std::string_view base, double seconds);
 
 // "FFmpeg 7.1", "Android MediaCodec"; "" when this build has no backend.
 std::string media_backend_name();

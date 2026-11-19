@@ -725,6 +725,25 @@ struct AudioPlayer {
   int tex_w = 0, tex_h = 0;      // size of video_tex
   int video_w = 0, video_h = 0;  // display size; 0 = sound only
   int64_t visit = 0;  // its visit in the log (record_media_visit), 0 = none
+  double start_at = -1;  // a `#t=` start, applied once it is open (< 0: none)
+  // Bookmarks of this file (update_media_marks), keyed on bookmarks_gen and
+  // url: the whole file, and positions (`#t=`) drawn on the seek bar.
+  struct Mark {
+    double t = 0;
+    std::string address;  // as stored
+  };
+  std::vector<Mark> marks;
+  std::string file_mark;  // the whole file's bookmark, as stored ("" = none)
+  uint64_t marks_gen = 0;
+  std::string marks_url;
+  bool marks_valid = false;
+};
+
+// The Media panel's right-click menu (UiCommand::MediaAction).
+struct MediaMenu {
+  bool open = false;
+  double t = 0;          // the position it is for (seconds)
+  std::string mark;      // a position bookmark under the pointer, as stored
 };
 
 // Search bar (app_search.cpp). The engine in use is
@@ -1326,6 +1345,7 @@ struct App {
 
   // The row of the open Downloads right-click menu.
   std::shared_ptr<xanatoo::DownloadProgress> download_menu;
+  MediaMenu media_menu;
   uint64_t next_fetch_id = 1;
   std::shared_ptr<ImageFetchShared> image_fetch =
       std::make_shared<ImageFetchShared>();
@@ -1794,6 +1814,8 @@ std::string page_address(std::string_view page);
 // `address` with its base spelled by page_address (old plain-path bookmarks
 // and history compare equal to file: URLs).
 std::string canonical_address(std::string_view address);
+// Local date, YYYY-MM-DD (Bookmark::created).
+std::string today();
 // Both name the same page (path vs file: URL).
 bool same_page(std::string_view a, std::string_view b);
 // Show `loc`'s selectors in the page the view already shows, no load. A
@@ -2193,7 +2215,9 @@ bool page_key(App& app, SDL_Keycode sym);
 
 // ---- sound player (app_audio.cpp) ----
 // Start playing `url` (local path, file: URL or http(s) address) in place
-// of what plays now. True = started loading.
+// of what plays now. A Media Fragments time (`#t=30`) is where it starts;
+// for the file already in the player it only goes there. True = started
+// loading (or went there).
 bool play_audio(App& app, const std::string& url);
 void audio_toggle(App& app);        // play / pause (replay once ended)
 void audio_stop(App& app);          // stop and hide the player
@@ -2212,6 +2236,16 @@ void draw_media_panel(App& app);
 void click_media_panel(App& app, int mx, int my);
 // Status text for the part of the panel under the pointer ("" = none).
 std::string media_panel_hover(const App& app, int mx, int my);
+// Right press in the panel: the bookmark menu for the seek bar position
+// under the pointer (elsewhere: the current position). True when the
+// press was inside the client area (taken, menu or not).
+bool right_click_media_panel(App& app, int mx, int my);
+// UiCommand::MediaAction on App::media_menu: bookmark-time / unbookmark-time
+// / bookmark-file / unbookmark-file / seek / copy-time.
+void media_action(App& app, const std::string& action);
+// The address a played file is stored under (visits, bookmarks): the base
+// as canonical_address, a `#t=` start kept in Media Fragments form.
+std::string canonical_media_address(std::string_view address);
 void audio_set_volume(App& app, float volume);  // 0..1
 
 // ---- search bar (app_search.cpp) ----

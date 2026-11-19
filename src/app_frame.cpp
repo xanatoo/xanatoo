@@ -17,6 +17,7 @@
 #include <stdexcept>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/reddit_credentials.hpp"
 #include "xanatoo/catalog_credentials.hpp"
 #include "xanatoo/platform.hpp"
@@ -395,6 +396,16 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.history_menu.label = history_menu_label(app);
     ui_state.history_menu.from_db = app.history.menu_id != 0;
     ui_state.history_menu.rewinds = app.view_settings.history_rewinds;
+  }
+  ui_state.media_menu = {};
+  if (app.media_menu.open && app.audio.state != AudioState::Idle) {
+    auto& mm = ui_state.media_menu;
+    mm.title = app.audio.title;
+    mm.time = xanatoo::format_audio_time(app.media_menu.t);
+    mm.time_bookmarked = !app.media_menu.mark.empty();
+    mm.file_bookmarked = !app.audio.file_mark.empty();
+    mm.seekable = app.audio.duration > 0 && app.audio.state != AudioState::Loading &&
+                  app.audio.state != AudioState::Failed;
   }
   ui_state.download_menu = {};
   if (const auto& d = app.download_menu) {
@@ -777,7 +788,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::GoHome || c == C::GoUp ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleMedia || c == C::ToggleBookmarks ||
         c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
-        c == C::DownloadAction || c == C::HistoryAction ||
+        c == C::DownloadAction || c == C::HistoryAction || c == C::MediaAction ||
         c == C::ToggleSubscriptions || c == C::Subscribe ||
         c == C::Unsubscribe || c == C::SubscriptionOpen ||
         c == C::SubscriptionMarkRead || c == C::SubscriptionRefresh ||
@@ -1898,6 +1909,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::HistoryAction:
       history_action(app, arg);
+      break;
+    case C::MediaAction:
+      media_action(app, arg);
       break;
     case C::CopyText:
       if (!arg.empty()) {

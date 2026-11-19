@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Media bookmarks on the timeline
+
+- Right-click in the Media panel: Bookmark Position m:ss (the seek bar
+  point under the pointer, else the current position) / Remove Bookmark
+  at m:ss, Go to, Copy Address at, Bookmark File / Remove File Bookmark.
+  Positions are Media Fragments addresses (`…/a.mp3#t=12.5`); they show
+  as green lines on the seek bar, a bookmarked file as a green ribbon
+  right of the title. Opening a `#t=` address starts there; for the file
+  already playing it only seeks. Unit tests for the fragment parsing.
+- Checked under Xvfb (isolated state, 60 s WAV): start from `#t=20`,
+  menu, bookmark position + file (stored addresses checked in sqlite),
+  line + ribbon drawn, hover names the mark, right-click on the line
+  offers removal, both removed, `#t=15` from the address bar seeks
+  without reloading; `red.mp4#t=0.3` opens through FFmpeg.
+- Known: the end of a `t=10,20` range is ignored (start only).
+
 ## Status (2026-11-19) — Played media is in the history
 
 - Sound / video that goes to the Media panel is a visit

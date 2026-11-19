@@ -391,6 +391,25 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   yellow while the player holds it (`update_playing_links` →
   `Pane::playing_links`, keyed on layout generation and `AudioPlayer::url`;
   the href resolves like a click, `file:` as its path; Stop clears it).
+- Bookmarks: right-click in the panel (`right_click_media_panel`) opens
+  the bookmark menu (`App::media_menu`, `UiState::media_menu`,
+  `UiCommand::MediaAction` → `media_action`) for the seek bar position
+  under the pointer (elsewhere the current one): bookmark / remove that
+  position, go there, copy its address, bookmark / remove the whole file.
+  A position is a Media Fragments address, `file:///a.mp3#t=12.5`
+  (`media_time_address`, tenths; `parse_media_time` /
+  `split_media_address` read `t=`, `t=npt:1:02`, `t=10,20`, percent-
+  encoded too). `update_media_marks` finds the file's bookmarks
+  (`AudioPlayer::marks` / `file_mark`, keyed on `bookmarks_gen` and the
+  url): green lines (`DocStyle::bookmark`) across the seek bar under the
+  knob, a ribbon right of the title for the file. A press near a line
+  goes to exactly its position; `mark_near` is the hit-test for click,
+  hover and menu.
+- `#t=` start: `navigate_pane` / startup split the time off before the
+  selector test; `play_audio` keeps it in `AudioPlayer::start_at` and seeks
+  once open (`start_playing` / `start_media`). For the file already in the
+  player it only seeks (and plays). Visits store `canonical_media_address`
+  (the locator form would percent-encode `t=`).
 - Not yet: built-in Opus (without a backend), streaming the built-in
   formats before the download ends.
 

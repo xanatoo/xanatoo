@@ -9,9 +9,11 @@
 #include "xanatoo/media.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <thread>
 
 #include "xanatoo/audio.hpp"
+#include "xanatoo/text_escape.hpp"
 
 namespace xanatoo {
 
@@ -27,6 +29,72 @@ bool needs_media_backend(std::string_view url) {
 
 bool is_playable_url(std::string_view url) {
   return is_audio_url(url) || (needs_media_backend(url) && media_backend_available());
+}
+
+namespace {
+// "10", "10.5", "1:02", "1:02:03.5"; nullopt for anything else.
+std::optional<double> parse_clock(std::string_view s) {
+  if (s.empty()) return std::nullopt;
+  double total = 0, part = 0, scale = 0;  // scale > 0: in the decimals
+  int colons = 0;
+  bool digit = false;
+  for (char c : s) {
+    if (c >= '0' && c <= '9') {
+      digit = true;
+      if (scale > 0) {
+        part += (c - '0') * scale;
+        scale /= 10;
+      } else {
+        part = part * 10 + (c - '0');
+      }
+    } else if (c == '.' && scale == 0 && digit) {
+      scale = 0.1;
+    } else if (c == ':' && scale == 0 && digit && colons < 2) {
+      total = (total + part) * 60;
+      part = 0;
+      digit = false;
+      ++colons;
+    } else {
+      return std::nullopt;
+    }
+  }
+  if (!digit) return std::nullopt;
+  return total + part;
+}
+
+}  // namespace
+
+std::optional<double> parse_media_time(std::string_view fragment) {
+  const std::string frag = percent_decode(fragment);
+  std::string_view rest = frag;
+  while (!rest.empty()) {
+    const size_t amp = rest.find('&');
+    std::string_view part = rest.substr(0, amp);
+    rest = amp == std::string_view::npos ? std::string_view{} : rest.substr(amp + 1);
+    if (part.size() < 2 || part.substr(0, 2) != "t=") continue;
+    part.remove_prefix(2);
+    if (part.substr(0, 4) == "npt:") part.remove_prefix(4);
+    const size_t comma = part.find(',');
+    const std::string_view start = part.substr(0, comma);
+    if (start.empty()) return 0.0;  // "t=,20": from the start
+    return parse_clock(start);
+  }
+  return std::nullopt;
+}
+
+MediaAddress split_media_address(std::string_view address) {
+  const size_t hash = address.find('#');
+  if (hash != std::string_view::npos)
+    if (auto t = parse_media_time(address.substr(hash + 1)))
+      return {std::string(address.substr(0, hash)), t};
+  return {std::string(address), std::nullopt};
+}
+
+std::string media_time_address(std::string_view base, double seconds) {
+  const long tenths = std::lround(std::max(0.0, seconds) * 10);
+  std::string t = std::to_string(tenths / 10);
+  if (tenths % 10) t += "." + std::to_string(tenths % 10);
+  return std::string(base) + "#t=" + t;
 }
 
 #if !(defined(XANATOO_FFMPEG) && XANATOO_FFMPEG) && !defined(__ANDROID__)

@@ -1119,6 +1119,12 @@ void Ui::open_download_menu(float x, float y) {
   context_y_ = y;
 }
 
+void Ui::open_media_menu(float x, float y) {
+  media_menu_open_ = true;
+  context_x_ = x;
+  context_y_ = y;
+}
+
 void Ui::open_history_menu(float x, float y) {
   history_menu_open_ = true;
   context_x_ = x;
@@ -3070,6 +3076,42 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::Separator();
         item("Remove from List", "forget", true);
       }
+    }
+    ImGui::EndPopup();
+  }
+
+  // ---- Menu of the Media panel's seek bar ----
+  if (media_menu_open_) {
+    ImGui::SetNextWindowPos(ImVec2(context_x_, context_y_), ImGuiCond_Appearing);
+    ImGui::OpenPopup("##media_menu");
+    media_menu_open_ = false;
+  }
+  if (ImGui::BeginPopup("##media_menu")) {
+    const auto& mm = state.media_menu;
+    if (mm.title.empty()) {
+      ImGui::CloseCurrentPopup();
+    } else {
+      std::string label = mm.title;
+      if (label.size() > 64) label = elide_middle(label, 28);
+      ImGui::TextDisabled("%s", label.c_str());
+      ImGui::Separator();
+      auto item = [&](const std::string& text, const char* action, bool enabled = true) {
+        if (ImGui::MenuItem(text.c_str(), nullptr, false, enabled)) {
+          cmd = UiCommand::MediaAction;
+          result.arg = action;
+        }
+      };
+      if (mm.time_bookmarked)
+        item("Remove Bookmark at " + mm.time, "unbookmark-time");
+      else
+        item("Bookmark Position " + mm.time, "bookmark-time");
+      item("Go to " + mm.time, "seek", mm.seekable);
+      item("Copy Address at " + mm.time, "copy-time");
+      ImGui::Separator();
+      if (mm.file_bookmarked)
+        item("Remove File Bookmark", "unbookmark-file");
+      else
+        item("Bookmark File", "bookmark-file");
     }
     ImGui::EndPopup();
   }

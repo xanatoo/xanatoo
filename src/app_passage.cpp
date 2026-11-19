@@ -141,6 +141,8 @@ std::string one_line(std::string_view s, size_t max) {
   return out;
 }
 
+}  // namespace
+
 std::string today() {
   const std::time_t now = std::time(nullptr);
   char buf[16] = {};
@@ -148,6 +150,8 @@ std::string today() {
     std::strftime(buf, sizeof(buf), "%Y-%m-%d", tm);
   return buf;
 }
+
+namespace {
 
 std::optional<xanatoo::SelectorKind> source_pipe(const xanatoo::Locator& loc) {
   for (const auto& pipe : loc.pipes)

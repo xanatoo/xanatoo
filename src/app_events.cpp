@@ -758,6 +758,10 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         w && w->role == WindowRole::Downloads &&
         right_click_downloads_panel(app, rx, ry))
       return;
+    // The Media panel: bookmarks of the file and of a position.
+    if (FloatWindow* w = float_at(app, rx, ry);
+        w && w->role == WindowRole::Media && right_click_media_panel(app, rx, ry))
+      return;
     const bool over_soft = over_float_chrome(app, rx, ry);
     if (!over_soft && !imgui_mouse && app.split) {
       const auto within = [&](const SDL_Rect& rc, int pad = 0) {

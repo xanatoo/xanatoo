@@ -137,6 +137,33 @@ void test_media(int& passed, int& failed) {
             "H.264 640\xC3\x97" "360 \xC2\xB7 AAC 44100 Hz stereo");
   EXPECT_EQ(media_describe("", 0, 0, "Opus", 48000, 1), "Opus 48000 Hz mono");
 
+  // Media Fragments: the start of a temporal fragment.
+  EXPECT(parse_media_time("t=10") == 10.0);
+  EXPECT(parse_media_time("t=12.5") == 12.5);
+  EXPECT(parse_media_time("t=npt:1:02.5") == 62.5);
+  EXPECT(parse_media_time("t=1:00:03") == 3603.0);
+  EXPECT(parse_media_time("t=10,20") == 10.0);
+  EXPECT(parse_media_time("t=,20") == 0.0);
+  EXPECT(parse_media_time("xywh=0,0,10,10&t=7") == 7.0);
+  EXPECT(parse_media_time("t%3D30") == 30.0);
+  EXPECT(!parse_media_time("t=abc"));
+  EXPECT(!parse_media_time("t=1..2"));
+  EXPECT(!parse_media_time("intro"));
+  EXPECT(!parse_media_time(""));
+  {
+    const MediaAddress a = split_media_address("file:///m/song.mp3#t=30");
+    EXPECT_EQ(a.base, "file:///m/song.mp3");
+    EXPECT(a.start == 30.0);
+    const MediaAddress b = split_media_address("song.mp3#intro");
+    EXPECT_EQ(b.base, "song.mp3#intro");
+    EXPECT(!b.start);
+    EXPECT_EQ(split_media_address("song.mp3").base, "song.mp3");
+  }
+  EXPECT_EQ(media_time_address("a.mp4", 12.0), "a.mp4#t=12");
+  EXPECT_EQ(media_time_address("a.mp4", 12.34), "a.mp4#t=12.3");
+  EXPECT_EQ(media_time_address("a.mp4", 59.96), "a.mp4#t=60");
+  EXPECT_EQ(media_time_address("a.mp4", -1), "a.mp4#t=0");
+
   // The pipe with sound and pictures.
   {
     auto pb = std::make_shared<MediaPlayback>();

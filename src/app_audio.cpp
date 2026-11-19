@@ -230,6 +230,8 @@ void start_media(App& app) {
   }
   xanatoo::media_set_paused(m, false, now_s());
   a.state = AudioState::Playing;
+  if (a.start_at > 0) audio_seek(app, a.start_at);
+  a.start_at = -1;
   std::cerr << "media: " << a.url << " (" << info.format << ", "
             << xanatoo::format_audio_time(a.duration) << ", " << xanatoo::media_backend_name()
             << ")\n";
@@ -280,6 +282,8 @@ void start_playing(App& app) {
     return;
   }
   a.play = std::move(s);
+  if (a.start_at > 0) audio_seek(app, a.start_at);
+  a.start_at = -1;
   xanatoo::sdl::pause_audio_out(a.play->out, false);
   a.state = AudioState::Playing;
   std::cerr << "audio: " << a.url << " ("
@@ -290,7 +294,9 @@ void start_playing(App& app) {
 
 // The panel's parts, placed in its client rect (shared by draw, click and
 // hover: the same hit-test as the action).
-enum class MediaPart : uint8_t { None, Video, Back, Toggle, Forward, Stop, Seek, Volume };
+enum class MediaPart : uint8_t {
+  None, Video, Back, Toggle, Forward, Stop, Seek, Volume, FileMark
+};
 
 struct MediaLayout {
   SDL_Rect client{};
@@ -299,6 +305,7 @@ struct MediaLayout {
   int pad = 0;
   int title_y = 0, info_y = 0, times_y = 0;  // text baselines
   SDL_Rect seek{}, back{}, toggle{}, forward{}, stop{}, volume{};
+  SDL_Rect file_mark{};  // ribbon right of the title while bookmarked (w = 0: none)
   int volume_label_x = 0, buttons_y = 0;
 };
 
@@ -334,11 +341,17 @@ MediaLayout media_layout(const App& app) {
   const int vw = std::min(160, cx + cw - L.pad - (vx + label_w));
   L.volume = {vx + label_w, y + (b - bar_h) / 2, std::max(0, vw), bar_h};
   L.controls_h = y + b + L.pad - cy;
+  if (!app.audio.file_mark.empty() && app.audio.state != AudioState::Idle) {
+    const int rw = std::max(8, lh / 2), rh = std::max(12, lh * 4 / 5);
+    L.file_mark = {cx + cw - L.pad - rw, L.title_y - f.ascender() + (lh - rh) / 2, rw, rh};
+  }
   // A video takes the room above the controls, which move down.
   if (app.audio.video_w > 0) {
     const int vh = std::max(0, ch - L.controls_h);
     L.video = {cx, cy, cw, vh};
-    for (SDL_Rect* r : {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.volume}) r->y += vh;
+    for (SDL_Rect* r :
+         {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.volume, &L.file_mark})
+      r->y += vh;
     L.title_y += vh;
     L.info_y += vh;
     L.times_y += vh;
@@ -361,6 +374,7 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
   if (inside(L.toggle, x, y)) return MediaPart::Toggle;
   if (inside(L.forward, x, y)) return MediaPart::Forward;
   if (inside(L.stop, x, y)) return MediaPart::Stop;
+  if (inside(L.file_mark, x, y)) return MediaPart::FileMark;
   if (inside(grow(L.seek), x, y)) return MediaPart::Seek;
   if (L.volume.w > 0 && inside(grow(L.volume), x, y)) return MediaPart::Volume;
   return MediaPart::None;
@@ -368,6 +382,68 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
 
 double frac_in(const SDL_Rect& r, int x) {
   return std::clamp(static_cast<double>(x - r.x) / std::max(1, r.w), 0.0, 1.0);
+}
+
+// Bookmarks are shown and placed only once the length is known.
+bool seekable(const AudioPlayer& a) {
+  return a.duration > 0 && a.state != AudioState::Loading && a.state != AudioState::Failed &&
+         a.state != AudioState::Idle;
+}
+
+// x of position `t` on the seek bar.
+int seek_x(const SDL_Rect& bar, double t, double duration) {
+  return bar.x + static_cast<int>(std::lround(bar.w * std::clamp(t / duration, 0.0, 1.0)));
+}
+
+// The position bookmark drawn nearest to x, within a few pixels.
+const AudioPlayer::Mark* mark_near(const AudioPlayer& a, const SDL_Rect& bar, int x) {
+  if (!seekable(a)) return nullptr;
+  const AudioPlayer::Mark* best = nullptr;
+  int best_d = 5;
+  for (const AudioPlayer::Mark& m : a.marks)
+    if (const int d = std::abs(seek_x(bar, m.t, a.duration) - x); d < best_d) {
+      best_d = d;
+      best = &m;
+    }
+  return best;
+}
+
+// A bookmark ribbon (as in the document margin): body, notch at the foot.
+void ribbon(App& app, const SDL_Rect& r, xanatoo::Rgba c, Uint8 alpha) {
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(app.sdl, c.r, c.g, c.b, alpha);
+  const int notch = std::max(3, r.w / 2);
+  const SDL_Rect body{r.x, r.y, r.w, r.h - notch};
+  xanatoo::sdl::fill_rect(app.sdl, &body);
+  for (int k = 0; k < notch; ++k) {
+    const int yy = r.y + r.h - notch + k;
+    const int leg = std::max(1, r.w / 2 - k);
+    xanatoo::sdl::draw_line(app.sdl, r.x, yy, r.x + leg - 1, yy);
+    xanatoo::sdl::draw_line(app.sdl, r.x + r.w - leg, yy, r.x + r.w - 1, yy);
+  }
+}
+
+// Finds this file's bookmarks again when they or the file change.
+void update_media_marks(App& app) {
+  AudioPlayer& a = app.audio;
+  if (a.marks_valid && a.marks_gen == app.bookmarks_gen && a.marks_url == a.url) return;
+  a.marks_valid = true;
+  a.marks_gen = app.bookmarks_gen;
+  a.marks_url = a.url;
+  a.marks.clear();
+  a.file_mark.clear();
+  if (a.url.empty()) return;
+  const std::string self = canonical_address(a.url);
+  for (const xanatoo::Bookmark& b : app.bookmarks) {
+    const xanatoo::MediaAddress m = xanatoo::split_media_address(b.address);
+    if (!xanatoo::is_playable_url(m.base) || canonical_address(m.base) != self) continue;
+    if (m.start)
+      a.marks.push_back({*m.start, b.address});
+    else if (a.file_mark.empty())
+      a.file_mark = b.address;
+  }
+  std::sort(a.marks.begin(), a.marks.end(),
+            [](const AudioPlayer::Mark& x, const AudioPlayer::Mark& y) { return x.t < y.t; });
 }
 
 // A triangle pointing right (dir = 1) or left (-1), `s` high, from x0.
@@ -417,6 +493,17 @@ void draw_button(App& app, const SDL_Rect& r, MediaPart part, bool hot, bool ena
   }
 }
 
+// The raised knob of a bar at `frac`.
+void draw_knob(App& app, const SDL_Rect& r, double frac) {
+  namespace th = xanatoo::theme;
+  const int w = static_cast<int>(std::lround(r.w * std::clamp(frac, 0.0, 1.0)));
+  const int kw = std::max(6, r.h * 2 / 3);
+  const SDL_Rect k{std::clamp(r.x + w - kw / 2, r.x - kw / 2, r.x + r.w - kw / 2), r.y - 3, kw,
+                   r.h + 6};
+  th::fill(app.sdl, k, th::palette().face_light);
+  th::bevel(app.sdl, k, th::Bevel::Raised);
+}
+
 // A sunken trough filled to `frac`, with a knob at the end when `knob`.
 void draw_bar(App& app, const SDL_Rect& r, double frac, xanatoo::theme::Rgb fillc, bool knob) {
   namespace th = xanatoo::theme;
@@ -425,13 +512,7 @@ void draw_bar(App& app, const SDL_Rect& r, double frac, xanatoo::theme::Rgb fill
   const int w = static_cast<int>(std::lround(r.w * std::clamp(frac, 0.0, 1.0)));
   if (w > 0) th::fill(app.sdl, {r.x, r.y, w, r.h}, fillc);
   th::bevel(app.sdl, r, th::Bevel::Sunken);
-  if (knob) {
-    const int kw = std::max(6, r.h * 2 / 3);
-    const SDL_Rect k{std::clamp(r.x + w - kw / 2, r.x - kw / 2, r.x + r.w - kw / 2), r.y - 3,
-                     kw, r.h + 6};
-    th::fill(app.sdl, k, p.face_light);
-    th::bevel(app.sdl, k, th::Bevel::Raised);
-  }
+  if (knob) draw_knob(app, r, frac);
 }
 
 void apply_drag(App& app, int x) {
@@ -446,7 +527,10 @@ void apply_drag(App& app, int x) {
 
 }  // namespace
 
-bool play_audio(App& app, const std::string& url_in) {
+bool play_audio(App& app, const std::string& address) {
+  // `#t=30` (Media Fragments): where to start; the rest is the file.
+  const xanatoo::MediaAddress split = xanatoo::split_media_address(address);
+  const std::string& url_in = split.base;
   std::string url = url_in;
   if (xanatoo::is_file_url(url)) {
     url = xanatoo::file_url_path(url);
@@ -456,11 +540,26 @@ bool play_audio(App& app, const std::string& url_in) {
     }
   }
   AudioPlayer& a = app.audio;
+  // The file in the player already: only go to the position (no reload).
+  if (split.start && a.url == url && have_media(a) && a.state != AudioState::Failed) {
+    if (a.visit) xanatoo::store_visit_leave(a.visit, xanatoo::now_epoch_ms());
+    a.visit = 0;
+    audio_seek(app, *split.start);
+    if (a.state != AudioState::Playing) audio_toggle(app);
+    app.media_panel_open = true;
+    flash_status(app, a.title + " at " + xanatoo::format_audio_time(*split.start));
+    return true;
+  }
+  if (split.start && a.url == url && a.state == AudioState::Loading) {
+    a.start_at = *split.start;  // still opening: start there
+    return true;
+  }
   close_player(a);
   const float volume = a.volume;
   a = {};
   a.volume = volume;
   a.url = url;
+  if (split.start) a.start_at = *split.start;
   a.title = xanatoo::audio_name_of(url);
   a.state = AudioState::Loading;
   if (xanatoo::needs_media_backend(url) && xanatoo::media_backend_available()) {
@@ -570,6 +669,7 @@ double audio_position(const App& app) {
 
 void update_audio(App& app) {
   AudioPlayer& a = app.audio;
+  update_media_marks(app);
   // A drag in the panel follows the pointer until the button comes up.
   if (a.drag != AudioPlayer::Drag::None) {
     if (!xanatoo::sdl::left_button_down() || !app.media_panel_open) {
@@ -664,13 +764,87 @@ void click_media_panel(App& app, int mx, int my) {
     case MediaPart::Seek:
       if (have_media(a) && a.duration > 0) {
         a.drag = AudioPlayer::Drag::Seek;
-        apply_drag(app, mx);
+        // A press on a bookmark's line goes to exactly its position.
+        if (const AudioPlayer::Mark* m = mark_near(a, L.seek, mx)) {
+          audio_seek(app, m->t);
+          a.drag_x = mx;
+        } else {
+          apply_drag(app, mx);
+        }
       }
       break;
     case MediaPart::Volume:
       a.drag = AudioPlayer::Drag::Volume;
       apply_drag(app, mx);
       break;
+    case MediaPart::FileMark: break;
+  }
+}
+
+bool right_click_media_panel(App& app, int mx, int my) {
+  if (!app.media_panel_open || float_shaded(app.media_win)) return false;
+  const MediaLayout L = media_layout(app);
+  if (!inside(L.client, mx, my)) return false;
+  AudioPlayer& a = app.audio;
+  if (a.state == AudioState::Idle || a.url.empty()) return true;
+  update_media_marks(app);
+  MediaMenu& menu = app.media_menu;
+  menu = {};
+  menu.open = true;
+  menu.t = audio_position(app);
+  if (media_part_at(app, L, mx, my) == MediaPart::Seek && seekable(a)) {
+    if (const AudioPlayer::Mark* m = mark_near(a, L.seek, mx)) {
+      menu.t = m->t;
+      menu.mark = m->address;
+    } else {
+      menu.t = frac_in(L.seek, mx) * a.duration;
+    }
+  }
+  // A bookmark at the same tenth of a second is the same bookmark.
+  if (menu.mark.empty()) {
+    const std::string at = xanatoo::media_time_address("", menu.t);
+    for (const AudioPlayer::Mark& m : a.marks)
+      if (xanatoo::media_time_address("", m.t) == at) menu.mark = m.address;
+  }
+  app.ui.open_media_menu(static_cast<float>(mx), static_cast<float>(my));
+  return true;
+}
+
+std::string canonical_media_address(std::string_view address) {
+  const xanatoo::MediaAddress m = xanatoo::split_media_address(address);
+  const std::string base = canonical_address(m.base);
+  return m.start ? xanatoo::media_time_address(base, *m.start) : base;
+}
+
+void media_action(App& app, const std::string& action) {
+  MediaMenu menu = std::exchange(app.media_menu, {});
+  AudioPlayer& a = app.audio;
+  if (!menu.open || a.url.empty()) return;
+  const std::string file = canonical_address(a.url);
+  const std::string at = xanatoo::media_time_address(file, menu.t);
+  const std::string when = xanatoo::format_audio_time(menu.t);
+  if (action == "bookmark-time") {
+    xanatoo::Bookmark b;
+    b.address = at;
+    b.title = a.title + " at " + when;
+    b.created = today();
+    add_bookmark(app, std::move(b));
+  } else if (action == "unbookmark-time") {
+    remove_bookmark(app, menu.mark.empty() ? at : menu.mark);
+  } else if (action == "bookmark-file") {
+    xanatoo::Bookmark b;
+    b.address = file;
+    b.title = a.title;
+    b.created = today();
+    add_bookmark(app, std::move(b));
+  } else if (action == "unbookmark-file") {
+    update_media_marks(app);
+    remove_bookmark(app, a.file_mark.empty() ? file : a.file_mark);
+  } else if (action == "seek") {
+    if (seekable(a)) audio_seek(app, menu.t);
+  } else if (action == "copy-time") {
+    SDL_SetClipboardText(at.c_str());
+    flash_status(app, "Copied " + at);
   }
 }
 
@@ -689,9 +863,14 @@ std::string media_panel_hover(const App& app, int mx, int my) {
                                               : "Play";
     case MediaPart::Stop: return "Stop";
     case MediaPart::Seek:
+      if (const AudioPlayer::Mark* m = mark_near(a, L.seek, mx))
+        return "Bookmark at " + xanatoo::format_audio_time(m->t) +
+               " (right-click: bookmark menu)";
       if (have_media(a) && a.duration > 0)
-        return "Go to " + xanatoo::format_audio_time(frac_in(L.seek, mx) * a.duration);
+        return "Go to " + xanatoo::format_audio_time(frac_in(L.seek, mx) * a.duration) +
+               " (right-click: bookmark menu)";
       return {};
+    case MediaPart::FileMark: return "This file is bookmarked";
     case MediaPart::Volume:
       return "Volume " + std::to_string(static_cast<int>(std::lround(a.volume * 100))) + "%";
   }
@@ -750,9 +929,11 @@ void draw_media_panel(App& app) {
       info = a.format;
       break;
   }
+  const int title_w = L.file_mark.w > 0 ? std::max(0, L.file_mark.x - 6 - (c.x + L.pad)) : text_w;
   app.renderer.draw_text(app.ui_font_bold, tx, static_cast<float>(L.title_y),
-                         fit_text(app.ui_font_bold, title, text_w), p.text.r, p.text.g,
+                         fit_text(app.ui_font_bold, title, title_w), p.text.r, p.text.g,
                          p.text.b);
+  if (L.file_mark.w > 0) ribbon(app, L.file_mark, app.style.bookmark, 230);
   app.renderer.draw_text(app.ui_font, tx, static_cast<float>(L.info_y),
                          fit_text(app.ui_font, info, text_w), info_ink.r, info_ink.g,
                          info_ink.b);
@@ -766,7 +947,19 @@ void draw_media_panel(App& app) {
   } else if (have_media(a) && a.duration > 0) {
     frac = pos / a.duration;
   }
-  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, have_media(a) && a.duration > 0);
+  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, false);
+  // Bookmarked positions: a short green line across the bar each.
+  if (seekable(a)) {
+    const xanatoo::Rgba& bc = app.style.bookmark;
+    SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(app.sdl, bc.r, bc.g, bc.b, 255);
+    for (const AudioPlayer::Mark& m : a.marks) {
+      const int x = std::min(seek_x(L.seek, m.t, a.duration), L.seek.x + L.seek.w - 2);
+      const SDL_Rect line{x - 1, L.seek.y - 2, 2, L.seek.h + 4};
+      xanatoo::sdl::fill_rect(app.sdl, &line);
+    }
+  }
+  if (have_media(a) && a.duration > 0) draw_knob(app, L.seek, frac);
   if (have_media(a)) {
     const std::string left = xanatoo::format_audio_time(pos);
     const std::string right = a.duration > 0 ? xanatoo::format_audio_time(a.duration) : "";
