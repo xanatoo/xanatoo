@@ -179,8 +179,11 @@ storing it (with step 4, the panel rewrite).
   trails continue across restarts); a tab opened from a link
   (`DocBuffer::origin_kind` / `origin_visit`, set by `open_link_in_tab`,
   used when the tab is first shown); otherwise `nav` from the previous
-  visit. Starting kinds (`address`, `bookmark`, `history`, `external`)
-  have no source.
+  visit. Starting kinds (`address`, `bookmark`, `external`) have no
+  source; a `history` visit's source is the visit picked in the panel
+  (`App::visit_from` → `NavHistory::pending_from`, or `origin_visit` for
+  a new tab), so browsing on from an old visit grows that visit's branch
+  instead of starting a new trail.
 - Back / Forward record nothing (they return to an entry that has its
   visit). An entry without a visit (restored with the session) gets one
   when its page arrives. Placeholders ("Loading …") are not visits; the

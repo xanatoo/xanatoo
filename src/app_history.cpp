@@ -198,9 +198,12 @@ void open_line(App& app, int line, bool invert = false) {
     for (size_t k = 0; k < e.count; ++k) ids.push_back(h.visits[e.first + k].id);
     if (nav_rewind_to_visit(app, ids)) return;
   }
+  // The new visit continues the picked one's trail (its newest visit).
   app.visit_hint = xanatoo::VisitKind::History;
+  app.visit_from = h.visits[e.first].id;
   open_address(app, address);
   app.visit_hint.reset();
+  app.visit_from = 0;
 }
 
 // Keeps line `sel` inside the client area.

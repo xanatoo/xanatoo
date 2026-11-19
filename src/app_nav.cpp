@@ -12,6 +12,7 @@
 #include <functional>
 #include <iostream>
 #include <optional>
+#include <utility>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/fixed_layout.hpp"
@@ -113,6 +114,8 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
     v.kind = *hint;
     if (*hint == VisitKind::Restore)
       v.source = xanatoo::latest_visit_of(cur.url);  // across restarts
+    else if (*hint == VisitKind::History && h.pending_from)
+      v.source = h.pending_from;  // continues the picked visit's trail
     else if (!xanatoo::visit_kind_starts_trail(*hint))
       v.source = prev;
   } else if (b && b->origin_kind) {
@@ -735,10 +738,12 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
     const xanatoo::VisitKind kind =
         app.visit_hint.value_or(xanatoo::VisitKind::NewTab);
     nb->origin_kind = kind;
-    nb->origin_visit = xanatoo::visit_kind_starts_trail(kind)
+    nb->origin_visit = kind == xanatoo::VisitKind::History ? app.visit_from
+                       : xanatoo::visit_kind_starts_trail(kind)
                            ? 0 : current_visit(app.panes[pi]);
   }
   app.visit_hint.reset();
+  app.visit_from = 0;
   auto& order = app.tab_order;
   if (std::find(order.begin(), order.end(), bi) == order.end()) {
     auto cur = std::find(order.begin(), order.end(), app.panes[pi].buf);
@@ -811,6 +816,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
                    NavLink via) {
   std::optional<xanatoo::VisitKind> hint;
   std::swap(hint, app.visit_hint);  // only ever for this navigation
+  const int64_t from = std::exchange(app.visit_from, 0);
   while (!target.empty() && (target.back() == ' ' || target.back() == '\t'))
     target.pop_back();
   if (target.empty()) return false;
@@ -822,6 +828,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
     if (!via.href.empty()) via.from_url = shown;
     p.nav.pending_link = std::move(via);
     p.nav.pending_kind = hint;
+    p.nav.pending_from = from;
   }
   if (xanatoo::starts_with(target, "draft:") ||
       target == kDocumentsPage || is_stored_document_ref(target) ||

@@ -1092,6 +1092,9 @@ struct App {
   // navigate_to_url / open_address by the chrome; navigate_pane moves it
   // into the view's NavHistory::pending_kind.
   std::optional<xanatoo::VisitKind> visit_hint;
+  // With a `history` hint: the visit picked in the History panel, which
+  // the new visit continues (navigate_pane → NavHistory::pending_from).
+  int64_t visit_from = 0;
   // False while start-up shows stand-in pages (the default document before
   // a session restore replaces it): no visits are recorded then.
   bool record_visits = true;

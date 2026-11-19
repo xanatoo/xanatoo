@@ -515,7 +515,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "Visits newest first, each linked to the visit it came from, like "
      "`git log --graph`: a lane continues where you followed links, a fork "
      "is a tab opened from a page, a hollow dot starts a trail (typed, "
-     "bookmark). Anchor jumps and reloads in one page share a row (*×n*). "
+     "bookmark). A visit opened from here continues its trail, so browsing "
+     "on grows that branch. Anchor jumps and reloads in one page share a row (*×n*). "
      "Click to open, middle-click for a new tab, hover for details. With "
      "the panel focused: **/** or **Ctrl+F** filters, arrows / Home / End "
      "move, **Enter** opens, **Esc** clears the filter or closes."},

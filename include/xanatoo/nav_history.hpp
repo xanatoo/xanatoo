@@ -40,6 +40,7 @@ struct NavHistory {
   NavLink pending_link;  // source of an asynchronous new navigation
   // How the pending navigation was asked for (App::visit_hint).
   std::optional<xanatoo::VisitKind> pending_kind;
+  int64_t pending_from = 0;  // App::visit_from of the pending navigation
 };
 
 inline void nav_history_capture(NavHistory& h, std::string_view visible,

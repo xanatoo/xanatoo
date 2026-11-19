@@ -16,6 +16,15 @@
 - Possible follow-up: also call `pointer_leave` when the mouse leaves the
   window (SDL window-leave event), which leaves hover stuck the same way.
 
+## Status (2026-11-19) — History visits continue the picked branch
+
+- Opening an old visit from the History panel (one no view's Back /
+  Forward trail holds any more) recorded a `history` visit without
+  source, so browsing on from it drew a new trail. Now its source is the
+  picked visit (`App::visit_from` → `NavHistory::pending_from`; new tabs
+  via `origin_visit`), so the new visits grow that visit's branch.
+- Builds, unit tests pass; not yet tried interactively.
+
 ## Status (2026-11-18) — History clicks go back instead of revisiting
 
 - Clicking (or Enter on) a History panel visit that is still in a view's
