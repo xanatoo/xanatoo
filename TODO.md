@@ -15,7 +15,12 @@
   "binary data (size)" page with a link to the folder (`App::binary_paths`).
 - Checked under Xvfb: 35 MB random `.bin` from the command line and from a
   listing click (~200 MB, flat; F2 says read-only). Unit test for the sniff.
-- Open: large *text* files (a 500 MB log) still load whole; no size cap.
+- Large text is fine, no cap needed: a 37 MB / 400k-line log opens in
+  ~10 s, peaks at 1.46 GB while parsing, settles at ~355 MB; Ctrl+End in
+  ~2 s, and SIGTERM ends it. (The binary case was pathological.)
+- Open (decide): a local `.txt` goes through the Markdown parser, so a log
+  shows as one reflowed paragraph. Plain text kept line by line (as a
+  preformatted block) would read better; that changes behaviour, so ask.
 
 ## Status (2026-11-19) — Video plays in the Media panel
 
