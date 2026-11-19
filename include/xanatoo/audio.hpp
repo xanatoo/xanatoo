@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -35,6 +36,9 @@ const char* audio_format_name(AudioFormat f);
 // .wav .opus), by its path, ignoring query and fragment. Local paths,
 // file: URLs and http(s) addresses; other schemes are not ("mailto:").
 bool is_audio_url(std::string_view url);
+// The same test for other names: `url` (local path, file:, http(s)) has a
+// path ending in one of `exts` (".mp4"; any case).
+bool url_has_extension(std::string_view url, std::initializer_list<std::string_view> exts);
 
 // An open decoder. It keeps the bytes it decodes from.
 struct AudioDecoder;

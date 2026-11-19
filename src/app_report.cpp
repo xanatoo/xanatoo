@@ -453,6 +453,10 @@ void print_startup_report(App& app) {
 #endif
   out.push_back("imgui: " IMGUI_VERSION);
   out.push_back("audio decoders: " + xanatoo::audio_decoder_versions());
+  {
+    const std::string m = xanatoo::media_backend_name();
+    out.push_back("media backend: " + (m.empty() ? std::string("none") : m));
+  }
 
   out.push_back("video: " + video_line(app));
   out.push_back("renderer: " + renderer_line(app));

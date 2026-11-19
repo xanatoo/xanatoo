@@ -227,13 +227,17 @@ AboutSection images() {
 AboutSection sound() {
   AboutSection s{"Sound", {}, {}};
   s.items.push_back({"Audio links", true,
-                     "MP3, FLAC, Ogg Vorbis and WAV play in the status line (" +
+                     "MP3, FLAC, Ogg Vorbis and WAV play in the Media panel (" +
                          xanatoo::audio_decoder_versions() + ")",
                      "examples/sound.md", {}});
   s.items.push_back({"Remote audio", kHttps, "http(s) audio links download, then play",
                      {}, "a network service"});
-  s.items.push_back({"Opus, AAC, video", false, "not decoded yet; mpv links on video pages",
-                     {}, {}});
+  const std::string backend = xanatoo::media_backend_name();
+  s.items.push_back({"Video, Opus, AAC", !backend.empty(),
+                     backend.empty() ? "not in this build; mpv links on video pages"
+                                     : "play in the Media panel (" + backend + ")",
+                     backend.empty() ? std::string() : std::string("examples/video.md"),
+                     backend.empty() ? "XANATOO_FFMPEG" : ""});
   return s;
 }
 

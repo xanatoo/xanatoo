@@ -286,6 +286,8 @@ add_executable(xanatoo
   src/audio.cpp
   src/audio_codecs.cpp
   src/app_audio.cpp
+  src/media.cpp
+  src/media_ffmpeg.cpp
   # Vendored Dear ImGui (MIT) — menu bar / toolbar shell
   external/imgui/imgui.cpp
   external/imgui/imgui_draw.cpp
@@ -390,6 +392,34 @@ if(XANATOO_THUMTOO)
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_THUMTOO=0)
   message(STATUS "Images: stb_image")
+endif()
+
+# Video and the audio formats the vendored decoders lack (media.hpp) through
+# FFmpeg; without it those links go to an external player as before. Android
+# uses the NDK's MediaCodec instead (mk/android, media_android.cpp).
+set(_ffmpeg_default ON)
+if(XANATOO_MINIMAL_PORT OR ANDROID)
+  set(_ffmpeg_default OFF)
+endif()
+option(XANATOO_FFMPEG "Video / more audio formats through FFmpeg (libavformat, libavcodec)" ${_ffmpeg_default})
+if(XANATOO_FFMPEG)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(FFMPEG QUIET IMPORTED_TARGET
+      libavformat libavcodec libswscale libswresample libavutil)
+  endif()
+  if(NOT FFMPEG_FOUND)
+    message(WARNING "FFmpeg not found: building without video (-DXANATOO_FFMPEG=OFF)")
+    set(XANATOO_FFMPEG OFF CACHE BOOL "" FORCE)
+  endif()
+endif()
+if(XANATOO_FFMPEG)
+  target_link_libraries(xanatoo PRIVATE PkgConfig::FFMPEG)
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FFMPEG=1)
+  message(STATUS "Video: FFmpeg (libavformat ${FFMPEG_libavformat_VERSION})")
+else()
+  target_compile_definitions(xanatoo PRIVATE XANATOO_FFMPEG=0)
+  message(STATUS "Video: none (external player)")
 endif()
 
 set(XANATOO_NEED_OPENSSL OFF)
@@ -714,6 +744,7 @@ add_executable(xanatoo_tests
   tests/sqlite_db_tests.cpp
   tests/history_trail_tests.cpp
   tests/audio_tests.cpp
+  tests/media_tests.cpp
   src/ui_help.cpp
   src/fixed_layout.cpp
   src/paginate.cpp
@@ -793,7 +824,12 @@ add_executable(xanatoo_tests
   src/url_cache.cpp
   src/audio.cpp
   src/audio_codecs.cpp
+  src/media.cpp
+  src/media_ffmpeg.cpp
 )
+if(XANATOO_FFMPEG)
+  target_link_libraries(xanatoo_tests PRIVATE PkgConfig::FFMPEG)
+endif()
 target_include_directories(xanatoo_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/external
@@ -826,6 +862,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_WEB=0
   XANATOO_WIKIPEDIA=0
   XANATOO_HTTPS=0
+  XANATOO_FFMPEG=$<BOOL:${XANATOO_FFMPEG}>
   XANATOO_FONTCONFIG=$<BOOL:${XANATOO_FONTCONFIG}>
   XANATOO_SQLITE=$<BOOL:${XANATOO_SQLITE}>
   "XANATOO_STYLE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/styles\""

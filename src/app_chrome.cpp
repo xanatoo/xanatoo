@@ -478,7 +478,7 @@ StatusLine compute_status(App& app) {
       label = "Search: ";
     else if (xanatoo::is_media_ref(app.hover.href))
       label = "Media: ";
-    else if (xanatoo::is_audio_url(app.hover.href))
+    else if (xanatoo::is_playable_url(app.hover.href))
       label = "Play: ";
     else if (app.hover.href.rfind("http://", 0) == 0 ||
              app.hover.href.rfind("https://", 0) == 0)

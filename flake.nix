@@ -97,6 +97,9 @@
               openssl
               mbedtls # optional TLS backend: -DXANATOO_TLS=mbedtls
               sqlite
+              # Video / other audio formats in the Media panel (optional,
+              # -DXANATOO_FFMPEG); headless: no X11 / SDL of its own.
+              ffmpeg-headless
               # Prefer top-level libx11; xorg.* package set is deprecated.
               libx11
               libGL

@@ -7,7 +7,8 @@ player opens in the **Media** panel (also under *Panels → Media*):
 - the buttons go back 10 s, play and pause, go forward 30 s, and stop,
 - the *Vol* slider sets the loudness.
 
-Closing the panel stops the sound. Like other panels it can float or be
+Closing the panel stops the sound. Videos play in the same panel: see
+[Video](video.md). Like other panels it can float or be
 docked at a window edge. **Go → Sound** has the same transport controls.
 
 ## Try it

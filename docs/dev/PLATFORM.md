@@ -52,6 +52,9 @@ ports, the SDL3 transition and Android.
   `nix/android-imagelibs.nix` cross-builds per ABI with nixpkgs' Android
   set (NDK 27, plain C, so they link into the NDK 29 build) and merges into
   one `libimagedeps.a`; `nix build .#imagedeps-android`.
+- Video: `media_android.cpp` (AMediaExtractor + AMediaCodec, `-lmediandk`
+  in `Android.mk`); the decoder's picture layout is logged
+  ("video decoder output: …") for devices that show garbled colours.
 - Test on the device: `adb logcat -s xanatoo` shows std::cout / std::cerr.
 
 ## Website and downloads

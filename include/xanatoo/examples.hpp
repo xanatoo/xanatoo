@@ -20,6 +20,7 @@ inline constexpr ExampleEntry kExamples[] = {
     {"Feature tour (every block kind)", "tour.md"},
     {"TeX math", "math.md"},
     {"Sound (audio links)", "sound.md"},
+    {"Video (video links)", "video.md"},
     {nullptr, nullptr},
     {"Directory (links and feeds)", "directory.md"},
     {"Finger (public hosts)", "finger.md"},

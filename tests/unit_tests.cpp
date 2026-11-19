@@ -85,6 +85,7 @@ void test_ui_help(int& passed, int& failed);
 void test_sqlite_db(int& passed, int& failed);
 void test_history_trail(int& passed, int& failed);
 void test_audio(int& passed, int& failed);
+void test_media(int& passed, int& failed);
 
 namespace {
 
@@ -7383,6 +7384,7 @@ int main() {
   test_sqlite_db(g_passed, g_failed);
   test_history_trail(g_passed, g_failed);
   test_audio(g_passed, g_failed);
+  test_media(g_passed, g_failed);
 
   std::printf("%d passed, %d failed\n", g_passed, g_failed);
   return g_failed == 0 ? 0 : 1;

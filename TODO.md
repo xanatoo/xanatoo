@@ -2,6 +2,35 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Video plays in the Media panel
+
+- `media.hpp`: backend interface (`MediaSource`) and a decode-ahead pipe
+  (`MediaPlayback`: worker thread, sound for the callback, I420 pictures
+  for the main thread, sound as the clock, wall clock without sound).
+  Backends: FFmpeg (`XANATOO_FFMPEG`, desktop, `ffmpeg-headless` in the
+  flake; streams http(s)) and Android AMediaExtractor + AMediaCodec
+  (`media_android.cpp`, `-lmediandk`). Windows / WASM: none (links go to
+  the system as before).
+- Player: backend formats (video, `.opus`, `.m4a`, `.aac`, …) go through
+  the pipe; the picture is an IYUV texture above the controls (click =
+  pause), the floating panel fits the video. A playable file given on the
+  command line plays (the tab lists its folder) instead of loading as text.
+  Page-link tooltips no longer hang over panels.
+- Fixed while testing: a 12-picture cap dropped the oldest pictures to
+  read sound ahead, which in MP4 (pictures decode ~0.5 s behind their
+  sound) were always the due ones: the picture froze. A full queue now
+  stops decoding (regression test with a lagging fake source).
+- Checked under Xvfb: `examples/video.md` (H.264 + AAC MP4, VP9 + Opus
+  WebM), pause by click, seek while paused, rapid seeks and skips on a
+  60 s 720p clip (picture in sync), panel fit. Tests: `test_media` (pipe
+  with fake sources; FFmpeg on `tests/data/video`).
+- Not checked: Android at run time (only compiled), real sound by ear,
+  remote streams.
+- Seen, not fixed: listing `/tmp/xanatoo-build/guitest` (≈40 screenshots
+  and a 35 MB MP4) took 2.5 GB and kept growing without any player.
+- Next: fullscreen / keys; play YouTube / PeerTube stream URLs here instead
+  of mpv; `<video>` / `<audio>` in web pages; subtitles; podcast enclosures.
+
 ## Status (2026-11-19) — Sound: MP3 / FLAC / Ogg Vorbis / WAV links play
 
 - Plan (from the media question): audio first with small vendored decoders

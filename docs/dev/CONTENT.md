@@ -372,5 +372,59 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `sdl::left_button_down()`. Volume is `AudioShared::gain` (slider²),
   applied in the callback, kept across files. Go → Sound has the same
   transport commands (`UiCommand::Audio*`).
-- Not yet: Opus (needs libopus), AAC / video (FFmpeg, Android
-  `AMediaCodec`, the browser), streaming playback before the download ends.
+- Not yet: built-in Opus (without a backend), streaming the built-in
+  formats before the download ends.
+
+## Video
+
+Video and the audio formats the vendored decoders lack (`.opus`, `.m4a`,
+`.aac`, …) play through a platform backend behind `media.hpp`; MP3 / FLAC /
+Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
+
+- Addresses: `is_video_url` / `needs_media_backend` by name;
+  `is_playable_url` (built-in audio, or backend formats when
+  `media_backend_available()`) is what links, `navigate_pane` and startup
+  arguments test. Without a backend video links go to the system as before.
+- Backends (`MediaSource`: `info()`, `next()` gives one piece — float
+  sound or an I420 `VideoFrame` — `seek()` to the key frame before):
+  - `media_ffmpeg.cpp` (`XANATOO_FFMPEG`, desktop; pkg-config
+    libavformat / libavcodec / libswscale / libswresample / libavutil,
+    `ffmpeg-headless` in the flake): local files and streamed http(s)
+    (FFmpeg's own TLS; `user_agent("video")`, interrupt callback on
+    cancel), more than two channels mixed to stereo, cover-art streams
+    ignored.
+  - `media_android.cpp` (`__ANDROID__`, `-lmediandk`, API 21):
+    AMediaExtractor (file descriptor, or the URL with the system's
+    networking) + AMediaCodec in ByteBuffer mode. Pictures are copied from
+    the decoder's layout (I420 = colour format 19, else read as NV12; stride,
+    slice height, crop from the output format, logged to logcat). Opening
+    pre-rolls until the sound decoder's own output format (HE-AAC doubles
+    the rate) is known.
+  - Neither (Windows, WASM): `open_media` fails, nothing routes there.
+- Pipe (`MediaPlayback`, unit-tested with fake sources): a detached worker
+  opens the source and decodes ahead into `audio` (deque of floats) and
+  `frames` (≤ `kMediaFramesMax`); it waits on a condition variable that
+  the sound callback (`media_pull_audio`) and the main thread
+  (`media_take_frame`) signal. A full picture queue stops decoding — files
+  decode pictures up to ~0.5 s behind their sound, and dropping old
+  pictures to read sound further ahead dropped exactly the due ones; only
+  when the sound runs dry (< 0.25 s) are the oldest dropped. Seeks are
+  requests (`media_seek` clears the queues; the worker seeks the source and
+  trims sound / drops pictures before the target).
+- Clock: sound frames handed to the device since the last seek + its
+  target; without sound (or once the sound has ended before the pictures)
+  the wall clock, paused with the player (`media_set_paused`). The first
+  picture after a start or seek shows at once (`want_first`), so a paused
+  seek shows where it went.
+- Player (`app_audio.cpp`): `play_audio` starts `media_start` for backend
+  formats; `update_audio` calls `start_media` once `opened` (sound device
+  for `info.rate` / `channels` with the same `fill` callback pulling from
+  the pipe; `fit_panel_to_video` sizes a floating panel), then each frame
+  `show_frame` uploads the due picture to an `SDL_PIXELFORMAT_IYUV`
+  streaming texture (`AudioPlayer::video_tex`, recreated on size change,
+  destroyed in `close_player`). The panel letterboxes it above the controls
+  (`MediaLayout::video`, `MediaPart::Video`: click = play / pause).
+- `examples/video.md` (synthesised H.264 + AAC MP4 and VP9 + Opus WebM);
+  fixtures `tests/data/video` (0.5 s, 64×48, red / blue).
+- Next: fullscreen, keyboard keys, playing the stream URLs of YouTube /
+  PeerTube pages here instead of mpv, `<video>` in web pages, subtitles.

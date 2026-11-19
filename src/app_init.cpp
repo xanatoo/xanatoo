@@ -193,6 +193,19 @@ bool app_init(App& app) {
     };
     std::string p0 = local(app.opt.file_path);
     std::string p1 = local(app.opt.file_path2);
+    // A sound or video file plays in the Media panel; the tab shows its
+    // folder (the default page for a remote one), never its bytes as text.
+    std::string media_arg;
+    if (xanatoo::is_playable_url(p0) && !xanatoo::parse_locator(p0).has_selectors()) {
+      media_arg = p0;
+      p0.clear();
+      if (!xanatoo::starts_with_ci(media_arg, "http://") &&
+          !xanatoo::starts_with_ci(media_arg, "https://")) {
+        std::error_code ec;
+        fs::path dir = fs::absolute(media_arg, ec).parent_path();
+        if (!ec && !dir.empty()) p0 = dir.string();
+      }
+    }
     if (p0.empty()) {
       p0 = xanatoo::find_default_document();
       if (p0.empty())
@@ -210,6 +223,7 @@ bool app_init(App& app) {
     };
     startup(p0);
     if (!p1.empty()) startup(p1);
+    if (!media_arg.empty()) play_audio(app, media_arg);
   }
   for (const auto& b : app.buffers) app.tab_order.push_back(b.id);
   update_title(app);

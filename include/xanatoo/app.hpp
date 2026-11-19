@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
+#include "xanatoo/media.hpp"
 #include "xanatoo/sdl.hpp"
 
 #include <atomic>
@@ -687,7 +688,8 @@ struct SiteCache {
 
 // Sound player (app_audio.cpp, docs/dev/CONTENT.md "Audio"): one file at a
 // time, its controls in the Media panel (WindowRole::Media). Opening a link
-// to an audio file starts it and shows the panel; the page stays.
+// to an audio or video file starts it and shows the panel; the page stays.
+// Video shows in the panel above the controls (docs/dev/CONTENT.md "Video").
 struct AudioShared;  // decoder + sound device, shared with SDL's audio thread
 struct AudioLoad;    // worker reading / downloading and opening the file
 enum class AudioState : uint8_t { Idle, Loading, Playing, Paused, Ended, Failed };
@@ -703,8 +705,14 @@ struct AudioPlayer {
   // left button that pressed it is down (update_audio follows the pointer).
   enum class Drag : uint8_t { None, Seek, Volume } drag = Drag::None;
   int drag_x = -1;      // pointer x last applied
-  std::shared_ptr<AudioShared> play;
-  std::shared_ptr<AudioLoad> load;
+  std::shared_ptr<AudioShared> play;  // the sound device, while open
+  std::shared_ptr<AudioLoad> load;    // built-in formats while loading
+  // Video and the formats only a backend decodes (media.hpp): the decoding
+  // pipe, and with pictures their texture (I420, renderer-owned).
+  std::shared_ptr<xanatoo::MediaPlayback> media;
+  SDL_Texture* video_tex = nullptr;
+  int tex_w = 0, tex_h = 0;      // size of video_tex
+  int video_w = 0, video_h = 0;  // display size; 0 = sound only
 };
 
 // Search bar (app_search.cpp). The engine in use is

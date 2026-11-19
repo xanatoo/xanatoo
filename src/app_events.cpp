@@ -555,7 +555,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         }
         if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
             xanatoo::is_image_address(abs) ||
-        (xanatoo::is_audio_url(abs) && !is_inapp_doc_href(app, abs))) {
+        (xanatoo::is_playable_url(abs) && !is_inapp_doc_href(app, abs))) {
           navigate_to_url(app, std::move(abs), true,
                           NavLink{*href, {}, hit->node, hit->span_index});
           return;
@@ -973,7 +973,14 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
     if (!app.dragging_sel && !app.dragging_scroll && !app.dragging_split &&
         !app.dragging_diff_overview &&
         !app.dragging_image && !app.dragging_block && !app.dragging_col_gap) {
-      if (over_float_chrome(app, mx_i, my_i)) return;
+      if (over_float_chrome(app, mx_i, my_i)) {
+        // A panel covers the page: no link tooltip from beneath it (one
+        // left from the page would hang over the panel).
+        if (const FloatWindow* w = float_at(app, mx_i, my_i);
+            w && w->role != WindowRole::Document)
+          clear_interaction_hover(app);
+        return;
+      }
     }
 
     if (app.dragging_scroll) {

@@ -34,6 +34,6 @@ LOCAL_CPPFLAGS += -std=c++20 -Wno-psabi -Wall -Wextra -Wno-unused-parameter \
 LOCAL_CPP_FEATURES := exceptions rtti
 LOCAL_SHARED_LIBRARIES := SDL3
 LOCAL_STATIC_LIBRARIES := freetype sqlite3 mbedtls thumtoo
-LOCAL_LDLIBS := -llog -landroid
+LOCAL_LDLIBS := -llog -landroid -lmediandk
 
 include $(BUILD_SHARED_LIBRARY)

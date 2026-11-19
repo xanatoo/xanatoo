@@ -221,7 +221,7 @@ const char* audio_format_name(AudioFormat f) {
   return "unknown";
 }
 
-bool is_audio_url(std::string_view url) {
+bool url_has_extension(std::string_view url, std::initializer_list<std::string_view> exts) {
   const size_t colon = url.find(':');
   const size_t slash = url.find('/');
   if (colon != std::string_view::npos &&
@@ -230,9 +230,13 @@ bool is_audio_url(std::string_view url) {
       !starts_with_ci(url, "file:") && !(colon == 1 && slash == 2))  // C:/path
     return false;
   const std::string_view path = url.substr(0, url.find_first_of("?#"));
-  for (std::string_view ext : {".mp3", ".ogg", ".oga", ".flac", ".wav", ".opus"})
+  for (std::string_view ext : exts)
     if (path_ends_with_ci(path, ext)) return true;
   return false;
+}
+
+bool is_audio_url(std::string_view url) {
+  return url_has_extension(url, {".mp3", ".ogg", ".oga", ".flac", ".wav", ".opus"});
 }
 
 AudioDecoderPtr open_audio(std::vector<uint8_t> bytes, std::string* error) {

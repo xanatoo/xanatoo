@@ -545,9 +545,10 @@ const std::vector<UiHelpTopic> kTopics = {
      "Current and finished downloads. Click to open, right-click for the "
      "folder, copy or cancel."},
     {"@panel:media", "Media panel",
-     "The sound player: a link to an audio file plays here. Click or drag "
-     "the bar to move in the file; back 10 s, play / pause, forward 30 s, "
-     "stop, volume. Closing the panel stops the sound."},
+     "The player: a link to a sound or video file plays here, a video "
+     "above the controls (click it to pause). Click or drag the bar to move "
+     "in the file; back 10 s, play / pause, forward 30 s, stop, volume. "
+     "Closing the panel stops it."},
     {"@panel:reply", "Reply panel",
      "Draft a reply to a message (a mockup: nothing is posted)."},
     {"@panel:annotations", "Annotations panel",

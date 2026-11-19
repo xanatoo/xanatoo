@@ -8,9 +8,14 @@
 // controls are the Media panel (WindowRole::Media): title and format, a
 // seek bar (click or drag), times, back / play-pause / forward / stop and a
 // volume slider. media_layout places them for drawing, clicks and hover.
+// Video and the formats only a backend decodes (media.hpp) go through a
+// MediaPlayback instead: its worker decodes ahead, the same callback pulls
+// the sound, and update_audio shows the picture due at the sound's clock
+// (the wall clock without sound) in a texture above the controls.
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -22,9 +27,9 @@
 #include "xanatoo/file_url.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/version.hpp"
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
-#include "xanatoo/version.hpp"
 #endif
 
 namespace xanatoo::app {
@@ -39,6 +44,7 @@ struct AudioShared {
   std::atomic<uint64_t> pos{0};  // frames handed to the device
   std::atomic<bool> ended{false};
   std::atomic<float> gain{1.f};  // from the volume slider
+  std::shared_ptr<xanatoo::MediaPlayback> media;  // set: sound from the pipe
   xanatoo::sdl::AudioOut out;
   ~AudioShared() { xanatoo::sdl::close_audio_out(out); }  // before `dec`
 };
@@ -63,7 +69,10 @@ void fill(void* user, float* out, int frames) {
   size_t got = 0;
   {
     std::lock_guard lock(s->m);
-    if (s->dec && !s->ended.load(std::memory_order_relaxed)) {
+    if (s->media) {
+      got = xanatoo::media_pull_audio(*s->media, out, want);
+      s->pos.fetch_add(got, std::memory_order_relaxed);
+    } else if (s->dec && !s->ended.load(std::memory_order_relaxed)) {
       got = xanatoo::audio_read(*s->dec, out, want);
       s->pos.fetch_add(got, std::memory_order_relaxed);
       if (got < want) s->ended.store(true, std::memory_order_release);
@@ -152,10 +161,96 @@ void run_load(const std::string& url, AudioLoad& load) {
   load.dec = xanatoo::open_audio(std::move(bytes), &load.error);
 }
 
+// Monotonic seconds, for the clock of video without sound.
+double now_s() {
+  using namespace std::chrono;
+  return duration<double>(steady_clock::now().time_since_epoch()).count();
+}
+
 void close_player(AudioPlayer& a) {
   if (a.load) a.load->cancel.store(true);
   a.load.reset();
   a.play.reset();  // closes the device (the callback has stopped) first
+  if (a.media) xanatoo::media_stop(*a.media);  // its worker leaves on its own
+  a.media.reset();
+  if (a.video_tex) SDL_DestroyTexture(a.video_tex);
+  a.video_tex = nullptr;
+  a.tex_w = a.tex_h = 0;
+}
+
+// Something is open: sound, pictures or both.
+bool have_media(const AudioPlayer& a) {
+  return a.play || (a.media && a.media->opened.load() && a.state != AudioState::Loading &&
+                    a.state != AudioState::Failed);
+}
+
+// Room for a video's picture at its size (up to 800 pixels wide), when the
+// panel floats free.
+void fit_panel_to_video(App& app);
+
+// The backend's file is open: open the sound device, start the clock.
+void start_media(App& app) {
+  AudioPlayer& a = app.audio;
+  xanatoo::MediaPlayback& m = *a.media;
+  {
+    std::lock_guard lock(m.m);
+    if (m.failed) {
+      a.state = AudioState::Failed;
+      a.error = m.error;
+      flash_status(app, "Cannot play " + a.title + ": " + a.error);
+      return;
+    }
+  }
+  const xanatoo::MediaInfo& info = m.info;
+  if (!info.title.empty()) a.title = info.title;
+  a.duration = info.duration;
+  a.format = info.format;
+  if (info.has_audio) {
+    auto s = std::make_shared<AudioShared>();
+    s->media = a.media;
+    s->channels = info.channels;
+    s->rate = info.rate;
+    s->gain.store(gain_of(a.volume));
+    if (!xanatoo::sdl::open_audio_out(s->out, s->rate, s->channels, fill, s.get())) {
+      a.state = AudioState::Failed;
+      a.error = std::string("no sound device: ") + SDL_GetError();
+      flash_status(app, "Cannot play " + a.title + ": " + a.error);
+      return;
+    }
+    a.play = std::move(s);
+    xanatoo::sdl::pause_audio_out(a.play->out, false);
+  }
+  if (info.has_video) {
+    a.video_w = info.width;
+    a.video_h = info.height;
+    fit_panel_to_video(app);
+  }
+  xanatoo::media_set_paused(m, false, now_s());
+  a.state = AudioState::Playing;
+  std::cerr << "media: " << a.url << " (" << info.format << ", "
+            << xanatoo::format_audio_time(a.duration) << ", " << xanatoo::media_backend_name()
+            << ")\n";
+}
+
+// The picture due now into the texture.
+void show_frame(App& app) {
+  AudioPlayer& a = app.audio;
+  xanatoo::VideoFrame f;
+  if (!xanatoo::media_take_frame(*a.media, xanatoo::media_clock(*a.media, now_s()), f) ||
+      f.w <= 0 || f.h <= 0)
+    return;
+  if (!a.video_tex || a.tex_w != f.w || a.tex_h != f.h) {
+    if (a.video_tex) SDL_DestroyTexture(a.video_tex);
+    a.video_tex = SDL_CreateTexture(app.sdl, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING,
+                                    f.w, f.h);
+    a.tex_w = a.video_tex ? f.w : 0;
+    a.tex_h = a.video_tex ? f.h : 0;
+    if (!a.video_tex) {
+      std::cerr << "media: no video texture: " << SDL_GetError() << "\n";
+      return;
+    }
+  }
+  SDL_UpdateYUVTexture(a.video_tex, nullptr, f.y(), f.w, f.u(), f.cw(), f.v(), f.cw());
 }
 
 void start_playing(App& app) {
@@ -192,10 +287,12 @@ void start_playing(App& app) {
 
 // The panel's parts, placed in its client rect (shared by draw, click and
 // hover: the same hit-test as the action).
-enum class MediaPart : uint8_t { None, Back, Toggle, Forward, Stop, Seek, Volume };
+enum class MediaPart : uint8_t { None, Video, Back, Toggle, Forward, Stop, Seek, Volume };
 
 struct MediaLayout {
   SDL_Rect client{};
+  SDL_Rect video{};  // the picture's area above the controls (w = 0: none)
+  int controls_h = 0;
   int pad = 0;
   int title_y = 0, info_y = 0, times_y = 0;  // text baselines
   SDL_Rect seek{}, back{}, toggle{}, forward{}, stop{}, volume{};
@@ -233,6 +330,17 @@ MediaLayout media_layout(const App& app) {
   const int label_w = lh * 2;
   const int vw = std::min(160, cx + cw - L.pad - (vx + label_w));
   L.volume = {vx + label_w, y + (b - bar_h) / 2, std::max(0, vw), bar_h};
+  L.controls_h = y + b + L.pad - cy;
+  // A video takes the room above the controls, which move down.
+  if (app.audio.video_w > 0) {
+    const int vh = std::max(0, ch - L.controls_h);
+    L.video = {cx, cy, cw, vh};
+    for (SDL_Rect* r : {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.volume}) r->y += vh;
+    L.title_y += vh;
+    L.info_y += vh;
+    L.times_y += vh;
+    L.buttons_y += vh;
+  }
   return L;
 }
 
@@ -245,6 +353,7 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
     return MediaPart::None;
   // Bars take a few pixels more height: they are thin.
   auto grow = [](SDL_Rect r) { return SDL_Rect{r.x - 2, r.y - 6, r.w + 4, r.h + 12}; };
+  if (inside(L.video, x, y)) return MediaPart::Video;
   if (inside(L.back, x, y)) return MediaPart::Back;
   if (inside(L.toggle, x, y)) return MediaPart::Toggle;
   if (inside(L.forward, x, y)) return MediaPart::Forward;
@@ -351,6 +460,14 @@ bool play_audio(App& app, const std::string& url_in) {
   a.url = url;
   a.title = xanatoo::audio_name_of(url);
   a.state = AudioState::Loading;
+  if (xanatoo::needs_media_backend(url) && xanatoo::media_backend_available()) {
+    xanatoo::MediaOptions options;
+    options.user_agent = xanatoo::user_agent("video");
+    a.media = xanatoo::media_start(url, std::move(options));
+    app.media_panel_open = true;
+    flash_status(app, "Opening " + a.title);
+    return true;
+  }
   a.load = std::make_shared<AudioLoad>();
 #if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
   run_load(url, *a.load);  // no threads in this build
@@ -372,21 +489,25 @@ bool play_audio(App& app, const std::string& url_in) {
 
 void audio_toggle(App& app) {
   AudioPlayer& a = app.audio;
-  if (!a.play) {
-    if (a.state == AudioState::Failed && !a.url.empty()) play_audio(app, a.url);
+  if (a.state == AudioState::Failed && !a.url.empty()) {
+    play_audio(app, a.url);  // try again
     return;
   }
+  if (!have_media(a)) return;
+  auto pause = [&](bool paused) {
+    if (a.play) xanatoo::sdl::pause_audio_out(a.play->out, paused);
+    if (a.media) xanatoo::media_set_paused(*a.media, paused, now_s());
+    a.state = paused ? AudioState::Paused : AudioState::Playing;
+  };
   switch (a.state) {
     case AudioState::Playing:
-      xanatoo::sdl::pause_audio_out(a.play->out, true);
-      a.state = AudioState::Paused;
+      pause(true);
       break;
     case AudioState::Ended:
       audio_seek(app, 0);
       [[fallthrough]];
     case AudioState::Paused:
-      xanatoo::sdl::pause_audio_out(a.play->out, false);
-      a.state = AudioState::Playing;
+      pause(false);
       break;
     default: break;
   }
@@ -406,6 +527,12 @@ void audio_set_volume(App& app, float volume) {
 
 void audio_seek(App& app, double seconds) {
   AudioPlayer& a = app.audio;
+  if (a.media && have_media(a)) {
+    xanatoo::media_seek(*a.media, seconds, now_s());
+    if (a.play) xanatoo::sdl::flush_audio_out(a.play->out);
+    if (a.state == AudioState::Ended) a.state = AudioState::Paused;
+    return;
+  }
   if (!a.play) return;
   AudioShared& s = *a.play;
   uint64_t frame = static_cast<uint64_t>(std::max(0.0, seconds) * s.rate);
@@ -421,10 +548,16 @@ void audio_seek(App& app, double seconds) {
 }
 
 void audio_skip(App& app, double delta) {
-  if (app.audio.play) audio_seek(app, audio_position(app) + delta);
+  if (have_media(app.audio)) audio_seek(app, audio_position(app) + delta);
 }
 
 double audio_position(const App& app) {
+  const AudioPlayer& a = app.audio;
+  if (a.media) {
+    if (!have_media(a)) return 0;
+    const double t = xanatoo::media_clock(*a.media, now_s());
+    return a.duration > 0 ? std::min(t, a.duration) : t;
+  }
   const AudioShared* s = app.audio.play.get();
   if (!s || s->rate <= 0) return 0;
   return static_cast<double>(s->pos.load(std::memory_order_relaxed)) / s->rate;
@@ -450,6 +583,25 @@ void update_audio(App& app) {
       flash_status(app, "Cannot play " + a.title + ": " + a.error);
     }
   }
+  if (a.media) {
+    if (a.state == AudioState::Loading && a.media->opened.load(std::memory_order_acquire))
+      start_media(app);
+    if (have_media(a)) {
+      if (a.video_w > 0) show_frame(app);
+      if (a.state == AudioState::Playing && xanatoo::media_finished(*a.media)) {
+        if (a.play) xanatoo::sdl::pause_audio_out(a.play->out, true);
+        xanatoo::media_set_paused(*a.media, true, now_s());
+        std::lock_guard lock(a.media->m);
+        if (a.media->failed) {
+          a.state = AudioState::Failed;
+          a.error = a.media->error;
+        } else {
+          a.state = AudioState::Ended;
+        }
+      }
+    }
+    return;
+  }
   if (a.play && a.state == AudioState::Playing &&
       a.play->ended.load(std::memory_order_acquire)) {
     xanatoo::sdl::pause_audio_out(a.play->out, true);
@@ -473,6 +625,27 @@ void close_media_panel(App& app) {
   audio_stop(app);
 }
 
+namespace {
+void fit_panel_to_video(App& app) {
+  FloatWindow& w = app.media_win;
+  const AudioPlayer& a = app.audio;
+  if (w.dock != Dock::None || a.video_w <= 0 || a.video_h <= 0) return;
+  const MediaLayout L = media_layout(app);
+  const int extra_w = w.w - L.client.w, extra_h = w.h - L.client.h;
+  // Up to 800 pixels wide, and no lower than the window minus room for the
+  // status line: a smaller picture rather than buttons out of reach.
+  int vw = std::clamp(a.video_w, 320, 800);
+  vw = std::min(vw, app.win_w - extra_w - 40);
+  const int room_h = app.win_h - w.y - 48 - L.controls_h - extra_h;
+  vw = std::max(160, std::min(vw, room_h * a.video_w / a.video_h));
+  const int vh = vw * a.video_h / a.video_w;
+  w.w = std::max(w.w, vw + extra_w);
+  w.h = vh + L.controls_h + extra_h;
+  w.x = std::clamp(w.x, 0, std::max(0, app.win_w - w.w));
+  w.y = std::clamp(w.y, 0, std::max(0, app.win_h - 48 - w.h));
+}
+}  // namespace
+
 void click_media_panel(App& app, int mx, int my) {
   AudioPlayer& a = app.audio;
   const MediaLayout L = media_layout(app);
@@ -480,10 +653,11 @@ void click_media_panel(App& app, int mx, int my) {
     case MediaPart::None: break;
     case MediaPart::Back: audio_skip(app, -10); break;
     case MediaPart::Forward: audio_skip(app, 30); break;
+    case MediaPart::Video:
     case MediaPart::Toggle: audio_toggle(app); break;
     case MediaPart::Stop: audio_stop(app); break;
     case MediaPart::Seek:
-      if (a.play && a.duration > 0) {
+      if (have_media(a) && a.duration > 0) {
         a.drag = AudioPlayer::Drag::Seek;
         apply_drag(app, mx);
       }
@@ -502,13 +676,15 @@ std::string media_panel_hover(const App& app, int mx, int my) {
     case MediaPart::None: return {};
     case MediaPart::Back: return "Back 10 seconds";
     case MediaPart::Forward: return "Forward 30 seconds";
+    case MediaPart::Video:
+      return a.state == AudioState::Playing ? "Click to pause" : "Click to play";
     case MediaPart::Toggle:
       return a.state == AudioState::Playing ? "Pause"
              : a.state == AudioState::Failed ? "Try again"
                                               : "Play";
     case MediaPart::Stop: return "Stop";
     case MediaPart::Seek:
-      if (a.play && a.duration > 0)
+      if (have_media(a) && a.duration > 0)
         return "Go to " + xanatoo::format_audio_time(frac_in(L.seek, mx) * a.duration);
       return {};
     case MediaPart::Volume:
@@ -531,19 +707,33 @@ void draw_media_panel(App& app) {
   const int text_w = std::max(0, c.w - 2 * L.pad);
   const float tx = static_cast<float>(c.x + L.pad);
 
+  // The picture, letterboxed in black at its display aspect.
+  if (L.video.w > 0 && L.video.h > 0) {
+    th::fill(app.sdl, L.video, th::rgb(0, 0, 0));
+    if (a.video_tex && a.video_w > 0 && a.video_h > 0) {
+      const double s = std::min(double(L.video.w) / a.video_w, double(L.video.h) / a.video_h);
+      const int w = std::max(1, int(a.video_w * s)), h = std::max(1, int(a.video_h * s));
+      const SDL_Rect dst{L.video.x + (L.video.w - w) / 2, L.video.y + (L.video.h - h) / 2, w, h};
+      xanatoo::sdl::copy(app.sdl, a.video_tex, nullptr, &dst);
+    }
+  }
+
   // Title and what it is (or why not).
   std::string title = a.title, info;
   th::Rgb info_ink = p.text_dim;
   switch (a.state) {
     case AudioState::Idle:
       title = "Nothing playing";
-      info = "Open a link to an MP3, FLAC, Ogg Vorbis or WAV file.";
+      info = xanatoo::media_backend_available()
+                 ? "Open a link to a sound or video file."
+                 : "Open a link to an MP3, FLAC, Ogg Vorbis or WAV file.";
       break;
     case AudioState::Loading: {
       const int64_t got = a.load ? a.load->got.load() : 0;
       const int64_t total = a.load ? a.load->total.load() : -1;
       info = total > 0 ? "Downloading " + std::to_string(got * 100 / total) + "%"
              : got > 0 ? "Downloading " + std::to_string(got >> 10) + " KiB"
+             : a.media ? std::string("Opening\xE2\x80\xA6")
                        : std::string("Loading\xE2\x80\xA6");
       break;
     }
@@ -568,11 +758,11 @@ void draw_media_panel(App& app) {
   if (a.load) {
     const int64_t got = a.load->got.load(), total = a.load->total.load();
     if (total > 0) frac = static_cast<double>(got) / total;
-  } else if (a.play && a.duration > 0) {
+  } else if (have_media(a) && a.duration > 0) {
     frac = pos / a.duration;
   }
-  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, a.play && a.duration > 0);
-  if (a.play) {
+  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, have_media(a) && a.duration > 0);
+  if (have_media(a)) {
     const std::string left = xanatoo::format_audio_time(pos);
     const std::string right = a.duration > 0 ? xanatoo::format_audio_time(a.duration) : "";
     app.renderer.draw_text(app.ui_font, tx, static_cast<float>(L.times_y), left,
@@ -586,7 +776,7 @@ void draw_media_panel(App& app) {
   // Buttons and volume.
   const MediaPart hot = media_part_at(app, L, static_cast<int>(app.mouse_x),
                                       static_cast<int>(app.mouse_y));
-  const bool have = a.play != nullptr;
+  const bool have = have_media(a);
   draw_button(app, L.back, MediaPart::Back, hot == MediaPart::Back, have, false);
   draw_button(app, L.toggle, MediaPart::Toggle, hot == MediaPart::Toggle,
               have || a.state == AudioState::Failed, a.state == AudioState::Playing);

@@ -55,7 +55,11 @@ apt-get -o APT::Sandbox::User=root \
   install -y --no-install-recommends libvips-dev libarchive-dev
 ```
 
-The latter pulls a sizeable image-codec dependency tree. On Ubuntu 24.04 it
+For video in the Media panel (FFmpeg; CMake turns it off with a warning
+when missing), also install `libavformat-dev libavcodec-dev libswscale-dev
+libswresample-dev libavutil-dev`.
+
+The image packages pull a sizeable image-codec dependency tree. On Ubuntu 24.04 it
 also detects DjVuLibre and libcurl. MuPDF (PDF/EPUB page backend), Tesseract
 (OCR text layers), and libunarr (solid RAR) remain optional and were absent
 in the verified setup; check CMake's thumtoo feature summary. The variable
