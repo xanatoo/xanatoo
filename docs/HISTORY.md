@@ -273,8 +273,12 @@ stale after `record_visit` and when `poll_shared_state` sees another
 process's commit (selection follows its visit). Click / Enter on a visit
 still in a view's Back / Forward trail steps that trail to it (focusing
 the view; `nav_rewind_to_visit`), like pressing Back several times, so no
-new visit is recorded; other visits, middle-click and Ctrl+Enter open
-the page anew (kind `history`). Preference "History clicks go back in the
+new visit is recorded. Other visits are opened in the focused view and
+its new entry takes the picked visit's id (`App::visit_resume` →
+`NavHistory::pending_resume`, handled first in `record_visit`): again no
+new row, and links followed from there continue that visit's branch.
+Middle-click, Ctrl+Enter and the other mode (Shift) open the page anew
+(kind `history`, source = the picked visit). Preference "History clicks go back in the
 view" (`ViewSettings::history_rewinds`, view.conf `history_rewinds`, on)
 picks the default; Shift+click / Shift+Enter does the other one. `/` or
 Ctrl+F opens the filter

@@ -192,18 +192,23 @@ void open_line(App& app, int line, bool invert = false) {
   if (ei < 0) return;
   const xanatoo::TrailEntry& e = h.entries[static_cast<size_t>(ei)];
   const std::string address = h.visits[e.first].address;
-  if (app.view_settings.history_rewinds != invert && !app.click_new_tab &&
-      h.from_db) {
+  const bool rewind = app.view_settings.history_rewinds != invert &&
+                      !app.click_new_tab && h.from_db;
+  if (rewind) {
     std::vector<int64_t> ids;
     for (size_t k = 0; k < e.count; ++k) ids.push_back(h.visits[e.first + k].id);
     if (nav_rewind_to_visit(app, ids)) return;
   }
-  // The new visit continues the picked one's trail (its newest visit).
+  // Rewinding to a visit no view holds any more: the view goes back to
+  // that visit (no new one). Otherwise a new `history` visit continues
+  // the picked one's trail (its newest visit).
   app.visit_hint = xanatoo::VisitKind::History;
   app.visit_from = h.visits[e.first].id;
+  app.visit_resume = rewind;
   open_address(app, address);
   app.visit_hint.reset();
   app.visit_from = 0;
+  app.visit_resume = false;
 }
 
 // Keeps line `sel` inside the client area.

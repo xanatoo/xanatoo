@@ -99,6 +99,17 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
     return;
   }
   const bool reload = hint == VisitKind::Reload;
+  if (hint == VisitKind::History && h.pending_resume && h.pending_from) {
+    // Back at a visit picked in the History panel: no new visit, the
+    // entry is that one, so browsing on continues its trail.
+    h.pending_resume = false;
+    const int64_t left = pushed ? prev : cur.visit;
+    if (left && left != h.pending_from)
+      xanatoo::store_visit_leave(left, xanatoo::now_epoch_ms());
+    cur.visit = h.pending_from;
+    history_changed(app);
+    return;
+  }
   if (!pushed && cur.visit && !reload) return;  // the same page, shown again
   xanatoo::VisitRecord v;
   if (reload && cur.visit) {
@@ -744,6 +755,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
   }
   app.visit_hint.reset();
   app.visit_from = 0;
+  app.visit_resume = false;  // a new tab is a new visit
   auto& order = app.tab_order;
   if (std::find(order.begin(), order.end(), bi) == order.end()) {
     auto cur = std::find(order.begin(), order.end(), app.panes[pi].buf);
@@ -817,6 +829,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   std::optional<xanatoo::VisitKind> hint;
   std::swap(hint, app.visit_hint);  // only ever for this navigation
   const int64_t from = std::exchange(app.visit_from, 0);
+  const bool resume = std::exchange(app.visit_resume, false);
   while (!target.empty() && (target.back() == ' ' || target.back() == '\t'))
     target.pop_back();
   if (target.empty()) return false;
@@ -829,6 +842,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
     p.nav.pending_link = std::move(via);
     p.nav.pending_kind = hint;
     p.nav.pending_from = from;
+    p.nav.pending_resume = resume;
   }
   if (xanatoo::starts_with(target, "draft:") ||
       target == kDocumentsPage || is_stored_document_ref(target) ||

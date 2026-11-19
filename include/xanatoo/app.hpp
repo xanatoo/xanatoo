@@ -1095,6 +1095,9 @@ struct App {
   // With a `history` hint: the visit picked in the History panel, which
   // the new visit continues (navigate_pane → NavHistory::pending_from).
   int64_t visit_from = 0;
+  // With `visit_from`: the view returns to that visit (it becomes the
+  // current entry's visit) instead of recording a new one.
+  bool visit_resume = false;
   // False while start-up shows stand-in pages (the default document before
   // a session restore replaces it): no visits are recorded then.
   bool record_visits = true;

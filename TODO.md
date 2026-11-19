@@ -23,6 +23,10 @@
   source, so browsing on from it drew a new trail. Now its source is the
   picked visit (`App::visit_from` → `NavHistory::pending_from`; new tabs
   via `origin_visit`), so the new visits grow that visit's branch.
+- Follow-up: a plain click (rewind mode) no longer records a `history`
+  visit at all, also for visits no view's trail holds: the view's entry
+  takes the picked visit's id (`App::visit_resume` →
+  `NavHistory::pending_resume`). New tab / Shift still record one.
 - Builds, unit tests pass; not yet tried interactively.
 
 ## Status (2026-11-18) — History clicks go back instead of revisiting

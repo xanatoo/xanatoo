@@ -41,6 +41,7 @@ struct NavHistory {
   // How the pending navigation was asked for (App::visit_hint).
   std::optional<xanatoo::VisitKind> pending_kind;
   int64_t pending_from = 0;  // App::visit_from of the pending navigation
+  bool pending_resume = false;  // App::visit_resume of it
 };
 
 inline void nav_history_capture(NavHistory& h, std::string_view visible,
