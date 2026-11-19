@@ -234,7 +234,11 @@ related fields into small records like `FloatPanel` / `Hover`); menus,
 toolbar and shortcuts should route through `execute_command`.
 Mouse cursor feedback must use the same hit-test as the action it advertises:
 `float_resize_at` for native panel edges, `dock_split_at` for neighbours,
-and `tile_divider_rect` for centre tiles. ImGui handles its own controls;
+and `tile_divider_rect` for centre tiles. Free windows resize from all four
+edges and corners (`FloatWindow::resize` bits 1/2/4/8 = right/bottom/left/
+top); corners use the per-corner cursors `cursor_size_nw/ne/sw/se`, since
+some cursor themes draw SDL's double-arrow diagonal as a single corner.
+ImGui handles its own controls;
 the SDL2 backend must detect external cursor changes to restore its I-beam.
 `set_cursor` also hands the canvas cursor to ImGui (`Ui::claim_cursor`):
 both backends apply ImGui's cursor in their next `new_frame`, and without

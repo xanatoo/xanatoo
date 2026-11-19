@@ -974,7 +974,10 @@ void Ui::claim_cursor(xanatoo::sdl::SystemCursor kind) {
     case K::Hand: c = ImGuiMouseCursor_Hand; break;
     case K::ResizeEW: c = ImGuiMouseCursor_ResizeEW; break;
     case K::ResizeNS: c = ImGuiMouseCursor_ResizeNS; break;
-    case K::ResizeNWSE: c = ImGuiMouseCursor_ResizeNWSE; break;
+    case K::ResizeNW:
+    case K::ResizeSE: c = ImGuiMouseCursor_ResizeNWSE; break;
+    case K::ResizeNE:
+    case K::ResizeSW: c = ImGuiMouseCursor_ResizeNESW; break;
     case K::Move: c = ImGuiMouseCursor_ResizeAll; break;
   }
   ImGui::SetMouseCursor(c);

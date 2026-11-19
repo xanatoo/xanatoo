@@ -5149,8 +5149,11 @@ void present_frame(App& app) {
           app.mouse_x, app.mouse_y, float_layer_at(app, mx, my))) {
     SDL_Cursor* pointer = app.cursor_arrow;
     const auto resizing = [&](int bits) -> SDL_Cursor* {
-      if ((bits & (1 | 4)) && (bits & (2 | 8)))
-        return app.cursor_sizenwse;
+      // bit 1=right, 2=bottom, 4=left, 8=top: a corner names its own cursor.
+      if ((bits & (1 | 4)) && (bits & (2 | 8))) {
+        if (bits & 8) return bits & 4 ? app.cursor_size_nw : app.cursor_size_ne;
+        return bits & 4 ? app.cursor_size_sw : app.cursor_size_se;
+      }
       if (bits & (1 | 4)) return app.cursor_sizewe;
       if (bits & (2 | 8)) return app.cursor_sizens;
       return nullptr;
@@ -5199,7 +5202,7 @@ void present_frame(App& app) {
       } else if (app.hover.col_gap) {
         pointer = app.cursor_sizewe;
       } else if (app.hover.image_handle) {
-        pointer = app.cursor_sizenwse;
+        pointer = app.cursor_size_se;
       } else if (app.hover.grip != xanatoo::INVALID_NODE) {
         pointer = app.cursor_sizeall;
       } else if (!app.hover.href.empty() || !app.hover.bookmark.empty() ||

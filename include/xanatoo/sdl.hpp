@@ -344,7 +344,12 @@ enum class EventKind {
   RenderReset,
 };
 
-enum class SystemCursor { Arrow, Hand, ResizeEW, ResizeNS, ResizeNWSE, Move };
+// Corner resize cursors name the corner being dragged: some cursor themes
+// draw the double-arrow diagonals as a single corner, so ResizeSE asks for the
+// bottom-right one explicitly (SDL2 has only the double arrows).
+enum class SystemCursor {
+  Arrow, Hand, ResizeEW, ResizeNS, ResizeNW, ResizeNE, ResizeSW, ResizeSE, Move
+};
 
 inline SDL_Cursor* create_system_cursor(SystemCursor kind) {
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
@@ -353,7 +358,10 @@ inline SDL_Cursor* create_system_cursor(SystemCursor kind) {
     case SystemCursor::Hand: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     case SystemCursor::ResizeEW: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE);
     case SystemCursor::ResizeNS: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE);
-    case SystemCursor::ResizeNWSE: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NWSE_RESIZE);
+    case SystemCursor::ResizeNW: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NW_RESIZE);
+    case SystemCursor::ResizeNE: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NE_RESIZE);
+    case SystemCursor::ResizeSW: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SW_RESIZE);
+    case SystemCursor::ResizeSE: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SE_RESIZE);
     case SystemCursor::Move: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE);
   }
 #else
@@ -362,7 +370,10 @@ inline SDL_Cursor* create_system_cursor(SystemCursor kind) {
     case SystemCursor::Hand: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
     case SystemCursor::ResizeEW: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE);
     case SystemCursor::ResizeNS: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS);
-    case SystemCursor::ResizeNWSE: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+    case SystemCursor::ResizeNW:
+    case SystemCursor::ResizeSE: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+    case SystemCursor::ResizeNE:
+    case SystemCursor::ResizeSW: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW);
     case SystemCursor::Move: return SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEALL);
   }
 #endif

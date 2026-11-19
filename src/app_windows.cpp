@@ -209,6 +209,8 @@ void begin_resize(FloatWindow& w, int bits, int mx, int my) {
   w.resize_start_y = my;
   w.resize_start_w = w.w;
   w.resize_start_h = w.h;
+  w.resize_start_wx = w.x;
+  w.resize_start_wy = w.y;
   w.dragging = false;
 }
 
@@ -531,12 +533,15 @@ static int float_resize_bits(const FloatWindow& w, int mx, int my) {
       my < w.y - help_edge || my > w.y + w.h + help_edge)
     return 0;
   // Free windows: the scrollbar sits flush on the right frame, so that edge
-  // reaches in by two pixels only.
+  // reaches in by two pixels only; the left and top edges reach in by two
+  // as well (the top one is the title bar, which otherwise moves the window).
+  const bool on_t = my < w.y + 2;
+  const bool on_l = mx < w.x + 2;
   const bool on_r = mx >= w.x + w.w - 2 &&
-                    my >= w.y + help_title_h && my <= w.y + w.h + help_edge;
-  const bool on_b = my >= w.y + w.h - help_edge &&
-                    mx >= w.x && mx <= w.x + w.w + help_edge;
-  return (on_r ? 1 : 0) | (on_b ? 2 : 0);
+                    (my >= w.y + help_title_h || on_t ||
+                     mx > w.x + w.w);
+  const bool on_b = my >= w.y + w.h - help_edge;
+  return (on_r ? 1 : 0) | (on_b ? 2 : 0) | (on_l ? 4 : 0) | (on_t ? 8 : 0);
 }
 
 int float_resize_at(App& app, int mx, int my) {
@@ -678,7 +683,7 @@ bool float_press(App& app, int mx, int my) {
         my < w->y - help_edge || my > w->y + w->h + help_edge)
       continue;
     const bool inside = contains(*w, mx, my);
-    // Free windows resize at right/bottom; docked ones at the inner edge.
+    // Free windows resize at any edge; docked ones at the inner edge.
     // This is also used by hover cursor feedback.
     const int bits = float_resize_bits(*w, mx, my);
     if (!bits && !inside) continue;
@@ -773,14 +778,28 @@ bool float_motion(App& app, int mx, int my) {
         return true;
       }
       auto [min_w, min_h] = min_size(*w);
-      if (w->resize & 1) {
+      if (w->resize & 1)
         w->w = std::clamp(w->resize_start_w + dx, min_w,
                           std::max(min_w, app.win_w - 20));
-        if (w->role == WindowRole::Help) app.help_needs_layout = true;
-      }
       if (w->resize & 2)
         w->h = std::clamp(w->resize_start_h + dy, min_h,
                           std::max(min_h, app.win_h - 40));
+      // Left / top edges move the origin and keep the opposite edge put.
+      if (w->resize & 4) {
+        const int right = w->resize_start_wx + w->resize_start_w;
+        w->w = std::clamp(w->resize_start_w - dx, min_w,
+                          std::max(min_w, right));
+        w->x = right - w->w;
+      }
+      if (w->resize & 8) {
+        const int bottom = w->resize_start_wy + w->resize_start_h;
+        const int top = static_cast<int>(app.ui_top);
+        w->h = std::clamp(w->resize_start_h - dy, min_h,
+                          std::max(min_h, bottom - top));
+        w->y = bottom - w->h;
+      }
+      if (w->role == WindowRole::Help && (w->resize & (1 | 4)))
+        app.help_needs_layout = true;
       return true;
     }
   }

@@ -164,7 +164,10 @@ bool app_init(App& app) {
   app.cursor_hand = xanatoo::sdl::create_system_cursor(SystemCursor::Hand);
   app.cursor_sizewe = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeEW);
   app.cursor_sizens = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeNS);
-  app.cursor_sizenwse = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeNWSE);
+  app.cursor_size_nw = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeNW);
+  app.cursor_size_ne = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeNE);
+  app.cursor_size_sw = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeSW);
+  app.cursor_size_se = xanatoo::sdl::create_system_cursor(SystemCursor::ResizeSE);
   app.cursor_sizeall = xanatoo::sdl::create_system_cursor(SystemCursor::Move);
   app.cursor_current = app.cursor_arrow;
   app.caret_blink_start = xanatoo::sdl::ticks();
@@ -328,7 +331,8 @@ void app_shutdown(App& app) {
   }
   SDL_Cursor** cursors[] = {&app.cursor_arrow, &app.cursor_hand,
                             &app.cursor_sizewe, &app.cursor_sizens,
-                            &app.cursor_sizenwse,
+                            &app.cursor_size_nw, &app.cursor_size_ne,
+                            &app.cursor_size_sw, &app.cursor_size_se,
                             &app.cursor_sizeall};
   for (SDL_Cursor** c : cursors) {
     if (*c) xanatoo::sdl::destroy_cursor(*c);

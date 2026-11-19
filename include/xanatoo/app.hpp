@@ -445,9 +445,10 @@ struct FloatWindow {
   int drag_dx = 0, drag_dy = 0;
   int press_x = 0, press_y = 0;  // title press; a docked window tears off
                                  // once the pointer moved away from it
-  int resize = 0;  // bit 1=right, 2=bottom, 4=left
+  int resize = 0;  // bit 1=right, 2=bottom, 4=left, 8=top, 8=top
   int resize_start_x = 0, resize_start_y = 0;
   int resize_start_w = 0, resize_start_h = 0;
+  int resize_start_wx = 0, resize_start_wy = 0;  // window origin then
   float scroll = 0.f;  // panel roles; a document view scrolls its Pane
   bool scroll_dragging = false;
 };
@@ -1287,7 +1288,11 @@ struct App {
   SDL_Cursor* cursor_hand = nullptr;
   SDL_Cursor* cursor_sizewe = nullptr;
   SDL_Cursor* cursor_sizens = nullptr;
-  SDL_Cursor* cursor_sizenwse = nullptr;
+  // Corner resize cursors, by the corner being dragged.
+  SDL_Cursor* cursor_size_nw = nullptr;
+  SDL_Cursor* cursor_size_ne = nullptr;
+  SDL_Cursor* cursor_size_sw = nullptr;
+  SDL_Cursor* cursor_size_se = nullptr;
   SDL_Cursor* cursor_sizeall = nullptr;
   SDL_Cursor* cursor_current = nullptr;
   Uint32 caret_blink_start = 0;

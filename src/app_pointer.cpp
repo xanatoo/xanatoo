@@ -131,7 +131,10 @@ void set_cursor(App& app, SDL_Cursor* c) {
   const K kind = c == app.cursor_hand        ? K::Hand
                  : c == app.cursor_sizewe    ? K::ResizeEW
                  : c == app.cursor_sizens    ? K::ResizeNS
-                 : c == app.cursor_sizenwse  ? K::ResizeNWSE
+                 : c == app.cursor_size_nw   ? K::ResizeNW
+                 : c == app.cursor_size_ne   ? K::ResizeNE
+                 : c == app.cursor_size_sw   ? K::ResizeSW
+                 : c == app.cursor_size_se   ? K::ResizeSE
                  : c == app.cursor_sizeall   ? K::Move
                                              : K::Arrow;
   app.ui.claim_cursor(kind);
