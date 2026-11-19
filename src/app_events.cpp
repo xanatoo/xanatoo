@@ -746,6 +746,11 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
                               app.panes[w->view].buf);
       return;
     }
+    // A History row has its own menu (open, new tab, copy, remove).
+    if (FloatWindow* w = float_at(app, rx, ry);
+        w && w->role == WindowRole::History &&
+        right_click_history_panel(app, rx, ry))
+      return;
     // A Downloads row has its own menu (open, folder, copy, cancel…).
     if (FloatWindow* w = float_at(app, rx, ry);
         w && w->role == WindowRole::Downloads &&

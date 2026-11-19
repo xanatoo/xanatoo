@@ -861,6 +861,10 @@ struct HistoryPanel {
   bool from_db = false;        // false: this session's addresses only
   int sel = -1;                // keyboard selection (line index)
   int hover = -1;              // line under the pointer, -1 none
+  // Row of the open right-click menu: its newest visit (0 without a
+  // visit log) and address; empty address = no menu.
+  int64_t menu_id = 0;
+  std::string menu_address;
   // Observation of the hovered visit, for its tooltip.
   int64_t tip_observation = 0;
   std::optional<xanatoo::PageObservation> tip_observed;
@@ -2245,6 +2249,13 @@ bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift);
 void history_changed(App& app);
 // Tooltip text for the hovered row ("" = none).
 std::string history_tooltip(App& app);
+// Right-click in the panel: menu of the row under the pointer (true =
+// the click was in the list).
+bool right_click_history_panel(App& app, int mx, int my);
+// Title (or address) of the row of the open menu.
+std::string history_menu_label(App& app);
+// UiCommand::HistoryAction on HistoryPanel::menu_id.
+void history_action(App& app, const std::string& action);
 void draw_help_window(App& app);
 // Help panel (app_hoverhelp.cpp): open / close, follow the pointer (each
 // frame after the chrome), draw. `hover_help_key_at` is the canvas part:

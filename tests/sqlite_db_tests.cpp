@@ -404,6 +404,42 @@ void test_visits() {
     EXPECT_EQ(visit_page(10, nullptr, "0%_o").size(), 1u);
     EXPECT_EQ(visit_page(10, nullptr, "x_y").size(), 0u);
   }
+  {
+    // Removing a visit: the visits reached from it take its source, and
+    // a later visit naming the removed one as source is stored unlinked.
+    VisitRecord w;
+    w.address = "https://c.example/1";
+    w.time = 100;
+    w.kind = VisitKind::Address;
+    const int64_t c1 = store_visit(w);
+    w.address = "https://c.example/2";
+    w.time = 110;
+    w.kind = VisitKind::Link;
+    w.source = c1;
+    const int64_t c2 = store_visit(w);
+    w.address = "https://c.example/3";
+    w.time = 120;
+    w.source = c2;
+    const int64_t c3 = store_visit(w);
+    EXPECT_EQ(remove_visits({c2}), 1u);
+    EXPECT_EQ(remove_visits({c2}), 0u);
+    auto rv2 = recent_visits(1);
+    EXPECT(!rv2.empty() && rv2[0].id == c3 && rv2[0].source == c1);
+    w.address = "https://c.example/4";
+    w.time = 130;
+    w.source = c2;  // gone
+    const int64_t c4 = store_visit(w);
+    EXPECT(c4 > 0);
+    rv2 = recent_visits(1);
+    EXPECT(!rv2.empty() && rv2[0].id == c4 && rv2[0].source == 0);
+    Db raw(open(t.str()));
+    Stmt s(raw, "SELECT visit_count FROM pages WHERE address = ?;",
+           {std::string_view("https://c.example/2")});
+    EXPECT(s.row() && s.int64(0) == 0);
+    set_no_save(true);
+    EXPECT_EQ(remove_visits({c1}), 0u);
+    set_no_save(false);
+  }
   statedb_use_path({});
   std::error_code ec;
   fs::remove_all(t.path.string() + ".d", ec);

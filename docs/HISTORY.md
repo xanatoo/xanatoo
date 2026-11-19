@@ -287,6 +287,14 @@ Esc cancels); Esc in the panel clears the filter, then closes. Hover
 tooltip: address, time and dwell, kind and source title, href, `×n`, and
 the observation (status, type, size, ETag, Last-Modified, text hash).
 Without a visit log (no SQLite / no state dir) it lists `App::visited`.
+Right-click on a row: menu (`UiCommand::HistoryAction` on
+`HistoryPanel::menu_id`): Open, Open in New Tab, the other open mode,
+Copy Address, Remove from History. Delete removes the selected row:
+`remove_visits` deletes the row's visits (a page run: all of them) and
+re-links the visits reached from them to the removed one's source, so
+trails stay connected; views showing them keep their pages, their
+entries take that source. `store_visit` stores a source removed
+meanwhile (another process) as NULL.
 
 Not done: "this tab only" toggle (by `window`), the hover → Context panel
 (the tooltip shows the observation instead), FTS. `App::visited` stays (the

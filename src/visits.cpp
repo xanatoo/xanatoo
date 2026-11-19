@@ -200,7 +200,10 @@ int64_t store_visit(const VisitRecord& v) {
   sqlite::Stmt s(d, "INSERT INTO visits(page, address, time, source, kind, "
                     "href, source_node, observation, window, title) "
                     "VALUES((SELECT id FROM pages WHERE address = ?1), ?2, ?3, "
-                    "NULLIF(?4, 0), ?5, ?6, ?7, NULLIF(?8, 0), ?9, ?10);");
+                    // A source removed meanwhile (remove_visits, maybe in
+                    // another process) becomes NULL, not a foreign-key error.
+                    "(SELECT id FROM visits WHERE id = ?4), ?5, ?6, ?7, "
+                    "NULLIF(?8, 0), ?9, ?10);");
   s.bind(1, page.empty() ? v.address : page).bind(2, v.address).bind(3, t)
       .bind(4, v.source).bind(5, visit_kind_name(v.kind)).bind(6, v.href)
       .bind(7, v.source_node).bind(8, v.observation).bind(9, v.window)
@@ -241,6 +244,29 @@ std::vector<VisitRecord> recent_visits(size_t limit, int64_t before) {
 
 bool visit_log_available() { return statedb_connection() != nullptr; }
 
+size_t remove_visits(const std::vector<int64_t>& ids) {
+  sqlite3* d = writable();
+  if (!d || ids.empty()) return 0;
+  size_t removed = 0;
+  sqlite::Tx tx(d);
+  for (int64_t id : ids) {
+    if (id <= 0) continue;
+    // Visits reached from it hang on its own source instead.
+    sqlite::Stmt relink(d, "UPDATE visits SET source = "
+                           "(SELECT source FROM visits WHERE id = ?1) "
+                           "WHERE source = ?1;");
+    if (!relink.bind(1, id).run()) return 0;
+    sqlite::Stmt count(d, "UPDATE pages SET visit_count = "
+                          "MAX(visit_count - 1, 0) WHERE id = "
+                          "(SELECT page FROM visits WHERE id = ?1);");
+    if (!count.bind(1, id).run()) return 0;
+    sqlite::Stmt del(d, "DELETE FROM visits WHERE id = ?1;");
+    if (!del.bind(1, id).run()) return 0;
+    removed += static_cast<size_t>(sqlite3_changes(d));
+  }
+  return tx.commit() ? removed : 0;
+}
+
 std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
                                     std::string_view filter) {
   std::vector<VisitRecord> out;
@@ -274,6 +300,7 @@ int64_t store_observation(const PageObservation&) { return 0; }
 std::optional<PageObservation> load_observation(int64_t) { return std::nullopt; }
 int64_t store_visit(const VisitRecord&) { return 0; }
 void store_visit_leave(int64_t, int64_t) {}
+size_t remove_visits(const std::vector<int64_t>&) { return 0; }
 int64_t latest_visit_of(std::string_view) { return 0; }
 std::vector<VisitRecord> recent_visits(size_t, int64_t) { return {}; }
 bool visit_log_available() { return false; }

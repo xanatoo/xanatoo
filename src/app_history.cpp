@@ -11,8 +11,10 @@
 #include <ctime>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/visits.hpp"
 
@@ -211,6 +213,65 @@ void open_line(App& app, int line, bool invert = false) {
   app.visit_resume = false;
 }
 
+// The line showing the visit `id` (or, without a visit log, `address`).
+int line_of(const HistoryPanel& h, int64_t id, const std::string& address) {
+  for (size_t li = 0; li < h.lines.size(); ++li) {
+    const int ei = h.lines[li].entry;
+    if (ei < 0) continue;
+    const xanatoo::VisitRecord& v =
+        h.visits[h.entries[static_cast<size_t>(ei)].first];
+    if (id != 0 ? v.id == id : v.address == address)
+      return static_cast<int>(li);
+  }
+  return -1;
+}
+
+void scroll_to_line(App& app, int sel);
+
+// Removes the visits of `line` from the log (a session address from
+// `app.visited` without one). Views showing them keep their pages; their
+// entries hang on the removed run's source, like the visits reached from
+// it. The selection stays on the row that takes the line's place.
+void remove_line(App& app, int line) {
+  HistoryPanel& h = app.history;
+  if (line < 0 || line >= static_cast<int>(h.lines.size())) return;
+  const int ei = h.lines[static_cast<size_t>(line)].entry;
+  if (ei < 0) return;
+  const xanatoo::TrailEntry e = h.entries[static_cast<size_t>(ei)];
+  const std::string label = entry_label(h, e);
+  if (h.from_db) {
+    std::vector<int64_t> ids;  // newest first: each relinks to the next
+    for (size_t k = 0; k < e.count; ++k) ids.push_back(h.visits[e.first + k].id);
+    const int64_t source = h.visits[e.first + e.count - 1].source;
+    if (xanatoo::no_save()) {
+      flash_status(app, "Not removed: --no-save");
+      return;
+    }
+    if (xanatoo::remove_visits(ids) == 0) {
+      flash_status(app, "Could not remove the visit");
+      return;
+    }
+    for (Pane& p : app.panes)
+      for (NavHistoryEntry& n : p.nav.entries)
+        if (std::find(ids.begin(), ids.end(), n.visit) != ids.end())
+          n.visit = source;
+  } else {
+    std::erase(app.visited, h.visits[e.first].address);
+  }
+  reload(app);
+  // The row now at the removed line's place (or the last one).
+  const int n = static_cast<int>(h.lines.size());
+  int sel = std::min(line, n - 1);
+  while (sel >= 0 && sel < n && h.lines[static_cast<size_t>(sel)].entry < 0)
+    ++sel;
+  if (sel >= n)
+    for (sel = n - 1; sel >= 0 && h.lines[static_cast<size_t>(sel)].entry < 0;)
+      --sel;
+  h.sel = sel;
+  if (sel >= 0) scroll_to_line(app, sel);
+  flash_status(app, "Removed from history: " + label);
+}
+
 // Keeps line `sel` inside the client area.
 void scroll_to_line(App& app, int sel) {
   FloatWindow& w = app.history_win;
@@ -278,7 +339,9 @@ void draw_history_panel(App& app) {
   {
     const int mx = static_cast<int>(app.mouse_x);
     const int my = static_cast<int>(app.mouse_y);
-    if (float_at(app, mx, my) == &w && mx >= cx && mx < cx + cw)
+    // Not under an open popup (the row menu): no hover, no tooltip.
+    if (float_at(app, mx, my) == &w && mx >= cx && mx < cx + cw &&
+        !app.ui.want_capture_mouse())
       h.hover = line_at(app, w, my);
   }
 
@@ -391,6 +454,59 @@ void click_history_panel(App& app, FloatWindow& w, int my) {
   open_line(app, line, (SDL_GetModState() & KMOD_SHIFT) != 0);
 }
 
+bool right_click_history_panel(App& app, int mx, int my) {
+  if (!app.history_panel_open) return false;
+  FloatWindow& w = app.history_win;
+  auto [cx, cy, cw, ch] = float_client_rect(app, w);
+  if (mx < cx || mx >= cx + cw || my < cy || my >= cy + ch) return false;
+  HistoryPanel& h = app.history;
+  h.menu_id = 0;
+  h.menu_address.clear();
+  const int line = line_at(app, w, my);
+  const int ei = line >= 0 ? h.lines[static_cast<size_t>(line)].entry : -1;
+  if (ei < 0) return true;  // a day header or empty space: no menu
+  const xanatoo::VisitRecord& v = h.visits[h.entries[static_cast<size_t>(ei)].first];
+  h.sel = line;
+  h.menu_id = v.id;
+  h.menu_address = v.address;
+  app.ui.open_history_menu(static_cast<float>(mx), static_cast<float>(my));
+  return true;
+}
+
+std::string history_menu_label(App& app) {
+  HistoryPanel& h = app.history;
+  const int line = line_of(h, h.menu_id, h.menu_address);
+  if (line < 0) return h.menu_address;
+  const int ei = h.lines[static_cast<size_t>(line)].entry;
+  return entry_label(h, h.entries[static_cast<size_t>(ei)]);
+}
+
+void history_action(App& app, const std::string& action) {
+  HistoryPanel& h = app.history;
+  const int64_t id = std::exchange(h.menu_id, 0);
+  const std::string address = std::exchange(h.menu_address, {});
+  if (address.empty()) return;
+  if (action == "copy") {
+    SDL_SetClipboardText(address.c_str());
+    flash_status(app, "Copied " + address);
+    return;
+  }
+  const int line = line_of(h, id, address);
+  if (line < 0) return;  // gone meanwhile (another process removed it)
+  h.sel = line;
+  if (action == "open") {
+    open_line(app, line);
+  } else if (action == "open-other") {
+    open_line(app, line, true);
+  } else if (action == "open-tab") {
+    app.click_new_tab = true;
+    open_line(app, line);
+    app.click_new_tab = false;
+  } else if (action == "remove") {
+    remove_line(app, line);
+  }
+}
+
 bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
   HistoryPanel& h = app.history;
   const int n = static_cast<int>(h.lines.size());
@@ -444,6 +560,9 @@ bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
       app.click_new_tab = ctrl;
       open_line(app, h.sel, shift);
       app.click_new_tab = false;
+      return true;
+    case SDLK_DELETE:
+      remove_line(app, h.sel);
       return true;
     case SDLK_SLASH:
       if (ctrl) return false;

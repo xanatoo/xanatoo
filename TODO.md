@@ -16,6 +16,21 @@
 - Possible follow-up: also call `pointer_leave` when the mouse leaves the
   window (SDL window-leave event), which leaves hover stuck the same way.
 
+## Status (2026-11-19) — History panel row menu and Delete
+
+- Right-click on a History row: Open, Open in New Tab, Open as New Visit
+  (or "Go Back to This Visit" with rewinding off), Copy Address, Remove
+  from History. Delete removes the selected row; the selection moves to
+  the row taking its place.
+- `remove_visits` (visits.hpp): deletes visits, re-links their children
+  to the removed visit's source, decrements `pages.visit_count`.
+  `store_visit` turns a removed source into NULL instead of failing the
+  foreign key. Test in `sqlite_db_tests.cpp`.
+- No row tooltip while a popup (the menu) is open.
+- Checked under Xvfb: menu, remove via menu and via Delete (tree re-linked).
+- Not done: removing several rows at once, undo, "remove all visits of
+  this page / site".
+
 ## Status (2026-11-19) — History visits continue the picked branch
 
 - Opening an old visit from the History panel (one no view's Back /

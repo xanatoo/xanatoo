@@ -109,6 +109,9 @@ enum class UiCommand {
   DownloadAction,  // arg = action on App::download_menu (right-clicked
                    // Downloads row): open / open-tab / system / folder /
                    // copy-path / copy-url / cancel / forget
+  HistoryAction,   // arg = action on the right-clicked History row
+                   // (HistoryPanel::menu_id): open / open-tab / open-other /
+                   // copy / remove
   OpenReply,       // right-clicked Message: start a mock reply draft
   JumpQuote,       // context menu quote link; arg = index into the items
   ContextJump,     // Context panel: jump to hovered quote source
@@ -525,6 +528,12 @@ struct UiState {
     bool active = false;    // still transferring: only Cancel applies
     bool complete = false;  // finished and the file still exists
   } download_menu;
+  // The History row of an open right-click menu (empty address: none).
+  struct HistoryMenu {
+    std::string label, address;
+    bool from_db = false;  // a logged visit (else a session address)
+    bool rewinds = true;   // ViewSettings::history_rewinds (Shift flips)
+  } history_menu;
   bool styles_open = false;
   bool styles_manager_open = false;
   int styles_manager_x = 0, styles_manager_y = 0, styles_manager_w = 0,
@@ -673,6 +682,8 @@ public:
   void open_bookmark_menu(float x, float y);
   // The menu of a Downloads panel row (UiState::download_menu).
   void open_download_menu(float x, float y);
+  // The menu of a History panel row (UiState::history_menu).
+  void open_history_menu(float x, float y);
 
   UiFrameResult begin_frame(const UiState& state);
   // Finalize ImGui's command lists before native panels are painted. Each
@@ -723,6 +734,7 @@ private:
   bool tile_menu_open_ = false;
   bool bookmark_menu_open_ = false;
   bool download_menu_open_ = false;
+  bool history_menu_open_ = false;
   float context_x_ = 0.f;
   float context_y_ = 0.f;
   float tile_menu_x_ = 0.f;

@@ -519,7 +519,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "browsing on grows that branch. Anchor jumps and reloads in one page share a row (*×n*). "
      "Click to open, middle-click for a new tab, hover for details. With "
      "the panel focused: **/** or **Ctrl+F** filters, arrows / Home / End "
-     "move, **Enter** opens, **Esc** clears the filter or closes."},
+     "move, **Enter** opens, **Delete** removes the visit from the history, "
+     "**Esc** clears the filter or closes. Right-click a row for its menu."},
     {"@panel:styles", "Style sheets panel", "Pick the style sheet of the focused page."},
     {"@panel:style-manager", "Style sheet manager",
      "Create, edit and pin style sheets. Changes apply as you type."},

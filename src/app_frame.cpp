@@ -384,6 +384,13 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   for (size_t i = app.visited.size(), n = 0; i > 0 && n < 25; --i, ++n)
     ui_state.recent_visited.push_back(app.visited[i - 1]);
   ui_state.downloads_open = app.downloads_panel_open;
+  ui_state.history_menu = {};
+  if (!app.history.menu_address.empty()) {
+    ui_state.history_menu.address = app.history.menu_address;
+    ui_state.history_menu.label = history_menu_label(app);
+    ui_state.history_menu.from_db = app.history.menu_id != 0;
+    ui_state.history_menu.rewinds = app.view_settings.history_rewinds;
+  }
   ui_state.download_menu = {};
   if (const auto& d = app.download_menu) {
     const auto phase = d->phase.load(std::memory_order_acquire);
@@ -765,7 +772,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::GoHome || c == C::GoUp ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleBookmarks ||
         c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
-        c == C::DownloadAction ||
+        c == C::DownloadAction || c == C::HistoryAction ||
         c == C::ToggleSubscriptions || c == C::Subscribe ||
         c == C::Unsubscribe || c == C::SubscriptionOpen ||
         c == C::SubscriptionMarkRead || c == C::SubscriptionRefresh ||
@@ -1876,6 +1883,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::DownloadAction:
       download_action(app, arg);
+      break;
+    case C::HistoryAction:
+      history_action(app, arg);
       break;
     case C::CopyText:
       if (!arg.empty()) {
