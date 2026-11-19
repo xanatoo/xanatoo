@@ -202,7 +202,7 @@ void draw_downloads_panel(App& app) {
     }
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll, max_scroll);
+  draw_client_scrollbar(app, w, max_scroll);
 }
 
 // The entry under the pointer in the panel's client area, if any.

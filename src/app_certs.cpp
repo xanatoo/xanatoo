@@ -196,7 +196,7 @@ void cert_ui_state(App& app, xanatoo::UiState& st) {
   }
   st.certs_open = app.certs.open;
   if (!app.certs.open) return;
-  auto [x, y, w, h] = float_client_rect(app, app.certs_win);
+  auto [x, y, w, h] = imgui_panel_rect(app, app.certs_win);
   st.certs_x = x;
   st.certs_y = y;
   st.certs_w = w;

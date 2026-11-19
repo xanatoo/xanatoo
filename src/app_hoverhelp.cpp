@@ -232,7 +232,7 @@ void draw_hover_help_window(App& app) {
                              static_cast<float>(cx));
   app.renderer.draw(hh.layout, draw_scroll, static_cast<float>(cx));
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll, max_s);
+  draw_client_scrollbar(app, w, max_s);
 }
 
 }  // namespace xanatoo::app

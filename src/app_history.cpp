@@ -373,7 +373,7 @@ void draw_history_panel(App& app) {
                            pal.text_dim.r, pal.text_dim.g, pal.text_dim.b);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll, max_s);
+  draw_client_scrollbar(app, w, max_s);
 }
 
 void click_history_panel(App& app, FloatWindow& w, int my) {

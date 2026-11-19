@@ -405,14 +405,14 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.styles_open = app.styles_panel_open;
   ui_state.styles_manager_open = app.styles_manager_panel_open;
   if (app.styles_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.styles_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.styles_win);
     ui_state.styles_x = x;
     ui_state.styles_y = y;
     ui_state.styles_w = w;
     ui_state.styles_h = h;
   }
   if (app.styles_manager_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.styles_manager_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.styles_manager_win);
     ui_state.styles_manager_x = x;
     ui_state.styles_manager_y = y;
     ui_state.styles_manager_w = w;
@@ -421,14 +421,14 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.bookmarks_open = app.bookmarks_panel_open;
   ui_state.context_open = app.context_panel_open;
   if (app.bookmarks_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.bookmarks_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.bookmarks_win);
     ui_state.bookmarks_x = x;
     ui_state.bookmarks_y = y;
     ui_state.bookmarks_w = w;
     ui_state.bookmarks_h = h;
   }
   if (app.context_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.context_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.context_win);
     ui_state.context_x = x;
     ui_state.context_y = y;
     ui_state.context_w = w;
@@ -447,7 +447,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.bookmarks = app.bookmarks;
   ui_state.subscriptions_open = app.subscriptions_panel_open;
   if (app.subscriptions_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.subscriptions_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.subscriptions_win);
     ui_state.subscriptions_x = x;
     ui_state.subscriptions_y = y;
     ui_state.subscriptions_w = w;
@@ -477,7 +477,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.lemmy_instance_only = app.lemmy_instance_only;
   ui_state.lemmy_supported = remote_fetch_supported("lemmy:lemmy.world/c/technology", nullptr);
   if (app.lemmy_explorer_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.lemmy_explorer_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.lemmy_explorer_win);
     ui_state.lemmy_explorer_x = x;
     ui_state.lemmy_explorer_y = y;
     ui_state.lemmy_explorer_w = w;
@@ -490,7 +490,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.matrix_server = app.matrix_server;
   ui_state.matrix_supported = remote_fetch_supported("matrix:directory/matrix.org", nullptr);
   if (app.matrix_explorer_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.matrix_explorer_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.matrix_explorer_win);
     ui_state.matrix_explorer_x = x;
     ui_state.matrix_explorer_y = y;
     ui_state.matrix_explorer_w = w;
@@ -520,14 +520,14 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.nostr_identities = app.nostr_identities;
   ui_state.nostr_selected_identity = app.nostr_active_identity;
   if (app.nostr_explorer_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.nostr_explorer_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.nostr_explorer_win);
     ui_state.nostr_explorer_x = x;
     ui_state.nostr_explorer_y = y;
     ui_state.nostr_explorer_w = w;
     ui_state.nostr_explorer_h = h;
   }
   if (app.nostr_accounts_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.nostr_accounts_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.nostr_accounts_win);
     ui_state.nostr_accounts_x = x;
     ui_state.nostr_accounts_y = y;
     ui_state.nostr_accounts_w = w;
@@ -538,7 +538,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.can_show_revisions = b && !!find_stored_document(b->doc_key);
   }
   if (app.annotation_panel_open) {
-    auto [x, y, w, h] = float_client_rect(app, app.annotation_win);
+    auto [x, y, w, h] = imgui_panel_rect(app, app.annotation_win);
     ui_state.annotation_x = x;
     ui_state.annotation_y = y;
     ui_state.annotation_w = w;
@@ -4556,7 +4556,7 @@ void draw_outline_panel(App& app) {
       const float content_h =
           static_cast<float>(app.outline.size()) * step + 8.f;
       const float max_s = std::max(0.f, content_h - static_cast<float>(ch));
-      draw_client_scrollbar(app, cx, cy, cw, ch, app.ol.scroll, max_s);
+      draw_client_scrollbar(app, app.ol, max_s);
     }
   }
 }
@@ -4622,7 +4622,7 @@ void draw_backlinks_panel(App& app) {
       const float content_h =
           static_cast<float>(app.backlinks.size()) * step + 8.f;
       const float max_s = std::max(0.f, content_h - static_cast<float>(ch));
-      draw_client_scrollbar(app, cx, cy, cw, ch, app.bl.scroll, max_s);
+      draw_client_scrollbar(app, app.bl, max_s);
     }
   }
 }
@@ -4662,7 +4662,7 @@ void draw_help_window(App& app) {
     {
       const float max_s = std::max(
           0.f, app.help_layout.content_height - static_cast<float>(ch) + 40.f);
-      draw_client_scrollbar(app, cx, cy, cw, ch, app.help.scroll, max_s);
+      draw_client_scrollbar(app, app.help, max_s);
     }
   }
 }
@@ -4747,7 +4747,7 @@ void draw_context_window(App& app) {
   {
     const float max_s = std::max(
         0.f, app.context_layout.content_height - static_cast<float>(ch) + 40.f);
-    draw_client_scrollbar(app, cx, cy, cw, ch, app.context_win.scroll, max_s);
+    draw_client_scrollbar(app, app.context_win, max_s);
   }
 
   // Connector line between the quote in the main pane and its source in

@@ -302,7 +302,7 @@ void draw_page_panel(App& app) {
                            ink.r, ink.g, ink.b);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll, page_max_scroll(app));
+  draw_client_scrollbar(app, w, page_max_scroll(app));
 }
 
 }  // namespace xanatoo::app

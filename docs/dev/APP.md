@@ -202,7 +202,11 @@ side is `App::dock_w[4]` (L, R, T, B). A `dock_gap` gutter (scaled,
 painted by `draw_dock_gutters` with `theme::draw_grip_dots`; docked panels draw no drop shadow) separates neighbouring docked panels and a
 dock from the panes; `dock_column_w` / `dock_band_h` include it, and the
 separator / dock-edge grab zones lie in it (plus two pixels of frame), so
-they never overlap a panel's or a pane's scrollbar. Max overlays the client area; every
+they never overlap a panel's or a pane's scrollbar. A panel docked against the
+window's right edge (`float_flush_right`) runs its scrollbar out to that edge
+(Fitts' law): native ones via `client_scrollbar_rect` (shared by
+`draw_client_scrollbar`, `press_client` and touch), ImGui bodies via
+`imgui_panel_rect`. Max overlays the client area; every
 frame has the close box at the title's left edge and the maximize /
 restore box at its right edge, the shade box just left of it
 (`title_close_zone` / `title_max_zone` / `title_shade_zone`). Shade

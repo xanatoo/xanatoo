@@ -627,7 +627,7 @@ void draw_sitemap_panel(App& app) {
         tink.g, tink.b);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll,
+  draw_client_scrollbar(app, w,
                         sitemap_max_scroll(app));
 }
 

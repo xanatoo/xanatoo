@@ -224,7 +224,7 @@ void draw_revision_panel(App& app) {
               line, ink);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  draw_client_scrollbar(app, cx, cy, cw, ch, w.scroll,
+  draw_client_scrollbar(app, w,
                         revision_panel_max_scroll(app, ch));
 }
 

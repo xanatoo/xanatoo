@@ -115,7 +115,7 @@ void refresh_related_sites(App& app) {
 void related_ui_state(App& app, xanatoo::UiState& st) {
   st.related_open = app.related.open;
   if (!app.related.open) return;
-  auto [x, y, w, h] = float_client_rect(app, app.related_win);
+  auto [x, y, w, h] = imgui_panel_rect(app, app.related_win);
   st.related_x = x;
   st.related_y = y;
   st.related_w = w;

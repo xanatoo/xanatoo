@@ -2162,6 +2162,14 @@ bool dock_split_motion(App& app, int x, int y);
 void dock_split_release(App& app);
 std::tuple<int, int, int, int> float_client_rect(App& app,
                                                  const FloatWindow& w);
+// A panel docked against the right edge of the window: its scrollbar runs
+// out to that edge (Fitts' law) instead of stopping at the frame.
+bool float_flush_right(const App& app, const FloatWindow& w);
+// The native client scrollbar strip (draw and hit-test share it).
+SDL_Rect client_scrollbar_rect(App& app, const FloatWindow& w);
+// Client rect handed to an embedded ImGui panel body (drawn 3 px inside it);
+// flush-right panels reach past the window edge so ImGui's scrollbar does too.
+std::tuple<int, int, int, int> imgui_panel_rect(App& app, const FloatWindow& w);
 float float_max_scroll(App& app, const FloatWindow& w);
 bool float_press(App& app, int x, int y);   // true = click consumed
 bool float_motion(App& app, int x, int y);  // true = drag/resize/scroll active
@@ -2199,8 +2207,7 @@ void draw_title_button(App& app, const SDL_Rect& r, const char* label,
 bool draw_floating_frame(App& app, const FloatWindow& win,
                          const std::string& title, bool active,
                          int title_reserve = 0);
-void draw_client_scrollbar(App& app, int cx, int cy, int cw, int ch,
-                           float scroll, float max_scroll);
+void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll);
 
 // ---- database-native document history (app_revisions.cpp) ----
 void refresh_revision_panel(App& app);

@@ -230,12 +230,11 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   return !shaded;
 }
 
-void draw_client_scrollbar(App& app, int cx, int cy, int cw, int ch,
-                           float scroll, float max_scroll) {
+void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll) {
   if (max_scroll <= 1.f) return;
-  SDL_Rect trough{cx + cw - 12, cy, 12, ch};
-  xanatoo::theme::draw_vscrollbar(app.sdl, trough, scroll, max_scroll,
-                                  static_cast<float>(ch));
+  const SDL_Rect trough = client_scrollbar_rect(app, w);
+  xanatoo::theme::draw_vscrollbar(app.sdl, trough, w.scroll, max_scroll,
+                                  static_cast<float>(trough.h));
 }
 
 // First running page navigation (status line + toolbar Stop button).

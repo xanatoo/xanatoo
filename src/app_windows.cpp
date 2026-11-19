@@ -349,12 +349,11 @@ void tear_off(App& app, FloatWindow& w, int mx, int my) {
 }
 
 void press_client(App& app, FloatWindow& w, int mx, int my) {
-  auto [cx, cy, cw, ch] = float_client_rect(app, w);
-  constexpr int sb_w = 10;
-  // Scrollbar strip: Outline and Backlinks rows span it, so only the
-  // content-scroll roles reserve it for click-free jump/drag.
-  const bool in_sb =
-      mx >= cx + cw - sb_w && mx <= cx + cw + 2 && my >= cy && my <= cy + ch;
+  // Scrollbar strip (out to the window edge when docked against it): only
+  // natively scrolled roles reserve it for click-free jump/drag.
+  const SDL_Rect sb = client_scrollbar_rect(app, w);
+  const bool in_sb = mx >= sb.x + 2 && mx <= sb.x + sb.w + 2 &&
+                     my >= sb.y && my <= sb.y + sb.h;
   if (in_sb && !imgui_scrolls(app, w)) {
     begin_scroll_drag(app, w, my);
     return;
@@ -580,6 +579,23 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
       return soft_client_rect(app, w);
   }
   return {0, 0, 0, 0};
+}
+
+bool float_flush_right(const App& app, const FloatWindow& w) {
+  return w.dock != Dock::None && w.x + w.w >= app.win_w;
+}
+
+SDL_Rect client_scrollbar_rect(App& app, const FloatWindow& w) {
+  auto [cx, cy, cw, ch] = float_client_rect(app, w);
+  const int right = float_flush_right(app, w) ? w.x + w.w : cx + cw;
+  return SDL_Rect{right - 12, cy, 12, ch};
+}
+
+std::tuple<int, int, int, int> imgui_panel_rect(App& app, const FloatWindow& w) {
+  auto [x, y, cw, h] = float_client_rect(app, w);
+  // ImGui keeps a 1 px border right of its scrollbar: push that off screen.
+  if (float_flush_right(app, w)) cw = app.win_w + 1 + 3 - x;
+  return {x, y, cw, h};
 }
 
 float float_max_scroll(App& app, const FloatWindow& w) {
