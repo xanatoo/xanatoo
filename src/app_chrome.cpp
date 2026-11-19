@@ -45,6 +45,7 @@ void set_chrome_scale(float scale) {
   kUiFontPx = px(14);
   help_pad = px(12);
   help_edge = px(6);
+  dock_gap = px(8);
   help_grip_h = px(14);
 }
 

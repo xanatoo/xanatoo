@@ -21,6 +21,7 @@
 #include "xanatoo/parse.hpp"
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
 
 namespace fs = std::filesystem;
@@ -202,11 +203,29 @@ std::tuple<int, int, int, int> dock_rect(App& app, Dock d) {
 }
 
 int dock_column_w(App& app, Dock side) {
-  return has_column(app, side) ? column_w(app, side) : 0;
+  return has_column(app, side) ? column_w(app, side) + dock_gap : 0;
 }
 
 int dock_band_h(App& app, Dock side) {
-  return has_column(app, side) ? band_h(app, side) : 0;
+  return has_column(app, side) ? band_h(app, side) + dock_gap : 0;
+}
+
+void draw_dock_gutters(App& app) {
+  namespace th = xanatoo::theme;
+  const th::Palette& pal = th::palette();
+  for (Dock side : {Dock::Left, Dock::Right, Dock::Top, Dock::Bottom}) {
+    if (!has_column(app, side)) continue;
+    // The whole dock plus its gutter; the panels draw over it afterwards.
+    auto [x, y, w, h] = dock_rect(app, side);
+    SDL_Rect r{x, y, w, h};
+    switch (side) {
+      case Dock::Left: r.w += dock_gap; break;
+      case Dock::Right: r.x -= dock_gap; r.w += dock_gap; break;
+      case Dock::Top: r.h += dock_gap; break;
+      default: r.y -= dock_gap; r.h += dock_gap; break;
+    }
+    th::fill(app.sdl, r, pal.face_dark);
+  }
 }
 
 void dock_window(App& app, FloatWindow& w, Dock d, int mx, int my) {
@@ -288,20 +307,21 @@ void place_windows(App& app) {
       shares.push_back(w->dock_share);
       shaded.push_back(float_shaded(*w));
     }
-    const auto edges =
-        xanatoo::dock_slices_shaded(shares, shaded, bw, shaded_band_w());
+    const int gaps = std::max(0, n - 1) * dock_gap;
+    const auto edges = xanatoo::dock_slices_shaded(
+        shares, shaded, std::max(0, bw - gaps), shaded_band_w());
     // A shaded panel keeps a narrow title strip at the band's top, in line
     // with its neighbours' titles.
     const bool all = all_shaded(app, side);
     for (int i = 0; i < n; ++i) {
       const size_t k = static_cast<size_t>(i);
-      int x0 = x + edges[k];
-      int x1 = x + edges[k + 1];
+      int x0 = x + i * dock_gap + edges[k];
+      int x1 = x + i * dock_gap + edges[k + 1];
       // All rolled up: the strips share the band's width again.
       if (all) {
-        const auto even = xanatoo::dock_slices(shares, bw);
-        x0 = x + even[k];
-        x1 = x + even[k + 1];
+        const auto even = xanatoo::dock_slices(shares, std::max(0, bw - gaps));
+        x0 = x + i * dock_gap + even[k];
+        x1 = x + i * dock_gap + even[k + 1];
       }
       const int h = shaded[k] ? std::min(bh, shaded_h()) : bh;
       set_geom(app, *row[k], x0, y, x1 - x0, h);
@@ -319,11 +339,12 @@ void place_windows(App& app) {
       shares.push_back(w->dock_share);
       shaded.push_back(float_shaded(*w));
     }
-    const auto edges =
-        xanatoo::dock_slices_shaded(shares, shaded, ch, shaded_h());
+    const int gaps = std::max(0, n - 1) * dock_gap;
+    const auto edges = xanatoo::dock_slices_shaded(
+        shares, shaded, std::max(0, ch - gaps), shaded_h());
     for (int i = 0; i < n; ++i) {
-      const int y0 = top + edges[static_cast<size_t>(i)];
-      const int y1 = top + edges[static_cast<size_t>(i + 1)];
+      const int y0 = top + i * dock_gap + edges[static_cast<size_t>(i)];
+      const int y1 = top + i * dock_gap + edges[static_cast<size_t>(i + 1)];
       set_geom(app, *col[static_cast<size_t>(i)], x, y0, cw, y1 - y0);
     }
   }
@@ -366,15 +387,17 @@ DockSplitHit find_dock_split(App& app, int mx, int my) {
     const bool horizontal = is_band(side);  // left/right neighbours
     for (size_t i = 0; i + 1 < col.size(); ++i) {
       const FloatWindow& a = *col[i];
-      if (float_shaded(a) || float_shaded(*col[i + 1])) continue;
+      const FloatWindow& b = *col[i + 1];
+      if (float_shaded(a) || float_shaded(b)) continue;
+      // The gutter between the two, plus a pixel into each frame edge.
       const int edge = horizontal ? a.x + a.w : a.y + a.h;
+      const int next = horizontal ? b.x : b.y;
       const int along = horizontal ? mx : my;
       const int cross = horizontal ? my : mx;
       const int first_cross = horizontal ? a.y : a.x;
       const int length = horizontal ? a.h : a.w;
-      if (std::abs(along - edge) <= help_edge &&
-          cross >= first_cross + help_edge &&
-          cross < first_cross + length - help_edge)
+      if (along >= edge - 2 && along < next + 2 &&
+          cross >= first_cross && cross < first_cross + length)
         return {side, i};
     }
   }

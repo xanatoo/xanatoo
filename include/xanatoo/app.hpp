@@ -79,6 +79,9 @@ inline int kUiFontPx = 14;
 inline constexpr int kStructTagPx = 9;
 inline int help_pad = 12;
 inline int help_edge = 6;
+// Gutter between docked panels and between a dock and the panes; the dock
+// separators and resize edges are grabbed in it, clear of scrollbars.
+inline int dock_gap = 8;
 inline int help_grip_h = 14;  // strip under the client well: resize grip / h-scroll
 
 // Client rect of a floating window (x, y, w, h = outer frame): the sunken
@@ -2047,6 +2050,8 @@ std::tuple<int, int, int, int> dock_rect(App& app, Dock d);
 int dock_column_w(App& app, Dock side);
 // Height taken from the panes by visible windows docked at Top / Bottom.
 int dock_band_h(App& app, Dock side);
+// Paint the gutters around docked panels (before the panels draw).
+void draw_dock_gutters(App& app);
 // Dock `w` at `d`; for a column or band, the pointer (`mx`, `my`) picks its
 // slot among the others.
 void dock_window(App& app, FloatWindow& w, Dock d, int mx, int my);

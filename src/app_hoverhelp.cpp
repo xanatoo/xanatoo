@@ -134,8 +134,9 @@ const FloatWindow* float_resize_window_at(App& app, int x, int y) {
   auto st = float_stack(app);
   for (auto it = st.rbegin(); it != st.rend(); ++it) {
     const FloatWindow& w = **it;
-    if (x >= w.x - help_edge && x <= w.x + w.w + help_edge &&
-        y >= w.y - help_edge && y <= w.y + w.h + help_edge)
+    const int reach = std::max(help_edge, dock_gap);
+    if (x >= w.x - reach && x <= w.x + w.w + reach &&
+        y >= w.y - reach && y <= w.y + w.h + reach)
       return &w;
   }
   return nullptr;

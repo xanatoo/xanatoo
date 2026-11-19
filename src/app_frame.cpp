@@ -5126,6 +5126,7 @@ void run_frame(App& app) {
   poll_images(app);
   pump_page_tiles(app);
   draw_panes(app);
+  draw_dock_gutters(app);
   draw_split_chrome(app);
   // Freeze ImGui's draw lists before painting native frames. Rich panel forms
   // now composite inside float_stack rather than across everything at the end.

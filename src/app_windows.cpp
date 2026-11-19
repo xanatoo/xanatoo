@@ -503,26 +503,32 @@ std::optional<UiPanelLayer> float_layer_at(App& app, int x, int y) {
 // outside-edge tolerance is intentional: thin frame edges remain grabbable.
 static int float_resize_bits(const FloatWindow& w, int mx, int my) {
   if (float_shaded(w)) return 0;  // the dock is resized from its open panels
+  // A docked panel's outer edge is grabbed in the gutter beside it (plus a
+  // pixel of frame), never over its own or a pane's scrollbar.
+  const bool in_v = my >= w.y && my < w.y + w.h;
+  const bool in_h = mx >= w.x && mx < w.x + w.w;
+  switch (w.dock) {
+    case Dock::Left:
+      return in_v && mx >= w.x + w.w - 2 && mx < w.x + w.w + dock_gap ? 1 : 0;
+    case Dock::Right:
+      return in_v && mx >= w.x - dock_gap && mx < w.x + 2 ? 4 : 0;
+    case Dock::Top:
+      return in_h && my >= w.y + w.h - 2 && my < w.y + w.h + dock_gap ? 2 : 0;
+    case Dock::Bottom:
+      return in_h && my >= w.y - dock_gap && my < w.y + 2 ? 8 : 0;
+    case Dock::Max: return 0;
+    case Dock::None: break;
+  }
   if (mx < w.x - help_edge || mx > w.x + w.w + help_edge ||
       my < w.y - help_edge || my > w.y + w.h + help_edge)
     return 0;
-  const bool on_r = mx >= w.x + w.w - help_edge &&
+  // Free windows: the scrollbar sits flush on the right frame, so that edge
+  // reaches in by two pixels only.
+  const bool on_r = mx >= w.x + w.w - 2 &&
                     my >= w.y + help_title_h && my <= w.y + w.h + help_edge;
-  const bool on_l = mx <= w.x + help_edge &&
-                    my >= w.y + help_title_h && my <= w.y + w.h;
   const bool on_b = my >= w.y + w.h - help_edge &&
                     mx >= w.x && mx <= w.x + w.w + help_edge;
-  const bool on_t = my <= w.y + 2 && my >= w.y - help_edge &&
-                    mx >= w.x && mx <= w.x + w.w;
-  switch (w.dock) {
-    case Dock::None: return (on_r ? 1 : 0) | (on_b ? 2 : 0);
-    case Dock::Left: return on_r ? 1 : 0;
-    case Dock::Right: return on_l ? 4 : 0;
-    case Dock::Top: return on_b ? 2 : 0;
-    case Dock::Bottom: return on_t ? 8 : 0;
-    case Dock::Max: return 0;
-  }
-  return 0;
+  return (on_r ? 1 : 0) | (on_b ? 2 : 0);
 }
 
 int float_resize_at(App& app, int mx, int my) {

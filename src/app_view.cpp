@@ -292,7 +292,8 @@ void place_centre_rows(App& app) {
 }
 
 int tile_gutter_size(const App& app) {
-  return app.diff_mode ? 22 : app.tile_mode == TileMode::Trail ? 12 : 8;
+  const int px = app.diff_mode ? 22 : app.tile_mode == TileMode::Trail ? 14 : 12;
+  return static_cast<int>(std::lround(px * app.ui_scale));
 }
 
 SDL_Rect tile_divider_rect(const App& app) {
