@@ -3845,6 +3845,33 @@ bool path_uses_gemtext(std::string_view path) {
   return path_ends_with_ci(path, ".gmi") || path_ends_with_ci(path, ".gemini");
 }
 
+bool path_uses_plain_text(std::string_view path) {
+  return path_ends_with_ci(path, ".txt");
+}
+
+namespace {
+
+void plain_text_blocks(const Document& doc, NodeId id, std::string& out) {
+  const Node& n = doc.get(id);
+  std::string text;
+  for (const auto& sp : n.spans) text += sp.text;
+  while (!text.empty() && text.back() == '\n') text.pop_back();
+  if (!text.empty()) {
+    if (!out.empty()) out += "\n";
+    out += text;
+    out += "\n";
+  }
+  for (NodeId c : n.children) plain_text_blocks(doc, c, out);
+}
+
+}  // namespace
+
+std::string serialize_plain_text(const Document& doc) {
+  std::string out;
+  if (doc.root != INVALID_NODE) plain_text_blocks(doc, doc.root, out);
+  return out;
+}
+
 bool looks_like_gemtext(std::string_view source) {
   // Weak heuristic: several gemtext-only line leaders and few markdown tables.
   int gem_lines = 0, lines = 0;
@@ -4216,6 +4243,8 @@ std::string serialize_sexpr(const Document& doc,
 
 Document parse_document(std::string_view source, std::string_view path) {
   if (path_uses_xml(path)) return parse_xml(source);
+  // Before the S-expression sniff: a text file may well start with '('.
+  if (path_uses_plain_text(path)) return plain_text_document(source);
   if (path_uses_sexpr(path) || looks_like_sexpr(source))
     return parse_sexpr(source);
   if (path_uses_gemtext(path))
@@ -4229,6 +4258,7 @@ Document parse_document(std::string_view source, std::string_view path) {
 
 std::string serialize_document(const Document& doc, std::string_view path) {
   if (path_uses_xml(path)) return serialize_xml(doc);
+  if (path_uses_plain_text(path)) return serialize_plain_text(doc);
   if (path_uses_sexpr(path)) return serialize_sexpr(doc);
   if (path_uses_gemtext(path)) return serialize_gemtext(doc);
   if (path_uses_org(path)) return serialize_org(doc);

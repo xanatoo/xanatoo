@@ -102,6 +102,13 @@ bool path_uses_gemtext(std::string_view path);
 bool looks_like_gemtext(std::string_view source);  // heuristic only
 
 Document parse_gemtext(std::string_view source);
+
+// Plain text (.txt) keeps its lines: blank-line separated chunks become
+// code blocks (plain_text_document, html_page.hpp). The writer joins every
+// block's text with blank lines, so a .txt round-trips as text, never as
+// Markdown.
+bool path_uses_plain_text(std::string_view path);
+std::string serialize_plain_text(const Document& doc);
 // Best-effort export (lossy vs full Markdown model).
 std::string serialize_gemtext(const Document& doc);
 

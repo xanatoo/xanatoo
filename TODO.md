@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — .txt keeps its lines
+
+- `.txt` files read as plain text, not Markdown: blank-line separated
+  chunks become monospace blocks (the web `text/plain` reader), so logs,
+  ASCII art and hard-wrapped notes look as written; `# x` or a leading
+  `(` stay text. Written back (drafts, export to `.txt`) as plain text by
+  `serialize_plain_text`; round trip tested. Gopher / Spartan / Nex text
+  items, which already parsed as "remote.txt", now keep their lines too.
+- Checked under Xvfb: a sample with indentation / ASCII box, and the
+  37 MB log (one 400k-line block): opens in ~6 s, ~376 MB, Ctrl+End < 2 s.
+- Known: blank-line runs and whitespace-only lines collapse to one blank
+  line when an edited `.txt` is saved.
+
 ## Status (2026-11-19) — Binary files no longer load as text
 
 - The 2.5 GB "folder listing" was not the listing: the earlier test had
@@ -18,9 +31,7 @@
 - Large text is fine, no cap needed: a 37 MB / 400k-line log opens in
   ~10 s, peaks at 1.46 GB while parsing, settles at ~355 MB; Ctrl+End in
   ~2 s, and SIGTERM ends it. (The binary case was pathological.)
-- Open (decide): a local `.txt` goes through the Markdown parser, so a log
-  shows as one reflowed paragraph. Plain text kept line by line (as a
-  preformatted block) would read better; that changes behaviour, so ask.
+- `.txt` now keeps its lines (asked for): see the next status above.
 
 ## Status (2026-11-19) — Video plays in the Media panel
 

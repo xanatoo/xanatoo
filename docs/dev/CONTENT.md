@@ -165,6 +165,14 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   bytes; such paths go into `App::binary_paths` and are read-only like
   `invalid_xml_paths`. A 35 MB MP4 read as text took 2+ GB, kept growing,
   and starved the event loop (SIGTERM went unanswered).
+- Plain text: `parse_document` sends `.txt` (`path_uses_plain_text`,
+  checked before the S-expression sniff) to `plain_text_document` (the
+  web `text/plain` reader: blank-line chunks → CodeBlocks), and
+  `serialize_document` writes it back with `serialize_plain_text` (each
+  block's text, blank-line separated), so drafts and exports of a `.txt`
+  stay plain text. Gopher / Spartan / Nex text items ("remote.txt") get
+  the same. Runs of blank lines and whitespace-only lines collapse to one
+  blank line on the round trip.
 
 ## Tables
 

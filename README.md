@@ -129,6 +129,8 @@ CMake commands, packaged assets, and the currently unsupported features.
 | Experimental minimal XML (`.xml`) | Same semantic tree with fixed tags, quoted attributes, and builtin escapes; editable and exportable ([subset definition](docs/XML.md)) |
 | Local `.html`, HTTP(S) pages | Simplified semantic HTML, read-only; no CSS/JavaScript engine |
 | Gemtext (`.gmi`, `.gemini`), `gemini://` | Native document parser and optional network client |
+| Plain text (`.txt`) | Kept line by line in monospace (blank lines split blocks); saved back as plain text |
+| Other binary files (video, archives, …) | A short "binary data" page instead of the bytes |
 | RSS / Atom feeds | Read-only threads and entries |
 | `wikipedia:`, `hn:`, `reddit:`, `lemmy:`, `nostr:` | Service-specific read-only document views |
 | EPUB | Imported for reading; a native EPUB importer is available without Pandoc |

@@ -7216,6 +7216,30 @@ static void test_font_face_index() {
   EXPECT(!missing.load(negative, 18, nullptr));
 }
 
+static void test_plain_text_files() {
+  using namespace xanatoo;
+  EXPECT(path_uses_plain_text("/x/notes.TXT"));
+  EXPECT(!path_uses_plain_text("notes.md"));
+  // Lines stay lines: no reflow, no Markdown, no S-expression sniff.
+  const std::string src =
+      "(not an sexpr)\n# not a heading\nline *two*\n\n\n  indented\r\nlast\n";
+  const Document doc = parse_document(src, "a.txt");
+  const Node& root = doc.get(doc.root);
+  EXPECT_EQ(root.children.size(), size_t(2));
+  EXPECT(doc.get(root.children[0]).kind == NodeKind::CodeBlock);
+  EXPECT_EQ(plain_text(doc, root.children[0]),
+            std::string("(not an sexpr)\n# not a heading\nline *two*"));
+  EXPECT_EQ(plain_text(doc, root.children[1]), std::string("  indented\nlast"));
+  // Written back as plain text, and stable from then on.
+  const std::string out = serialize_document(doc, "a.txt");
+  EXPECT_EQ(out, std::string(
+      "(not an sexpr)\n# not a heading\nline *two*\n\n  indented\nlast\n"));
+  EXPECT_EQ(serialize_document(parse_document(out, "a.txt"), "a.txt"), out);
+  // Markdown-made blocks (a paragraph, list items) write as their text.
+  const Document md = parse_markup("Para *em*\n\n- one\n- two\n");
+  EXPECT_EQ(serialize_plain_text(md), std::string("Para em\n\none\n\ntwo\n"));
+}
+
 static void test_looks_like_binary() {
   using xanatoo::looks_like_binary;
   EXPECT(!looks_like_binary(""));
@@ -7270,6 +7294,7 @@ static void test_transfer_label() {
 }
 
 int main() {
+  test_plain_text_files();
   test_looks_like_binary();
   test_transfer_label();
   test_font_face_index();
