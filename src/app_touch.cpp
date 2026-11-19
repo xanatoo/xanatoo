@@ -78,7 +78,6 @@ void begin_gesture(App& app, float x, float y) {
     return;
   }
   if (y < app.ui_top || yi >= app.win_h - status_bar_h) {
-    audio_press(app, xi, yi);  // the player's buttons work by touch too
     t.mode = TouchMode::Ignored;
     return;
   }

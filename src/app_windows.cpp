@@ -31,6 +31,8 @@ std::pair<int, int> min_size(const FloatWindow& w) {
     case WindowRole::Downloads:
     case WindowRole::Backlinks:
       return {200, 120};
+    case WindowRole::Media:
+      return {260, 150};
     case WindowRole::Styles:
       return {220, 240};
     case WindowRole::StyleManager:
@@ -160,6 +162,9 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Downloads:
       app.downloads_panel_open = false;
+      break;
+    case WindowRole::Media:
+      close_media_panel(app);  // closing the player stops the sound
       break;
     case WindowRole::Reply:
       app.reply.open = false;
@@ -373,6 +378,9 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::Downloads:
       click_downloads_panel(app, mx, my);
       break;
+    case WindowRole::Media:
+      click_media_panel(app, mx, my);
+      break;
     case WindowRole::Reply:
       break;  // ImGui owns the editor and formatting controls.
     case WindowRole::Annotations:
@@ -473,6 +481,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   // Auto-opened downloads should remain visible above detached document
   // windows, just like a browser's downloads popover.
   if (app.downloads_panel_open) st.push_back(&app.downloads_win);
+  if (app.media_panel_open) st.push_back(&app.media_win);
   if (app.reply.open) st.push_back(&app.reply_win);
   // Docked columns under floating windows, maximized ones on top.
   auto layer = [](const FloatWindow* w) {
@@ -565,6 +574,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::HoverHelp:
       return window_client_rect(w.x, w.y, w.w, w.h);
     case WindowRole::Downloads:
+    case WindowRole::Media:
     case WindowRole::Reply:
     case WindowRole::Annotations:
     case WindowRole::Revisions:
@@ -640,6 +650,7 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::RelatedSites:
+    case WindowRole::Media:
       return 0.f;
     case WindowRole::Revisions:
       return revision_panel_max_scroll(app, ch);
@@ -902,6 +913,9 @@ void draw_floats(App& app) {
         break;
       case WindowRole::Downloads:
         draw_downloads_panel(app);
+        break;
+      case WindowRole::Media:
+        draw_media_panel(app);
         break;
       case WindowRole::Reply:
         if (draw_floating_frame(app, *w, "Reply (mockup)", float_active(app, *w)))

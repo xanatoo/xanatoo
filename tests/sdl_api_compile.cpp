@@ -30,6 +30,7 @@ void compile_sdl_render_api(SDL_Window* window, SDL_Renderer* renderer, SDL_Text
   sdl::destroy_surface(surface);
   int x = 0, y = 0;
   sdl::mouse_position(&x, &y);
+  (void)sdl::left_button_down();
   (void)sdl::ticks();
   (void)sdl::ticks_passed(0, 0);
   sdl::renderer_output_size(renderer, &x, &y);

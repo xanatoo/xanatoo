@@ -16,10 +16,15 @@
   title + time, stop); Go → Sound; `examples/sound.md` with three
   synthesised clips; About → Sound; report line "audio decoders".
   Details: `docs/dev/CONTENT.md` "Audio".
+- Then: the controls moved out of the status line into a dockable Media
+  panel (Panels → Media; opens on play, closing it stops): title, format,
+  seek bar (click / drag), times, back 10 s / play-pause / forward 30 s /
+  stop, volume slider. Checked under Xvfb: play, drag volume, seek, pause,
+  close, reopen idle.
 - Checked under Xvfb (SDL_AUDIODRIVER=dummy): all three example formats,
   end of file, seek by click, replay, stop, menu. Test: `test_audio`
   (fixtures in `tests/data/audio`); `checks.sdl3-api` builds the bridge.
-- Not checked: real sound output by ear, Android, WASM, Windows.
+- Not checked: WASM, Windows (the user confirmed sound on PC and Android).
 - Next: Opus (libopusfile, optional); start remote files while they
   download; keyboard shortcuts for the player; an inline player for
   audio links / `<audio>` in pages; podcast enclosures in feeds; then the

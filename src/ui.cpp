@@ -2689,6 +2689,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleHistory;
       if (ImGui::MenuItem("Downloads", nullptr, state.downloads_open))
         cmd = UiCommand::ToggleDownloads;
+      if (ImGui::MenuItem("Media", nullptr, state.media_open))
+        cmd = UiCommand::ToggleMedia;
       if (ImGui::MenuItem("Subscriptions", nullptr, state.subscriptions_open))
         cmd = UiCommand::ToggleSubscriptions;
       if (ImGui::MenuItem("Certificates", nullptr, state.certs_open))

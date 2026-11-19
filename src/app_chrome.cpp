@@ -66,7 +66,7 @@ void apply_ui_scale(App& app) {
   app.body_px = static_cast<int>(std::lround(app.body_px * ratio));
   app.heading_px = static_cast<int>(std::lround(app.heading_px * ratio));
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
-                         &app.history_win, &app.styles_win, &app.downloads_win,
+                         &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win, &app.nostr_accounts_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
@@ -263,7 +263,8 @@ StatusLine compute_status(App& app) {
   std::string& label = st.text;
   StatusTone& tone = st.tone;
   tone = StatusTone::Hint;
-  if (std::string over = audio_hover_text(app, static_cast<int>(app.mouse_x), static_cast<int>(app.mouse_y));
+  if (std::string over = media_panel_hover(app, static_cast<int>(app.mouse_x),
+                                            static_cast<int>(app.mouse_y));
       !over.empty() && !prompt_active(app)) {
     label = std::move(over);
     tone = StatusTone::Info;
@@ -578,11 +579,6 @@ void draw_status_bar(App& app) {
   SDL_Rect left{bar.x + 3, bar.y + 3, bar.w - 6 - (stats_w ? stats_w + 3 : 0),
                 bar_h - 5};
   SDL_Rect right{bar.x + bar.w - 3 - stats_w, left.y, stats_w, left.h};
-  // The sound player's well comes first (audio_well_rect).
-  if (const SDL_Rect well = audio_well_rect(app); well.w > 0) {
-    left.x += well.w + 3;
-    left.w -= well.w + 3;
-  }
 
   th::Rgb ink = p.text_dim;
   th::Rgb well = p.face;
@@ -623,7 +619,6 @@ void draw_status_bar(App& app) {
                          static_cast<float>(ty), st.text, ink.r, ink.g, ink.b);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 
-  draw_audio_well(app);
   if (stats_w) {
     th::bevel(app.sdl, right, th::Bevel::Sunken);
     app.renderer.draw_text(font, static_cast<float>(right.x + pad_x),

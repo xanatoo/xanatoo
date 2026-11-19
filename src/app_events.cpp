@@ -866,9 +866,6 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
 static void on_mousebuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
                                bool imgui_keys) {
   if (static_cast<float>(ev.button.y) < app.ui_top) return;
-  if (ev.button.button == SDL_BUTTON_LEFT && !imgui_mouse &&
-      audio_press(app, ev.button.x, ev.button.y))
-    return;
   if (ev.button.y >= app.win_h - status_bar_h) return;
   switch (ev.button.button) {
     case SDL_BUTTON_LEFT:

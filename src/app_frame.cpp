@@ -388,6 +388,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   for (size_t i = app.visited.size(), n = 0; i > 0 && n < 25; --i, ++n)
     ui_state.recent_visited.push_back(app.visited[i - 1]);
   ui_state.downloads_open = app.downloads_panel_open;
+  ui_state.media_open = app.media_panel_open;
   ui_state.history_menu = {};
   if (!app.history.menu_address.empty()) {
     ui_state.history_menu.address = app.history.menu_address;
@@ -774,7 +775,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::NavigateUrl || c == C::NavBack || c == C::NavForward ||
         c == C::NavJump ||
         c == C::GoHome || c == C::GoUp ||
-        c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleBookmarks ||
+        c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleMedia || c == C::ToggleBookmarks ||
         c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
         c == C::DownloadAction || c == C::HistoryAction ||
         c == C::ToggleSubscriptions || c == C::Subscribe ||
@@ -1208,6 +1209,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       } else if (app.key_focus == KeyFocus::History) {
         app.key_focus = KeyFocus::Document;
       }
+      break;
+    case C::ToggleMedia:
+      toggle_media_panel(app);
       break;
     case C::ToggleDownloads:
       app.downloads_panel_open = !app.downloads_panel_open;

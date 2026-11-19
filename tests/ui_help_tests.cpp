@@ -78,7 +78,7 @@ void test_ui_help(int& passed, int& failed) {
        {"@panel:hover-help", "@panel:help", "@panel:outline",
         "@panel:backlinks", "@panel:sitemap", "@panel:page", "@panel:history",
         "@panel:styles", "@panel:style-manager", "@panel:bookmarks",
-        "@panel:context", "@panel:subscriptions", "@panel:downloads",
+        "@panel:context", "@panel:subscriptions", "@panel:downloads", "@panel:media",
         "@panel:reply", "@panel:annotations", "@panel:revisions",
         "@panel:nostr-explorer", "@panel:nostr-accounts",
         "@panel:lemmy-explorer", "@panel:matrix-explorer",

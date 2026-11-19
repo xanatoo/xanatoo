@@ -39,6 +39,7 @@ enum class UiCommand {
   StopLoading, // cancel running page fetches (toolbar Stop, Esc)
   ToggleHistory,   // View → History panel
   ToggleDownloads, // Panels → Downloads
+  ToggleMedia,     // Panels → Media (the sound player)
   ToggleStylesPanel, // Panels → Style sheets (pick applied theme)
   ToggleStyleManagerPanel, // Panels → Manage style sheets (edit / create)
   AddBookmark,     // bookmark the selection, else the current page
@@ -529,6 +530,7 @@ struct UiState {
   bool history_open = false;
   std::vector<std::string> recent_visited;  // newest first, for the History menu
   bool downloads_open = false;
+  bool media_open = false;
   // The Downloads row of an open right-click menu (empty name: none).
   struct DownloadMenu {
     std::string name, path, url;

@@ -29,6 +29,7 @@ const char* role_key(WindowRole role) {
     case WindowRole::StyleManager: return "style-manager";
     case WindowRole::Bookmarks: return "bookmarks";
     case WindowRole::Downloads: return "downloads";
+    case WindowRole::Media: return "media";
     case WindowRole::Reply: return "reply";
     case WindowRole::Annotations: return "annotations";
     case WindowRole::Context: return "context";

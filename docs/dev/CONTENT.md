@@ -361,9 +361,16 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   channels, SDL converts). The callback reads the decoder under
   `AudioShared::m`; seeks take the same lock. End of file pauses the device
   (`AudioState::Ended`); Play replays from the start.
-- Controls: a well at the left of the status line (`audio_well_rect`,
-  parts by `audio_part_at`, shared by `draw_audio_well`, `audio_press`
-  — mouse and touch — and `audio_hover_text`). Go → Sound has
-  play / pause, back 10 s / forward 30 s, stop (`UiCommand::Audio*`).
+- Controls: the Media panel (`WindowRole::Media`, `App::media_win`,
+  session key `media`, Panels → Media). `play_audio` opens it; closing it
+  stops the sound (`close_media_panel`). Native-drawn in `app_audio.cpp`:
+  title, format / progress / error line, seek bar, times, back 10 s /
+  play-pause / forward 30 s / stop, volume. `media_layout` places the
+  parts; `media_part_at` is the one hit-test for `draw_media_panel`,
+  `click_media_panel` and `media_panel_hover` (status text). Seek bar and
+  volume drag: `AudioPlayer::drag`, followed in `update_audio` while
+  `sdl::left_button_down()`. Volume is `AudioShared::gain` (slider²),
+  applied in the callback, kept across files. Go → Sound has the same
+  transport commands (`UiCommand::Audio*`).
 - Not yet: Opus (needs libopus), AAC / video (FFmpeg, Android
   `AMediaCodec`, the browser), streaming playback before the download ends.

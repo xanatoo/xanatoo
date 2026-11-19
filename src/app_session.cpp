@@ -39,7 +39,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 21> panels(App& app) {
+std::array<PanelRef, 22> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -53,6 +53,7 @@ std::array<PanelRef, 21> panels(App& app) {
            {"context", &app.context_win, app.context_panel_open},
            {"subscriptions", &app.subscriptions_win, app.subscriptions_panel_open},
            {"downloads", &app.downloads_win, app.downloads_panel_open},
+           {"media", &app.media_win, app.media_panel_open},
            {"annotations", &app.annotation_win, app.annotation_panel_open},
            {"revisions", &app.revision_win, app.revision_panel_open},
            {"nostr-explorer", &app.nostr_explorer_win, app.nostr_explorer_open},

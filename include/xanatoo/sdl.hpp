@@ -752,6 +752,11 @@ inline void mouse_position(int* x, int* y) {
 #endif
 }
 
+// The left mouse button is held (drags that outlive their press event).
+inline bool left_button_down() {
+  return (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK) != 0;
+}
+
 // Keep existing 32-bit timing fields, and SDL2's wrap-safe deadline test.
 // SDL3's SDL_GetTicks() returns 64 bits; narrowing preserves the same modulo.
 inline Uint32 ticks() { return static_cast<Uint32>(SDL_GetTicks()); }

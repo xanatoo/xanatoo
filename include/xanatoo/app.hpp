@@ -384,7 +384,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
-  Subscriptions, Certificates, RelatedSites, MatrixExplorer, HoverHelp, Document
+  Subscriptions, Certificates, RelatedSites, MatrixExplorer, HoverHelp, Media, Document
 };
 
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
@@ -686,8 +686,8 @@ struct SiteCache {
 };
 
 // Sound player (app_audio.cpp, docs/dev/CONTENT.md "Audio"): one file at a
-// time, its controls in the status line. Opening a link to an audio file
-// starts it; the page stays.
+// time, its controls in the Media panel (WindowRole::Media). Opening a link
+// to an audio file starts it and shows the panel; the page stays.
 struct AudioShared;  // decoder + sound device, shared with SDL's audio thread
 struct AudioLoad;    // worker reading / downloading and opening the file
 enum class AudioState : uint8_t { Idle, Loading, Playing, Paused, Ended, Failed };
@@ -697,6 +697,12 @@ struct AudioPlayer {
   std::string title;  // from the file's tags, else its name
   std::string error;  // Failed: why
   double duration = 0;  // seconds; 0 = unknown
+  std::string format;   // "MP3 · 44100 Hz · stereo", once open
+  float volume = 1.f;   // 0..1, applied in the callback
+  // Dragging in the panel: the seek bar or the volume slider, while the
+  // left button that pressed it is down (update_audio follows the pointer).
+  enum class Drag : uint8_t { None, Seek, Volume } drag = Drag::None;
+  int drag_x = -1;      // pointer x last applied
   std::shared_ptr<AudioShared> play;
   std::shared_ptr<AudioLoad> load;
 };
@@ -1248,6 +1254,8 @@ struct App {
   SitemapPanel sitemap;
   SearchBar search;
   AudioPlayer audio;
+  bool media_panel_open = false;
+  FloatWindow media_win = make_float_panel(WindowRole::Media, 140, 140, 440, 200);
   FloatWindow pg = make_float_panel(WindowRole::Page, 60, 110, 260, 420);
   PagePanel page;
   Hover hover;
@@ -2164,16 +2172,16 @@ double audio_position(const App& app);      // seconds
 // Per frame: finished loads start playing, the end of the file is noted.
 void update_audio(App& app);
 void shutdown_audio(App& app);
-// The player's well in the status line (w = 0 when the player is hidden) and
-// its parts; drawing and clicks share these.
-enum class AudioPart : uint8_t { None, Toggle, Seek, Stop };
-SDL_Rect audio_well_rect(const App& app);
-AudioPart audio_part_at(const App& app, int x, int y, double* frac = nullptr);
-void draw_audio_well(App& app);
-// A press in the status line: true when the player took it.
-bool audio_press(App& app, int x, int y);
-// Status-line hover text for the player's parts ("" = not over it).
-std::string audio_hover_text(const App& app, int x, int y);
+// Media panel (WindowRole::Media): the player's controls. Opening it does
+// not play anything; closing it stops the sound.
+void toggle_media_panel(App& app);
+void close_media_panel(App& app);
+void draw_media_panel(App& app);
+// Press in the panel's client area (buttons, seek bar, volume).
+void click_media_panel(App& app, int mx, int my);
+// Status text for the part of the panel under the pointer ("" = none).
+std::string media_panel_hover(const App& app, int mx, int my);
+void audio_set_volume(App& app, float volume);  // 0..1
 
 // ---- search bar (app_search.cpp) ----
 void init_search(App& app);

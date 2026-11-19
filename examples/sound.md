@@ -1,13 +1,14 @@
 # Sound
 
 A link to an audio file plays it, and the page stays where it is. The
-player sits at the left of the status line:
+player opens in the **Media** panel (also under *Panels → Media*):
 
-- the first button plays and pauses,
-- clicking the bar goes to that point of the file,
-- the square button stops and closes the player.
+- click or drag the bar to go to that point of the file,
+- the buttons go back 10 s, play and pause, go forward 30 s, and stop,
+- the *Vol* slider sets the loudness.
 
-**Go → Sound** has the same controls, plus *Back 10 s* and *Forward 30 s*.
+Closing the panel stops the sound. Like other panels it can float or be
+docked at a window edge. **Go → Sound** has the same transport controls.
 
 ## Try it
 
