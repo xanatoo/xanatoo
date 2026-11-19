@@ -87,6 +87,8 @@ read-only service clients. Every client is read-only: never post or log in.
   HTML (`/api/rest_v1/page/html/…`, descriptive User-Agent required) and
   map it with `parse_html_page`; `wikipedia_rewrite_links` turns article
   links into `wikipedia:` refs (non-article namespaces stay web links).
+  Citations become footnotes in `parse_html_page` (`html_footnotes.hpp`,
+  docs/dev/CONTENT.md "Web pages").
 - `https://*.wikipedia.org/wiki/…` stays an ordinary web page; the
   explicit "Native view" toggle / `UiCommand::ToggleNative` switches via
   `alternate_view_url` (`native.hpp`) — add new native mappings there,

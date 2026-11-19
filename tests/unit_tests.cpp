@@ -5950,6 +5950,68 @@ void test_html_chrome_regions() {
   EXPECT_EQ(chrome_regions(doc).size(), 1u);
 }
 
+// Bracketed same-page reference links into an ordered notes list
+// (Wikipedia / Grokipedia) become footnotes.
+void test_html_link_footnotes() {
+  using namespace xanatoo;
+  // Parsoid: [1] twice for one note, a lower-alpha group, back links.
+  const char* wiki =
+      "<html><body><h1>T</h1>"
+      "<p>One<sup class=\"mw-ref reference\" id=\"cite_ref-x_1-0\">"
+      "<a href=\"./T#cite_note-x-1\"><span class=\"mw-reflink-text\">"
+      "<span class=\"cite-bracket\">[</span>1<span class=\"cite-bracket\">]"
+      "</span></span></a></sup> two<sup><a href=\"./T#cite_note-x-1\">[1]</a>"
+      "</sup> three<sup><a href=\"./T#cite_note-n-2\">[a]</a></sup>"
+      " <a href=\"#cite_note-x-1\">see</a> <a href=\"#top\">[9]</a>.</p>"
+      "<ol class=\"mw-references references\">"
+      "<li id=\"cite_note-n-2\"><span class=\"mw-cite-backlink\">"
+      "<a href=\"./T#cite_ref-n_2-0\">\xE2\x86\x91</a></span> "
+      "<span class=\"reference-text\">A note.</span></li></ol>"
+      "<ol class=\"references\"><li id=\"cite_note-x-1\">"
+      "<span class=\"mw-cite-backlink\">\xE2\x86\x91 "
+      "<a href=\"./T#cite_ref-x_1-0\">a</a> "
+      "<a href=\"./T#cite_ref-x_1-1\">b</a></span> "
+      "<span class=\"reference-text\">Smith, <a href=\"#CITEREFSmith\">"
+      "Smith 2001</a>, p. 3.</span></li>"
+      "<li id=\"cite_note-z-3\">Unused.</li></ol>"
+      "</body></html>";
+  Document doc = parse_html_page(wiki, "https://en.wikipedia.org/wiki/T");
+  const std::string md = serialize_markup(doc);
+  EXPECT(md.find("One[^1] two[^1] three[^a] [see](#fn:1) [\\[9\\]](#top).") !=
+         std::string::npos);
+  EXPECT(md.find("[^a]: A note.") != std::string::npos);
+  EXPECT(md.find("[^1]: Smith, [Smith 2001](#CITEREFSmith), p. 3.") !=
+         std::string::npos);
+  EXPECT(md.find("[^2]: Unused.") != std::string::npos);
+  EXPECT(md.find("cite_note") == std::string::npos);
+  NodeId fn = find_footnote(doc, "1");
+  EXPECT(fn != INVALID_NODE);
+  EXPECT(doc.get(doc.get(fn).parent).kind == NodeKind::Section);
+  EXPECT(jump_to_href(doc, "#fn:a").has_value());
+  // The Markdown form reads back as the same footnotes.
+  Document back = parse_markup(md);
+  EXPECT(find_footnote(back, "a") != INVALID_NODE);
+
+  // Grokipedia: nested <sup><a> marks, "1↑" self link, host after title.
+  const char* grok =
+      "<html><body><article><h1>T</h1><p>Text<sup><a href=\"#ref-1\"><sup>"
+      "<a href=\"#ref-1\">[1]</a></sup></a></sup>.</p>"
+      "<h2>References</h2><ol><li id=\"ref-1\" class=\"ref-row\">"
+      "<a href=\"#ref-1\" class=\"ref-num\">1<span>\xE2\x86\x91</span></a>"
+      "<div><a href=\"https://ex.org/a\">Title</a><span>ex.org</span></div>"
+      "</li></ol></article></body></html>";
+  Document g = parse_html_page(grok, "https://grokipedia.com/page/T");
+  const std::string gm = serialize_markup(g);
+  EXPECT(gm.find("Text[^1].") != std::string::npos);
+  EXPECT(gm.find("[^1]: [Title](https://ex.org/a) \xC2\xB7 ex.org") !=
+         std::string::npos);
+
+  // A plain numbered list with ordinary links stays a list.
+  Document plain = parse_html_page(
+      "<p><a href=\"#s1\">step one</a><ol><li id=\"s1\">Do it</ol>", "a.html");
+  EXPECT(serialize_markup(plain).find("[^") == std::string::npos);
+}
+
 void test_html_page() {
   using namespace xanatoo;
   EXPECT(is_web_url("https://example.org"));
@@ -7147,6 +7209,7 @@ int main() {
   test_html_min();
   test_html_chrome_regions();
   test_html_page();
+  test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();
   test_hn_urls_and_html();

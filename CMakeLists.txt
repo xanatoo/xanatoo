@@ -275,6 +275,7 @@ add_executable(xanatoo
   src/inflate.cpp
   src/html_min.cpp
   src/html_page.cpp
+  src/html_footnotes.cpp
   src/download.cpp
   src/wikipedia.cpp
   src/locator.cpp
@@ -758,6 +759,7 @@ add_executable(xanatoo_tests
   src/inflate.cpp
   src/html_min.cpp
   src/html_page.cpp
+  src/html_footnotes.cpp
   src/download.cpp
   src/wikipedia.cpp
   src/locator.cpp

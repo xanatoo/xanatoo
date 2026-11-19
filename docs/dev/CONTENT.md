@@ -142,6 +142,14 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   (`set_hide_chrome`) and draws the "… hidden · Show all" notice
   (`LayoutResult::chrome_notice`). Never put reader mode into the address or
   parse a page twice for it (docs/PASSAGES.md "Reader mode").
+- Reference marks → footnotes (`html_footnotes.hpp`, last step of
+  `parse_html_page`): a link whose text is `[mark]` and whose `#id` names a
+  ListItem of a List becomes `FootnoteRef` (key = mark, blanks → `-`); every
+  item of such a list becomes a `Footnote` in the list's place, leading back
+  links (`↑`, `a b`, `1↑`) dropped, other `#id` links rewritten to `#fn:key`.
+  Covers Wikipedia (Parsoid `cite_note-…` and the regular site), Grokipedia
+  (`#ref-N`, host appended after the title link gets a ` · `) and wikis
+  alike; unbracketed links to list items stay links.
 - `web_fetch` dispatches on Content-Type; bodies go through
   `detect_charset` / `to_utf8` (util.hpp) first.
 - `external:<url>` hrefs force the system browser (`open_external_url`).

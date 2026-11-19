@@ -2,6 +2,21 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Wikipedia / Grokipedia citations as footnotes
+
+- `html_link_footnotes` (`src/html_footnotes.cpp`, run at the end of
+  `parse_html_page`): bracketed same-page reference links ("[1]", "[a]")
+  into an ordered notes list become `FootnoteRef` spans, the list items
+  `Footnote` nodes in the list's place (back links dropped). Works for
+  `wikipedia:` (Parsoid), en.wikipedia.org web pages and grokipedia.com
+  pages (there is no `grokipedia:` scheme; its pages open as web pages).
+  Footnote overlay, `#fn:` jumps and Markdown `[^key]` export now apply.
+- Checked on saved Ada Lovelace (193 notes) and Alan Turing Grokipedia
+  (131 notes) pages, and under Xvfb (superscript marks + overlay).
+  Test: `test_html_link_footnotes`.
+- Possible follow-ups: Wikipedia's short-footnote → bibliography links
+  (`#CITEREF…`) could become `Cite` spans; a native `grokipedia:` ref.
+
 ## Status (2026-11-19) — Colours and fonts from another style sheet
 
 - Layout → Colours / Fonts (and the toolbar style button, and Sheet /

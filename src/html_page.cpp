@@ -5,6 +5,7 @@
 
 #include "xanatoo/feed.hpp"
 #include "xanatoo/fixed_layout.hpp"
+#include "xanatoo/html_footnotes.hpp"
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
@@ -251,6 +252,7 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
     }
   }
   if (!after.empty()) html_append_chrome(doc, root, "page footer", after, opt);
+  html_link_footnotes(doc);
   return doc;
 }
 
