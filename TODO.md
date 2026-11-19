@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — URL bar completes typed addresses
+
+- Typed text without a scheme gets `https://` (`example.com`,
+  `localhost:8080/x`); `/`, `./`, `../`, `~/` (and `.` / `..`, drive
+  paths) become `file://` URLs, relative ones against the cwd. Bare names
+  of an existing file or bundled example still open it; keyword searches
+  and text with blanks are untouched. Both the toolbar field and the
+  Ctrl+L minibuffer prompt (`complete_location`); pure part
+  `complete_typed_address` unit-tested in `file_url_tests`.
+- Not checked in the GUI. Known: `localhost` gets https too; text with
+  blanks is not sent to the default search engine.
+
 ## Status (2026-11-19) — Media bookmarks on the timeline
 
 - Right-click in the Media panel: Bookmark Position m:ss (the seek bar

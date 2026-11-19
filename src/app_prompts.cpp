@@ -261,7 +261,7 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       if (!target.empty()) minibuf_commit_url_hist(app);
       close_prompt(app);
       app.visit_hint = xanatoo::VisitKind::Address;
-      navigate_to_url(app, std::move(target));
+      navigate_to_url(app, target.empty() ? target : complete_location(app, target));
       app.visit_hint.reset();
       return true;
     }

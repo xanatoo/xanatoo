@@ -465,7 +465,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "**Ctrl+Shift+H**."},
     {"urlbar", "Address field",
      "The address of the focused view. Type an address, a file path or a "
-     "search and press Enter; suggestions come from history, tabs and "
+     "search and press Enter: `example.com` opens as https://, a path "
+     "starting with `/`, `./` or `~/` as a local file; suggestions come from history, tabs and "
      "bookmarks. Search keywords like `w xanadu` work too. **Ctrl+L**."},
     {"searchfield", "Search field",
      "Searches with the engine shown at its left end; click the engine to "

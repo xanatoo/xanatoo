@@ -61,8 +61,17 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   are local; typing does not contact a search engine.
 - **Up/Down** chooses a suggestion, **Enter** opens it (or switches to its
   existing tab), and clicking a result does the same. Without a selected
-  suggestion, Enter navigates to the text as entered. **Escape** or **Tab**
+  suggestion, Enter navigates to the text as entered, completed: **Escape** or **Tab**
   dismisses the list without navigating. A new edit or focus reopens it.
+- Typed text without a scheme is a web address: `example.com/x` and
+  `localhost:8080` open as `https://…`. A path starting with `/`, `./`,
+  `../` or `~/` (also `.` / `..`, Windows `C:\`) opens as a `file://` URL,
+  relative ones against the working directory; a `#` after it starts the
+  selectors as usual. A bare name that names an existing file or a bundled
+  example (`notes.md`, `welcome.md`) still opens that file. Keyword
+  searches (`w xanadu`, `? query`), `#…` and other text with blanks stay as
+  typed (`complete_location`, pure part `complete_typed_address` in
+  `file_url.hpp`).
 - Visited URLs are added to the existing `minibuf-url.history` ring in the
   state directory. It is bounded to 200 distinct recent addresses and obeys
   `--no-save`; the per-pane Back/Forward history remains separate.

@@ -1015,10 +1015,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::NavigateUrl:
       xanatoo::platform_release_keyboard(app.window);  // URL typed; page is read-only
       if (!arg.empty()) {
-        const std::string kw = search_from_location(app, arg);
         app.visit_hint = find_bookmark(app, arg) ? xanatoo::VisitKind::Bookmark
                                                  : xanatoo::VisitKind::Address;
-        navigate_to_url(app, kw.empty() ? arg : kw);
+        navigate_to_url(app, complete_location(app, arg));
         app.visit_hint.reset();
       }
       break;

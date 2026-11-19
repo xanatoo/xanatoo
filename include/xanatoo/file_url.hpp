@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 
@@ -90,6 +91,54 @@ inline bool looks_like_local_path(std::string_view s) {
                           s[i] == '+' || s[i] == '-' || s[i] == '.'))
     ++i;
   return !(i < s.size() && s[i] == ':' && i >= 2);
+}
+
+// An address typed into the URL bar, completed. An explicit local path —
+// "/", "./", "../", "." / "..", a Windows drive — becomes a file:// URL
+// (relative ones against `cwd`, which should be absolute; a '#' starts the
+// selectors as in any address). Text with a scheme ("gemini://…", "db:…",
+// "about:") stays, as does a leading '~' (left unexpanded), '#' or '?',
+// other text with blanks
+// and the empty string. Anything else is a web host: "example.com/x",
+// "localhost:8080" → https://….
+inline std::string complete_typed_address(std::string_view text,
+                                          std::string_view cwd) {
+  if (text.empty() || text.front() == '~' || text.front() == '#' ||
+      text.front() == '?')
+    return std::string(text);
+  const bool drive = text.size() >= 3 && text[1] == ':' &&
+      (text[2] == '/' || text[2] == '\\') &&
+      ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z'));
+  const bool explicit_path = text.front() == '/' || drive || text == "." ||
+      text == ".." || text.starts_with("./") || text.starts_with("../");
+  if (explicit_path) {
+    const size_t hash = text.find('#');
+    std::filesystem::path p(std::string(text.substr(0, hash)));
+    if (!drive && p.is_relative())
+      p = std::filesystem::path(std::string(cwd)) / p;
+    std::string abs = p.lexically_normal().generic_string();
+    // A trailing slash only when typed ("./dir/", ".", "..").
+    if (abs.size() > 1 && abs.back() == '/' &&
+        !(text.substr(0, hash).ends_with("/") ||
+          text.substr(0, hash).ends_with(".")))
+      abs.pop_back();
+    std::string out = file_url(abs);
+    if (hash != std::string_view::npos) out += text.substr(hash);
+    return out;
+  }
+  for (const char c : text)
+    if (c == ' ' || c == '\t') return std::string(text);
+  if (!looks_like_local_path(text)) {
+    // "host:8080/x" reads as a scheme to looks_like_local_path; a port is
+    // digits up to the path.
+    const size_t colon = text.find(':');
+    size_t i = colon + 1;
+    while (i < text.size() && text[i] >= '0' && text[i] <= '9') ++i;
+    const bool port = i > colon + 1 &&
+        (i == text.size() || text[i] == '/' || text[i] == '?' || text[i] == '#');
+    if (!port) return std::string(text);
+  }
+  return "https://" + std::string(text);
 }
 
 }  // namespace xanatoo

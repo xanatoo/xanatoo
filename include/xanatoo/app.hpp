@@ -2262,6 +2262,10 @@ void search_site(App& app, const std::string& id);
 void run_search(App& app, const std::string& text);  // → search: address
 // Ctrl+L text "w xanadu" → search address ("" when it is no keyword search).
 std::string search_from_location(const App& app, const std::string& text);
+// Typed location → address: a keyword search, "./a.md" / "/a" / "~/a" →
+// file://, a scheme as is, a bare name of an existing (or bundled) file as
+// is, anything else → https:// (app_nav.cpp).
+std::string complete_location(App& app, const std::string& text);
 
 // ---- related sites panel (app_related.cpp) ----
 void toggle_related_sites(App& app);

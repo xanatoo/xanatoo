@@ -26,6 +26,7 @@
 #include "xanatoo/nex.hpp"
 #include "xanatoo/finger.hpp"
 #include "xanatoo/lemmy.hpp"
+#include "xanatoo/minibuffer.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/paths.hpp"
@@ -860,6 +861,29 @@ std::string home_page(App& app) {
   std::string p = find_data_file(app, "welcome.md");
   if (p.empty()) p = xanatoo::find_default_document();
   return p;
+}
+
+std::string complete_location(App& app, const std::string& text) {
+  if (std::string kw = search_from_location(app, text); !kw.empty()) return kw;
+  std::string_view trimmed = text;
+  xanatoo::trim_ascii(trimmed);
+  std::string t(trimmed);
+  if (t.starts_with("~")) t = xanatoo::expand_user_path(t);
+  std::error_code ec;
+  const fs::path cwd = fs::current_path(ec);
+  const std::string web = xanatoo::complete_typed_address(t, cwd.string());
+  if (!web.starts_with("https://") || t.starts_with("https://")) {
+    // "./a#b.md" may name a file of that name.
+    if (xanatoo::is_file_url(web) && !xanatoo::is_file_url(t) &&
+        t.find('#') != std::string::npos && fs::exists(t, ec))
+      return xanatoo::file_url(
+          fs::absolute(t, ec).lexically_normal().generic_string());
+    return web;
+  }
+  // A bare name still opens the file or bundled example it names
+  // ("notes.md", "welcome.md"); otherwise it is a web host.
+  if (fs::exists(t, ec) || !find_data_file(app, t.c_str()).empty()) return t;
+  return web;
 }
 
 std::string page_up_url(App& app) {
