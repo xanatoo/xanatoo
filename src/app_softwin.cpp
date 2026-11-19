@@ -225,6 +225,25 @@ void draw_dock_gutters(App& app) {
       default: r.y -= dock_gap; r.h += dock_gap; break;
     }
     th::fill(app.sdl, r, pal.face_dark);
+    // Grip dots: in the gutter towards the panes, and between neighbours.
+    SDL_Rect g{};
+    switch (side) {
+      case Dock::Left: g = {x + w, y, dock_gap, h}; break;
+      case Dock::Right: g = {x - dock_gap, y, dock_gap, h}; break;
+      case Dock::Top: g = {x, y + h, w, dock_gap}; break;
+      default: g = {x, y - dock_gap, w, dock_gap}; break;
+    }
+    th::draw_grip_dots(app.sdl, g, app.ui_scale);
+    const auto col = dock_column(app, side);
+    for (size_t i = 0; i + 1 < col.size(); ++i) {
+      const FloatWindow& a = *col[i];
+      const FloatWindow& b = *col[i + 1];
+      if (float_shaded(a) || float_shaded(b)) continue;
+      const SDL_Rect between = is_band(side)
+          ? SDL_Rect{a.x + a.w, a.y, b.x - a.x - a.w, a.h}
+          : SDL_Rect{a.x, a.y + a.h, a.w, b.y - a.y - a.h};
+      th::draw_grip_dots(app.sdl, between, app.ui_scale);
+    }
   }
 }
 

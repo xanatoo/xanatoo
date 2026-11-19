@@ -4,6 +4,7 @@
 #include "xanatoo/theme.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace xanatoo::theme {
 
@@ -104,6 +105,28 @@ void drop_shadow(SDL_Renderer* r, const SDL_Rect& rc, int offset) {
   SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 }
 
+void draw_grip_dots(SDL_Renderer* r, const SDL_Rect& rc, float scale,
+                    int count) {
+  const Palette& p = palette();
+  const int d = std::max(2, static_cast<int>(std::lround(2.f * scale)));
+  const int step = d * 3;
+  const bool vertical = rc.h > rc.w;
+  const int across = vertical ? rc.w : rc.h;
+  const int along = vertical ? rc.h : rc.w;
+  if (across < d + 1) return;
+  count = std::min(count, std::max(0, (along - d) / step + 1));
+  if (count <= 0) return;
+  const int span = (count - 1) * step + d;
+  const int a0 = (along - span) / 2;
+  const int c0 = (across - d - 1) / 2;
+  for (int i = 0; i < count; ++i) {
+    const int x = rc.x + (vertical ? c0 : a0 + i * step);
+    const int y = rc.y + (vertical ? a0 + i * step : c0);
+    fill(r, SDL_Rect{x + 1, y + 1, d, d}, p.shadow);
+    fill(r, SDL_Rect{x, y, d, d}, p.highlight);
+  }
+}
+
 void draw_button_face(SDL_Renderer* r, const SDL_Rect& rc, bool pressed,
                       bool hot) {
   const Palette& p = palette();
@@ -166,7 +189,7 @@ void draw_scroll_thumb(SDL_Renderer* r, const SDL_Rect& rc, bool pressed) {
 void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
   const Palette& p = palette();
   const SDL_Rect& o = w.outer;
-  drop_shadow(r, o);
+  if (w.shadow) drop_shadow(r, o);
   // Frame + client face
   fill(r, o, p.face);
   // Title strip

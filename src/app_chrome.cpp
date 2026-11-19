@@ -197,6 +197,7 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   w.shade_enabled = float_docked(win);
   w.shaded = shaded;
   w.scale = app.ui_scale;
+  w.shadow = win.dock == Dock::None;
   const SDL_Rect close_zone = title_close_zone(outer);
   const SDL_Rect max_zone = title_max_zone(outer);
   const SDL_Rect shade_zone = title_shade_zone(outer);

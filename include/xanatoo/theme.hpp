@@ -72,6 +72,10 @@ void vgradient(SDL_Renderer* r, const SDL_Rect& rc, Rgb top, Rgb bottom);
 void bevel(SDL_Renderer* r, const SDL_Rect& rc, Bevel style);
 // Soft drop shadow for floating windows.
 void drop_shadow(SDL_Renderer* r, const SDL_Rect& rc, int offset = 3);
+// A row of small raised dots centred in `rc` along its long side: the grip
+// mark of a draggable gutter / divider.
+void draw_grip_dots(SDL_Renderer* r, const SDL_Rect& rc, float scale = 1.f,
+                    int count = 5);
 
 struct WindowChrome {
   SDL_Rect outer{};       // whole window incl. frame
@@ -88,6 +92,7 @@ struct WindowChrome {
   bool max_hot = false;
   bool shade_hot = false;
   float scale = 1.f;      // ui scale: close box size
+  bool shadow = true;     // drop shadow (free windows only; docked sit flat)
 };
 
 // Frame, title strip (gradient), close box and resize grip. The window

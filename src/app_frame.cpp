@@ -4358,6 +4358,7 @@ void draw_split_chrome(App& app) {
       th::hline(app.sdl, div.x, div.x + div.w - 1,
                 div.y + div.h - 1, pal.shadow);
     }
+    if (!app.diff_mode) th::draw_grip_dots(app.sdl, div, app.ui_scale);
     if (app.diff_mode) {
       const SDL_Rect track = tile_diff_track_rect(app);
       if (track.w >= 2 && track.h >= 2) {

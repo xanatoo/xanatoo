@@ -199,7 +199,7 @@ by `dock_seq`; `dock_band_h`, used by `place_centre_rows`). Dock neighbours
 are sized by `FloatWindow::dock_share`, not forced equal; shared separator
 dragging updates only the adjacent pair. The size per
 side is `App::dock_w[4]` (L, R, T, B). A `dock_gap` gutter (scaled,
-painted by `draw_dock_gutters`) separates neighbouring docked panels and a
+painted by `draw_dock_gutters` with `theme::draw_grip_dots`; docked panels draw no drop shadow) separates neighbouring docked panels and a
 dock from the panes; `dock_column_w` / `dock_band_h` include it, and the
 separator / dock-edge grab zones lie in it (plus two pixels of frame), so
 they never overlap a panel's or a pane's scrollbar. Max overlays the client area; every
