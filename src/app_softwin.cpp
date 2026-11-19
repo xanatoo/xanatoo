@@ -233,16 +233,21 @@ void draw_dock_gutters(App& app) {
       case Dock::Top: g = {x, y + h, w, dock_gap}; break;
       default: g = {x, y - dock_gap, w, dock_gap}; break;
     }
+    // Raised like the tile divider: light top / left, dark bottom / right
+    // on every gutter, whichever side its panels sit on.
+    th::bevel(app.sdl, g, th::Bevel::Raised);
     th::draw_grip_dots(app.sdl, g, app.ui_scale);
     const auto col = dock_column(app, side);
     for (size_t i = 0; i + 1 < col.size(); ++i) {
       const FloatWindow& a = *col[i];
       const FloatWindow& b = *col[i + 1];
-      if (float_shaded(a) || float_shaded(b)) continue;
       const SDL_Rect between = is_band(side)
-          ? SDL_Rect{a.x + a.w, a.y, b.x - a.x - a.w, a.h}
+          ? SDL_Rect{a.x + a.w, a.y, b.x - a.x - a.w, std::max(a.h, b.h)}
           : SDL_Rect{a.x, a.y + a.h, a.w, b.y - a.y - a.h};
-      th::draw_grip_dots(app.sdl, between, app.ui_scale);
+      th::bevel(app.sdl, between, th::Bevel::Raised);
+      // Dots only where a drag works (find_dock_split skips shaded pairs).
+      if (!float_shaded(a) && !float_shaded(b))
+        th::draw_grip_dots(app.sdl, between, app.ui_scale);
     }
   }
 }

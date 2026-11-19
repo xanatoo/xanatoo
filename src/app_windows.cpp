@@ -933,39 +933,6 @@ void draw_floats(App& app) {
         break;
     }
   }
-  // Small Clearlooks-style grips reveal that adjacent docked panels have a
-  // movable separator (distinct from the dock's outer width/height edge).
-  const auto& pal = xanatoo::theme::palette();
-  for (Dock side : {Dock::Left, Dock::Right, Dock::Top, Dock::Bottom}) {
-    std::vector<FloatWindow*> col;
-    for (FloatWindow* w : float_stack(app))
-      if (w->dock == side) col.push_back(w);
-    std::stable_sort(col.begin(), col.end(),
-                     [](const FloatWindow* a, const FloatWindow* b) {
-                       return a->dock_seq < b->dock_seq;
-                     });
-    const bool horizontal = side == Dock::Top || side == Dock::Bottom;
-    for (size_t i = 0; i + 1 < col.size(); ++i) {
-      const FloatWindow& a = *col[i];
-      if (float_shaded(a) || float_shaded(*col[i + 1])) continue;
-      const int cx = horizontal ? a.x + a.w : a.x + a.w / 2;
-      const int cy = horizontal ? a.y + a.h / 2 : a.y + a.h;
-      const FloatWindow* covering = float_at(app, cx, cy);
-      if (covering && covering->dock != side) continue;
-      for (int n = -1; n <= 1; ++n) {
-        const int x = cx + (horizontal ? 0 : n * 4);
-        const int y = cy + (horizontal ? n * 4 : 0);
-        SDL_SetRenderDrawColor(app.sdl, pal.shadow.r, pal.shadow.g,
-                               pal.shadow.b, 255);
-        SDL_Rect dark{x, y, 2, 2};
-        xanatoo::sdl::fill_rect(app.sdl, &dark);
-        SDL_SetRenderDrawColor(app.sdl, pal.highlight.r, pal.highlight.g,
-                               pal.highlight.b, 255);
-        SDL_Rect light{x + 1, y + 1, 1, 1};
-        xanatoo::sdl::fill_rect(app.sdl, &light);
-      }
-    }
-  }
 }
 
 }  // namespace xanatoo::app
