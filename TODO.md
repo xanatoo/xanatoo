@@ -2,6 +2,21 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Binary files no longer load as text
+
+- The 2.5 GB "folder listing" was not the listing: the earlier test had
+  opened `big.mp4` as text (before the startup fix), SIGTERM did not end
+  that process, and the later RSS checks picked it by `head -1` of the PID
+  list. A listing of 40 PNGs + MP4 stays at ~205 MB, flat.
+- Real bug, fixed: any binary file opened as a document (startup argument,
+  listing link, tab, session restore) was read and laid out as text; a
+  35 MB file went past 1.4 GB, kept growing and ignored SIGTERM.
+  `load_doc` now sniffs 8 KiB (`looks_like_binary`) and shows a read-only
+  "binary data (size)" page with a link to the folder (`App::binary_paths`).
+- Checked under Xvfb: 35 MB random `.bin` from the command line and from a
+  listing click (~200 MB, flat; F2 says read-only). Unit test for the sniff.
+- Open: large *text* files (a 500 MB log) still load whole; no size cap.
+
 ## Status (2026-11-19) — Video plays in the Media panel
 
 - `media.hpp`: backend interface (`MediaSource`) and a decode-ahead pipe
@@ -26,8 +41,7 @@
   with fake sources; FFmpeg on `tests/data/video`).
 - Not checked: Android at run time (only compiled), real sound by ear,
   remote streams.
-- Seen, not fixed: listing `/tmp/xanatoo-build/guitest` (≈40 screenshots
-  and a 35 MB MP4) took 2.5 GB and kept growing without any player.
+- The "listing took 2.5 GB" note was a misreading: see the next status.
 - Next: fullscreen / keys; play YouTube / PeerTube stream URLs here instead
   of mpv; `<video>` / `<audio>` in web pages; subtitles; podcast enclosures.
 

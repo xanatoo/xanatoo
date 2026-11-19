@@ -159,6 +159,12 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   anything under `cache_dir()`) makes `browsing(app)` true even with
   `app.edit_mode` set. Gate document edits on `browsing(app)`, never on
   `app.edit_mode` alone. Edit toggle is disabled for foreign content.
+- Local files: `load_doc` (app_buffers.cpp) is the one reader. It sniffs
+  the first 8 KiB with `looks_like_binary` (util.hpp: a NUL byte, or over
+  10 % control bytes) and shows a short "binary data" page instead of the
+  bytes; such paths go into `App::binary_paths` and are read-only like
+  `invalid_xml_paths`. A 35 MB MP4 read as text took 2+ GB, kept growing,
+  and starved the event loop (SIGTERM went unanswered).
 
 ## Tables
 

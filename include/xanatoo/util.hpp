@@ -113,6 +113,12 @@ std::string to_utf8(std::string body, std::string_view charset);
 // Well-formed UTF-8 (structure only: lead bytes and continuation bytes).
 bool is_valid_utf8(std::string_view s);
 
+// Whether `head` (the start of a file) is binary data rather than text: it
+// holds a NUL byte, or more than one in ten bytes are control characters
+// other than tab, line breaks, form feed and escape. Legacy 8-bit text
+// counts as text.
+bool looks_like_binary(std::string_view head);
+
 // Write a config / state file atomically (gamepkgstd DIR-14): <path>.tmp
 // in the same directory (created if missing), flushed, renamed over
 // <path>. False, with an error naming the path on stderr, on failure.

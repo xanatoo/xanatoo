@@ -26,6 +26,7 @@
 #include "xanatoo/nntp.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/sitemap.hpp"
+#include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gopher.hpp"
@@ -145,8 +146,27 @@ xanatoo::Document load_doc(App& app, std::string path) {
     std::cerr << "Failed to open document: " << path << "\n";
     return xanatoo::parse_document(xanatoo::fallback_document(), {});
   }
-  std::string source((std::istreambuf_iterator<char>(in)),
-                     std::istreambuf_iterator<char>());
+  // Look at the start first: a video, archive or other binary file read
+  // and laid out as text takes gigabytes and minutes.
+  std::string source(8192, '\0');
+  in.read(source.data(), static_cast<std::streamsize>(source.size()));
+  source.resize(static_cast<size_t>(in.gcount()));
+  if (xanatoo::looks_like_binary(source)) {
+    app.binary_paths.insert(path);
+    std::cout << "Binary, not opened as text: " << path << "\n";
+    const uint64_t size = fs::file_size(path, ec);
+    std::string md = "# " + path_title(path) + "\n\n`" + path +
+                     "` is binary data";
+    if (!ec) md += " (" + xanatoo::transfer_label(size, -1, 0) + ")";
+    md += ", not a document; it is not shown as text.\n";
+    const fs::path dir = fs::absolute(path, ec).parent_path();
+    if (!ec && dir.string().find_first_of("()[]") == std::string::npos)
+      md += "\n[Its folder](" + dir.string() + "/)\n";
+    return xanatoo::parse_document(md, {});
+  }
+  app.binary_paths.erase(path);
+  source.append(std::istreambuf_iterator<char>(in),
+                std::istreambuf_iterator<char>());
   std::cout << "Opened: " << path << "\n";
   if (xanatoo::path_uses_xml(path)) {
     try {
@@ -242,7 +262,8 @@ bool focused_read_only(App& app) {
   const DocBuffer* b = find_buf(app, p.buf);
   return b && ((p.source_buf == p.buf && p.source_doc.has_value()) ||
                is_foreign_path(b->path) ||
-               app.invalid_xml_paths.contains(b->path));
+               app.invalid_xml_paths.contains(b->path) ||
+               app.binary_paths.contains(b->path));
 }
 
 bool browsing(App& app) { return !app.edit_mode || focused_read_only(app); }

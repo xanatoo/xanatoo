@@ -971,6 +971,8 @@ struct App {
   // Documents whose strict XML import failed stay read-only until reloaded
   // successfully. An error preview must never overwrite the original file.
   std::unordered_set<std::string> invalid_xml_paths;
+  // Files shown as a "binary data" notice instead of their bytes: read-only.
+  std::unordered_set<std::string> binary_paths;
   BufferId next_buffer_id = 1;
   std::vector<BufferId> tab_order;
   ImageCache images;

@@ -1635,6 +1635,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       const std::string spath = path_of(app, p);
       if (app.invalid_xml_paths.contains(spath)) {
         flash_status(app, "Invalid XML is read-only — fix the file and reload");
+      } else if (app.binary_paths.contains(spath)) {
+        flash_status(app, "Binary file: nothing to save");
       } else if (make_stored_copy(app, p.buf) &&
                  save_stored_buffer(app, focused_pane(app).buf)) {
         app.discard_armed = false;

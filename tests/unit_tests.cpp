@@ -7216,6 +7216,16 @@ static void test_font_face_index() {
   EXPECT(!missing.load(negative, 18, nullptr));
 }
 
+static void test_looks_like_binary() {
+  using xanatoo::looks_like_binary;
+  EXPECT(!looks_like_binary(""));
+  EXPECT(!looks_like_binary("# Title\n\n\tText with tabs,\r\n\fand \x1b[1mANSI\n"));
+  EXPECT(!looks_like_binary("Gr\xfc\xdf" "e in Latin-1, \xc3\xa4 in UTF-8\n"));
+  EXPECT(looks_like_binary(std::string_view("\x89PNG\r\n\x1a\n\0\0\0\rIHDR", 16)));
+  EXPECT(looks_like_binary(std::string_view("text\0", 5)));
+  EXPECT(looks_like_binary("\x01\x02\x03\x04 abcdef\x05"));
+}
+
 static void test_transfer_label() {
   using xanatoo::transfer_label;
   EXPECT_EQ(transfer_label(0, -1, 0), std::string());
@@ -7260,6 +7270,7 @@ static void test_transfer_label() {
 }
 
 int main() {
+  test_looks_like_binary();
   test_transfer_label();
   test_font_face_index();
   test_reply_markdown();

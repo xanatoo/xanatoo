@@ -362,6 +362,19 @@ std::string charset_token(std::string_view s, size_t at) {
 
 bool is_valid_utf8(std::string_view s) { return valid_utf8(s); }
 
+bool looks_like_binary(std::string_view head) {
+  size_t control = 0;
+  for (const char ch : head) {
+    const auto c = static_cast<unsigned char>(ch);
+    if (c == 0) return true;
+    if ((c < 0x20 && c != '\t' && c != '\n' && c != '\r' && c != '\f' &&
+         c != 0x1b) ||
+        c == 0x7f)
+      ++control;
+  }
+  return control * 10 > head.size();
+}
+
 std::string detect_charset(std::string_view content_type,
                            std::string_view body) {
   std::string ct = ascii_lower(std::string(content_type));
