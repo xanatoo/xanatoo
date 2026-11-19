@@ -472,21 +472,14 @@ void LayoutEngine::layout_remote_image(const Document& doc, const Node& node,
     }
   }
   const float start_y = y;
-  PositionedImage pi{node.id, x, y, w, h, node.src, image_base_};
+  // Centred in its column; the alt text is not laid out below the image
+  // (the loading placeholder shows it instead).
+  (void)doc;
+  const float ix = x + std::max(0.f, (max_width - w) * 0.5f);
+  PositionedImage pi{node.id, ix, y, w, h, node.src, image_base_};
   pi.thumb = kRemoteThumbEdge;
   out.images.push_back(std::move(pi));
-  y += h + 6.f * dp;
-  if (!node.alt.empty()) {
-    Node cap = node;
-    cap.kind = NodeKind::Paragraph;
-    cap.spans.clear();
-    InlineSpan s;
-    s.kind = InlineKind::Emphasis;
-    s.text = node.alt;
-    cap.spans.push_back(std::move(s));
-    layout_paragraph(doc, cap, x, y, max_width, out, FontRole::Body);
-  }
-  y += 8.f * dp;
+  y += h + 14.f * dp;
   out.boxes.push_back({node.id, x, start_y, max_width, y - start_y});
 }
 
@@ -1553,8 +1546,17 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       float start_y = y;
       const bool was_in_image_float = in_image_float_;
       in_image_float_ = true;
-      for (NodeId c : node.children)
-        layout_node(doc, c, x, y, max_width, out);
+      {
+        // A block figure is a centred column of ~60% of the page; the
+        // caption wraps at the same width as the image.
+        const float em = static_cast<float>(fonts_.regular.pixel_size());
+        float cw = max_width;
+        if (!was_in_image_float && !in_margin_)
+          cw = std::min(max_width, std::max(max_width * 0.6f, 16.f * em));
+        const float cx = x + (max_width - cw) * 0.5f;
+        for (NodeId c : node.children)
+          layout_node(doc, c, cx, y, cw, out);
+      }
       in_image_float_ = was_in_image_float;
       y += after(BlockRole::Figure);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
@@ -2003,6 +2005,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       }
       if (!in_image_float_ && !node.float_side.empty())
         y = clear_floats(x, max_width, y);
+      // A block image outside a figure gets the same centred ~60% column.
+      const bool block_image = !in_image_float_ && !in_margin_;
+      if (block_image) {
+        const float cw = std::min(max_width, std::max(max_width * 0.6f, 16.f * em));
+        x += (max_width - cw) * 0.5f;
+        max_width = cw;
+      }
       if (is_remote_image(node.src)) {
         layout_remote_image(doc, node, x, y, max_width, out);
         break;
@@ -2031,23 +2040,12 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           disp_h = img.height * scale;
         }
       }
-      out.images.push_back({id, x, y, disp_w, disp_h, node.src, image_base_});
-      out.boxes.push_back({id, x, y, disp_w, disp_h});
-      // Alt text under image if present
-      if (!node.alt.empty()) {
-        float y2 = y + disp_h + 4.f;
-        Node fake = node;
-        fake.kind = NodeKind::Paragraph;
-        fake.spans.clear();
-        InlineSpan s;
-        s.kind = InlineKind::Emphasis;
-        s.text = node.alt;
-        fake.spans.push_back(std::move(s));
-        layout_paragraph(doc, fake, x, y2, max_width, out, FontRole::Body);
-        y = y2 + 10.f;
-      } else {
-        y += disp_h + 14.f;
-      }
+      // Centre the image in its column; the alt text is not shown below
+      // it (it stands in for the image only while that is missing).
+      const float ix = x + std::max(0.f, (max_width - disp_w) * 0.5f);
+      out.images.push_back({id, ix, y, disp_w, disp_h, node.src, image_base_});
+      out.boxes.push_back({id, ix, y, disp_w, disp_h});
+      y += disp_h + 14.f;
       break;
     }
 
