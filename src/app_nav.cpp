@@ -342,6 +342,42 @@ void update_open_tab_links(App& app, int pi) {
   }
 }
 
+void update_playing_links(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  PlayingLinks& pl = p.playing_links;
+  const std::string& url =
+      app.audio.state == AudioState::Idle ? std::string() : app.audio.url;
+  if (pl.valid && pl.layout_gen == p.layout.generation && pl.url == url)
+    return;
+  pl.valid = true;
+  pl.layout_gen = p.layout.generation;
+  pl.url = url;
+  pl.spans.clear();
+  if (url.empty()) return;
+  const xanatoo::Document& d = doc_of(app, p);
+  std::vector<std::pair<xanatoo::NodeId, size_t>> seen;
+  for (const auto& pg : p.layout.glyphs) {
+    if (pg.kind != xanatoo::InlineKind::Link ||
+        pg.node == xanatoo::INVALID_NODE || pg.node >= d.next_id)
+      continue;
+    const std::pair<xanatoo::NodeId, size_t> k{pg.node, pg.span_index};
+    if (!seen.empty() && seen.back() == k) continue;  // same run
+    if (std::find(seen.begin(), seen.end(), k) != seen.end()) continue;
+    seen.push_back(k);
+    const xanatoo::Node& n = d.get(pg.node);
+    if (pg.span_index >= n.spans.size()) continue;
+    const std::string& href = n.spans[pg.span_index].href;
+    if (href.empty() || href[0] == '#') continue;
+    // The address play_audio got for it: the base, a file: URL as its path.
+    const LinkTarget t = resolve_link(app, pi, href);
+    if (t.kind == LinkKind::None || t.kind == LinkKind::Anchor || t.url.empty())
+      continue;
+    std::string target = xanatoo::parse_locator(t.url).base;
+    if (xanatoo::is_file_url(target)) target = xanatoo::file_url_path(target);
+    if (target == url) pl.spans.push_back(k);
+  }
+}
+
 bool can_nav_step(App& app, int dir) {
   if (split_browsing(app) && app.focus < kCentreViews)
     return split_history_can_step(app, dir);

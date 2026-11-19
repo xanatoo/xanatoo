@@ -3157,6 +3157,35 @@ static void draw_pane_overlays(App& app, int i) {
                                       uy + 1);
           });
     }
+    // The link whose file is in the Media panel: a yellow wash (the lit
+    // title-tab colours), kept while the player holds it.
+    update_playing_links(app, i);
+    if (!pane.playing_links.spans.empty()) {
+      const auto& spans = pane.playing_links.spans;
+      const auto& pal = xanatoo::theme::palette();
+      for_each_link_run(
+          app, pane,
+          [&](const xanatoo::PositionedGlyph& pg) {
+            if (pg.kind != xanatoo::InlineKind::Link) return false;
+            return std::find(spans.begin(), spans.end(),
+                             std::pair{pg.node, pg.span_index}) != spans.end();
+          },
+          [&](float x0, float x1, float top, float base, float bot) {
+            SDL_Rect r{static_cast<int>(x0 + ox) - 2,
+                       static_cast<int>(top - draw_scroll) - 2,
+                       static_cast<int>(x1 - x0) + 4,
+                       static_cast<int>(bot - top) + 4};
+            SDL_SetRenderDrawColor(app.sdl, pal.tab_top.r, pal.tab_top.g,
+                                   pal.tab_top.b, 80);
+            xanatoo::sdl::fill_rect(app.sdl, &r);
+            const int uy = static_cast<int>(base + 3.f - draw_scroll);
+            SDL_SetRenderDrawColor(app.sdl, pal.tab_bottom.r, pal.tab_bottom.g,
+                                   pal.tab_bottom.b, 255);
+            xanatoo::sdl::draw_line(app.sdl, r.x + 1, uy, r.x + r.w - 2, uy);
+            xanatoo::sdl::draw_line(app.sdl, r.x + 1, uy + 1, r.x + r.w - 2,
+                                    uy + 1);
+          });
+    }
     // A link just clicked whose page is still loading: a pulsing wash until
     // the new page replaces this one (or the fetch fails / is stopped).
     if (const NavLink* pend = pending_nav_link(app, i)) {

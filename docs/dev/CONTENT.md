@@ -387,6 +387,10 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `sdl::left_button_down()`. Volume is `AudioShared::gain` (slider²),
   applied in the callback, kept across files. Go → Sound has the same
   transport commands (`UiCommand::Audio*`).
+- The link whose file is in the player is washed in the lit title-tab
+  yellow while the player holds it (`update_playing_links` →
+  `Pane::playing_links`, keyed on layout generation and `AudioPlayer::url`;
+  the href resolves like a click, `file:` as its path; Stop clears it).
 - Not yet: built-in Opus (without a backend), streaming the built-in
   formats before the download ends.
 

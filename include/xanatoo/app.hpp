@@ -257,6 +257,16 @@ struct OpenTabLinks {
   std::vector<std::pair<xanatoo::NodeId, size_t>> spans;  // node, span index
 };
 
+// Links of the page a view shows whose target is the file in the Media
+// panel (update_playing_links), washed while it is loaded there. Keyed on
+// the layout and the player's address.
+struct PlayingLinks {
+  uint64_t layout_gen = 0;
+  std::string url;  // AudioPlayer::url they were found for ("" = none)
+  bool valid = false;
+  std::vector<std::pair<xanatoo::NodeId, size_t>> spans;  // node, span index
+};
+
 struct AnnotationMark {
   std::string annotation_id;
   std::string layer_id;
@@ -347,6 +357,7 @@ struct Pane {
   BookmarkMarks bookmark_marks;
   AnnotationMarks annotation_marks;
   OpenTabLinks open_tab_links;
+  PlayingLinks playing_links;
   bool section_focus = false;  // Section Focus: the outline picks the cut
   // Reader mode of this view: page chrome (Chrome nodes) hidden. Unset =
   // ViewSettings::reader_mode; kept across navigation. View state, never
@@ -1743,6 +1754,9 @@ const NavLink* pending_nav_link(App& app, int pi);
 // Recompute Pane::open_tab_links of view `pi` when its layout or the open
 // tabs changed.
 void update_open_tab_links(App& app, int pi);
+// Recompute Pane::playing_links of view `pi` when its layout or the file in
+// the Media panel changed (none while the player is idle).
+void update_playing_links(App& app, int pi);
 // Back (dir −1) / Forward (+1) in the focused view; false when there is
 // no page that way.
 bool can_nav_step(App& app, int dir);
