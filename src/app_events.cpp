@@ -2333,11 +2333,9 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
     case SDLK_w:
       if (ctrl) {
-        // Soft window → help → outline → document tab
-        if (!app.soft_wins.empty()) {
-          close_doc_window(app, app.soft_wins.size() - 1);
+        // The focused window (panel or detached document), else the tab.
+        if (close_focused_float(app)) {
           flash_status(app, "Closed window");
-        } else if (close_top_float(app)) {
         } else {
           // Close focused tab
           int tab_i = -1;

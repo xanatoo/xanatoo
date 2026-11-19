@@ -18,7 +18,7 @@ Jump to: [Files](#Files) · [Edit](#Edit) · [Navigate](#Navigate) · [View](#Vi
 - **Shift+F1** — Help panel: explains whatever the mouse pointer is over (menus, buttons, window controls, parts of the page)
 - **Ctrl+Q** — Quit (unsaved edits are kept as drafts; File → Drafts)
 - **Ctrl+T** — New tab
-- **Ctrl+W** — Close floating window, help, outline, or document tab
+- **Ctrl+W** — Close the focused window (panel, help, outline, detached document), otherwise the document tab
 - **Ctrl+Tab** / **Ctrl+Shift+Tab** — Next / previous tab
 - **Ctrl+Shift+P** — Pop focused document out to a floating window (a full
   view: edit, select, follow links inside it); in a window, move its page

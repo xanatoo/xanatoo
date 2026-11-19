@@ -2385,7 +2385,8 @@ bool float_motion(App& app, int x, int y);  // true = drag/resize/scroll active
 void float_release(App& app, int x, int y);
 bool float_wheel(App& app, int x, int y, int wheel_y);
 bool float_page_scroll(App& app, int x, int y, bool up);
-bool close_top_float(App& app);  // closes the topmost window, if any
+// Closes the window that has key focus (float_active), if any.
+bool close_focused_float(App& app);
 
 // ---- keymap ----
 // Ctrl+<key> chord → command (nullopt = not a table binding).

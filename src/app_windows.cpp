@@ -862,11 +862,14 @@ bool over_float_chrome(App& app, int x, int y) {
          pane_at(app, static_cast<float>(x), static_cast<float>(y)) != w->view;
 }
 
-bool close_top_float(App& app) {
+bool close_focused_float(App& app) {
   auto st = float_stack(app);
-  if (st.empty()) return false;
-  close_window(app, *st.back());
-  return true;
+  for (auto it = st.rbegin(); it != st.rend(); ++it)
+    if (float_active(app, **it)) {
+      close_window(app, **it);
+      return true;
+    }
+  return false;
 }
 
 // Frame, then the view through the ordinary pane drawing (caret, overlays,
