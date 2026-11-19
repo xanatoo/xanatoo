@@ -301,6 +301,35 @@ bool sitemap_button_shown(App& app) {
          it->second.rec.result == xanatoo::SitemapProbe::Yes;
 }
 
+const std::vector<xanatoo::FeedLink>& page_feeds(App& app) {
+  PageFeedsCache& c = app.page_feeds;
+  const DocBuffer* b = find_buf(app, focused_pane(app).buf);
+  const std::string& path = b ? b->path : std::string{};
+  const bool raw = b && b->raw_source;
+  const size_t raw_size = raw ? b->raw_source->size() : 0;
+  if (b && c.buf == b->id && c.path == path && c.raw == raw &&
+      c.raw_size == raw_size)
+    return c.links;
+  c.buf = b ? b->id : kNoBuffer;
+  c.path = path;
+  c.raw = raw;
+  c.raw_size = raw_size;
+  c.links.clear();
+#if defined(XANATOO_FEEDS) && XANATOO_FEEDS
+  const bool web = xanatoo::starts_with_ci(path, "https://") ||
+                   xanatoo::starts_with_ci(path, "http://");
+  if (raw && web && !b->placeholder && !xanatoo::is_feed_url(path) &&
+      !xanatoo::looks_like_feed(*b->raw_source))
+    c.links = xanatoo::feed_links(*b->raw_source, path);
+#endif
+  return c.links;
+}
+
+void open_page_feed(App& app, const std::string& url) {
+  if (url.empty()) return;
+  navigate_to_url(app, xanatoo::is_feed_url(url) ? url : "feed:" + url);
+}
+
 void update_sitemap(App& app) {
   // Loads started by sitemap_step finish with the panel closed, too.
   poll_loads(app);

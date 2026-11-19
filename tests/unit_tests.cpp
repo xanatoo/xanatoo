@@ -5875,6 +5875,29 @@ void test_feed_urls() {
                 "href=\"/atom.xml\"></head>",
                 "https://jvns.ca/blog/"),
             "https://jvns.ca/atom.xml");
+  // All feeds, titles kept, duplicates and non-feed alternates dropped,
+  // nothing from <body>.
+  auto links = feed_links(
+      "<head><link rel=\"alternate\" hreflang=\"de\" href=\"/de/\">"
+      "<link rel=\"alternate\" type=\"application/rss+xml\" "
+      "title=\"Posts &amp; Notes\" href=\"feed.xml\">"
+      "<link rel=\"alternate nofollow\" type=\"application/atom+xml\" "
+      "href=\"https://ex.org/atom\">"
+      "<link rel=\"alternate\" type=\"application/rss+xml\" "
+      "href=\"/blog/feed.xml\">"
+      "<link rel=\"alternates\" type=\"application/rss+xml\" href=\"/x\">"
+      "</head><body><link rel=\"alternate\" "
+      "type=\"application/rss+xml\" href=\"/body.xml\"></body>",
+      "https://ex.org/blog/");
+  EXPECT_EQ(links.size(), size_t{2});
+  if (links.size() == 2) {
+    EXPECT_EQ(links[0].url, "https://ex.org/blog/feed.xml");
+    EXPECT_EQ(links[0].title, "Posts & Notes");
+    EXPECT_EQ(links[0].type, "RSS");
+    EXPECT_EQ(links[1].url, "https://ex.org/atom");
+    EXPECT_EQ(links[1].type, "Atom");
+  }
+  EXPECT(feed_links("<html><head><title>x</title></head>", "https://ex.org/").empty());
 }
 
 void test_parse_feeds() {

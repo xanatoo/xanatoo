@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Feed button in the URL bar
+
+- A web page that announces RSS / Atom feeds (`<link rel="alternate"
+  type="application/rss+xml|atom+xml">` in its head) shows the orange
+  feed icon among the URL-bar buttons; the tooltip names the feed. One
+  feed opens on click, several are offered in a small menu (titles from
+  the links). `feed_links` unit-tested next to `feed_autodiscover`.
+- Checked under Xvfb: jvns.ca (one Atom feed, opens atom.xml; the feed
+  page has no icon), wordpress.org/news/ (three feeds in the menu, the
+  comments feed opens).
+- Known: no probing of /feed.xml etc. on pages without the link (would
+  cost a request per site); JSON Feed links are ignored (no parser).
+
 ## Status (2026-11-19) — URL bar completes typed addresses
 
 - Typed text without a scheme gets `https://` (`example.com`,

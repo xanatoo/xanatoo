@@ -238,6 +238,7 @@ enum class UiCommand {
   ToggleChrome,  // content only: hide menu bar, toolbars, tabs, status line
   ToggleNative,  // web page ↔ its native xanatoo form (wikipedia:, hn:, …)
   ToggleArchive,  // web page ↔ its nearest Wayback Machine snapshot
+  OpenPageFeed,   // location bar feed button (arg = feed URL of the page)
   ViewSourceRendered, // leave a source projection and show the document
   ViewSourceRaw,      // focused document's raw source (if available)
   ViewSourceSexpr,    // focused document's S-expression representation
@@ -518,6 +519,11 @@ struct UiState {
   std::string archive_url;
   bool archive_view = false;
   std::string up_url;  // parent page of the focused one ("" at the top)
+  // RSS / Atom feeds the focused web page announces (URL-bar feed button).
+  struct PageFeed {
+    std::string url, label;
+  };
+  std::vector<PageFeed> page_feeds;
   bool native_view = false;  // focused page is a native ref (alternate = web)
   std::string source_mode;  // empty = rendered, otherwise source-raw/sexpr/xml
   bool gallery = false;      // the focused view shows `//gallery`

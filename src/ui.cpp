@@ -1317,6 +1317,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   const float field_row_h = 32.f * scale_ + 6.f;
   const float field_row_y = 4.f + tool_button_h + 2.f * scale_;
   const int url_extras = (state.alternate_url.empty() ? 0 : 1) +
+                         (state.page_feeds.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
                          (state.site_search.empty() ? 0 : 1);
@@ -1735,6 +1736,40 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         extra("url_search", "find", "?", tip.c_str(), UiCommand::SearchSite,
               /*on=*/false);
         if (cmd == UiCommand::SearchSite) result.arg = state.site_search;
+      }
+      if (!state.page_feeds.empty()) {
+        // One feed opens at once; several are offered in a small menu.
+        const bool one = state.page_feeds.size() == 1;
+        const std::string tip = one
+            ? "Open the page's feed: " + state.page_feeds[0].label + "\n" +
+                  state.page_feeds[0].url
+            : "The page has " + std::to_string(state.page_feeds.size()) +
+                  " feeds";
+        UiCommand before = cmd;
+        extra("url_feed", "site-feed", "F", tip.c_str(), UiCommand::OpenPageFeed,
+              /*on=*/false);
+        if (cmd == UiCommand::OpenPageFeed) {
+          if (one) {
+            result.arg = state.page_feeds[0].url;
+          } else {
+            cmd = before;
+            ImGui::OpenPopup("##url_feeds");
+          }
+        }
+        if (ImGui::BeginPopup("##url_feeds")) {
+          for (size_t i = 0; i < state.page_feeds.size(); ++i) {
+            const auto& f = state.page_feeds[i];
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::MenuItem(f.label.c_str())) {
+              cmd = UiCommand::OpenPageFeed;
+              result.arg = f.url;
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+              ImGui::SetTooltip("%s", f.url.c_str());
+            ImGui::PopID();
+          }
+          ImGui::EndPopup();
+        }
       }
       if (state.has_chrome)
         extra("url_reader", "reader", "R", state.reader ? "Show the whole page (F9)" : "Reader mode (F9)",

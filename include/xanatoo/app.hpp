@@ -21,6 +21,7 @@
 #include "xanatoo/cli.hpp"
 #include "xanatoo/download.hpp"
 #include "xanatoo/editor.hpp"
+#include "xanatoo/feed.hpp"
 #include "xanatoo/font.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
@@ -783,6 +784,16 @@ struct SitemapPanel {
   uint64_t seen_gen = 1;
 };
 
+// Feeds the focused web page announces (<link rel="alternate">), for the
+// URL-bar feed button; read from the buffer's raw source once per page.
+struct PageFeedsCache {
+  BufferId buf = kNoBuffer;
+  std::string path;
+  size_t raw_size = 0;
+  bool raw = false;
+  std::vector<xanatoo::FeedLink> links;
+};
+
 // Page panel (app_page.cpp): navigation / side bar chrome of the focused page.
 struct PageRow {
   enum Kind : uint8_t { Label, Group, Link, Text };
@@ -1293,6 +1304,7 @@ struct App {
   RelatedPanel related;
   ReplyDraft reply;
   SitemapPanel sitemap;
+  PageFeedsCache page_feeds;
   SearchBar search;
   AudioPlayer audio;
   bool media_panel_open = false;
@@ -2292,6 +2304,11 @@ void open_sitemap_page(App& app);
 // URL-bar Site map button: the focused page's site is known to have a
 // sitemap (probed in the background, cached per host), or the panel is open.
 bool sitemap_button_shown(App& app);
+// Feeds of the focused web page (cached; empty for local pages, native
+// views, feeds themselves, and builds without XANATOO_FEEDS).
+const std::vector<xanatoo::FeedLink>& page_feeds(App& app);
+// Opens a feed from page_feeds (as `feed:` when its URL does not say so).
+void open_page_feed(App& app, const std::string& url);
 // Records a shown web page (title for the panel, coverage counts).
 void note_page_seen(App& app, const std::string& url,
                     const xanatoo::Document& doc);

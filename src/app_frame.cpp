@@ -313,6 +313,10 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       ui_state.archive_url = xanatoo::wayback_lookup_ref(path);
     }
     ui_state.up_url = page_up_url(app);
+    ui_state.page_feeds.clear();
+    for (const xanatoo::FeedLink& f : page_feeds(app))
+      ui_state.page_feeds.push_back(
+          {f.url, f.title.empty() ? f.type + " feed" : f.title + " (" + f.type + ")"});
   }
   if (ui_state.services.empty()) {
     // Front pages of the in-app clients; greyed out when not built in.
@@ -785,7 +789,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::Quit || c == C::OpenDocument || c == C::OpenUrlBar ||
         c == C::NavigateUrl || c == C::NavBack || c == C::NavForward ||
         c == C::NavJump ||
-        c == C::GoHome || c == C::GoUp ||
+        c == C::GoHome || c == C::GoUp || c == C::OpenPageFeed ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleMedia || c == C::ToggleBookmarks ||
         c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
         c == C::DownloadAction || c == C::HistoryAction || c == C::MediaAction ||
@@ -984,6 +988,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         flash_status(app, "No archived version for this page");
       break;
     }
+    case C::OpenPageFeed:
+      open_page_feed(app, arg);
+      break;
     case C::ToggleReader:
       if (p.chrome_parts == 0 && !pane_reader(app, p))
         flash_status(app, "Reader mode: this page has no page chrome to hide");

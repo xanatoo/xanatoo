@@ -614,8 +614,14 @@ bool looks_like_feed(std::string_view body) {
   return r == "rss" || r == "feed" || r == "rdf:rdf" || r == "atom:feed";
 }
 
-std::string feed_autodiscover(std::string_view html, std::string_view page_url) {
+std::vector<FeedLink> feed_links(std::string_view html, std::string_view page_url) {
+  std::vector<FeedLink> out;
   std::string low = ascii_lower(html);
+  // The links are in <head>; <body> text may quote "<link" in examples.
+  if (size_t b = low.find("<body"); b != std::string::npos) {
+    low.resize(b);
+    html = html.substr(0, b);
+  }
   for (size_t p = low.find("<link"); p != std::string::npos;
        p = low.find("<link", p + 5)) {
     size_t e = xml_tag_end(html, p);
@@ -623,14 +629,41 @@ std::string feed_autodiscover(std::string_view html, std::string_view page_url) 
     std::string_view attrs = html.substr(p + 5, e - p - 5);
     std::string rel = ascii_lower(html_attr(attrs, "rel"));
     std::string type = ascii_lower(html_attr(attrs, "type"));
-    if (rel.find("alternate") == std::string::npos) continue;
-    if (type.find("rss+xml") == std::string::npos &&
-        type.find("atom+xml") == std::string::npos)
+    bool alternate = false;
+    for (std::string_view r = rel; !r.empty();) {
+      size_t sp = r.find_first_of(" \t\r\n");
+      if (r.substr(0, sp) == "alternate") alternate = true;
+      if (sp == std::string_view::npos) break;
+      r.remove_prefix(sp + 1);
+    }
+    if (!alternate) continue;
+    FeedLink f;
+    if (type.find("rss+xml") != std::string::npos ||
+        type.find("rdf+xml") != std::string::npos)
+      f.type = "RSS";
+    else if (type.find("atom+xml") != std::string::npos)
+      f.type = "Atom";
+    else
       continue;
     std::string href = html_attr(attrs, "href");
-    if (!href.empty()) return resolve_url(page_url, href);
+    std::string_view h = href;
+    trim_ascii(h);
+    if (h.empty()) continue;
+    f.url = resolve_url(page_url, h);
+    std::string title = html_attr(attrs, "title");
+    std::string_view t = title;
+    trim_ascii(t);
+    f.title = std::string(t);
+    bool dup = false;
+    for (const FeedLink& o : out) dup = dup || o.url == f.url;
+    if (!dup) out.push_back(std::move(f));
   }
-  return {};
+  return out;
+}
+
+std::string feed_autodiscover(std::string_view html, std::string_view page_url) {
+  std::vector<FeedLink> all = feed_links(html, page_url);
+  return all.empty() ? std::string{} : std::move(all.front().url);
 }
 
 std::optional<Document> parse_feed(std::string_view xml, std::string_view feed_url,

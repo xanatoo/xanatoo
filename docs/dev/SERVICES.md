@@ -78,6 +78,13 @@ read-only service clients. Every client is read-only: never post or log in.
 - `is_feed_url`: `feed:` prefix (HTML pages autodiscover via
   `<link rel=alternate>`), *.rss / .atom / .rdf / .xml, /feed, /rss,
   /feeds/…, ?feed=rss2. Checked before the other services in dispatch.
+- URL-bar feed button: `feed_links` reads the `<link rel=alternate>`
+  RSS / Atom feeds from the `<head>` of the focused web page's raw source;
+  `page_feeds(App&)` (app_sitemap.cpp) caches them per buffer / path /
+  source size in `App::page_feeds`. One feed opens on click, several in a
+  menu (`UiCommand::OpenPageFeed`, `feed:` prefixed when `is_feed_url`
+  cannot tell). No icon on local pages, native views or feeds themselves;
+  no guessing of `/feed.xml` (pages without the link get no icon).
 - Entry HTML goes through `html_min` (below).
 
 ## Wikipedia (`wikipedia.hpp`)

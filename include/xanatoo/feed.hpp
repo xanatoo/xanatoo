@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace xanatoo {
 
@@ -22,8 +23,19 @@ std::string feed_http_url(std::string_view s);
 // Root element is <rss>, <feed> (Atom) or <rdf:RDF> (RSS 1.0).
 bool looks_like_feed(std::string_view body);
 
-// First <link rel="alternate" type="application/(rss|atom)+xml"> of an HTML
-// page, resolved against `page_url`; empty when none.
+// A feed an HTML page announces: <link rel="alternate"
+// type="application/(rss|atom|rdf)+xml" href=… title=…>.
+struct FeedLink {
+  std::string url;    // resolved against the page URL
+  std::string title;  // the link's title attribute ("" = none)
+  std::string type;   // "RSS" or "Atom"
+};
+
+// All feeds of an HTML page in document order, duplicates dropped; only
+// the part before <body> is read when the page has one.
+std::vector<FeedLink> feed_links(std::string_view html, std::string_view page_url);
+
+// URL of the first of feed_links; empty when none.
 std::string feed_autodiscover(std::string_view html, std::string_view page_url);
 
 // Feed XML → Document: feed title / subtitle, then a Thread with one
