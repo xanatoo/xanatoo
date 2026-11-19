@@ -3952,6 +3952,22 @@ void test_image_address() {
   EXPECT(!xanatoo::is_image_address("finger://x.org/a.png"));
   EXPECT(xanatoo::is_image_address("nex://x.org/a.jpg"));
   EXPECT(!xanatoo::is_image_address("nex://x.org/a.txt"));
+  // Pages about a file, named like the file: web pages, not images.
+  EXPECT(!xanatoo::is_image_address(
+      "https://en.wikipedia.org/wiki/File:Sovietsky_Soyuz_1_June_1942.jpg"));
+  EXPECT(!xanatoo::is_image_address("https://de.wikipedia.org/wiki/Datei:A.png"));
+  EXPECT(!xanatoo::is_image_address(
+      "https://commons.wikimedia.org/wiki/File%3AA_b.JPG"));
+  EXPECT(!xanatoo::is_image_address("https://x.fandom.com/wiki/File:A.png"));
+  EXPECT(!xanatoo::is_image_address("https://github.com/u/r/blob/main/a.png"));
+  EXPECT(!xanatoo::is_image_address("https://gitlab.com/u/r/-/blob/main/a.png"));
+  EXPECT(xanatoo::is_image_address(
+      "https://commons.wikimedia.org/wiki/Special:FilePath/A.jpg"));
+  EXPECT(xanatoo::is_image_address(
+      "https://upload.wikimedia.org/wikipedia/commons/a/ab/A.jpg"));
+  EXPECT(xanatoo::is_image_address("https://x.org/wiki/images/a/ab/A.png"));
+  EXPECT(xanatoo::is_image_address("https://x.org/u/r/blob/main/a.png"));
+  EXPECT(xanatoo::is_image_address("https://github.com/u/r/raw/main/a.png"));
   EXPECT(xanatoo::is_remote_image("nex://x.org/a.jpg"));
   EXPECT(xanatoo::looks_like_image(std::string_view("\x89PNG\r\n\x1a\n\0\0", 10)));
   EXPECT(xanatoo::looks_like_image("\xff\xd8\xff\xe0rest"));

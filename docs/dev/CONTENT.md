@@ -294,7 +294,10 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Layout draws remote images from their `kRemoteThumbEdge` thumbnail
   (`layout_remote_image`); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: a `has_image_fetch_scheme` URL or local
-  path by extension)
+  path by extension; an image address is never fetched as a page, so no
+  Content-Type is seen: pages named like their file — MediaWiki
+  `/wiki/File:X.jpg` in any namespace / language, GitHub and GitLab
+  `blob` views — are excluded by `is_file_description_page`)
   show that image in the page's `//gallery` (`open_link_image`, checked
   before split / external handling), never the system browser; one not
   among the page's images opens as `URL//gallery//item:1`

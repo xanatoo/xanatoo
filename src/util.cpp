@@ -135,6 +135,37 @@ bool has_image_fetch_scheme(std::string_view url) {
   return false;
 }
 
+namespace {
+
+// An HTML page about a file whose address ends in the file's name: a
+// MediaWiki file description page ("/wiki/File:X.jpg", "/wiki/Datei:X.jpg",
+// any namespace; but "Special:FilePath/X.jpg" redirects to the file itself)
+// and a GitHub / GitLab "blob" view ("/u/r/blob/main/x.png").
+bool is_file_description_page(std::string_view url, std::string_view path) {
+  const size_t wiki = path.find("/wiki/");
+  if (wiki != std::string_view::npos) {
+    std::string_view title = path.substr(wiki + 6);
+    const size_t colon = title.find(':');
+    const std::string lower = ascii_lower(std::string(title));
+    const size_t enc = lower.find("%3a");
+    const size_t ns = std::min(colon, enc);
+    if (ns != std::string_view::npos && ns > 0 &&
+        title.substr(0, ns).find('/') == std::string_view::npos &&
+        !starts_with(lower, "special:") && !starts_with(lower, "special%3a"))
+      return true;
+  }
+  if (path.find("/-/blob/") != std::string_view::npos) return true;  // GitLab
+  std::string_view host = url;
+  if (const size_t s = host.find("://"); s != std::string_view::npos)
+    host = host.substr(s + 3);
+  host = host.substr(0, host.find('/'));
+  return (ascii_lower(host) == "github.com" ||
+          ascii_lower(host) == "www.github.com") &&
+         path.find("/blob/") != std::string_view::npos;
+}
+
+}  // namespace
+
 bool is_image_url(std::string_view url) {
   // Scheme-relative or relative paths are fine, and the schemes the image
   // fetcher downloads; other schemes are not images we can load ("mailto:").
@@ -145,6 +176,7 @@ bool is_image_url(std::string_view url) {
       !has_image_fetch_scheme(url) && !(colon == 1 && slash == 2))  // C:/path
     return false;
   std::string_view path = url.substr(0, url.find_first_of("?#"));
+  if (is_file_description_page(url, path)) return false;
   static constexpr std::string_view kExts[] = {
       ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
       ".svg", ".avif", ".tif", ".tiff", ".jxl"};
