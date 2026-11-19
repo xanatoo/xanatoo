@@ -116,8 +116,10 @@ bool middle_open(UiCommand& cmd, std::string& arg, const std::string& addr) {
   return true;
 }
 
-// First and last `keep` bytes (on character boundaries) around an ellipsis.
+// First and last `keep` bytes (on character boundaries) around an ellipsis;
+// a string too short to gain from eliding comes back unchanged.
 std::string elide_middle(const std::string& s, size_t keep) {
+  if (s.size() <= 2 * keep + 3) return s;
   auto cont = [&](size_t i) {
     return i < s.size() && (static_cast<unsigned char>(s[i]) & 0xc0) == 0x80;
   };
