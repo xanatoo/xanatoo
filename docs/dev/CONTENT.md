@@ -136,8 +136,10 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   dispatch). HTML is read-only: Save asks for a `.md` name.
 - Page chrome (nav / aside / footer / form / dialog, landmark roles, navbox /
   share / cookie classes, what lies around `<main>`) is kept as
-  `NodeKind::Chrome` nodes (`summary` = what it is); hidden / sr-only text is
-  always dropped. Reader mode is view state (`Pane::reader`, `pane_reader` /
+  `NodeKind::Chrome` nodes (`summary` = what it is); hidden / sr-only /
+  `opacity:0.00…` text is always dropped (`is_hidden`), except React
+  streaming-SSR segments `<div hidden id="S:n">` (Next.js sites such as
+  lesswrong.com), which hold the whole page. Reader mode is view state (`Pane::reader`, `pane_reader` /
   `set_reader`, default `ViewSettings::reader_mode`): layout leaves Chrome out
   (`set_hide_chrome`) and draws the "… hidden · Show all" notice
   (`LayoutResult::chrome_notice`). Never put reader mode into the address or

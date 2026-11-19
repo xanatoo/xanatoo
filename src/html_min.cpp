@@ -1004,14 +1004,34 @@ std::string math_tex_source(std::string_view attrs, std::string_view inner) {
   return {};
 }
 
-// Hidden, aria-hidden, display:none or screen-reader-only: not shown by a
-// browser either, dropped in both modes.
+// React streaming SSR (Next.js) sends the page as `<div hidden id="S:0">`
+// segments that a script moves into their `<template id="B:0">` slots;
+// without the script they are the page, so they stay.
+bool is_react_stream_segment(std::string_view attrs) {
+  const std::string id = html_attr(attrs, "id");
+  if (id.size() < 3 || id[0] != 'S' || id[1] != ':') return false;
+  return std::all_of(id.begin() + 2, id.end(),
+                     [](char c) { return c >= '0' && c <= '9'; });
+}
+
+// Hidden, aria-hidden, display:none, (nearly) transparent or
+// screen-reader-only: not shown by a browser either, dropped in both modes.
 bool is_hidden(std::string_view attrs) {
-  if (html_has_attr(attrs, "hidden")) return true;
+  if (html_has_attr(attrs, "hidden") && !is_react_stream_segment(attrs))
+    return true;
   if (ascii_lower(html_attr(attrs, "aria-hidden")) == "true") return true;
   std::string style = ascii_lower(html_attr(attrs, "style"));
   style.erase(std::remove(style.begin(), style.end(), ' '), style.end());
   if (style.find("display:none") != std::string::npos) return true;
+  // opacity:0, opacity:0.001, …: under 1 %, an invisible placeholder.
+  for (size_t k = style.find("opacity:"); k != std::string::npos;
+       k = style.find("opacity:", k + 8)) {
+    if (k > 0 && style[k - 1] != ';') continue;  // fill-opacity, …
+    std::string_view v = std::string_view(style).substr(k + 8);
+    if (v.starts_with("0.00") || v.starts_with(".00") || v == "0" ||
+        v.starts_with("0;") || v.starts_with("0!"))
+      return true;
+  }
   bool hidden = false;
   for_each_class(attrs, [&](std::string_view tok) {
     if (tok == "hidden") hidden = true;

@@ -6127,6 +6127,7 @@ void test_html_page() {
       "and <a href=\"https://ex.org/p#intro\">top</a>"
       "<span class=\"sr-only\">hidden</span><img src=d.png alt=\"\">"
       "<div hidden><p>gone</div>"
+      "<div style=\"opacity:0.001;position:absolute\">x</div>"
       "<h3>Sub</h3><p id=\"more\">Deep</p><h2>Two</h2><p>Last</main>"
       "<footer>foot</footer></body></html>";
   EXPECT_EQ(html_page_title(page), "OG title");
@@ -6162,7 +6163,17 @@ void test_html_page() {
     EXPECT(t.find("hidden") == std::string::npos);
     EXPECT(t.find("gone") == std::string::npos);
     EXPECT(t.find("[image") == std::string::npos);
+    EXPECT(t != "x");
   }
+  // React streaming SSR: the page arrives in `<div hidden id="S:0">`.
+  Document streamed = parse_html_page(
+      "<body><template id=\"B:0\"></template>"
+      "<div hidden id=\"S:0\"><main><p>Streamed</p></main></div></body>",
+      "https://ex.org/s");
+  bool found = false;
+  for (const Node& n : streamed.nodes)
+    found = found || plain_text(streamed, n.id) == "Streamed";
+  EXPECT(found);
   EXPECT_EQ(chrome_regions(doc).size(), 2u);
   EXPECT_EQ(chrome_hidden_text(doc, chrome_regions(doc)),
             "2 parts of the page hidden (navigation, footer)");
