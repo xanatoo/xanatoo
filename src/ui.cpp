@@ -1242,6 +1242,8 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   };
 
   // ---- Two toolbars: browse (navigation) then edit ----
+  // An icon button is 28·s plus 4·s frame padding above and below.
+  const float tool_button_h = 36.f * scale_;
   ImGuiViewport* vp = ImGui::GetMainViewport();
   ImGuiWindowFlags tb_flags =
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -1251,7 +1253,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   auto toolbar_separator = [&] {
     ImGui::SameLine(0.f, 4.f);
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float row_h = 32.f * scale_ + 6.f;
+    const float row_h = tool_button_h;
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(p.x + 3.f, p.y + 4.f),
         ImVec2(p.x + 3.f, p.y + row_h - 4.f),
@@ -1261,7 +1263,10 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   };
 
   // -- Browse / navigation row (browser chrome) --
-  const float button_row_h = 32.f * scale_ + 16.f;
+  // Icon row, then the location row (its field is centred in 32·s + 6),
+  // sized to their contents with only a small gap between them.
+  const float field_row_h = 32.f * scale_ + 6.f;
+  const float field_row_y = 4.f + tool_button_h + 2.f * scale_;
   const int url_extras = (state.alternate_url.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
@@ -1279,7 +1284,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   const float search_w = state.searchbar
       ? 6.f * scale_ + field_icon_w + search_field_w + go_w
       : 0.f;
-  const float browse_h = 2.f * button_row_h;
+  const float browse_h = field_row_y + field_row_h + 4.f;
   ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
   ImGui::SetNextWindowSize(ImVec2(vp->Size.x, browse_h));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.f, 4.f));
@@ -1875,7 +1880,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                 !state.browse);
     // tool_button ends with SameLine, so the cursor sits after the group.
     {
-      const float row_y = 4.f + button_row_h;
+      const float row_y = field_row_y;
       ImGui::SetCursorPos(ImVec2(6.f, row_y));
       location_field();
       if (state.searchbar) search_field(row_y);
@@ -1916,8 +1921,9 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         }
       }
     }
-    const float row_h = 32.f * scale_ + 6.f;
-    const float edit_h = edit_rows * row_h + 10.f;
+    // Window padding (4 + 4), the button rows and the spacing between them.
+    const float edit_h = edit_rows * tool_button_h +
+                         (edit_rows - 1) * ImGui::GetStyle().ItemSpacing.y + 8.f;
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
     ImGui::SetNextWindowSize(ImVec2(vp->Size.x, edit_h));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.f, 4.f));
