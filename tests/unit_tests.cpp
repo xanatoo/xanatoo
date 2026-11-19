@@ -2356,6 +2356,116 @@ void test_style_sheets_shipped() {
   EXPECT(!load_style("no-such-sheet", missing));
 }
 
+// Number of members of aggregate T (no nested-aggregate brace elision:
+// AnyField converts to every member type).
+struct AnyField {
+  template <typename T>
+  operator T() const;
+};
+template <typename T, typename... A>
+constexpr size_t aggregate_fields() {
+  if constexpr (requires { T{A{}..., AnyField{}}; })
+    return aggregate_fields<T, A..., AnyField>();
+  else
+    return sizeof...(A);
+}
+
+void test_style_choice_mix() {
+  using namespace xanatoo;
+  // copy_style_group names every field; a new one must join a group there.
+  static_assert(aggregate_fields<BlockStyle>() == 11,
+                "new BlockStyle field: add it to copy_style_group");
+  static_assert(aggregate_fields<InlineStyle>() == 6,
+                "new InlineStyle field: add it to copy_style_group");
+  DocStyle a = builtin_style(), b = builtin_style();
+  apply_style_source(b, R"(
+    (page (background "#010203") (color "#040506") (image "p.png"))
+    (fonts (body "Mono A" "monospace") (heading-scale 1.25))
+    (role paragraph (space-after 3) (color "#aa0000") (font code))
+    (role link (color "#00aa00") (underline #f) (font italic)))");
+  DocStyle colors = a;
+  copy_style_group(colors, b, kStyleColors);
+  EXPECT(colors.paper == b.paper && colors.ink == b.ink);
+  EXPECT_EQ(colors.paper_image, "p.png");
+  EXPECT(colors[BlockRole::Paragraph].color == (Rgba{0xaa, 0, 0, 255}));
+  EXPECT(!colors[InlineKind::Link].underline);
+  EXPECT(colors[BlockRole::Paragraph].space_after.px(10.f) == 14.f);
+  EXPECT(colors[BlockRole::Paragraph].font == FontRole::Body);
+  EXPECT(colors.fonts.body.empty());
+  DocStyle fonts = a;
+  copy_style_group(fonts, b, kStyleFonts);
+  EXPECT(fonts.paper == a.paper);
+  EXPECT_EQ(fonts.fonts.body.size(), 2u);
+  EXPECT(fonts.heading_scale > 1.2f);
+  EXPECT(fonts[BlockRole::Paragraph].font == FontRole::Code);
+  EXPECT(fonts[InlineKind::Link].has_font);
+  EXPECT(fonts[InlineKind::Link].color == a[InlineKind::Link].color);
+  EXPECT(fonts[BlockRole::Paragraph].space_after.px(10.f) == 14.f);
+
+  // Shipped sheets: Hacker News layout, Night colours, Typewriter fonts.
+  DocStyle hn, night, tw, mix;
+  EXPECT(load_style("hackernews", hn));
+  EXPECT(load_style("night", night));
+  EXPECT(load_style("typewriter", tw));
+  EXPECT(load_style(StyleChoice{"hackernews", "night", "typewriter"}, mix));
+  EXPECT_EQ(mix.name, "hackernews");
+  EXPECT_EQ(mix.colors_from, "night");
+  EXPECT_EQ(mix.fonts_from, "typewriter");
+  EXPECT(mix.warnings.empty());
+  EXPECT(mix.paper == night.paper && mix.ink == night.ink);
+  for (BlockRole r : {BlockRole::MessageOp, BlockRole::Message,
+                      BlockRole::CodeBlock}) {
+    EXPECT(mix[r].has_color == night[r].has_color);
+    EXPECT(mix[r].color == night[r].color);
+    EXPECT(mix[r].background == night[r].background);
+    EXPECT(mix[r].space_after.px(10.f) == hn[r].space_after.px(10.f));
+  }
+  EXPECT(mix[InlineKind::Link].color == night[InlineKind::Link].color);
+  EXPECT(mix.fonts == tw.fonts);
+  EXPECT(mix.heading_scale == tw.heading_scale);
+  EXPECT(mix[BlockRole::Header].font == tw[BlockRole::Header].font);
+  // The sheet's own choice and an empty one change nothing.
+  DocStyle same;
+  EXPECT(load_style(StyleChoice{"night", "night", ""}, same));
+  EXPECT(same.paper == night.paper && same.colors_from.empty());
+  // A missing colour sheet warns but keeps the request on record.
+  DocStyle gone;
+  EXPECT(load_style(StyleChoice{"night", "no-such-sheet", ""}, gone));
+  EXPECT_EQ(gone.colors_from, "no-such-sheet");
+  EXPECT(gone.paper == night.paper);
+  EXPECT_EQ(gone.warnings.size(), 1u);
+  DocStyle none;
+  EXPECT(!load_style(StyleChoice{"no-such-sheet", "night", ""}, none));
+}
+
+void test_style_choice_variants() {
+  using namespace xanatoo;
+  // Variants follow the groups: the theme's variant keeps its spacing but
+  // loses its colours to the colour sheet's variant of the same name.
+  DocStyle theme = builtin_style(), palette = builtin_style();
+  apply_style_source(theme, R"(
+    (variant warning (role note (space-after 40) (color "#111111")
+                                (border "#222222"))))", "theme");
+  apply_style_source(palette, R"(
+    (define hot "#ee0000")
+    (page (background "#000000"))
+    (variant warning (role note (color hot) (space-after 2))))", "palette");
+  DocStyle mix = theme;
+  copy_style_group(mix, palette, kStyleColors);
+  for (auto& [_, parts] : mix.variants)
+    for (StyleVariant& p : parts) p.groups &= ~kStyleColors;
+  for (auto& [n, parts] : palette.variants)
+    for (StyleVariant p : parts) {
+      p.groups &= kStyleColors;
+      mix.variants[n].push_back(p);
+    }
+  DocStyle scoped = mix;
+  EXPECT(apply_style_variant(scoped, "warning"));
+  EXPECT(scoped[BlockRole::Note].space_after.px(10.f) == 40.f);
+  EXPECT(scoped[BlockRole::Note].color == (Rgba{0xee, 0, 0, 255}));
+  EXPECT(scoped[BlockRole::Note].border == mix[BlockRole::Note].border);
+}
+
 void test_style_assignments() {
   using namespace xanatoo;
   EXPECT(valid_style_name("my-reading-theme"));
@@ -7115,6 +7225,8 @@ int main() {
   test_style_sheet_parse();
   test_gallery_view_style();
   test_named_style_scopes();
+  test_style_choice_mix();
+  test_style_choice_variants();
   test_layout_article_gaps();
   test_layout_inline_metadata();
   test_nav_history_positions_and_forward_link();

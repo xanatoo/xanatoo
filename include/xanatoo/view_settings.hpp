@@ -54,6 +54,10 @@ struct ViewSettings {
   int page_columns = 0;
   // Document style sheet (styles/<name>.xss); "default" = built in.
   std::string style = "default";
+  // Sheets lending their colours / fonts on top of `style` (and of a
+  // pinned sheet); empty = the sheet's own. StyleChoice in style.hpp.
+  std::string style_colors;
+  std::string style_fonts;
   // Default search engine (search.hpp id): search bar choice, and the target
   // of the "?" location-bar keyword. Saved in view.conf; Preferences has a
   // dropdown to pick one of the engines that are switched on.

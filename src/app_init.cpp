@@ -124,9 +124,15 @@ bool app_init(App& app) {
   init_search(app);
   {
     std::string err;
-    if (!xanatoo::load_style(app.view_settings.style, app.style, &err)) {
+    const xanatoo::StyleChoice choice{app.view_settings.style,
+                                      app.view_settings.style_colors,
+                                      app.view_settings.style_fonts};
+    if (!xanatoo::load_style(choice, app.style, &err)) {
       std::cerr << "Style: " << err << " (using default)\n";
       app.view_settings.style = "default";
+      xanatoo::load_style(xanatoo::StyleChoice{"default", choice.colors,
+                                               choice.fonts},
+                          app.style);
     }
     for (const std::string& w : app.style.warnings)
       std::cerr << "style warning: " << w << "\n";

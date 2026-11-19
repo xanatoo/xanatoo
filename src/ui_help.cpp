@@ -341,6 +341,14 @@ const std::vector<UiHelpTopic> kTopics = {
     {"style sheet|tb_style", "Style sheet",
      "The look of documents: fonts, colours and spacing per role. Choose a "
      "sheet, or manage and edit them."},
+    {"colours", "Colours",
+     "Take the page, text, link and box colours from another style sheet, "
+     "keeping the sheet's spacing and fonts. Applies to pinned sheets too."},
+    {"fonts", "Fonts",
+     "Take the font families, sizes and role fonts from another style "
+     "sheet, keeping the sheet's colours and spacing."},
+    {"from style sheet", "From style sheet",
+     "Use the applied sheet's own colours or fonts."},
     {"manage / edit style sheets|manage style sheets", "Manage style sheets",
      "Opens the style sheet manager: create, edit and pin sheets to sites "
      "or services."},
@@ -521,7 +529,9 @@ const std::vector<UiHelpTopic> kTopics = {
      "the panel focused: **/** or **Ctrl+F** filters, arrows / Home / End "
      "move, **Enter** opens, **Delete** removes the visit from the history, "
      "**Esc** clears the filter or closes. Right-click a row for its menu."},
-    {"@panel:styles", "Style sheets panel", "Pick the style sheet of the focused page."},
+    {"@panel:styles", "Style sheets panel",
+     "Pick the style sheet of the focused page; the Colours and Fonts tabs "
+     "take those from another sheet."},
     {"@panel:style-manager", "Style sheet manager",
      "Create, edit and pin style sheets. Changes apply as you type."},
     {"@panel:bookmarks", "Bookmarks panel",

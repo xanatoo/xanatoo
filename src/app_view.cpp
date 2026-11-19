@@ -652,12 +652,26 @@ std::string body_font_path(const App& app) {
   return app.style.fonts.body.empty() ? app.env_font_path : std::string{};
 }
 
-static void set_style(App& app, const std::string& name, bool set_default) {
+// The sheet pins pick for the focused page, with the reader's colour /
+// font sheets on top.
+static xanatoo::StyleChoice effective_style_choice(App& app) {
+  return {xanatoo::style_for_url(app.style_pins, path_of(app, focused_pane(app)),
+                                 app.view_settings.style),
+          app.view_settings.style_colors, app.view_settings.style_fonts};
+}
+
+static xanatoo::StyleChoice current_style_choice(const App& app) {
+  return {app.style.name, app.style.colors_from, app.style.fonts_from};
+}
+
+// Explicit choices (set_default) save view.conf and report the result.
+static bool set_style(App& app, const xanatoo::StyleChoice& choice,
+                      bool set_default) {
   xanatoo::DocStyle next;
   std::string err;
-  if (!xanatoo::load_style(name, next, &err)) {
+  if (!xanatoo::load_style(choice, next, &err)) {
     flash_status(app, "Style: " + err);
-    return;
+    return false;
   }
   for (const std::string& w : next.warnings)
     std::cerr << "style warning: " << w << "\n";
@@ -673,33 +687,69 @@ static void set_style(App& app, const std::string& name, bool set_default) {
   apply_font_sizes(app);
   app.help_needs_layout = true;
   app.hover_help.needs_layout = true;
-  if (set_default) app.view_settings.style = app.style.name;
   apply_view_settings(app, set_default);  // relayout; only explicit choices save view.conf
   std::string msg = "Style: " + app.style.title;
+  auto title_of = [&](const std::string& name) {
+    for (const xanatoo::StyleEntry& e : app.styles)
+      if (e.name == name) return e.title;
+    return name;
+  };
+  if (!app.style.colors_from.empty())
+    msg += " · colours: " + title_of(app.style.colors_from);
+  if (!app.style.fonts_from.empty())
+    msg += " · fonts: " + title_of(app.style.fonts_from);
   if (!app.style.warnings.empty())
     msg += " (" + std::to_string(app.style.warnings.size()) +
            " warning(s), see stderr)";
   if (set_default) flash_status(app, msg);
+  return true;
 }
 
 void apply_style(App& app, const std::string& name) {
-  set_style(app, name, true);
+  xanatoo::StyleChoice c = current_style_choice(app);
+  c.sheet = name.empty() ? "default" : name;
+  const std::string old = app.view_settings.style;
+  app.view_settings.style = c.sheet;
+  if (!set_style(app, c, true)) app.view_settings.style = old;
+}
+
+void apply_style_layer(App& app, unsigned group, const std::string& name) {
+  const bool colors = group == xanatoo::kStyleColors;
+  xanatoo::StyleChoice c = current_style_choice(app);
+  (colors ? c.colors : c.fonts) = name;
+  if (!name.empty()) {
+    xanatoo::DocStyle check;
+    std::string err;
+    if (!xanatoo::load_style(name, check, &err)) {
+      flash_status(app, "Style: " + err);
+      return;
+    }
+  }
+  std::string& saved =
+      colors ? app.view_settings.style_colors : app.view_settings.style_fonts;
+  const std::string old = saved;
+  saved = name;
+  if (!set_style(app, c, true)) saved = old;
 }
 
 void sync_pinned_style(App& app) {
-  const std::string wanted = xanatoo::style_for_url(
-      app.style_pins, path_of(app, focused_pane(app)),
-      app.view_settings.style);
-  if (wanted != app.style.name) {
+  const xanatoo::StyleChoice wanted = effective_style_choice(app);
+  // A sheet naming itself as the colour / font source is the plain sheet.
+  auto layer = [&](const std::string& s) {
+    return s == wanted.sheet ? std::string{} : s;
+  };
+  if (wanted.sheet != app.style.name ||
+      layer(wanted.colors) != app.style.colors_from ||
+      layer(wanted.fonts) != app.style.fonts_from) {
     xanatoo::DocStyle check;
-    if (xanatoo::load_style(wanted, check))
+    if (xanatoo::load_style(wanted.sheet, check))
       set_style(app, wanted, false);
   }
 }
 
 void reload_styles(App& app) {
   app.styles = xanatoo::list_styles();
-  set_style(app, app.style.name, false);
+  set_style(app, current_style_choice(app), false);
   flash_status(app, "Reloaded style sheets");
 }
 

@@ -59,11 +59,37 @@ Night, Sepia Book, Reddit, Hacker News and accessibility styles. Discussion
 cards now have more breathing room between replies; **Compact** is available
 when you deliberately want dense threads.
 
+### Colours and fonts from another sheet
+
+**Layout → Colours** and **Layout → Fonts** (also under the toolbar's
+style button, and the *Colours* / *Fonts* tabs of the Style Sheets panel)
+take that part of the look from a second sheet, while the applied sheet
+keeps the rest:
+
+- *Colours*: page background / text / selection / mark / bookmark
+  colours, the desk and paper images, and every role's `color`,
+  `background`, `border` and `underline`.
+- *Fonts*: the whole `(fonts …)` form (families, weight, scales) and every
+  role's `font`.
+- Everything else (spacing, indent, width, side, placement) always comes
+  from the applied sheet.
+
+The lending sheet counts as a whole look, built-in default and `inherit`s
+included, so e.g. Hacker News with Night colours has no orange left over
+from Hacker News. Named variants follow the same split. *From style sheet*
+goes back to the sheet's own colours or fonts.
+
+The choices are saved as `style_colors=` / `style_fonts=` in `view.conf`
+and also apply on top of sheets pinned to a domain or service, so a dark
+colour choice follows you everywhere while each site keeps its layout.
+
 ## Precedence
 
 1. Reader view prefs: line spacing, margins, text width, justify, zoom,
    `--font`.
-2. The selected style sheet, and the sheets it `inherit`s.
+2. The selected style sheet, and the sheets it `inherit`s; its colours /
+   fonts replaced by those of the sheets picked under Layout → Colours /
+   Fonts.
 3. The built-in default (`builtin_style()`; `styles/default.xss` spells it
    out).
 

@@ -134,8 +134,12 @@ class SheetReader {
     defines_ = defines;
   }
 
+  void set_groups(unsigned groups) { groups_ = groups; }
+
   void finish_variants() {
-    for (auto& [name, variant] : style_.variants) {
+    for (auto& [name, parts] : style_.variants) {
+      if (parts.empty()) continue;
+      StyleVariant& variant = parts.front();
       variant.defines = defines_;
       // Validate once on load, not on every layout pass.
       DocStyle check = style_;
@@ -180,7 +184,9 @@ class SheetReader {
       if (f.kids.size() < 3 || f.kids[1].kind != SExpr::Kind::Atom) {
         warn("expected (variant name (role …) …)");
       } else {
-        auto& variant = style_.variants[f.kids[1].text];
+        auto& parts = style_.variants[f.kids[1].text];
+        if (parts.empty()) parts.emplace_back();
+        StyleVariant& variant = parts.front();
         for (size_t i = 2; i < f.kids.size(); ++i) {
           if (is_form(f.kids[i], "role")) variant.forms.push_back(f.kids[i]);
           else warn("variant " + f.kids[1].text + " accepts only role forms");
@@ -195,6 +201,9 @@ class SheetReader {
   DocStyle& style_;
   std::string sheet_;
   std::map<std::string, SExpr> defines_;
+  unsigned groups_ = kStyleAllGroups;
+
+  bool on(unsigned group) const { return (groups_ & group) != 0; }
 
   void warn(const std::string& msg) {
     style_.warnings.push_back(sheet_.empty() ? msg : sheet_ + ": " + msg);
@@ -342,6 +351,11 @@ class SheetReader {
 
   void block_props(const SExpr& f, BlockStyle& b) {
     for_props(f, 2, [&](const std::string& prop, const SExpr& v) {
+      const bool colors = prop == "color" || prop == "background" ||
+                          prop == "border";
+      if (colors ? !on(kStyleColors)
+                 : prop == "font" ? !on(kStyleFonts) : !on(kStyleLayout))
+        return;
       if (prop == "space-before") length(v, b.space_before);
       else if (prop == "space-after") length(v, b.space_after);
       else if (prop == "indent") length(v, b.indent);
@@ -375,6 +389,7 @@ class SheetReader {
 
   void inline_props(const SExpr& f, InlineStyle& s) {
     for_props(f, 2, [&](const std::string& prop, const SExpr& v) {
+      if (!on(prop == "font" ? kStyleFonts : kStyleColors)) return;
       if (prop == "color") s.has_color = color(v, s.color) || s.has_color;
       else if (prop == "background") color(v, s.background);
       else if (prop == "underline") s.underline = sexpr_bool(value(v), s.underline);
@@ -648,9 +663,14 @@ void apply_style_source(DocStyle& style, std::string_view source,
 bool apply_style_variant(DocStyle& style, std::string_view name) {
   const auto it = style.variants.find(std::string(name));
   if (it == style.variants.end()) return false;
-  SheetReader reader(style, "variant " + std::string(name));
-  reader.set_defines(it->second.defines);
-  for (const SExpr& f : it->second.forms) reader.apply(f);
+  // Copy: applying may not invalidate the parts being read.
+  const std::vector<StyleVariant> parts = it->second;
+  for (const StyleVariant& part : parts) {
+    SheetReader reader(style, "variant " + std::string(name));
+    reader.set_defines(part.defines);
+    reader.set_groups(part.groups);
+    for (const SExpr& f : part.forms) reader.apply(f);
+  }
   return true;
 }
 
@@ -699,6 +719,17 @@ std::vector<StyleEntry> list_styles() {
       by_name[e.name] = std::move(e);
     }
   }
+  for (auto& [name, e] : by_name) {
+    DocStyle st;
+    load_style(name, st);  // on failure: the built-in look
+    e.paper = st.paper;
+    e.ink = st.ink;
+    e.accent = st.inl[static_cast<size_t>(InlineKind::Link)].has_color
+                   ? st.inl[static_cast<size_t>(InlineKind::Link)].color
+                   : st.ink;
+    if (!st.fonts.body.empty()) e.body_font = st.fonts.body.front();
+    if (!st.fonts.heading.empty()) e.heading_font = st.fonts.heading.front();
+  }
   std::vector<StyleEntry> out;
   out.push_back(by_name["default"]);
   by_name.erase("default");
@@ -717,6 +748,86 @@ bool load_style(const std::string& name, DocStyle& out, std::string* error) {
     return false;
   out.name = name.empty() ? "default" : name;
   apply_forms(out, forms, out.name);
+  return true;
+}
+
+void copy_style_group(DocStyle& dst, const DocStyle& src, unsigned groups) {
+  if (groups & kStyleColors) {
+    dst.paper = src.paper;
+    dst.margin = src.margin;
+    dst.margin_image = src.margin_image;
+    dst.paper_image = src.paper_image;
+    dst.ink = src.ink;
+    dst.selection = src.selection;
+    dst.mark = src.mark;
+    dst.bookmark = src.bookmark;
+  }
+  if (groups & kStyleFonts) {
+    dst.fonts = src.fonts;
+    dst.heading_scale = src.heading_scale;
+    dst.body_scale = src.body_scale;
+  }
+  for (size_t i = 0; i < kBlockRoleCount; ++i) {
+    BlockStyle& d = dst.block[i];
+    const BlockStyle& s = src.block[i];
+    if (groups & kStyleColors) {
+      d.has_color = s.has_color;
+      d.color = s.color;
+      d.background = s.background;
+      d.border = s.border;
+    }
+    if (groups & kStyleFonts) d.font = s.font;
+    if (groups & kStyleLayout) {
+      d.space_before = s.space_before;
+      d.space_after = s.space_after;
+      d.indent = s.indent;
+      d.width = s.width;
+      d.side = s.side;
+      d.placement = s.placement;
+    }
+  }
+  auto inl = [groups](InlineStyle& d, const InlineStyle& s) {
+    if (groups & kStyleColors) {
+      d.has_color = s.has_color;
+      d.color = s.color;
+      d.background = s.background;
+      d.underline = s.underline;
+    }
+    if (groups & kStyleFonts) {
+      d.has_font = s.has_font;
+      d.font = s.font;
+    }
+  };
+  for (size_t i = 0; i < kInlineKindCount; ++i) inl(dst.inl[i], src.inl[i]);
+  inl(dst.metadata, src.metadata);
+}
+
+bool load_style(const StyleChoice& choice, DocStyle& out, std::string* error) {
+  if (!load_style(choice.sheet, out, error)) return false;
+  const std::pair<const std::string*, unsigned> layers[] = {
+      {&choice.colors, kStyleColors}, {&choice.fonts, kStyleFonts}};
+  for (const auto& [name, group] : layers) {
+    if (name->empty() || *name == out.name) continue;
+    (group == kStyleColors ? out.colors_from : out.fonts_from) = *name;
+    DocStyle src;
+    std::string err;
+    if (!load_style(*name, src, &err)) {
+      out.warnings.push_back(err);
+      continue;
+    }
+    copy_style_group(out, src, group);
+    for (auto& [_, parts] : out.variants)
+      for (StyleVariant& part : parts) part.groups &= ~group;
+    for (auto& [vname, parts] : src.variants) {
+      for (StyleVariant& part : parts) {
+        if (!(part.groups & group)) continue;
+        part.groups &= group;
+        out.variants[vname].push_back(std::move(part));
+      }
+    }
+    out.warnings.insert(out.warnings.end(), src.warnings.begin(),
+                        src.warnings.end());
+  }
   return true;
 }
 

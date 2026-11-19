@@ -121,6 +121,10 @@ bool load_view_settings(ViewSettings& out) {
         out.page_columns = std::stoi(val);
       else if (key == "style" && !val.empty())
         out.style = val;
+      else if (key == "style_colors")
+        out.style_colors = val;
+      else if (key == "style_fonts")
+        out.style_fonts = val;
       else if (key == "search_engine" && !val.empty())
         out.search_engine = val;
       else if (key == "search_on" || key == "search_off") {
@@ -169,6 +173,8 @@ bool save_view_settings(const ViewSettings& in) {
   out << "paged=" << (v.paged ? "1" : "0") << "\n";
   out << "page_columns=" << v.page_columns << "\n";
   out << "style=" << v.style << "\n";
+  out << "style_colors=" << v.style_colors << "\n";
+  out << "style_fonts=" << v.style_fonts << "\n";
   out << "search_engine=" << v.search_engine << "\n";
   auto ids = [](const std::vector<std::string>& list) {
     std::string s;

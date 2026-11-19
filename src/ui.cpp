@@ -358,6 +358,44 @@ void fill_measure_items(const UiState& state, UiCommand& cmd,
   }
 }
 
+void fill_style_items(const UiState& state, UiCommand& cmd, std::string& arg);
+
+// Colours / fonts lent by another sheet: "From style sheet" + all sheets.
+void fill_style_layer_items(const UiState& state, bool colors, UiCommand& cmd,
+                            std::string& arg) {
+  const std::string& current = colors ? state.style_colors : state.style_fonts;
+  const UiCommand c =
+      colors ? UiCommand::SelectStyleColors : UiCommand::SelectStyleFonts;
+  if (ImGui::MenuItem("From style sheet", nullptr, current.empty())) {
+    cmd = c;
+    arg.clear();
+  }
+  ImGui::Separator();
+  for (const auto& [name, title] : state.styles) {
+    if (name == state.style) continue;  // same as "From style sheet"
+    if (ImGui::MenuItem(title.c_str(), nullptr, name == current)) {
+      cmd = c;
+      arg = name;
+    }
+  }
+}
+
+// Layout → Style sheet / Colours / Fonts as three submenus.
+void fill_style_menus(const UiState& state, UiCommand& cmd, std::string& arg) {
+  if (ImGui::BeginMenu("Style sheet")) {
+    fill_style_items(state, cmd, arg);
+    ImGui::EndMenu();
+  }
+  if (ImGui::BeginMenu("Colours")) {
+    fill_style_layer_items(state, true, cmd, arg);
+    ImGui::EndMenu();
+  }
+  if (ImGui::BeginMenu("Fonts")) {
+    fill_style_layer_items(state, false, cmd, arg);
+    ImGui::EndMenu();
+  }
+}
+
 // Document style sheets (styles/*.xss) — radio list + reload.
 void fill_style_items(const UiState& state, UiCommand& cmd, std::string& arg) {
   for (const auto& [name, title] : state.styles) {
@@ -1208,10 +1246,7 @@ static void view_tools_items(const UiState& state, UiCommand& cmd,
       fill_margins_items(state, cmd, arg);
       ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Style sheet")) {
-      fill_style_items(state, cmd, arg);
-      ImGui::EndMenu();
-    }
+    fill_style_menus(state, cmd, arg);
   } else {
     menu_item_cmd("Replace…", UiCommand::Replace, cmd, true, "Ctrl+H");
   }
@@ -1871,6 +1906,15 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       }
       if (tool_menu_begin("tb_style", "style", "Style sheet (view)")) {
         fill_style_items(state, cmd, result.arg);
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Colours")) {
+          fill_style_layer_items(state, true, cmd, result.arg);
+          ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Fonts")) {
+          fill_style_layer_items(state, false, cmd, result.arg);
+          ImGui::EndMenu();
+        }
         tool_menu_end();
       }
     }
@@ -2619,10 +2663,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       if (ImGui::MenuItem("Justify lines", nullptr, state.justify))
         cmd = UiCommand::ToggleJustify;
-      if (ImGui::BeginMenu("Style sheet")) {
-        fill_style_items(state, cmd, result.arg);
-        ImGui::EndMenu();
-      }
+      fill_style_menus(state, cmd, result.arg);
       ImGui::EndMenu();
     }
     force_menu("Panels");
@@ -3646,23 +3687,97 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
     if (ImGui::Begin("##styles_panel_body", nullptr, style_flags)) {
-      ImGui::TextDisabled("Applied theme");
+      static const char* const kTabs[] = {"Sheet", "Colours", "Fonts"};
+      if (ImGui::BeginTabBar("##style_layers")) {
+        for (int t = 0; t < 3; ++t)
+          if (ImGui::BeginTabItem(kTabs[t])) {
+            style_panel_tab_ = t;
+            ImGui::EndTabItem();
+          }
+        ImGui::EndTabBar();
+      }
+      auto title_of = [&](const std::string& name) {
+        for (const StyleEntry& e : state.style_entries)
+          if (e.name == name) return e.title;
+        return name;
+      };
+      const int tab = style_panel_tab_;
+      const std::string& lent = tab == 1 ? state.style_colors : state.style_fonts;
+      ImGui::TextDisabled("%s", tab == 0 ? "Applied sheet"
+                                : tab == 1 ? "Colours taken from"
+                                           : "Fonts taken from");
       ImGui::Separator();
+      const float row_h = ImGui::GetTextLineHeight();
+      ImDrawList* draw = ImGui::GetWindowDrawList();
+      if (tab > 0) {
+        const bool active = lent.empty();
+        std::string label = (active ? "● " : "  ") + std::string("From style sheet");
+        if (ImGui::Selectable(label.c_str(), active) && !active) {
+          cmd = tab == 1 ? UiCommand::SelectStyleColors : UiCommand::SelectStyleFonts;
+          result.arg.clear();
+        }
+      }
       for (const StyleEntry& entry : state.style_entries) {
+        if (tab > 0 && entry.name == state.style) continue;
         ImGui::PushID(entry.name.c_str());
-        const bool active = state.style == entry.name;
+        const bool active = tab == 0 ? state.style == entry.name : lent == entry.name;
         std::string label = (active ? "● " : "  ") + entry.title;
+        const ImVec2 row = ImGui::GetCursorScreenPos();
         if (ImGui::Selectable(label.c_str(), active)) {
           if (!active) {
-            cmd = UiCommand::SelectStyle;
+            cmd = tab == 0 ? UiCommand::SelectStyle
+                : tab == 1 ? UiCommand::SelectStyleColors
+                           : UiCommand::SelectStyleFonts;
             result.arg = entry.name;
           }
-          style_editor_sheet_ = entry.name;
+          if (tab == 0) style_editor_sheet_ = entry.name;
         }
-        if (ImGui::IsItemHovered())
-          ImGui::SetTooltip("%s%s", entry.name.c_str(),
-                            active ? " (currently applied)" : "");
+        const float right = ImGui::GetWindowContentRegionMax().x +
+                            ImGui::GetWindowPos().x;
+        if (tab == 1) {
+          // Paper chip with the text and link colour as two bars on it.
+          const float w = row_h * 1.6f;
+          const ImVec2 a(right - w, row.y + 1), b(right, row.y + row_h - 1);
+          auto col = [](const Rgba& c) { return IM_COL32(c.r, c.g, c.b, 255); };
+          draw->AddRectFilled(a, b, col(entry.paper), 2.f);
+          draw->AddRect(a, b, IM_COL32(0, 0, 0, 90), 2.f);
+          const float bar = (b.y - a.y) * 0.22f;
+          draw->AddRectFilled(ImVec2(a.x + 3, a.y + bar), ImVec2(b.x - 3, a.y + 2 * bar),
+                              col(entry.ink));
+          draw->AddRectFilled(ImVec2(a.x + 3, b.y - 2 * bar),
+                              ImVec2(a.x + (b.x - a.x) * 0.6f, b.y - bar),
+                              col(entry.accent));
+        } else if (tab == 2) {
+          const std::string face =
+              entry.body_font.empty() ? std::string("default") : entry.body_font;
+          const float tw = ImGui::CalcTextSize(face.c_str()).x;
+          const float title_end =
+              row.x + ImGui::CalcTextSize(label.c_str()).x + row_h;
+          if (right - tw > title_end)  // else only in the tooltip
+            draw->AddText(ImVec2(right - tw, row.y),
+                        ImGui::GetColorU32(ImGuiCol_TextDisabled), face.c_str());
+        }
+        if (ImGui::IsItemHovered()) {
+          if (tab == 2)
+            ImGui::SetTooltip("%s: body %s, headings %s", entry.name.c_str(),
+                              entry.body_font.empty() ? "default" : entry.body_font.c_str(),
+                              entry.heading_font.empty()
+                                  ? (entry.body_font.empty() ? "default" : "as body")
+                                  : entry.heading_font.c_str());
+          else
+            ImGui::SetTooltip("%s%s", entry.name.c_str(),
+                              active ? " (currently applied)" : "");
+        }
         ImGui::PopID();
+      }
+      ImGui::Separator();
+      {
+        std::string mix = title_of(state.style);
+        if (!state.style_colors.empty())
+          mix += " · " + title_of(state.style_colors) + " colours";
+        if (!state.style_fonts.empty())
+          mix += " · " + title_of(state.style_fonts) + " fonts";
+        ImGui::TextWrapped("%s", mix.c_str());
       }
       ImGui::Separator();
       if (classic_button("Reload")) cmd = UiCommand::ReloadStyles;

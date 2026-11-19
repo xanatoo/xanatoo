@@ -108,9 +108,23 @@ struct InlineStyle {
 // A named, explicitly applied group of role overrides. The parsed forms
 // and late-bound tokens are reused when composing nested scopes, so only
 // properties mentioned by the variant change in the child scope.
+//
+// Property groups: a reader can take one group (colours, fonts) from another
+// sheet than the rest (`StyleChoice`). Every DocStyle field belongs to one.
+enum StyleGroup : unsigned {
+  kStyleColors = 1,  // page colours / images; role color, background,
+                     // border, underline
+  kStyleFonts = 2,   // (fonts …) families and scales; role font
+  kStyleLayout = 4,  // spacing, indent, width, side, placement
+  kStyleAllGroups = 7,
+};
+
 struct StyleVariant {
   std::vector<SExpr> forms;
   std::map<std::string, SExpr> defines;
+  // Which groups of the forms' properties apply: a variant of the sheet
+  // that lent the colours only recolours, the sheet's own one no longer.
+  unsigned groups = kStyleAllGroups;
 };
 
 struct DocStyle {
@@ -135,7 +149,12 @@ struct DocStyle {
   BlockStyle block[kBlockRoleCount];
   InlineStyle inl[kInlineKindCount];
   InlineStyle metadata;  // semantic inline role, can also apply to links
-  std::map<std::string, StyleVariant> variants;
+  // One part per sheet that contributes to the variant (see StyleVariant).
+  std::map<std::string, std::vector<StyleVariant>> variants;
+  // Sheets that lent the colour / font group (StyleChoice); empty = the
+  // sheet `name` itself.
+  std::string colors_from;
+  std::string fonts_from;
   // Unknown roles / properties / values met while loading (with sheet name).
   std::vector<std::string> warnings;
 
@@ -182,6 +201,10 @@ struct StyleEntry {
   std::string name;   // file stem
   std::string title;  // (name "…") from the sheet, else the stem
   std::string path;
+  // A preview for the Colours / Fonts lists: page, text and link colour,
+  // and the first body / heading family ("" = the default face).
+  Rgba paper, ink, accent;
+  std::string body_font, heading_font;
 };
 
 // Style directories, lowest priority first (later ones override by name):
@@ -192,6 +215,23 @@ std::vector<StyleEntry> list_styles();
 // Built-in default + (inherit …) chain + the named sheet. False (and `out`
 // left as the built-in default) if the sheet is missing.
 bool load_style(const std::string& name, DocStyle& out,
+                std::string* error = nullptr);
+
+// A style sheet with its colours and / or fonts taken from other sheets.
+// Empty `colors` / `fonts` = the sheet's own.
+struct StyleChoice {
+  std::string sheet = "default";
+  std::string colors;
+  std::string fonts;
+};
+// Copy the fields of `groups` (StyleGroup bits) from `src` into `dst`.
+void copy_style_group(DocStyle& dst, const DocStyle& src, unsigned groups);
+// load_style(choice.sheet), then each group from its fully resolved sheet
+// (built-in default + inherit chain), variants included. False only if
+// the main sheet is missing; a missing colour / font sheet adds a warning
+// and leaves that group to the main sheet (colors_from / fonts_from still
+// name the request, so callers do not retry every frame).
+bool load_style(const StyleChoice& choice, DocStyle& out,
                 std::string* error = nullptr);
 
 // User-owned sheets live in the high-priority XDG user-data style directory.

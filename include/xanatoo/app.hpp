@@ -1518,6 +1518,10 @@ std::string body_font_path(const App& app);
 // Load style sheet `name` (re-reading the file), reload fonts if its
 // families changed, relayout everything and remember it in view.conf.
 void apply_style(App& app, const std::string& name);
+// Take the colours (group kStyleColors) or fonts (kStyleFonts) from sheet
+// `name` on top of the sheet in use; "" = the sheet's own. Saved in
+// view.conf (style_colors / style_fonts), kept across pinned sheets.
+void apply_style_layer(App& app, unsigned group, const std::string& name);
 void sync_pinned_style(App& app);
 // Rescan style_dirs() and re-read the active sheet (after editing a .xss).
 void reload_styles(App& app);

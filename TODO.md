@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — Colours and fonts from another style sheet
+
+- Layout → Colours / Fonts (and the toolbar style button, and Sheet /
+  Colours / Fonts tabs in the Style Sheets panel) take that property group
+  from a second sheet; spacing stays with the applied sheet. Any existing
+  sheet works as colour or font source — no files were split.
+- `StyleChoice` + `load_style(choice)` / `copy_style_group` in style.cpp;
+  variants carry a group mask so the theme's variant keeps its spacing and
+  the lender's variant supplies the colours. Saved as `style_colors` /
+  `style_fonts` in view.conf, applied on top of pinned sheets.
+- Colour tab rows show paper / text / link swatches, Font rows the body
+  family (`StyleEntry` now carries a preview, filled by `list_styles`).
+- Tests: `test_style_choice_mix` (incl. member-count tripwire for
+  BlockStyle / InlineStyle), `test_style_choice_variants`. Checked under
+  Xvfb: menus, panel tabs, status line, view.conf.
+- Possible follow-ups: per-pin colour / font overrides; the manager
+  could show the active mix; a spacing group (Compact) as a third layer.
+
 ## Status (2026-11-19) — Android: bundled CA roots, verify diagnostics
 
 - Android 5 tablet: "TLS handshake failed: X509 - Certificate verification

@@ -278,6 +278,8 @@ enum class UiCommand {
   ClearRedditCredentials,   // remove locally saved Reddit credentials
   SetUiScale,               // Preferences: scale chrome and default text
   SelectStyle,              // arg = style sheet name (styles/<name>.xss)
+  SelectStyleColors,        // arg = sheet lending the colours; "" = own
+  SelectStyleFonts,         // arg = sheet lending the fonts; "" = own
   ReloadStyles,             // rescan styles/ and re-read the active sheet
   StyleCreate,              // arg = new stem + '\n' + parent stem
   StyleSave,                // arg = stem + '\n' + source
@@ -544,6 +546,9 @@ struct UiState {
   uint64_t style_save_generation = 0;
   std::vector<std::string> style_pin_candidates;
   std::string default_style;
+  // Sheets lending colours / fonts to the applied one ("" = its own).
+  std::string style_colors;
+  std::string style_fonts;
   bool bookmarks_open = false;
   int bookmarks_x = 0, bookmarks_y = 0;
   int bookmarks_w = 0, bookmarks_h = 0;
@@ -788,6 +793,7 @@ private:
   char matrix_search_input_[256] = {};
   char matrix_open_input_[512] = {};
   std::string style_editor_sheet_;
+  int style_panel_tab_ = 0;  // Style Sheets panel: 0 sheet, 1 colours, 2 fonts
   std::string style_editor_loaded_;
   char style_editor_[65536] = {};
   char style_new_name_[81] = {};

@@ -25,6 +25,20 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   domain keys checked before service keys. `sync_pinned_style` changes only
   the resolved active look, never the saved global fallback. Do not write the
   active pinned sheet into `view.conf` on navigation.
+- Colour / font mixing: `StyleChoice{sheet, colors, fonts}` and
+  `load_style(choice, …)`. Each lending sheet is resolved fully (built-in +
+  inherit chain) and `copy_style_group` copies its `StyleGroup` fields
+  (`kStyleColors` / `kStyleFonts` / `kStyleLayout`) — every `DocStyle`,
+  `BlockStyle` and `InlineStyle` field belongs to exactly one group there;
+  a `static_assert` in `test_style_choice_mix` counts the role structs'
+  members, so a new field must be added to `copy_style_group`. Variants
+  are lists of `StyleVariant` parts with a `groups` mask: the sheet's own
+  parts lose the lent groups, the lender's parts are appended with only
+  those. `DocStyle::colors_from` / `fonts_from` record the request (also
+  when that sheet is missing, so `sync_pinned_style` does not retry each
+  frame). `ViewSettings::style_colors` / `style_fonts` are global and sit
+  on top of pinned sheets; `apply_style_layer` / `UiCommand::
+  SelectStyleColors` / `SelectStyleFonts` set them.
 
 ## Layout virtualization
 

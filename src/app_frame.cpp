@@ -229,6 +229,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   for (const auto& e : app.styles) ui_state.styles.emplace_back(e.name, e.title);
   ui_state.style = app.style.name;
   ui_state.default_style = app.view_settings.style;
+  ui_state.style_colors = app.style.colors_from;
+  ui_state.style_fonts = app.style.fonts_from;
   ui_state.style_entries = app.styles;
   ui_state.style_pins = app.style_pins;
   ui_state.style_save_generation = app.style_save_generation;
@@ -856,7 +858,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ClearCatalogCredentials ||
         c == C::SaveRedditCredentials || c == C::ClearRedditCredentials ||
         c == C::SetUiScale ||
-        c == C::SelectStyle || c == C::ReloadStyles;
+        c == C::SelectStyle || c == C::SelectStyleColors ||
+        c == C::SelectStyleFonts || c == C::ReloadStyles;
     if (!allowed) {
       flash_status(app, "Browse mode — F2 to edit");
       cmd = C::None;
@@ -2690,6 +2693,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::SelectStyle:
       if (!arg.empty()) apply_style(app, arg);
       break;
+    case C::SelectStyleColors:
+      apply_style_layer(app, xanatoo::kStyleColors, arg);
+      break;
+    case C::SelectStyleFonts:
+      apply_style_layer(app, xanatoo::kStyleFonts, arg);
+      break;
     case C::ReloadStyles:
       reload_styles(app);
       break;
@@ -2723,7 +2732,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         }
         xanatoo::save_style_pins(app.style_pins);
         if (app.view_settings.style == arg) app.view_settings.style = "default";
-        if (app.style.name == arg) apply_style(app, app.view_settings.style);
+        if (app.view_settings.style_colors == arg)
+          app.view_settings.style_colors.clear();
+        if (app.view_settings.style_fonts == arg)
+          app.view_settings.style_fonts.clear();
+        xanatoo::save_view_settings(app.view_settings);
+        sync_pinned_style(app);
         reload_styles(app);
         flash_status(app, "Deleted style " + arg);
       } else flash_status(app, "Style: " + err);
