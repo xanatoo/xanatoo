@@ -6,6 +6,8 @@
 #include "xanatoo/about.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
+#include "xanatoo/opensearch.hpp"
+#include "xanatoo/page_links.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/html_min.hpp"
@@ -5900,6 +5902,160 @@ void test_feed_urls() {
   EXPECT(feed_links("<html><head><title>x</title></head>", "https://ex.org/").empty());
 }
 
+void test_page_links() {
+  using namespace xanatoo;
+  const std::string html =
+      "<!doctype html><html lang=\"en\"><head>"
+      "<base href=\"https://ex.org/docs/\">"
+      "<link rel=\"shortcut icon\" href=\"/favicon.ico\">"
+      "<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"i16.png\">"
+      "<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"i32.png\">"
+      "<link rel=\"icon\" type=\"image/svg+xml\" href=\"i.svg\">"
+      "<link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/touch.png\">"
+      "<link rel=\"canonical\" href=\"https://ex.org/docs/page\">"
+      "<link rel=\"search\" type=\"application/opensearchdescription+xml\" "
+      "title=\"Ex Docs\" href=\"/os.xml\">"
+      "<link rel=\"alternate\" hreflang=\"de\" href=\"https://ex.org/de/\">"
+      "<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://ex.org/\">"
+      "<link rel=\"alternate\" hreflang=\"DE\" href=\"https://ex.org/de2/\">"
+      "<link rel=\"alternate\" type=\"application/rss+xml\" href=\"/f.xml\">"
+      "<link rel=\"next\" title=\"Install\" href=\"install.html\">"
+      "<link rel=\"Previous\" href=\"intro.html\">"
+      "<link rel=\"index\" href=\"genindex.html\">"
+      "<link rel=\"stylesheet\" href=\"s.css\">"
+      "</head><body>"
+      "<a rel=\"next\" href=\"other.html\">Later</a>"
+      "<a rel=\"author\" href=\"/me\">me</a>"
+      "<a rel=\"license\" href=\"https://cc.org/by\"><b>CC</b> BY</a>"
+      "<a rel=\"last\" href=\"#\">x</a>"
+      "</body></html>";
+  PageLinks l = page_links(html, "https://ex.org/docs/page?utm_source=x");
+  EXPECT_EQ(l.lang, "en");
+  EXPECT_EQ(l.icons.size(), size_t{5});
+  EXPECT_EQ(l.canonical, "https://ex.org/docs/page");
+  EXPECT_EQ(l.searches.size(), size_t{1});
+  if (!l.searches.empty()) {
+    EXPECT_EQ(l.searches[0].url, "https://ex.org/os.xml");
+    EXPECT_EQ(l.searches[0].title, "Ex Docs");
+  }
+  EXPECT_EQ(l.languages.size(), size_t{2});
+  if (l.languages.size() == 2) {
+    EXPECT_EQ(l.languages[0].lang, "de");
+    EXPECT_EQ(l.languages[1].lang, "x-default");
+  }
+  // prev / next (head wins over body) / index / license, in menu order;
+  // body author and the "#" last page are not taken.
+  EXPECT_EQ(l.relations.size(), size_t{4});
+  if (l.relations.size() == 4) {
+    EXPECT_EQ(l.relations[0].rel, "prev");
+    EXPECT_EQ(l.relations[0].url, "https://ex.org/docs/intro.html");
+    EXPECT_EQ(l.relations[1].rel, "next");
+    EXPECT_EQ(l.relations[1].url, "https://ex.org/docs/install.html");
+    EXPECT_EQ(l.relations[1].title, "Install");
+    EXPECT_EQ(l.relations[2].rel, "index");
+    EXPECT_EQ(l.relations[3].rel, "license");
+    EXPECT_EQ(l.relations[3].title, "CC BY");
+  }
+  const auto icons = icon_candidates(l);
+  EXPECT_EQ(icons.size(), size_t{5});
+  if (icons.size() == 5) {
+    EXPECT_EQ(icons[0], "https://ex.org/docs/i32.png");
+    EXPECT_EQ(icons[1], "https://ex.org/docs/i16.png");
+    EXPECT_EQ(icons[2], "https://ex.org/docs/i.svg");
+    EXPECT_EQ(icons[3], "https://ex.org/touch.png");
+    EXPECT_EQ(icons[4], "https://ex.org/favicon.ico");
+  }
+  // Body pagination when the head has none.
+  PageLinks b = page_links("<head></head><body><a class=x rel=\"prev nofollow\" "
+                           "href=\"?page=1\">&laquo; Newer</a></body>",
+                           "https://forum.ex/t?page=2");
+  EXPECT_EQ(b.relations.size(), size_t{1});
+  if (!b.relations.empty()) {
+    EXPECT_EQ(b.relations[0].url, "https://forum.ex/t?page=1");
+    EXPECT_EQ(b.relations[0].title, "\xC2\xAB Newer");
+  }
+
+  EXPECT_EQ(safe_canonical("https://www.ex.org/a/?utm=1", "https://ex.org/a"),
+            "https://ex.org/a");
+  EXPECT_EQ(safe_canonical("http://ex.org/a/amp", "https://ex.org/a/"),
+            "https://ex.org/a/");
+  EXPECT_EQ(safe_canonical("https://ex.org/a", "https://ex.org/"), "");
+  EXPECT_EQ(safe_canonical("https://ex.org/a", "https://other.org/a"), "");
+  EXPECT_EQ(safe_canonical("https://ex.org/a?p=2", "https://ex.org/a?p=1"), "");
+  EXPECT_EQ(safe_canonical("https://ex.org/a", "https://ex.org/a"), "");
+
+  EXPECT_EQ(language_name("de"), "Deutsch");
+  EXPECT_EQ(language_name("pt-br"), "Portugu\xC3\xAAs (BR)");
+  EXPECT_EQ(language_name("x-default"), "Default");
+  EXPECT_EQ(language_name("tlh"), "tlh");
+  EXPECT_EQ(language_english_name("el"), "Greek");
+  EXPECT_EQ(language_english_name("zh-TW"), "Chinese (TW)");
+  EXPECT_EQ(accept_language_value({"de", "en-GB", "en"}), "de,en-GB;q=0.9,en;q=0.8");
+  EXPECT_EQ(accept_language_value({}), "");
+  const auto langs = parse_language_list(" de, en-GB;q=0.8 ,fr fr, b@d,");
+  EXPECT_EQ(langs.size(), size_t{3});
+  if (langs.size() == 3) {
+    EXPECT_EQ(langs[0], "de");
+    EXPECT_EQ(langs[1], "en-GB");
+    EXPECT_EQ(langs[2], "fr");
+  }
+}
+
+void test_opensearch() {
+  using namespace xanatoo;
+  const char* xml =
+      "<?xml version=\"1.0\"?>\n"
+      "<OpenSearchDescription xmlns=\"http://a9.com/-/spec/opensearch/1.1/\" "
+      "xmlns:moz=\"http://www.mozilla.org/2006/browser/search/\">"
+      "<ShortName>Ex &amp; Docs</ShortName>"
+      "<Url type=\"application/x-suggestions+json\" template=\"https://ex.org/s?q={searchTerms}\"/>"
+      "<Url type=\"application/rss+xml\" template=\"https://ex.org/rss?q={searchTerms}\"/>"
+      "<Url type=\"text/html\" method=\"get\" "
+      "template=\"https://search.ex.org/find?q={searchTerms}&amp;p={startPage?}&amp;ie={inputEncoding}\">"
+      "<Param name=\"src\" value=\"os\"/></Url>"
+      "</OpenSearchDescription>";
+  auto e = parse_opensearch(xml, "https://www.ex.org/opensearch.xml");
+  EXPECT(e.has_value());
+  if (e) {
+    EXPECT_EQ(e->name, "Ex & Docs");
+    EXPECT_EQ(e->id, "ex-org");
+    EXPECT_EQ(e->badge, "E");
+    EXPECT_EQ(e->kind, "page");
+    EXPECT_EQ(e->url, "https://search.ex.org/find?q=%s&p=&ie=UTF-8&src=os");
+    EXPECT_EQ(e->sites.size(), size_t{2});
+    // Round trip through search.sexp.
+    std::vector<std::string> warnings;
+    auto back = parse_engines(engine_sexp(*e), &warnings);
+    EXPECT(warnings.empty());
+    EXPECT_EQ(back.size(), size_t{1});
+    if (!back.empty()) {
+      EXPECT_EQ(back[0].id, e->id);
+      EXPECT_EQ(back[0].name, e->name);
+      EXPECT_EQ(back[0].url, e->url);
+      EXPECT_EQ(back[0].sites.size(), size_t{2});
+      EXPECT_EQ(engine_for_address("https://ex.org/a", back), "ex-org");
+    }
+  }
+  // Only a feed template: a feed engine. POST only / no terms: refused.
+  auto f = parse_opensearch(
+      "<OpenSearchDescription><ShortName>F</ShortName><Url type=\"application/atom+xml\" "
+      "template=\"https://f.example/a?q={searchTerms}&amp;n={count}\"/></OpenSearchDescription>",
+      "https://f.example/os.xml");
+  EXPECT(f.has_value());
+  if (f) {
+    EXPECT_EQ(f->kind, "feed");
+    EXPECT_EQ(f->url, "https://f.example/a?q=%s&n=20");
+  }
+  std::string err;
+  EXPECT(!parse_opensearch(
+      "<OpenSearchDescription><Url type=\"text/html\" method=\"post\" "
+      "template=\"https://p.example/s\"/></OpenSearchDescription>",
+      "https://p.example/", &err));
+  EXPECT(!err.empty());
+  EXPECT(!parse_opensearch("<html></html>", "https://p.example/"));
+  EXPECT_EQ(engine_id_for_host("search.Mozilla.org"), "mozilla-org");
+}
+
 void test_parse_feeds() {
   using namespace xanatoo;
   auto rss = parse_feed(
@@ -7355,6 +7511,8 @@ int main() {
   test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();
+  test_page_links();
+  test_opensearch();
   test_hn_urls_and_html();
   test_timestamps();
   test_json_utf8_and_top_level();

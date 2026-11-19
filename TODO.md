@@ -2,6 +2,32 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-19) — What a page says about itself (<link rel>)
+
+- `page_links.hpp`: icons, relations, OpenSearch, canonical, hreflang from
+  the page head (body `<a rel=next|prev…>` for pagination); unit tests.
+- Favicons: declared `rel=icon` / touch icons before `/favicon.ico`,
+  remembered per host for tabs and bookmarks (session only).
+- Page panel: "Page links" group (Previous / Next page, Contents, Index,
+  Search, Author, License …, Canonical address).
+- OpenSearch: green plus on the engine tile, "Add …" in the engine menu,
+  saved to search.sexp and selected.
+- Canonical: page bookmarks store / match the page's canonical address when
+  it is the same page (tracking parameters dropped; `safe_canonical`).
+- Languages: flag icon in the URL bar for pages with hreflang versions;
+  the menu (and Preferences) set the preferred languages, sent as
+  Accept-Language. The menu font now covers Latin Extended, Greek and
+  Cyrillic; other scripts show English language names.
+- Checked under Xvfb (isolated state): docs.python.org (py.svg icon, panel
+  links, Next page, added "Python" engine in search.sexp, bookmark of
+  `?utm_source=test` stored without it, star / Remove Bookmark match),
+  mozilla.org (58 languages, switch to /de/), httpbin.org/headers shows
+  `de,en;q=0.9`.
+- Known: site icons are not persisted across sessions; visits / history
+  keep the URL as visited (no canonical); the declared Up relation does not
+  drive the Up button; Python's search page is JavaScript-only, so its
+  engine finds nothing in xanatoo.
+
 ## Status (2026-11-19) — Feed button in the URL bar
 
 - A web page that announces RSS / Atom feeds (`<link rel="alternate"

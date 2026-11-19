@@ -13,6 +13,13 @@
 
 namespace xanatoo {
 
+// Accept-Language sent with every HTTP(S) request ("de,en;q=0.9"; the
+// user's preferred languages, page_links.hpp accept_language_value). Empty
+// = "en-US,en;q=0.9". Thread-safe. The browser build leaves it to the
+// browser (a forbidden header for fetch).
+void set_accept_language(std::string value);
+std::string accept_language();
+
 // Minimal HTTP/1.1 client. http:// uses plain TCP (port 80); https:// uses
 // TlsStream (OpenSSL or Mbed TLS, port 443). The historical `https_*` names
 // accept either scheme so existing service clients share one implementation.

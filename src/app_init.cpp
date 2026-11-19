@@ -59,6 +59,7 @@ static void add_startup_document(App& app, xanatoo::Document doc,
 bool app_init(App& app) {
   // Load the user's chrome scale before deriving any pixel geometry.
   xanatoo::load_view_settings(app.view_settings);
+  apply_preferred_languages(app);
   xanatoo::platform_auto_updates(app.view_settings.auto_updates);
   // Chrome metrics, UI font and the default document size follow the
   // display scale (--ui-scale, else density on Android).

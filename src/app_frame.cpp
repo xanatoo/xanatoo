@@ -100,6 +100,16 @@ static SDL_Texture* address_icon(App& app, const std::string& address) {
     const size_t start = base.find("://") + 3;
     const size_t end = base.find_first_of("/?#", start);
     if (end == start || start >= base.size()) return nullptr;
+    // Icons the site declared (<link rel=icon>, learnt from its pages)
+    // first, best first; /favicon.ico when none of them decodes.
+    if (auto it = app.site_icons.find(xanatoo::url_host(base));
+        it != app.site_icons.end()) {
+      for (const std::string& url : it->second) {
+        const auto& image = app.images.get(url);
+        if (image.ok) return image.texture;
+        if (image.pending) return nullptr;
+      }
+    }
     base = base.substr(0, end) + "/favicon.ico";
   } else {
     // thumtoo can render the first page of a local PDF as a thumbnail.
@@ -213,6 +223,13 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
+  ui_state.offered_engines.clear();
+  if (xanatoo::engine_for_address(path_of(app, focused_pane(app)),
+                                  app.search.engines).empty())
+    for (const xanatoo::OpenSearchLink& o : focused_page_info(app).links.searches)
+      ui_state.offered_engines.push_back(
+          {o.url, o.title.empty() ? xanatoo::url_host(o.url) : o.title});
+  ui_state.adding_engine = app.search.adding != nullptr;
   ui_state.search_engines.clear();
   for (const auto& e : app.search.engines)
     ui_state.search_engines.push_back(
@@ -313,6 +330,36 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       ui_state.archive_url = xanatoo::wayback_lookup_ref(path);
     }
     ui_state.up_url = page_up_url(app);
+    ui_state.page_languages.clear();
+    {
+      const PageInfoCache& info = focused_page_info(app);
+      bool other = false, marked = false;
+      for (const xanatoo::LanguageLink& l : info.links.languages) {
+        // The site's own name for it (title="Deutsch"), else ours.
+        std::string label = l.title.empty() || l.title.size() > 40
+                                ? xanatoo::language_name(l.lang) : l.title;
+        if (label != l.lang) label += "  (" + l.lang + ")";
+        std::string fallback = xanatoo::language_english_name(l.lang);
+        if (fallback != l.lang) fallback += "  (" + l.lang + ")";
+        const bool current = l.url == info.path;
+        marked = marked || current;
+        other = other || !current;
+        ui_state.page_languages.push_back(
+            {l.url, std::move(label), std::move(fallback), current});
+      }
+      // No link names this very URL: the page's own <html lang> is current.
+      if (!marked && !info.links.lang.empty())
+        for (size_t i = 0; i < info.links.languages.size(); ++i)
+          if (xanatoo::ascii_lower(info.links.languages[i].lang) ==
+              xanatoo::ascii_lower(info.links.lang)) {
+            ui_state.page_languages[i].current = true;
+            break;
+          }
+      if (!other) ui_state.page_languages.clear();
+    }
+    ui_state.languages.clear();
+    for (const std::string& t : app.view_settings.languages)
+      ui_state.languages += (ui_state.languages.empty() ? "" : ", ") + t;
     ui_state.page_feeds.clear();
     for (const xanatoo::FeedLink& f : page_feeds(app))
       ui_state.page_feeds.push_back(
@@ -673,9 +720,11 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     // With a selection the star bookmarks the selection.
     ui_state.current_bookmarked =
         focused_pane(app).sel.empty() &&
-        is_bookmarked(app, pane_address(app, focused_pane(app)));
+        (is_bookmarked(app, pane_address(app, focused_pane(app))) ||
+         is_bookmarked(app, focused_canonical(app)));
     ui_state.page_bookmarked =
-        is_bookmarked(app, pane_address(app, focused_pane(app)));
+        is_bookmarked(app, pane_address(app, focused_pane(app))) ||
+        is_bookmarked(app, focused_canonical(app));
     ui_state.page_bookmarks = bookmarks_in_page(app, focused_pane(app));
     ui_state.bookmark_menu = {};
     if (const xanatoo::Bookmark* b = find_bookmark(app, app.bookmark_menu)) {
@@ -853,7 +902,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ToggleSearchBar || c == C::FocusSearchBar || c == C::Search ||
         c == C::AudioToggle || c == C::AudioStop || c == C::AudioSkip ||
         c == C::SelectSearchEngine || c == C::ToggleSearchEngine ||
-        c == C::SearchSite ||
+        c == C::SearchSite || c == C::AddSearchEngine || c == C::SetLanguages ||
         c == C::SitemapPrev || c == C::SitemapNext ||
         c == C::OpenTranscludeOther ||
         c == C::ToggleDiff || c == C::ToggleStructure || c == C::ToggleEdit ||
@@ -1630,6 +1679,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       // URL chrome refers to the page, never the document text selection.
       xanatoo::Bookmark bm = bookmark_for_view(app, p, false);
       bm.address = pane_address(app, p);
+      // The page's own address without tracking parameters (rel=canonical).
+      if (std::string c = focused_canonical(app); !c.empty()) bm.address = c;
       bm.title.clear();
       bm.quote.clear();
       add_bookmark(app, std::move(bm));
@@ -1640,7 +1691,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::RemoveBookmark: {
       std::string url = arg;
-      if (url.empty()) url = pane_address(app, p);
+      if (url.empty()) {
+        url = pane_address(app, p);
+        if (std::string c = focused_canonical(app);
+            !c.empty() && !is_bookmarked(app, url))
+          url = c;
+      }
       remove_bookmark(app, url);
       break;
     }
@@ -2464,6 +2520,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::SearchSite:
       search_site(app, arg);
+      break;
+    case C::AddSearchEngine:
+      add_search_engine_from(app, arg);
+      break;
+    case C::SetLanguages:
+      set_preferred_languages(app, xanatoo::parse_language_list(arg));
       break;
     case C::SitemapPrev:
     case C::SitemapNext:
@@ -5202,6 +5264,7 @@ void run_frame(App& app) {
   poll_shared_state(app);
   update_split_preview(app);
   update_sitemap(app);
+  poll_search_engine_adds(app);
   update_related_sites(app);
   update_page_panel(app);
   sync_window_size(app);

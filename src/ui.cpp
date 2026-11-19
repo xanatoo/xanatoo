@@ -630,7 +630,7 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "back", "forward", "up", "home", "reload", "stop", "bookmark", "bookmark-outline", "history", "downloads", "edit", "native", "reader", "sitemap",
       "linespacing", "measure", "style", "gemini", "gemini-changed",
       "site-file", "site-folder", "site-about", "site-store", "site-web",
-      "site-feed", "site-nostr",
+      "site-feed", "site-nostr", "language",
       "format", "insert", "view", "lists",
   };
 
@@ -847,10 +847,14 @@ static void load_ui_fonts(ImGuiIO& io, float scale) {
   cfg.OversampleV = 1;
   cfg.PixelSnapH = true;  // crisper menus on integer positions
   if (!path.empty()) {
-    // Latin-1 plus the punctuation, arrows and shapes menu labels use
-    // ("…", "—", "→", "▸"); the default range alone draws them as "?".
-    static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x2010, 0x205E,
-                                      0x2190, 0x21FF, 0x25A0, 0x25FF, 0};
+    // Latin (with Extended-A/B: "Čeština"), Greek and Cyrillic for page
+    // titles and language names, plus the punctuation, arrows and shapes
+    // menu labels use ("…", "—", "→", "▸"); the default range alone draws
+    // them as "?". Other scripts fall back (ui_can_draw).
+    static const ImWchar kRanges[] = {0x0020, 0x024F, 0x0370, 0x03FF,
+                                      0x0400, 0x052F, 0x1E00, 0x1EFF,
+                                      0x2010, 0x205E, 0x2190, 0x21FF,
+                                      0x25A0, 0x25FF, 0};
     ImFont* font =
         io.Fonts->AddFontFromFileTTF(path.c_str(), size_px, &cfg, kRanges);
     if (font) {
@@ -1282,6 +1286,47 @@ static void view_tools_items(const UiState& state, UiCommand& cmd,
 }
 
 // Browse (navigation) row, edit row (not while browsing) and tab strip.
+// Whether the menu font has a glyph for every character of `s` (UTF-8).
+static bool ui_can_draw(const std::string& s) {
+  ImFont* font = ImGui::GetFont();
+  const char* p = s.c_str();
+  const char* end = p + s.size();
+  while (p < end) {
+    unsigned int c = 0;
+    const int n = ImTextCharFromUtf8(&c, p, end);
+    if (n <= 0) return false;
+    p += n;
+    if (c >= 0x20 && !font->FindGlyphNoFallback(static_cast<ImWchar>(c)))
+      return false;
+  }
+  return true;
+}
+
+// Preferred languages as a comma list; Enter or Set issues SetLanguages.
+// Follows the saved list while not being edited.
+void Ui::languages_field(const UiState& state, UiCommand& cmd, std::string& arg,
+                         const char* id) {
+  if (!languages_editing_ && languages_synced_ != state.languages) {
+    std::snprintf(languages_input_, sizeof(languages_input_), "%s",
+                  state.languages.c_str());
+    languages_synced_ = state.languages;
+  }
+  ImGui::PushID(id);
+  ImGui::SetNextItemWidth(220.f * scale_);
+  const bool enter = ImGui::InputTextWithHint(
+      "##languages", "de, en  (empty: en-US, en)", languages_input_,
+      sizeof(languages_input_), ImGuiInputTextFlags_EnterReturnsTrue);
+  languages_editing_ = ImGui::IsItemActive();
+  ImGui::SameLine();
+  if (classic_button("Set") || enter) {
+    cmd = UiCommand::SetLanguages;
+    arg = languages_input_;
+    languages_editing_ = false;
+    languages_synced_.clear();  // take the normalised list back
+  }
+  ImGui::PopID();
+}
+
 void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   // These controls are actions as well as toggles. Keep the current mode
   // sunken, rather than giving it a bright (hover-like) selection wash.
@@ -1318,6 +1363,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   const float field_row_y = 4.f + tool_button_h + 2.f * scale_;
   const int url_extras = (state.alternate_url.empty() ? 0 : 1) +
                          (state.page_feeds.empty() ? 0 : 1) +
+                         (state.page_languages.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
                          (state.site_search.empty() ? 0 : 1);
@@ -1737,6 +1783,41 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
               /*on=*/false);
         if (cmd == UiCommand::SearchSite) result.arg = state.site_search;
       }
+      if (!state.page_languages.empty()) {
+        std::string tip = "This page in other languages:";
+        for (const auto& l : state.page_languages)
+          if (!l.current)
+            tip += "\n  " + (ui_can_draw(l.label) ? l.label : l.fallback_label);
+        UiCommand before = cmd;
+        extra("url_language", "language", "L", tip.c_str(), UiCommand::SetLanguages,
+              /*on=*/false);
+        if (cmd == UiCommand::SetLanguages) {
+          cmd = before;
+          ImGui::OpenPopup("##url_languages");
+        }
+        if (ImGui::BeginPopup("##url_languages")) {
+          // The preference first: the list below can be long.
+          ImGui::TextDisabled("Preferred languages (sent to web sites)");
+          languages_field(state, cmd, result.arg, "url_languages_field");
+          ImGui::Separator();
+          ImGui::TextDisabled("This page in");
+          for (size_t i = 0; i < state.page_languages.size(); ++i) {
+            const auto& l = state.page_languages[i];
+            ImGui::PushID(static_cast<int>(i));
+            const std::string& label =
+                ui_can_draw(l.label) ? l.label : l.fallback_label;
+            if (ImGui::MenuItem(label.c_str(), nullptr, l.current, !l.current)) {
+              cmd = UiCommand::NavigateUrl;
+              result.arg = l.url;
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+              ImGui::SetTooltip("%s", l.url.c_str());
+            ImGui::PopID();
+          }
+          if (cmd == UiCommand::SetLanguages) ImGui::CloseCurrentPopup();
+          ImGui::EndPopup();
+        }
+      }
       if (!state.page_feeds.empty()) {
         // One feed opens at once; several are offered in a small menu.
         const bool one = state.page_feeds.size() == 1;
@@ -1826,6 +1907,19 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                                       : ImGuiCol_ButtonHovered),
                               ImGui::GetStyle().FrameRounding);
         draw_engine_tile(draw, ImVec2(x0, y0), side, cur);
+        if (!state.offered_engines.empty()) {
+          // The page offers a search engine: a small green plus, as
+          // browsers marked their search box.
+          const float r = 5.f * scale_;
+          const ImVec2 c(x0 + side - r * 0.4f, y0 + side - r * 0.4f);
+          draw->AddCircleFilled(c, r, IM_COL32(60, 150, 60, 255));
+          draw->AddCircle(c, r, IM_COL32(255, 255, 255, 255), 0, 1.f * scale_);
+          const float a = r * 0.55f, t = std::max(1.f, 1.4f * scale_);
+          draw->AddLine(ImVec2(c.x - a, c.y), ImVec2(c.x + a, c.y),
+                        IM_COL32(255, 255, 255, 255), t);
+          draw->AddLine(ImVec2(c.x, c.y - a), ImVec2(c.x, c.y + a),
+                        IM_COL32(255, 255, 255, 255), t);
+        }
         if (hot)
           ImGui::SetTooltip("Search engine: %s · click to change",
                             cur ? cur->name.c_str() : "none");
@@ -1856,6 +1950,22 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       ImGui::SetNextWindowPos(ImVec2(field_end.x, field_end.y + 2.f * scale_),
                               ImGuiCond_Always, ImVec2(1.f, 0.f));
       if (ImGui::BeginPopup("##search_engines")) {
+        // Engines the page offers first, above the long list.
+        if (!state.offered_engines.empty()) {
+          for (size_t i = 0; i < state.offered_engines.size(); ++i) {
+            const UiOfferedEngine& o = state.offered_engines[i];
+            ImGui::PushID(static_cast<int>(i));
+            const std::string label = "Add \u201c" + o.title + "\u201d";
+            if (ImGui::MenuItem(label.c_str(), nullptr, false, !state.adding_engine)) {
+              cmd = UiCommand::AddSearchEngine;
+              result.arg = o.url;
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+              ImGui::SetTooltip("The page offers this search engine\n%s", o.url.c_str());
+            ImGui::PopID();
+          }
+          ImGui::Separator();
+        }
         // First, so a long list does not hide it below the fold.
         if (ImGui::BeginMenu("Choose engines")) {
           search_engine_checkboxes(state, cmd, result.arg);
@@ -3582,6 +3692,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       ImGui::TextDisabled("  Engines that need an API key or refuse anonymous "
                           "use start off");
+      ImGui::SeparatorText("Languages");
+      languages_field(state, cmd, result.arg, "prefs_languages");
+      ImGui::TextDisabled("Preferred languages for web pages, best first "
+                          "(Accept-Language). Reload a page to apply.");
       ImGui::SeparatorText("Accounts and APIs");
       ImGui::TextWrapped("API keys are managed in a separate dialog, not in "
                          "view.conf or a document.");

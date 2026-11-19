@@ -269,6 +269,8 @@ add_executable(xanatoo
   src/time.cpp
   src/ebooks.cpp
   src/feed.cpp
+  src/page_links.cpp
+  src/opensearch.cpp
   src/sitemap.cpp
   src/related_sites.cpp
   src/search.cpp
@@ -791,6 +793,8 @@ add_executable(xanatoo_tests
   src/time.cpp
   src/ebooks.cpp
   src/feed.cpp
+  src/page_links.cpp
+  src/opensearch.cpp
   src/sitemap.cpp
   src/related_sites.cpp
   src/search.cpp

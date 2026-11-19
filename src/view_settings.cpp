@@ -127,8 +127,9 @@ bool load_view_settings(ViewSettings& out) {
         out.style_fonts = val;
       else if (key == "search_engine" && !val.empty())
         out.search_engine = val;
-      else if (key == "search_on" || key == "search_off") {
-        auto& list = key == "search_on" ? out.search_on : out.search_off;
+      else if (key == "search_on" || key == "search_off" || key == "languages") {
+        auto& list = key == "search_on" ? out.search_on
+                     : key == "search_off" ? out.search_off : out.languages;
         list.clear();
         std::string_view rest = val;
         while (!rest.empty()) {
@@ -183,6 +184,7 @@ bool save_view_settings(const ViewSettings& in) {
   };
   out << "search_on=" << ids(v.search_on) << "\n";
   out << "search_off=" << ids(v.search_off) << "\n";
+  out << "languages=" << ids(v.languages) << "\n";
   out << "ui_scale=" << v.ui_scale << "\n";
   return write_file_atomic(path, out.str());
 }

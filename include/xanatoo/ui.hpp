@@ -227,6 +227,8 @@ enum class UiCommand {
   Search,             // search bar committed (arg = what was typed)
   SelectSearchEngine, // arg = engine id (search.hpp)
   ToggleSearchEngine, // arg = engine id: switch it on / off in the menu
+  AddSearchEngine,    // arg = OpenSearch description URL the page offers
+  SetLanguages,       // arg = preferred languages, "de, en" (Accept-Language)
   SearchSite,         // location bar: open search bar on the site engine (not a toggle)
   TogglePage,     // navigation / side bars of the focused page, as a panel
   SitemapPrev,    // previous / next page in the site map's order
@@ -314,6 +316,12 @@ struct UiSearchEngine {
   uint32_t color = 0;  // tile background, 0xRRGGBB (engine_color)
   bool on = true;      // in the menu (engine_on)
   std::string note;    // why it is off by default (SearchEngine::note)
+};
+
+// A search engine the focused page offers (OpenSearch) and that is not in
+// the list yet.
+struct UiOfferedEngine {
+  std::string url, title;
 };
 
 struct UiState {
@@ -462,6 +470,8 @@ struct UiState {
   std::vector<UiSearchEngine> search_engines;
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service
+  std::vector<UiOfferedEngine> offered_engines;
+  bool adding_engine = false;  // a description is being read
   bool has_nav = false;  // focused page has navigation for the panel
   bool has_site = false; // focused site is known to have a sitemap (or panel open)
   bool diff = false;
@@ -524,6 +534,15 @@ struct UiState {
     std::string url, label;
   };
   std::vector<PageFeed> page_feeds;
+  // Versions of the focused page in other languages (hreflang), and the
+  // preferred languages as typed ("de, en").
+  struct PageLanguage {
+    std::string url, label;
+    std::string fallback_label;  // English name, when the font lacks the script
+    bool current = false;
+  };
+  std::vector<PageLanguage> page_languages;
+  std::string languages;
   bool native_view = false;  // focused page is a native ref (alternate = web)
   std::string source_mode;  // empty = rendered, otherwise source-raw/sexpr/xml
   bool gallery = false;      // the focused view shows `//gallery`
@@ -810,6 +829,12 @@ private:
   bool url_context_was_open_ = false;
   bool url_context_acted_ = false;
   char search_input_[512] = {};  // search bar text (kept between searches)
+  // Preferred languages field (URL-bar language menu, Preferences).
+  char languages_input_[256] = {};
+  std::string languages_synced_;
+  bool languages_editing_ = false;
+  void languages_field(const UiState& state, UiCommand& cmd, std::string& arg,
+                       const char* id);
   char subscription_input_[1024] = {};
   std::string subscription_remove_confirm_;
   char nostr_local_search_[512] = {};

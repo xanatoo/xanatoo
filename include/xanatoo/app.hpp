@@ -22,6 +22,7 @@
 #include "xanatoo/download.hpp"
 #include "xanatoo/editor.hpp"
 #include "xanatoo/feed.hpp"
+#include "xanatoo/page_links.hpp"
 #include "xanatoo/font.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
@@ -749,11 +750,20 @@ struct MediaMenu {
 
 // Search bar (app_search.cpp). The engine in use is
 // ViewSettings::search_engine (saved in view.conf).
+// A site's OpenSearch description being read (search menu "Add …").
+struct OpenSearchLoad {
+  std::atomic<bool> done{false};
+  std::optional<xanatoo::SearchEngine> engine;
+  std::string error;
+};
+
 struct SearchBar {
   bool open = true;  // shown by default: hidden it is hard to find
   std::vector<xanatoo::SearchEngine> engines;  // all, for search: addresses
   // Those switched on (engines_on): the menu, keywords, site search.
   std::vector<xanatoo::SearchEngine> active;
+  std::shared_ptr<OpenSearchLoad> adding;  // one at a time
+  std::string adding_url;
 };
 
 // Background "has a sitemap?" check of one host (URL-bar button).
@@ -784,14 +794,18 @@ struct SitemapPanel {
   uint64_t seen_gen = 1;
 };
 
-// Feeds the focused web page announces (<link rel="alternate">), for the
-// URL-bar feed button; read from the buffer's raw source once per page.
-struct PageFeedsCache {
+// What the focused web page says about itself (<link rel=…>): feeds for the
+// URL-bar feed button, icons, relations for the page panel, OpenSearch,
+// canonical, language versions. Read from the buffer's raw source once per
+// page (app_sitemap.cpp `focused_page_info`); `gen` counts rebuilds.
+struct PageInfoCache {
   BufferId buf = kNoBuffer;
   std::string path;
   size_t raw_size = 0;
   bool raw = false;
-  std::vector<xanatoo::FeedLink> links;
+  uint64_t gen = 0;
+  std::vector<xanatoo::FeedLink> feeds;
+  xanatoo::PageLinks links;
 };
 
 // Page panel (app_page.cpp): navigation / side bar chrome of the focused page.
@@ -1304,7 +1318,10 @@ struct App {
   RelatedPanel related;
   ReplyDraft reply;
   SitemapPanel sitemap;
-  PageFeedsCache page_feeds;
+  PageInfoCache page_info;
+  // Declared icon (<link rel=icon>) per web host, learnt from pages shown
+  // this session: tabs and bookmarks of that site use it too.
+  std::unordered_map<std::string, std::vector<std::string>> site_icons;
   SearchBar search;
   AudioPlayer audio;
   bool media_panel_open = false;
@@ -2271,6 +2288,13 @@ void toggle_search_engine(App& app, const std::string& id);
 // Location bar search button: open the search bar on the site engine.
 // Not a toggle — never hides the bar.
 void search_site(App& app, const std::string& id);
+// Search menu "Add …": reads the OpenSearch description at `url` in the
+// background, then saves the engine to search.sexp and selects it.
+void add_search_engine_from(App& app, const std::string& url);
+void poll_search_engine_adds(App& app);
+// Preferred languages (ViewSettings::languages) → Accept-Language.
+void apply_preferred_languages(const App& app);
+void set_preferred_languages(App& app, std::vector<std::string> tags);
 void run_search(App& app, const std::string& text);  // → search: address
 // Ctrl+L text "w xanadu" → search address ("" when it is no keyword search).
 std::string search_from_location(const App& app, const std::string& text);
@@ -2304,8 +2328,14 @@ void open_sitemap_page(App& app);
 // URL-bar Site map button: the focused page's site is known to have a
 // sitemap (probed in the background, cached per host), or the panel is open.
 bool sitemap_button_shown(App& app);
-// Feeds of the focused web page (cached; empty for local pages, native
-// views, feeds themselves, and builds without XANATOO_FEEDS).
+// <link rel=…> facts of the focused web page (cached; empty for local
+// pages, native views and feeds themselves).
+const PageInfoCache& focused_page_info(App& app);
+// rel=canonical of the focused page when it names that very page (only
+// tracking parameters, www. / http differ: safe_canonical) and the view
+// shows the whole page; else "". Bookmarks store and match it.
+std::string focused_canonical(App& app);
+// Feeds of the focused web page (empty without XANATOO_FEEDS).
 const std::vector<xanatoo::FeedLink>& page_feeds(App& app);
 // Opens a feed from page_feeds (as `feed:` when its URL does not say so).
 void open_page_feed(App& app, const std::string& url);

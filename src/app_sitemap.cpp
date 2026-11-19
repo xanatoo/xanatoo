@@ -301,28 +301,47 @@ bool sitemap_button_shown(App& app) {
          it->second.rec.result == xanatoo::SitemapProbe::Yes;
 }
 
-const std::vector<xanatoo::FeedLink>& page_feeds(App& app) {
-  PageFeedsCache& c = app.page_feeds;
+const PageInfoCache& focused_page_info(App& app) {
+  PageInfoCache& c = app.page_info;
   const DocBuffer* b = find_buf(app, focused_pane(app).buf);
   const std::string& path = b ? b->path : std::string{};
-  const bool raw = b && b->raw_source;
+  const bool raw = b && b->raw_source && !b->placeholder;
   const size_t raw_size = raw ? b->raw_source->size() : 0;
   if (b && c.buf == b->id && c.path == path && c.raw == raw &&
       c.raw_size == raw_size)
-    return c.links;
+    return c;
   c.buf = b ? b->id : kNoBuffer;
   c.path = path;
   c.raw = raw;
   c.raw_size = raw_size;
-  c.links.clear();
-#if defined(XANATOO_FEEDS) && XANATOO_FEEDS
+  c.feeds.clear();
+  c.links = {};
+  ++c.gen;
   const bool web = xanatoo::starts_with_ci(path, "https://") ||
                    xanatoo::starts_with_ci(path, "http://");
-  if (raw && web && !b->placeholder && !xanatoo::is_feed_url(path) &&
-      !xanatoo::looks_like_feed(*b->raw_source))
-    c.links = xanatoo::feed_links(*b->raw_source, path);
+  if (!raw || !web || xanatoo::looks_like_feed(*b->raw_source)) return c;
+#if defined(XANATOO_FEEDS) && XANATOO_FEEDS
+  if (!xanatoo::is_feed_url(path))
+    c.feeds = xanatoo::feed_links(*b->raw_source, path);
 #endif
-  return c.links;
+  c.links = xanatoo::page_links(*b->raw_source, path);
+  if (!c.links.icons.empty()) {
+    const std::string host = xanatoo::url_host(path);
+    if (!host.empty()) app.site_icons[host] = xanatoo::icon_candidates(c.links);
+  }
+  return c;
+}
+
+std::string focused_canonical(App& app) {
+  const PageInfoCache& info = focused_page_info(app);
+  if (info.links.canonical.empty() ||
+      pane_address(app, focused_pane(app)) != info.path)
+    return {};
+  return xanatoo::safe_canonical(info.path, info.links.canonical);
+}
+
+const std::vector<xanatoo::FeedLink>& page_feeds(App& app) {
+  return focused_page_info(app).feeds;
 }
 
 void open_page_feed(App& app, const std::string& url) {

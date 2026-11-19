@@ -91,14 +91,30 @@ void rebuild(App& app) {
   PagePanel& pg = app.page;
   Pane& p = focused_pane(app);
   const xanatoo::Document& doc = doc_of(app, p);
-  const uint64_t key = (static_cast<uint64_t>(p.buf) << 32) ^
-                       (static_cast<uint64_t>(doc.next_id) * 2654435761u) ^
-                       doc.nodes.size();
+  const PageInfoCache& info = focused_page_info(app);
+  const uint64_t key = ((static_cast<uint64_t>(p.buf) << 32) ^
+                        (static_cast<uint64_t>(doc.next_id) * 2654435761u) ^
+                        doc.nodes.size()) +
+                       info.gen * 0x9E3779B97F4A7C15ull;
   if (key == pg.key && !pg.rows.empty()) return;
   if (key == pg.key && pg.built) return;
   pg.key = key;
   pg.built = true;
   pg.rows.clear();
+  // What the page declares about its neighbours (<link rel=next> …): the
+  // old browsers' site navigation bar, until it finds a better home.
+  const xanatoo::PageLinks& links = info.links;
+  const bool canonical = !links.canonical.empty() && links.canonical != info.path;
+  if (!links.relations.empty() || canonical) {
+    pg.rows.push_back({PageRow::Label, 0, "Page links", {}});
+    for (const xanatoo::PageRelation& r : links.relations) {
+      std::string text(xanatoo::page_relation_label(r.rel));
+      if (!r.title.empty()) text += ": " + r.title;
+      pg.rows.push_back({PageRow::Link, 0, std::move(text), r.url});
+    }
+    if (canonical)
+      pg.rows.push_back({PageRow::Link, 0, "Canonical address", links.canonical});
+  }
   for (xanatoo::NodeId region : panel_regions(doc)) {
     const xanatoo::Node& n = doc.get(region);
     pg.rows.push_back({PageRow::Label, 0, capitalised(n.summary), {}});
@@ -163,7 +179,8 @@ size_t page_nav_regions(const xanatoo::Document& doc) {
 }
 
 bool page_has_navigation(App& app) {
-  return focused_pane(app).nav_parts > 0;
+  return focused_pane(app).nav_parts > 0 ||
+         !focused_page_info(app).links.relations.empty();
 }
 
 void toggle_page_panel(App& app) {

@@ -360,7 +360,8 @@ std::optional<HttpResult> request_impl(std::string_view method,
       << "Host: " << parsed->authority << "\r\n"
       << "User-Agent: " << user_agent << "\r\n";
   if (!custom_accept) req << "Accept: application/json, text/plain, */*\r\n";
-  req << "Accept-Language: en-US,en;q=0.9\r\n";
+  if (ascii_lower(extra_headers).find("accept-language:") == std::string::npos)
+    req << "Accept-Language: " << accept_language() << "\r\n";
   if (!pooled) req << "Connection: close\r\n";
   if (!extra_headers.empty()) req << extra_headers;
   if (!body_in.empty())
@@ -519,7 +520,8 @@ bool stream_raw(const std::string& url, std::string_view agent,
   if (!conn.open(*parsed, err)) return false;
   const std::string req = "GET " + parsed->target + " HTTP/1.1\r\nHost: " + parsed->authority +
       "\r\nUser-Agent: " + std::string(agent) +
-      "\r\nAccept: */*\r\nAccept-Encoding: identity\r\n"
+      "\r\nAccept: */*\r\nAccept-Language: " + accept_language() +
+      "\r\nAccept-Encoding: identity\r\n"
       "Connection: close\r\n\r\n";
   if (!conn.write_all(req.data(), req.size())) {
     if (err) *err = "HTTP write failed";
@@ -717,5 +719,24 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
   if (err) *err = "too many HTTP redirects";
   return false;
 }
+
+namespace {
+std::mutex g_accept_language_mutex;
+std::string g_accept_language;
+}  // namespace
+
+void set_accept_language(std::string value) {
+  // Header injection guard: the value is the user's text.
+  std::erase_if(value, [](char c) { return c == '\r' || c == '\n'; });
+  std::lock_guard<std::mutex> lock(g_accept_language_mutex);
+  g_accept_language = std::move(value);
+}
+
+std::string accept_language() {
+  std::lock_guard<std::mutex> lock(g_accept_language_mutex);
+  return g_accept_language.empty() ? std::string("en-US,en;q=0.9")
+                                   : g_accept_language;
+}
+
 
 }  // namespace xanatoo

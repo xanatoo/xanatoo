@@ -9,8 +9,16 @@
 
 #include "xanatoo/app.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <thread>
+
+#include "xanatoo/opensearch.hpp"
+#include "xanatoo/page_links.hpp"
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+#include "xanatoo/https.hpp"
+#endif
 
 namespace xanatoo::app {
 
@@ -102,6 +110,95 @@ void run_search(App& app, const std::string& text) {
   }
   app.ui.release_input_capture();
   navigate_to_url(app, ref);
+}
+
+void apply_preferred_languages(const App& app) {
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+  xanatoo::set_accept_language(
+      xanatoo::accept_language_value(app.view_settings.languages));
+#else
+  (void)app;
+#endif
+}
+
+void set_preferred_languages(App& app, std::vector<std::string> tags) {
+  app.view_settings.languages = std::move(tags);
+  xanatoo::save_view_settings(app.view_settings);
+  apply_preferred_languages(app);
+  std::string shown;
+  for (const std::string& t : app.view_settings.languages)
+    shown += (shown.empty() ? "" : ", ") + t;
+  flash_status(app, shown.empty()
+                        ? "Languages: default (en-US, en)"
+                        : "Languages: " + shown + " (reload a page to apply)");
+}
+
+void add_search_engine_from(App& app, const std::string& url) {
+  if (url.empty()) return;
+  if (app.search.adding) {
+    flash_status(app, "Still reading a search engine description");
+    return;
+  }
+#if defined(XANATOO_WEB) && XANATOO_WEB
+  app.search.adding = std::make_shared<OpenSearchLoad>();
+  app.search.adding_url = url;
+  flash_status(app, "Reading the site's search engine …");
+  std::thread(
+      [url](std::shared_ptr<OpenSearchLoad> out) {
+        out->engine = xanatoo::fetch_opensearch(url, &out->error);
+        out->done.store(true, std::memory_order_release);
+      },
+      app.search.adding)
+      .detach();
+#else
+  flash_status(app, "Adding search engines needs a build with web support");
+#endif
+}
+
+void poll_search_engine_adds(App& app) {
+  auto load = app.search.adding;
+  if (!load || !load->done.load(std::memory_order_acquire)) return;
+  app.search.adding.reset();
+  if (!load->engine) {
+    flash_status(app, "Cannot add the search engine: " + load->error);
+    return;
+  }
+  xanatoo::SearchEngine e = std::move(*load->engine);
+  // A built-in or earlier engine of that id stays unless it searches this
+  // very site (then the new description replaces it).
+  for (const xanatoo::SearchEngine& old : app.search.engines) {
+    if (old.id != e.id || old.url == e.url) continue;
+    const bool same_site = std::find(old.sites.begin(), old.sites.end(),
+                                     e.sites.empty() ? "" : e.sites[0]) !=
+                           old.sites.end();
+    if (!same_site) {
+      for (int n = 2; n < 100; ++n) {
+        const std::string id = e.id + "-" + std::to_string(n);
+        if (std::none_of(app.search.engines.begin(), app.search.engines.end(),
+                         [&](const xanatoo::SearchEngine& x) { return x.id == id; })) {
+          e.id = id;
+          break;
+        }
+      }
+    }
+  }
+  std::string err;
+  const bool saved = xanatoo::save_user_engine(e, &err);
+  if (saved) {
+    app.search.engines = xanatoo::load_engines();
+  } else {
+    // No place to keep it (or --no-save): this session only.
+    std::erase_if(app.search.engines,
+                  [&](const xanatoo::SearchEngine& x) { return x.id == e.id; });
+    app.search.engines.push_back(e);
+  }
+  // Switched on even if the user had an engine of this id switched off.
+  std::erase(app.view_settings.search_off, e.id);
+  update_active(app);
+  app.view_settings.search_engine = e.id;
+  xanatoo::save_view_settings(app.view_settings);
+  flash_status(app, "Added search engine " + e.name +
+                        (saved ? "" : " for this session (" + err + ")"));
 }
 
 std::string search_from_location(const App& app, const std::string& text) {

@@ -51,6 +51,18 @@ Search is an address, not a widget in the document and not a panel.
   `search_off=` id lists), so later default changes still reach users.
   `search.sexp` engines take `(enabled no)`. An engine that is off still
   resolves its `search:` addresses (bookmarks, history, links).
+- **Site engines (OpenSearch):** a page with `<link rel="search"
+  type="application/opensearchdescription+xml">` puts a green plus on the
+  engine tile and "Add “…”" at the top of the engine menu (only when no
+  engine covers the page's site yet). `add_search_engine_from` reads the
+  description on a worker thread (`fetch_opensearch`, opensearch.cpp);
+  `parse_opensearch` takes the GET `text/html` template (else an RSS /
+  Atom one, kind feed), `{searchTerms}` → `%s`, optional `{x?}` dropped,
+  `<Param>` children appended; id from the host (`engine_id_for_host`),
+  `site` = the host so the location bar's search button appears there.
+  `save_user_engine` appends the `(engine …)` form to `search.sexp`
+  (last entry of an id wins); the engine is switched on and selected.
+  With `--no-save` it lives for the session only.
 - **No forms in documents.** A document can *link* to a search
   (`[x](search:arxiv:electron+spin)`); it cannot contain an input. That keeps
   the document format free of application state.
@@ -96,8 +108,7 @@ Instagram / TikTok have nothing public.
 
 Mastodon `/api/v2/search` for accounts / hashtags, Reddit `search.json`
 (the feed is enough), per-engine icons, a toolbar toggle button, suggestions
-while typing, "search this site" for hosts no engine covers (a site's own
-OpenSearch description), paging
+while typing, "search this site" for hosts that offer no OpenSearch description, paging
 ("more results" links: Wikipedia `sroffset`, Algolia `page`, Lemmy `page`).
 
 ## Published-media catalogs

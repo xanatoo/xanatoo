@@ -65,6 +65,9 @@ struct ViewSettings {
   // Engines the user switched on / off against their default
   // (SearchEngine::enabled); view.conf keeps comma-separated ids.
   std::vector<std::string> search_on, search_off;
+  // Preferred languages, best first ("de", "en-GB"): the Accept-Language
+  // header of web requests. Empty = en-US, en. view.conf: comma-separated.
+  std::vector<std::string> languages;
   // Multiplier on the platform's normal chrome scale; 1 = platform default.
   float ui_scale = 1.f;
 

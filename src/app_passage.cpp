@@ -749,6 +749,9 @@ std::string cut_address(const std::string& address) {
 xanatoo::Bookmark bookmark_for_view(App& app, Pane& p, bool position) {
   xanatoo::Bookmark b;
   b.address = pane_address(app, p);
+  // The page's own address without tracking parameters (rel=canonical).
+  if (&p == &focused_pane(app))
+    if (std::string c = focused_canonical(app); !c.empty()) b.address = c;
   b.created = today();
   if (b.address.empty()) return b;
   if (p.sel.empty() && !position) return b;

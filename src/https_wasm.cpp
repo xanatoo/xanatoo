@@ -196,4 +196,8 @@ bool https_get_follow_stream(std::string_view url, std::string_view agent,
   return true;
 }
 
+// The browser sends its own Accept-Language (fetch may not set it).
+void set_accept_language(std::string) {}
+std::string accept_language() { return {}; }
+
 }  // namespace xanatoo

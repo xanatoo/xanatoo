@@ -263,6 +263,42 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   a finished full read updates the record too. Menu / Ctrl+Alt+M still
   open the panel on any site.
 
+## Page links (`page_links.hpp`)
+
+- `page_links(html, url)`: what a web page declares in `<head>` (`<base
+  href>` respected): icons (`rel=icon`, `apple-touch-icon`), relations
+  (up / first / prev / next / last / contents·toc / index / glossary /
+  help / search / author / license·copyright, normalised, first wins,
+  `page_relation_order`), OpenSearch descriptions, `canonical`,
+  `hreflang` alternates and `<html lang>`. From the body only
+  `<a rel=next|prev|first|last|up|license>` (pagination), not when the
+  head already has that relation. Pure, unit-tested.
+- `focused_page_info(App&)` (app_sitemap.cpp) reads it once per buffer /
+  path / raw-source size into `App::page_info` (`gen` bumps on change),
+  together with the feeds (`feed_links`); only http(s) pages with a raw
+  source that is not itself a feed.
+- Icons: `icon_candidates` ranks PNG / raster near 32 px, SVG, touch
+  icons, ICO last; stored per host in `App::site_icons`, which
+  `address_icon` (app_frame.cpp) tries before `/favicon.ico` (a candidate
+  still loading waits, a failed one is skipped). Session only.
+- Relations: a "Page links" group at the top of the Page panel
+  (app_page.cpp), plus "Canonical address" when it differs from the URL;
+  the panel button shows for pages that only have relations, too.
+- Canonical: `safe_canonical` accepts it only for the very same page
+  (host modulo www. / m. / amp., same path modulo trailing slash and
+  `/amp`, may drop the query, never adds one). `focused_canonical` is
+  used by `bookmark_for_view` / `BookmarkPage` (stored address) and for
+  "is this page bookmarked" / Remove Bookmark. Visits keep the real URL.
+- Languages: `hreflang` links give the URL-bar flag menu
+  (`UiState::page_languages`, label = the link's `title`, else
+  `language_name`; `language_english_name` when the menu font lacks the
+  script, `ui_can_draw`). The same menu and Preferences edit
+  `ViewSettings::languages` (view.conf `languages=de,en`), which
+  `apply_preferred_languages` turns into the Accept-Language header
+  (`set_accept_language`, https.cpp; default `en-US,en;q=0.9`; the wasm
+  build leaves it to the browser).
+- OpenSearch: see docs/SEARCH.md.
+
 ## Pandoc import (`epub_import.hpp`)
 
 - `kPandocFormats` maps extensions to pandoc readers (epub, docx, odt, rst,
