@@ -7501,6 +7501,29 @@ public:
   xanatoo::MathConstants k;
 };
 
+// Double-click word selection: the caret from the hit test sits between
+// characters; at a word's start it must pick that word, not the one before.
+void test_select_word_at() {
+  using namespace xanatoo;
+  Document d = parse_markup("alpha beta, *gamma*delta\n");
+  const NodeId pn = d.get(d.root).children[0];
+  auto word = [&](size_t span, size_t ch) {
+    Selection sel;
+    sel.focus = {pn, span, ch};
+    select_word_at(d, sel);
+    return selected_text(d, sel);
+  };
+  EXPECT_EQ(word(0, 6), std::string("beta"));   // start of "beta"
+  EXPECT_EQ(word(0, 8), std::string("beta"));   // inside
+  EXPECT_EQ(word(0, 10), std::string("beta"));  // end of "beta"
+  EXPECT_EQ(word(0, 0), std::string("alpha"));  // start of the block
+  EXPECT_EQ(word(0, 5), std::string("alpha"));  // end of "alpha"
+  EXPECT_EQ(word(0, 11), std::string(" "));     // between ',' and ' '
+  // Across a span boundary: "gamma" (emphasis) runs into "delta".
+  EXPECT_EQ(word(1, 0), std::string("gammadelta"));
+  EXPECT_EQ(word(2, 0), std::string("gammadelta"));
+}
+
 void test_math() {
   using namespace xanatoo;
   auto width = [](const char* tex, bool display = false) {
@@ -8045,6 +8068,7 @@ int main() {
   test_text_selectors();
   test_bookmark_lines();
   test_math();
+  test_select_word_at();
   test_forums(g_passed, g_failed);
   test_nntp(g_passed, g_failed);
   test_ui_help(g_passed, g_failed);

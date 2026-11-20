@@ -2209,13 +2209,84 @@ void select_all(Document& doc, Selection& sel) {
   }
 }
 
+// The character right after / before a caret inside its node, stepping
+// over span boundaries; false at the node's end / start.
+static bool char_after(const Node& n, Caret c, uint32_t& cp) {
+  while (c.span_index + 1 < n.spans.size() &&
+         c.char_index >= utf8_char_count(n.spans[c.span_index].text)) {
+    ++c.span_index;
+    c.char_index = 0;
+  }
+  if (c.span_index >= n.spans.size() ||
+      c.char_index >= utf8_char_count(n.spans[c.span_index].text))
+    return false;
+  cp = char_at(n, c.span_index, c.char_index);
+  return true;
+}
+
+static bool char_before(const Node& n, Caret c, uint32_t& cp) {
+  if (n.spans.empty()) return false;
+  if (c.span_index >= n.spans.size()) {
+    c.span_index = n.spans.size() - 1;
+    c.char_index = utf8_char_count(n.spans[c.span_index].text);
+  }
+  while (c.char_index == 0 && c.span_index > 0) {
+    --c.span_index;
+    c.char_index = utf8_char_count(n.spans[c.span_index].text);
+  }
+  if (c.char_index == 0) return false;
+  cp = char_at(n, c.span_index, c.char_index - 1);
+  return true;
+}
+
+// 0 = word, 1 = space, 2 = other (punctuation, symbols).
+static int char_class(uint32_t cp) {
+  if (is_word_char(cp)) return 0;
+  if (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r') return 1;
+  return 2;
+}
+
 void select_word_at(Document& doc, Selection& sel) {
   if (sel.focus.node == INVALID_NODE) return;
+  const Node& n = doc.get(sel.focus.node);
+  if (n.id != sel.focus.node) return;
   Caret c = sel.focus;
-  move_word_left(doc, c);
-  sel.anchor = c;
-  sel.focus = c;
-  move_word_right(doc, sel.focus);
+  // The caret sits between two characters: take the run of the one after
+  // it (the click landed at the start of that word), unless only the one
+  // before it is a word character (click at a word's end).
+  uint32_t after = 0, before = 0;
+  bool has_after = char_after(n, c, after);
+  bool has_before = char_before(n, c, before);
+  int cls;
+  if (has_after && (char_class(after) == 0 || !has_before ||
+                    char_class(before) != 0))
+    cls = char_class(after);
+  else if (has_before)
+    cls = char_class(before);
+  else
+    return;
+  // Step over one character, skipping empty span boundaries first.
+  auto step_left = [&](Caret& k) {
+    while (k.char_index == 0 && k.span_index > 0) {
+      --k.span_index;
+      k.char_index = utf8_char_count(n.spans[k.span_index].text);
+    }
+    if (k.char_index > 0) --k.char_index;
+  };
+  auto step_right = [&](Caret& k) {
+    while (k.span_index + 1 < n.spans.size() &&
+           k.char_index >= utf8_char_count(n.spans[k.span_index].text)) {
+      ++k.span_index;
+      k.char_index = 0;
+    }
+    ++k.char_index;
+  };
+  Caret start = c, end = c;
+  uint32_t cp = 0;
+  while (char_before(n, start, cp) && char_class(cp) == cls) step_left(start);
+  while (char_after(n, end, cp) && char_class(cp) == cls) step_right(end);
+  sel.anchor = start;
+  sel.focus = end;
 }
 
 
