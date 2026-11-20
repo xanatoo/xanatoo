@@ -4671,14 +4671,13 @@ void draw_outline_panel(App& app) {
           app.outline[static_cast<size_t>(app.outline_sel)].text;
       if (!tx.empty()) ol_title += " — " + tx;
     }
-    const SDL_Rect outer{app.ol.x, app.ol.y, app.ol.w, app.ol.h};
-    const SDL_Rect fb = outline_focus_rect(app, outer);
+    const SDL_Rect fb = outline_focus_rect(app, app.ol);
     // Title tab + selection are lit only while the outline has the keyboard.
     const bool keys = panel_has_keys(app, KeyFocus::Outline);
     const bool open = draw_floating_frame(app, app.ol, ol_title, keys,
-                                          title_shade_zone(outer).x - fb.x);
+                                          title_shade_zone(app.ol).x - fb.x);
     // Focus toggle (section isolation): latched push button left of shade.
-    draw_title_button(app, fb, "Focus", section_focus);
+    draw_title_button(app, app.ol, fb, "Focus", section_focus);
     if (!open) return;
 
     SDL_Rect clip{cx, cy, cw, ch};
@@ -4761,7 +4760,7 @@ void draw_backlinks_panel(App& app) {
       app.bl.h = std::max(app.bl.h, 120);
     }
     const float step = backlinks_row_step(app);
-    const int title_h = help_title_h;
+    const int title_h = float_title_h(app.bl);
     const int pad = 8;
     int cx = app.bl.x + pad, cy = app.bl.y + title_h + 4;
     int cw = app.bl.w - pad * 2, ch = app.bl.h - title_h - pad - 4;

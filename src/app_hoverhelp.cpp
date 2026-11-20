@@ -54,17 +54,16 @@ bool within(const SDL_Rect& r, int x, int y, int pad = 0) {
 
 // Title bar of `w` (press_title's zones, in its order).
 const char* title_key(App& app, const FloatWindow& w, int mx) {
-  const SDL_Rect outer{w.x, w.y, w.w, w.h};
-  const SDL_Rect close = title_close_zone(outer);
-  if (mx >= outer.x && mx < close.x + close.w) return "@float-close";
-  if (mx >= title_max_zone(outer).x) return "@float-max";
-  if (mx >= title_shade_zone(outer).x) return "@float-shade";
+  const SDL_Rect close = title_close_zone(w);
+  if (mx >= w.x && mx < close.x + close.w) return "@float-close";
+  if (mx >= title_max_zone(w).x) return "@float-max";
+  if (mx >= title_shade_zone(w).x) return "@float-shade";
   if (w.role == WindowRole::Sitemap) {
-    const SDL_Rect pb = title_button_rect(app, outer, "Page");
+    const SDL_Rect pb = title_button_rect(app, w, "Page");
     if (mx >= pb.x - 2 && mx < pb.x + pb.w + 2) return "@sitemap-page";
   }
   if (w.role == WindowRole::Outline) {
-    const SDL_Rect fb = outline_focus_rect(app, outer);
+    const SDL_Rect fb = outline_focus_rect(app, w);
     if (mx >= fb.x - 2 && mx < fb.x + fb.w + 2) return "@outline-focus";
   }
   return w.role == WindowRole::Document ? "@doc-window-title" : "@float-title";
@@ -148,7 +147,7 @@ std::string hover_help_key_at(App& app, int mx, int my) {
   if (const FloatWindow* w = float_resize_window_at(app, mx, my))
     return float_docked(*w) ? "@dock-edge" : "@float-resize";
   if (FloatWindow* w = float_at(app, mx, my)) {
-    if (my < w->y + help_title_h) return title_key(app, *w, mx);
+    if (my < w->y + float_title_h(*w)) return title_key(app, *w, mx);
     if (w->role != WindowRole::Document)
       return std::string("@panel:") + role_key(w->role);
     const int pi = pane_at(app, static_cast<float>(mx), static_cast<float>(my));
@@ -189,7 +188,7 @@ void update_hover_help(App& app) {
   if (mx < 0 || my < 0 || mx >= app.win_w || my >= app.win_h) return;
   // Inside its own client area the text holds still to be read / scrolled.
   const FloatWindow* top = float_at(app, mx, my);
-  if (top == &app.hover_help_win && my >= top->y + help_title_h &&
+  if (top == &app.hover_help_win && my >= top->y + float_title_h(*top) &&
       !float_resize_window_at(app, mx, my))
     return;
   const xanatoo::UiHoverItem& item = app.ui.hover_item();

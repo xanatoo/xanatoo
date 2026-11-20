@@ -222,6 +222,12 @@ shaded shrinks to one strip and the panes get the height); it is greyed out
 for free / maximized windows and cleared when the window leaves its dock.
 Test `float_shaded(w)`, never the raw flag; `draw_floating_frame` returns
 false for a shaded window — draw no client content then.
+Title height is per window: `float_title_h(w)` is `help_title_h` for a
+free window (room to grab its top edge) and the slimmer `dock_title_h`
+while docked or maximized, where the controls (`float_control_w`) and
+title buttons (`title_button_rect`) sit flush in the strip and the title
+uses `title_font` (`ui_font_small*`). Never test against `help_title_h`
+directly for a window that may be docked; `window_client_rect(w)` follows.
 Tabs ↔ windows: dragging a tab past the strip (ImGui, `UiCommand::TearTab`
 → `tear_tab`) opens its buffer in a window (docked at a zone), dragging a
 window title onto the strip (`over_tab_strip`) runs `pop_in_soft`; tab

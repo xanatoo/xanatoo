@@ -742,7 +742,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
     // each document window its own context command, regardless of focus.
     if (FloatWindow* w = float_at(app, rx, ry);
         w && w->role == WindowRole::Document &&
-        ry >= w->y && ry < w->y + help_title_h &&
+        ry >= w->y && ry < w->y + float_title_h(*w) &&
         rx >= w->x && rx < w->x + w->w) {
       app.ui.open_window_menu(static_cast<float>(rx), static_cast<float>(ry),
                               app.panes[w->view].buf);

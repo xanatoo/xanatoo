@@ -212,12 +212,14 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
   SDL_SetRenderDrawColor(r, p.frame.r, p.frame.g, p.frame.b, 255);
   xanatoo::sdl::draw_rect(r, &o);
   const auto px = [&](int v) { return static_cast<int>(v * w.scale + 0.5f); };
-  const int slot = px(28);
+  const int slot = w.slot > 0 ? w.slot : px(28);
   const int side = std::min(px(20), std::max(px(12), w.title_h - px(6)));
   // Close at the title's left edge; maximize / restore at its right edge,
-  // shade just left of it.
+  // shade just left of it. Flush controls cover their whole zone, sharing
+  // the frame line and resting on the line under the strip.
   auto control_rect = [&](int from_right) {
     const int zone_x = from_right < 0 ? o.x : o.x + o.w - (from_right + 1) * slot;
+    if (w.flush) return SDL_Rect{zone_x, o.y, slot, w.title_h};
     return SDL_Rect{zone_x + (slot - side) / 2,
                     o.y + (w.title_h - side) / 2, side, side};
   };

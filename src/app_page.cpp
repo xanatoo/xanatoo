@@ -208,7 +208,7 @@ void update_page_panel(App& app) {
 }
 
 std::tuple<int, int, int, int> page_client_rect(App& app) {
-  return window_client_rect(app.pg.x, app.pg.y, app.pg.w, app.pg.h);
+  return window_client_rect(app.pg);
 }
 
 float page_max_scroll(App& app) {

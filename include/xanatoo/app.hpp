@@ -74,8 +74,13 @@ enum class TileMode { Independent, Trail };
 inline int status_bar_h = 28;       // 0 while content only hides it
 inline int status_bar_full_h = 28;  // scaled height when shown
 constexpr int kMaxNavHistory = 100;
-inline int help_title_h = 28;
-inline int float_close_w = 28;  // width of one title control hit zone
+inline int help_title_h = 28;   // title strip of a free (undocked) window
+inline int float_close_w = 28;  // width of one title control hit zone (free)
+// Docked / maximized windows: a slimmer title strip whose controls fill it
+// flush (square, no padding) and a smaller title font. Free windows keep
+// the taller strip so their edges stay easy to grab for resizing.
+inline int dock_title_h = 20;
+inline int kUiSmallFontPx = 12;
 // Canvas chrome text (status line, window titles, outline / backlinks);
 // matches the ImGui menu font and ignores document style + zoom.
 inline int kUiFontPx = 14;
@@ -87,15 +92,7 @@ inline int help_edge = 6;
 inline int dock_gap = 8;
 inline int help_grip_h = 14;  // strip under the client well: resize grip / h-scroll
 
-// Client rect of a floating window (x, y, w, h = outer frame): the sunken
-// well under the title minus its bevel. Left inset only; the right edge is
-// flush so the scrollbar sits on the frame; the bottom strip is the grip row.
-inline std::tuple<int, int, int, int> window_client_rect(int x, int y, int w,
-                                                        int h) {
-  const int lp = help_pad - 4;
-  return {x + 4 + lp, y + help_title_h + 5, w - 8 - lp - 1,
-          h - help_title_h - 4 - help_grip_h - 2};
-}
+// float_title_h / float_control_w / window_client_rect follow FloatWindow.
 
 // Scale the chrome metrics above (call before layout and when the UI scale changes).
 void set_chrome_scale(float scale);
@@ -462,6 +459,26 @@ inline bool float_docked(const FloatWindow& w) {
 // Shown as its title strip only: no client area, no resize edges.
 inline bool float_shaded(const FloatWindow& w) {
   return w.shaded && float_docked(w);
+}
+
+// Title strip height of `w` (compact while docked or maximized).
+inline int float_title_h(const FloatWindow& w) {
+  return w.dock == Dock::None ? help_title_h : dock_title_h;
+}
+
+// Width of one title control hit zone of `w` (square + flush when docked).
+inline int float_control_w(const FloatWindow& w) {
+  return w.dock == Dock::None ? float_close_w : dock_title_h;
+}
+
+// Client rect of a floating window: the sunken well under the title minus
+// its bevel. Left inset only; the right edge is flush so the scrollbar sits
+// on the frame; the bottom strip is the grip row.
+inline std::tuple<int, int, int, int> window_client_rect(const FloatWindow& w) {
+  const int lp = help_pad - 4;
+  const int th = float_title_h(w);
+  return {w.x + 4 + lp, w.y + th + 5, w.w - 8 - lp - 1,
+          w.h - th - 4 - help_grip_h - 2};
 }
 
 inline FloatWindow make_float_panel(WindowRole role, int x, int y, int w,
@@ -1028,6 +1045,8 @@ struct App {
   xanatoo::Font ui_font;       // chrome text (see kUiFontPx)
   xanatoo::Font ui_font_bold;  // outline top level, emphasis in chrome
   xanatoo::Font ui_font_tiny;  // structure highlight tags (kStructTagPx)
+  xanatoo::Font ui_font_small;       // docked window titles (kUiSmallFontPx)
+  xanatoo::Font ui_font_small_bold;
   std::vector<DocBuffer> buffers;  // dense storage; address by BufferId
   // Documents whose strict XML import failed stay read-only until reloaded
   // successfully. An error preview must never overwrite the original file.
@@ -2415,15 +2434,18 @@ std::string fit_text(xanatoo::Font& font, const std::string& text, int max_w);
 // Title-bar control hit zones of a floating frame (paint + hit-test): the
 // close box sits at the title's left edge, maximize / restore at its right,
 // shade (roll up, docked windows only) just left of maximize.
-SDL_Rect title_close_zone(const SDL_Rect& outer);
-SDL_Rect title_max_zone(const SDL_Rect& outer);
-SDL_Rect title_shade_zone(const SDL_Rect& outer);
+SDL_Rect title_close_zone(const FloatWindow& w);
+SDL_Rect title_max_zone(const FloatWindow& w);
+SDL_Rect title_shade_zone(const FloatWindow& w);
 // Outline title-bar "Focus" toggle, left of the shade box (paint + hit-test).
-SDL_Rect outline_focus_rect(App& app, const SDL_Rect& outer);
-// Push button `label` in a window title, left of the shade box.
-SDL_Rect title_button_rect(App& app, const SDL_Rect& outer, const char* label);
-void draw_title_button(App& app, const SDL_Rect& r, const char* label,
-                       bool latched);
+SDL_Rect outline_focus_rect(App& app, const FloatWindow& w);
+// Push button `label` in a window title, left of the shade box (flush with
+// the strip while docked).
+SDL_Rect title_button_rect(App& app, const FloatWindow& w, const char* label);
+void draw_title_button(App& app, const FloatWindow& w, const SDL_Rect& r,
+                       const char* label, bool latched);
+// Chrome font for the title of `w` (smaller while docked).
+xanatoo::Font& title_font(App& app, const FloatWindow& w, bool bold);
 // Frame of `win` (title, controls, grip and the client well).
 // `title_reserve`: px kept free left of the shade box (title buttons).
 // Returns false when the window is shaded: draw no client content then.

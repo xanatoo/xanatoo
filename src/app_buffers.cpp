@@ -827,7 +827,7 @@ void layout_context(App& app) {
 }
 
 std::tuple<int, int, int, int> help_client_rect(App& app) {
-  return window_client_rect(app.help.x, app.help.y, app.help.w, app.help.h);
+  return window_client_rect(app.help);
 }
 
 }  // namespace xanatoo::app

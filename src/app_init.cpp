@@ -157,6 +157,11 @@ bool app_init(App& app) {
     app.ui_font_bold.load(ui, kUiFontPx, app.sdl);
   if (!app.ui_font.path().empty())
     app.ui_font_tiny.load(app.ui_font.face(), kStructTagPx, app.sdl);
+  if (!app.ui_font.path().empty())
+    app.ui_font_small.load(app.ui_font.face(), kUiSmallFontPx, app.sdl);
+  if (app.ui_font_bold.loaded())
+    app.ui_font_small_bold.load(app.ui_font_bold.face(), kUiSmallFontPx,
+                                app.sdl);
   std::cerr << "chrome font: " << app.ui_font.path() << " @ " << kUiFontPx
             << " px\n";
   using xanatoo::sdl::SystemCursor;

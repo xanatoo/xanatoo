@@ -383,7 +383,7 @@ void update_sitemap(App& app) {
 }
 
 std::tuple<int, int, int, int> sitemap_client_rect(App& app) {
-  return window_client_rect(app.sm.x, app.sm.y, app.sm.w, app.sm.h);
+  return window_client_rect(app.sm);
 }
 
 float sitemap_max_scroll(App& app) {
@@ -394,9 +394,8 @@ float sitemap_max_scroll(App& app) {
 }
 
 void click_sitemap(App& app, int mx, int my) {
-  const SDL_Rect outer{app.sm.x, app.sm.y, app.sm.w, app.sm.h};
-  if (my < app.sm.y + help_title_h) {
-    const SDL_Rect b = title_button_rect(app, outer, kPageButton);
+  if (my < app.sm.y + float_title_h(app.sm)) {
+    const SDL_Rect b = title_button_rect(app, app.sm, kPageButton);
     if (mx >= b.x && mx < b.x + b.w) open_sitemap_page(app);
     return;
   }
@@ -559,13 +558,12 @@ void draw_sitemap_panel(App& app) {
   xanatoo::Font& bold =
       app.ui_font_bold.loaded() ? app.ui_font_bold : app.ui_font;
   const bool keys = panel_has_keys(app, KeyFocus::Sitemap);
-  const SDL_Rect outer{w.x, w.y, w.w, w.h};
-  const SDL_Rect pb = title_button_rect(app, outer, kPageButton);
+  const SDL_Rect pb = title_button_rect(app, w, kPageButton);
   const std::string title =
       app.sitemap.host.empty() ? "Site map" : "Site map — " + app.sitemap.host;
   const bool open = draw_floating_frame(app, w, title, keys,
-                                        title_shade_zone(outer).x - pb.x);
-  draw_title_button(app, pb, kPageButton, false);
+                                        title_shade_zone(w).x - pb.x);
+  draw_title_button(app, w, pb, kPageButton, false);
   if (!open) return;
 
   auto [cx, cy, cw, ch] = sitemap_client_rect(app);

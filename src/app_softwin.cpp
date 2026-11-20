@@ -30,7 +30,7 @@ namespace xanatoo::app {
 
 std::tuple<int, int, int, int> soft_client_rect(App& app,
                                                 const FloatWindow& sw) {
-  return window_client_rect(sw.x, sw.y, sw.w, sw.h);
+  return window_client_rect(sw);
 }
 
 void snap_soft_geom(App& app, int& x, int& y, int w, int h) {
@@ -95,7 +95,7 @@ int column_w(App& app, Dock side) {
 constexpr int kMinPaneRows = 160;
 
 // Height of a shaded panel: the title strip and the frame line below it.
-int shaded_h() { return help_title_h + 1; }
+int shaded_h() { return dock_title_h + 1; }
 
 // Width of a shaded panel in a band: the three title controls plus a
 // readable piece of the title.

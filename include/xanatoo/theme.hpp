@@ -87,6 +87,8 @@ void draw_grip_dots(SDL_Renderer* r, const SDL_Rect& rc, float scale = 1.f,
 struct WindowChrome {
   SDL_Rect outer{};       // whole window incl. frame
   int title_h = 28;       // height of the title strip
+  int slot = 0;           // control hit-zone width (0: 28px · scale)
+  bool flush = false;     // controls fill their zone + the strip (docked)
   bool active = true;     // yellow tab vs. grey
   bool close_box = true;  // left-aligned close widget (hit zone: first 28px)
   bool resizable = true;  // SE grip

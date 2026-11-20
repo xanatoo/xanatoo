@@ -43,7 +43,9 @@ void set_chrome_scale(float scale) {
   status_bar_full_h = status_bar_h = px(28);
   help_title_h = px(28);
   float_close_w = px(28);
+  dock_title_h = px(20);
   kUiFontPx = px(14);
+  kUiSmallFontPx = px(12);
   help_pad = px(12);
   help_edge = px(6);
   dock_gap = px(8);
@@ -87,6 +89,9 @@ void apply_ui_scale(App& app) {
   set_chrome_scale(app.ui_scale);
   if (app.ui_font.loaded()) app.ui_font.set_size(kUiFontPx);
   if (app.ui_font_bold.loaded()) app.ui_font_bold.set_size(kUiFontPx);
+  if (app.ui_font_small.loaded()) app.ui_font_small.set_size(kUiSmallFontPx);
+  if (app.ui_font_small_bold.loaded())
+    app.ui_font_small_bold.set_size(kUiSmallFontPx);
   apply_font_sizes(app);
   app.layout_engine.set_options(
       xanatoo::LayoutOptions::from_view(app.view_settings, app.ui_scale));
@@ -143,32 +148,47 @@ std::string fit_text(xanatoo::Font& font, const std::string& text,
   return out + ell;
 }
 
-SDL_Rect title_close_zone(const SDL_Rect& outer) {
-  return SDL_Rect{outer.x, outer.y, float_close_w, help_title_h};
+SDL_Rect title_close_zone(const FloatWindow& w) {
+  return SDL_Rect{w.x, w.y, float_control_w(w), float_title_h(w)};
 }
 
-SDL_Rect title_max_zone(const SDL_Rect& outer) {
-  return SDL_Rect{outer.x + outer.w - float_close_w, outer.y, float_close_w,
-                  help_title_h};
+SDL_Rect title_max_zone(const FloatWindow& w) {
+  const int cw = float_control_w(w);
+  return SDL_Rect{w.x + w.w - cw, w.y, cw, float_title_h(w)};
 }
 
-SDL_Rect title_shade_zone(const SDL_Rect& outer) {
-  return SDL_Rect{outer.x + outer.w - 2 * float_close_w, outer.y,
-                  float_close_w, help_title_h};
+SDL_Rect title_shade_zone(const FloatWindow& w) {
+  const int cw = float_control_w(w);
+  return SDL_Rect{w.x + w.w - 2 * cw, w.y, cw, float_title_h(w)};
 }
 
-SDL_Rect title_button_rect(App& app, const SDL_Rect& outer, const char* label) {
+xanatoo::Font& title_font(App& app, const FloatWindow& w, bool bold) {
+  if (w.dock != Dock::None) {
+    if (bold && app.ui_font_small_bold.loaded()) return app.ui_font_small_bold;
+    if (app.ui_font_small.loaded()) return app.ui_font_small;
+  }
+  if (bold && app.ui_font_bold.loaded()) return app.ui_font_bold;
+  return app.ui_font;
+}
+
+SDL_Rect title_button_rect(App& app, const FloatWindow& win, const char* label) {
+  const int th = float_title_h(win);
+  const int shade_x = title_shade_zone(win).x;
+  if (win.dock != Dock::None) {
+    // Flush with the strip and the shade box, like the title controls.
+    const int w = title_font(app, win, false).measure(label) + 12;
+    return SDL_Rect{shade_x - w, win.y, w, th};
+  }
   const int w = app.ui_font.measure(label) + 16;
-  const int h = help_title_h - static_cast<int>(std::lround(8.f * app.ui_scale));
-  return SDL_Rect{title_shade_zone(outer).x - 4 - w,
-                  outer.y + (help_title_h - h) / 2, w, h};
+  const int h = th - static_cast<int>(std::lround(8.f * app.ui_scale));
+  return SDL_Rect{shade_x - 4 - w, win.y + (th - h) / 2, w, h};
 }
 
-void draw_title_button(App& app, const SDL_Rect& r, const char* label,
-                       bool latched) {
+void draw_title_button(App& app, const FloatWindow& win, const SDL_Rect& r,
+                       const char* label, bool latched) {
   namespace th = xanatoo::theme;
   const th::Palette& pal = th::palette();
-  xanatoo::Font& font = app.ui_font;
+  xanatoo::Font& font = title_font(app, win, false);
   th::draw_button_face(app.sdl, r, latched, false);
   const th::Rgb ink = latched ? pal.accent_dark : pal.text;
   const int off = latched ? 1 : 0;
@@ -179,8 +199,8 @@ void draw_title_button(App& app, const SDL_Rect& r, const char* label,
       label, ink.r, ink.g, ink.b);
 }
 
-SDL_Rect outline_focus_rect(App& app, const SDL_Rect& outer) {
-  return title_button_rect(app, outer, "Focus");
+SDL_Rect outline_focus_rect(App& app, const FloatWindow& w) {
+  return title_button_rect(app, w, "Focus");
 }
 
 bool draw_floating_frame(App& app, const FloatWindow& win,
@@ -191,7 +211,10 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   const bool shaded = float_shaded(win);
   th::WindowChrome w;
   w.outer = outer;
-  w.title_h = help_title_h;
+  const int title_h = float_title_h(win);
+  w.title_h = title_h;
+  w.slot = float_control_w(win);
+  w.flush = win.dock != Dock::None;
   w.active = active;
   w.resizable = win.dock == Dock::None;
   w.maximized = win.dock == Dock::Max;
@@ -199,9 +222,9 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   w.shaded = shaded;
   w.scale = app.ui_scale;
   w.shadow = win.dock == Dock::None;
-  const SDL_Rect close_zone = title_close_zone(outer);
-  const SDL_Rect max_zone = title_max_zone(outer);
-  const SDL_Rect shade_zone = title_shade_zone(outer);
+  const SDL_Rect close_zone = title_close_zone(win);
+  const SDL_Rect max_zone = title_max_zone(win);
+  const SDL_Rect shade_zone = title_shade_zone(win);
   const auto hot = [&](const SDL_Rect& z) {
     return active && app.mouse_x >= z.x && app.mouse_x < z.x + z.w &&
            app.mouse_y >= z.y && app.mouse_y < z.y + z.h;
@@ -213,17 +236,16 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   const th::Palette& p = th::palette();
   // Document well: paper surface in a sunken frame under the title strip.
   if (!shaded) {
-    const SDL_Rect well{outer.x + 4, outer.y + help_title_h + 4, outer.w - 8,
-                        outer.h - help_title_h - 4 - help_grip_h};
+    const SDL_Rect well{outer.x + 4, outer.y + title_h + 4, outer.w - 8,
+                        outer.h - title_h - 4 - help_grip_h};
     th::fill(app.sdl, well, p.paper);
     th::bevel(app.sdl, well, th::Bevel::Sunken);
   }
   const th::Rgb ink = active ? p.tab_text : p.text_dim;
-  xanatoo::Font& font = app.ui_font_bold.loaded() ? app.ui_font_bold
-                                                  : app.ui_font;
+  xanatoo::Font& font = title_font(app, win, true);
   const int title_x = close_zone.x + close_zone.w + 4;
   const int title_w = shade_zone.x - title_reserve - 8 - title_x;
-  const int ty = outer.y + (help_title_h - font.line_height()) / 2 +
+  const int ty = outer.y + (title_h - font.line_height()) / 2 +
                  font.ascender();
   app.renderer.draw_text(font, static_cast<float>(title_x),
                          static_cast<float>(ty), fit_text(font, title, title_w),

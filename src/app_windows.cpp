@@ -75,7 +75,7 @@ bool contains(const FloatWindow& w, int mx, int my) {
 // Backlinks rows live in a padded client area just below the title.
 std::tuple<int, int, int, int> backlinks_client_rect(const FloatWindow& w) {
   // Same inset as every other window (outline / help / page / sitemap).
-  return window_client_rect(w.x, w.y, w.w, w.h);
+  return window_client_rect(w);
 }
 
 float scroll_wheel_step(const FloatWindow& w) {
@@ -319,25 +319,23 @@ void click_help(App& app, FloatWindow& w, int mx, int my) {
 }
 
 void press_title(App& app, FloatWindow& w, int mx, int my) {
-  const SDL_Rect outer{w.x, w.y, w.w, w.h};
-  if (mx >= outer.x &&
-      mx < title_close_zone(outer).x + title_close_zone(outer).w) {
+  if (mx >= w.x && mx < title_close_zone(w).x + title_close_zone(w).w) {
     close_window(app, w);
     return;
   }
-  if (mx >= title_max_zone(outer).x) {
+  if (mx >= title_max_zone(w).x) {
     toggle_maximize(app, w);
     w.last_title_click = 0;
     return;
   }
-  if (mx >= title_shade_zone(outer).x) {
+  if (mx >= title_shade_zone(w).x) {
     toggle_shade(app, w);  // greyed out (no-op) unless docked
     w.last_title_click = 0;
     return;
   }
   if (w.role == WindowRole::Sitemap) {
     // "Page" button just left of the maximize box.
-    const SDL_Rect pb = title_button_rect(app, outer, "Page");
+    const SDL_Rect pb = title_button_rect(app, w, "Page");
     if (mx >= pb.x - 2 && mx < pb.x + pb.w + 2) {
       click_sitemap(app, mx, my);
       return;
@@ -345,7 +343,7 @@ void press_title(App& app, FloatWindow& w, int mx, int my) {
   }
   if (w.role == WindowRole::Outline) {
     // Focus toggle sits just left of the maximize box.
-    const SDL_Rect fb = outline_focus_rect(app, outer);
+    const SDL_Rect fb = outline_focus_rect(app, w);
     if (mx >= fb.x - 2 && mx < fb.x + fb.w + 2) {
       toggle_section_focus_mode(app);
       return;
@@ -369,7 +367,7 @@ void press_title(App& app, FloatWindow& w, int mx, int my) {
 void tear_off(App& app, FloatWindow& w, int mx, int my) {
   undock_window(app, w);
   w.x = std::max(0, mx - w.w / 2);
-  w.y = std::max(static_cast<int>(app.ui_top), my - help_title_h / 2);
+  w.y = std::max(static_cast<int>(app.ui_top), my - float_title_h(w) / 2);
   w.drag_dx = mx - w.x;
   w.drag_dy = my - w.y;
 }
@@ -557,7 +555,7 @@ static int float_resize_bits(const FloatWindow& w, int mx, int my) {
   const bool on_t = my < w.y + 2;
   const bool on_l = mx < w.x + 2;
   const bool on_r = mx >= w.x + w.w - 2 &&
-                    (my >= w.y + help_title_h || on_t ||
+                    (my >= w.y + float_title_h(w) || on_t ||
                      mx > w.x + w.w);
   const bool on_b = my >= w.y + w.h - help_edge;
   return (on_r ? 1 : 0) | (on_b ? 2 : 0) | (on_l ? 4 : 0) | (on_t ? 8 : 0);
@@ -587,16 +585,16 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::Page:
       return page_client_rect(app);
     case WindowRole::History:
-      return window_client_rect(w.x, w.y, w.w, w.h);
+      return window_client_rect(w);
     case WindowRole::Styles:
     case WindowRole::StyleManager:
-      return window_client_rect(w.x, w.y, w.w, w.h);
+      return window_client_rect(w);
     case WindowRole::Bookmarks:
     case WindowRole::Subscriptions:
-      return window_client_rect(w.x, w.y, w.w, w.h);
+      return window_client_rect(w);
     case WindowRole::Context:
     case WindowRole::HoverHelp:
-      return window_client_rect(w.x, w.y, w.w, w.h);
+      return window_client_rect(w);
     case WindowRole::Downloads:
     case WindowRole::Media:
     case WindowRole::Reply:
@@ -608,7 +606,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::RelatedSites:
-      return window_client_rect(w.x, w.y, w.w, w.h);
+      return window_client_rect(w);
     case WindowRole::Document:
       return soft_client_rect(app, w);
   }
@@ -716,7 +714,7 @@ bool float_press(App& app, int mx, int my) {
       w = &app.soft_wins.back();
       // Content clicks belong to the view (caret, links, selection, its
       // scrollbar): focus it and let the pane path handle the press.
-      if (!bits && my >= w->y + help_title_h &&
+      if (!bits && my >= w->y + float_title_h(*w) &&
           pane_at(app, static_cast<float>(mx), static_cast<float>(my)) ==
               w->view) {
         focus_view(app, w->view);
@@ -727,7 +725,7 @@ bool float_press(App& app, int mx, int my) {
       begin_resize(*w, bits, mx, my);
       return true;
     }
-    if (my < w->y + help_title_h)
+    if (my < w->y + float_title_h(*w))
       press_title(app, *w, mx, my);
     else
       press_client(app, *w, mx, my);
@@ -738,7 +736,7 @@ bool float_press(App& app, int mx, int my) {
 
 bool middle_click_float(App& app, int mx, int my) {
   FloatWindow* w = float_at(app, mx, my);
-  if (!w || my < w->y + help_title_h) return false;
+  if (!w || my < w->y + float_title_h(*w)) return false;
   switch (w->role) {
     case WindowRole::History:
     case WindowRole::Sitemap:
