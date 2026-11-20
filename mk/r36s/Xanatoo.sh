@@ -33,6 +33,15 @@ export XDG_CACHE_HOME="$GAMEDIR/conf/cache"
 # CFWs that only ship libssl3).
 export LD_LIBRARY_PATH="$GAMEDIR/libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# SDL3 KMS/DRM on ArkOS/dArkOS: default libEGL.so.1 is not Mali. Point at the
+# bifrost stack so CreateWindow can load EGL/GLES. (SDL2 finds Mali without this.)
+export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-kmsdrm}"
+if [ -z "${SDL_EGL_LIBRARY:-}" ] && [ -e /usr/lib/aarch64-linux-gnu/libMali.so ]; then
+  export SDL_EGL_LIBRARY=/usr/lib/aarch64-linux-gnu/libMali.so
+  export SDL_VIDEO_EGL_DRIVER="${SDL_VIDEO_EGL_DRIVER:-$SDL_EGL_LIBRARY}"
+  export SDL_VIDEO_GL_DRIVER="${SDL_VIDEO_GL_DRIVER:-$SDL_EGL_LIBRARY}"
+fi
+
 if [ -f "$GAMEDIR/fonts/DejaVuSans.ttf" ]; then
   export XANATOO_FONT="$GAMEDIR/fonts/DejaVuSans.ttf"
 fi

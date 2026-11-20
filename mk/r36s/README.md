@@ -46,6 +46,14 @@ Local `.gmi` / `.org` examples work offline. Network clients that need TLS
 `libssl.so.1.1` and `libcrypto.so.1.1` in `libs/` so it works on images that
 only have OpenSSL 3 (e.g. newer dArkOS) as well as classic ArkOS.
 
+## Graphics
+
+SDL3 needs the Mali EGL library on current ArkOS/dArkOS images (`libEGL.so.1`
+is a non-Mali stub). The PortMaster launcher sets `SDL_VIDEODRIVER=kmsdrm` and
+`SDL_EGL_LIBRARY` to `/usr/lib/aarch64-linux-gnu/libMali.so` when that file
+exists. Running the binary by hand from SSH requires the same exports, and a
+free DRM device (stop EmulationStation first).
+
 ## Controls
 
 | Input | Action |
