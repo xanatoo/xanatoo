@@ -240,6 +240,9 @@ split / windows are heading.
 Rules: no behaviour on data types; new modal state goes in `App` (group
 related fields into small records like `FloatPanel` / `Hover`); menus,
 toolbar and shortcuts should route through `execute_command`.
+In browse mode `execute_command` refuses only the commands
+`changes_document` (`app_frame.cpp`) lists; add a new command there when it
+edits the document or replaces its buffer, and nowhere for views / toggles.
 Mouse cursor feedback must use the same hit-test as the action it advertises:
 `float_resize_at` for native panel edges, `dock_split_at` for neighbours,
 and `tile_divider_rect` for centre tiles. Free windows resize from all four

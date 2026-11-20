@@ -826,6 +826,39 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.stick_rmb = app.stick_rmb;
 }
 
+// Commands that edit the focused document or replace its buffer; browse
+// mode (foreign or read-only content) refuses them. Everything else (views,
+// panels, navigation, toggles) runs in either mode, so a new command is
+// only listed here when it changes the document.
+static bool changes_document(xanatoo::UiCommand cmd) {
+  using C = xanatoo::UiCommand;
+  switch (cmd) {
+    case C::NewDocument: case C::RevertToSaved:
+    case C::Undo: case C::Redo: case C::Cut: case C::Paste:
+    case C::Replace: case C::ReplaceAll: case C::VirtualKey:
+    case C::Bold: case C::Italic: case C::Code: case C::Strike:
+    case C::Cite: case C::Link:
+    case C::Heading1: case C::Heading2: case C::Heading3:
+    case C::Heading4: case C::Heading5: case C::Heading6:
+    case C::MakeHeader: case C::ParagraphLevel:
+    case C::ToggleBlockQuote: case C::ToggleOrderedList:
+    case C::ToggleUnorderedList: case C::ToggleTask:
+    case C::IndentList: case C::OutdentList:
+    case C::InsertParagraph: case C::InsertHr: case C::InsertImage:
+    case C::InsertFigure: case C::InsertTable: case C::InsertColumns:
+    case C::InsertDefList: case C::InsertCodeBlock: case C::InsertNote:
+    case C::InsertTransclude: case C::InsertBiblioEntry:
+    case C::DuplicateBlock: case C::MoveBlockUp: case C::MoveBlockDown:
+    case C::MoveSectionUp: case C::MoveSectionDown:
+    case C::PromoteSection: case C::DemoteSection:
+    case C::WrapSection: case C::WrapArticle: case C::UnwrapSectioning:
+    case C::WrapStretch: case C::UnwrapStretch: case C::EditStretchSummary:
+      return true;
+    default:
+      return false;
+  }
+}
+
 // Apply one toolbar / menu command to the world. `arg` is the optional
 // payload (URL, tab index, virtual key, example name).
 void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
@@ -833,108 +866,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   auto& p = focused_pane(app);
   auto& d = doc_of(app, p);
 
-  // Browse mode: ignore mutating commands from menus/toolbar.
-  if (browsing(app) && cmd != C::None) {
-    const C c = cmd;
-    const bool allowed =
-        c == C::Quit || c == C::OpenDocument || c == C::OpenUrlBar ||
-        c == C::NavigateUrl || c == C::NavigateHistoryUrl || c == C::NavBack || c == C::NavForward ||
-        c == C::NavJump ||
-        c == C::GoHome || c == C::GoUp || c == C::OpenPageFeed ||
-        c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleMedia || c == C::ToggleBookmarks ||
-        c == C::ToggleContextPanel || c == C::ToggleHoverHelp ||
-        c == C::DownloadAction || c == C::HistoryAction || c == C::MediaAction ||
-        c == C::ToggleSubscriptions || c == C::Subscribe ||
-        c == C::Unsubscribe || c == C::SubscriptionOpen ||
-        c == C::SubscriptionMarkRead || c == C::SubscriptionRefresh ||
-        c == C::SubscriptionInterval ||
-        c == C::ToggleAnnotationsPanel || c == C::ToggleRevisionsPanel ||
-        c == C::ToggleNostrExplorer || c == C::ToggleNostrAccounts ||
-        c == C::ToggleCertificates || c == C::CertAccept ||
-        c == C::CertReject || c == C::CertForget || c == C::CertSelect ||
-        c == C::ToggleRelatedSites || c == C::RelatedOpen ||
-        c == C::RelatedOpenTab || c == C::RelatedRefresh ||
-        c == C::RelatedFollow ||
-        c == C::ToggleLemmyExplorer || c == C::LemmySetTab ||
-        c == C::LemmySetSearch || c == C::LemmySetInstance ||
-        c == C::LemmyAddInstance || c == C::LemmySetSort ||
-        c == C::LemmyToggleInstanceOnly ||
-        c == C::ToggleMatrixExplorer || c == C::MatrixSetTab ||
-        c == C::MatrixSetSearch || c == C::MatrixSetServer ||
-        c == C::MatrixAddServer ||
-        c == C::NostrSearchLocal || c == C::NostrShowPeople ||
-        c == C::NostrShowEvents || c == C::NostrShowGroups ||
-        c == C::NostrRefreshLocal ||
-        c == C::NostrPrevPage || c == C::NostrNextPage ||
-        c == C::NostrAddWatchIdentity || c == C::NostrSelectIdentity ||
-        c == C::NewAnnotationLayer ||
-        c == C::SelectAnnotationLayer || c == C::ToggleAnnotationLayer ||
-        c == C::AddAnnotationHighlight || c == C::AddAnnotationNote ||
-        c == C::SelectAnnotation || c == C::UpdateAnnotationNote ||
-        c == C::RemoveAnnotation || c == C::RestoreAnnotationLayerVersion ||
-        c == C::ToggleStylesPanel || c == C::ToggleStyleManagerPanel ||
-        c == C::StyleCreate || c == C::StyleSave ||
-        c == C::StyleDelete || c == C::StylePin || c == C::StyleUnpin ||
-        c == C::AddBookmark || c == C::BookmarkPage || c == C::RemoveBookmark ||
-        c == C::BookmarkPosition || c == C::NewTab ||
-        c == C::CloseTab || c == C::NextTab || c == C::PrevTab ||
-        c == C::SelectTab || c == C::ReorderTabs || c == C::TearTab || c == C::PopOut || c == C::PopIn ||
-        c == C::ViewSourceRendered || c == C::ViewSourceRaw ||
-        c == C::ViewSourceSexpr || c == C::ViewSourceXml ||
-        c == C::ToggleGallery || c == C::Save ||
-        c == C::Publish || c == C::EditLocalCopy || c == C::ViewOriginal ||
-        c == C::SaveAs || c == C::ExportSexpr || c == C::ExportXml ||
-        c == C::ExportMarkdown ||
-        c == C::Reload || c == C::ForceReload || c == C::OpenDrafts ||
-        c == C::OpenStoredDocuments ||
-        c == C::OpenAbout ||
-        c == C::Copy ||
-        c == C::CopyPageUrl || c == C::SelectAll || c == C::SelectBlock ||
-        c == C::CopyText || c == C::OpenLinkInTab || c == C::OpenLinkInTrail ||
-        c == C::DownloadUrl || c == C::ConfirmDownload ||
-        c == C::DownloadToFolder || c == C::CancelDownload ||
-        c == C::OpenReply || c == C::EditReply || c == C::SendReply ||
-        c == C::JumpQuote || c == C::ContextJump ||
-        c == C::Find || c == C::ToggleSplit || c == C::ToggleTrail ||
-        c == C::TilesIndependent || c == C::TilesTrail ||
-        c == C::TilesCompare || c == C::TilesColumns || c == C::TilesRows ||
-        c == C::SwapPanes || c == C::JoinLeftPane || c == C::JoinRightPane ||
-        c == C::ToggleOutline ||
-        c == C::ToggleBacklinks || c == C::ToggleSitemap || c == C::TogglePage ||
-        c == C::ToggleSearchBar || c == C::FocusSearchBar || c == C::Search ||
-        c == C::AudioToggle || c == C::AudioStop || c == C::AudioSkip ||
-        c == C::SelectSearchEngine || c == C::ToggleSearchEngine ||
-        c == C::SearchSite || c == C::AddSearchEngine || c == C::SetLanguages ||
-        c == C::SitemapPrev || c == C::SitemapNext ||
-        c == C::OpenTranscludeOther ||
-        c == C::ToggleDiff || c == C::ToggleStructure || c == C::ToggleEdit ||
-        c == C::ToggleChrome || c == C::ToggleNative || c == C::ToggleArchive ||
-        c == C::ToggleReader || c == C::ToggleReaderDefault ||
-        c == C::TogglePaged || c == C::TogglePagedDefault ||
-        c == C::PageColumns ||
-        c == C::CollectionView || c == C::ToggleGallery ||
-        c == C::ToggleHelp || c == C::ToggleVirtualKeyboard ||
-        c == C::OpenFormatDoc || c == C::OpenSemanticDoc ||
-        c == C::OpenInWindow || c == C::OpenExample || c == C::LoadDiffDemo ||
-        c == C::ZoomIn || c == C::ZoomOut || c == C::ViewLineSpacingTight ||
-        c == C::ViewLineSpacingNormal || c == C::ViewLineSpacingRelaxed ||
-        c == C::ViewLineSpacingLoose || c == C::ViewMargins ||
-        c == C::ViewMeasure ||
-        c == C::ToggleSectionFocus || c == C::ToggleJustify ||
-        c == C::ToggleHoverPreview || c == C::ToggleHistoryRewinds ||
-        c == C::ToggleAutoLinks || c == C::ToggleFootnoteOverlay ||
-        c == C::ToggleBookmarkMarks ||
-        c == C::ToggleAutoImages || c == C::ToggleAutoUpdates || c == C::TogglePreferences ||
-        c == C::ToggleCredentials || c == C::SaveCatalogCredentials ||
-        c == C::ClearCatalogCredentials ||
-        c == C::SaveRedditCredentials || c == C::ClearRedditCredentials ||
-        c == C::SetUiScale ||
-        c == C::SelectStyle || c == C::SelectStyleColors ||
-        c == C::SelectStyleFonts || c == C::ReloadStyles;
-    if (!allowed) {
-      flash_status(app, "Browse mode — F2 to edit");
-      cmd = C::None;
-    }
+  // Browse mode: ignore commands that change the document.
+  if (browsing(app) && changes_document(cmd)) {
+    flash_status(app, "Browse mode — F2 to edit");
+    cmd = C::None;
   }
 
   switch (cmd) {
