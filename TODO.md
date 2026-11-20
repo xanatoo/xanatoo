@@ -23,9 +23,15 @@
   after completion a seek back is instant; extensionless MP3 and MP4,
   FLAC, WAV, Ogg (→ FFmpeg). Unit tests: feed decoding = whole-file
   decoding, cancel, seek interrupt, pipe with a trickling feed, failure.
+- Then: FFmpeg streams read ahead on a thread of their own (30 s / 96 MiB
+  of packets; seeks through it, range requests by FFmpeg). Checked: 720p
+  MP4 at 1 MB/s with a 4 s stall every 6 MB plays on steadily (0:03 /
+  0:08 / 0:14 / 0:19 at 5 s steps), the seek bar shades the read-ahead,
+  seeks to 2:06 and back to 0:12 work. Fixtures also run through the
+  reader in `test_media`.
 - Not yet: range requests for the built-in path (seeking far ahead waits
-  for the download); FFmpeg video has only ~1 s decoded ahead (no compressed
-  read-ahead buffer, a stalling server stutters); the title of an
+  for the download); a seek back in an FFmpeg stream fetches again (no
+  cache of what was read); the title of an
   extensionless address is its last path part ("x"); a startup address that
   turns out to be media leaves the "Loading…" page.
 

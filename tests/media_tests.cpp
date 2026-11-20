@@ -5,7 +5,8 @@
 // source (read-ahead, audio clock, frame picking, seek trimming, the wall
 // clock without sound, the end), the built-in decoders streaming from a
 // feed through the pipe, Content-Type tests and, in FFmpeg builds, the fixtures in
-// tests/data/video (0.5 s, 64×48 at 10 fps: red H.264 + AAC 8 kHz mono in
+// tests/data/video (read directly and through the read-ahead thread; 0.5 s,
+// 64×48 at 10 fps: red H.264 + AAC 8 kHz mono in
 // MP4, blue VP9 + Opus in WebM; made with ffmpeg). Part of xanatoo_tests.
 
 #include "xanatoo/media.hpp"
@@ -400,10 +401,13 @@ void test_media(int& passed, int& failed) {
     const char* name;
     int rate, y;  // sample rate, luma of the colour
   };
+  // Read directly, and through the reader thread streams use.
+  for (int ahead : {0, 1})
   for (const Fixture& fx : {Fixture{"red.mp4", 8000, 81}, Fixture{"blue.webm", 48000, 41}}) {
     std::string err;
-    auto src = open_media(std::string(XANATOO_TEST_DATA) + "/video/" + fx.name, MediaOptions{},
-                          &err);
+    MediaOptions o;
+    o.read_ahead = ahead;
+    auto src = open_media(std::string(XANATOO_TEST_DATA) + "/video/" + fx.name, o, &err);
     EXPECT(src != nullptr);
     if (!src) {
       std::fprintf(stderr, "  %s: %s\n", fx.name, err.c_str());
@@ -431,6 +435,8 @@ void test_media(int& passed, int& failed) {
       }
     }
     EXPECT_EQ(pictures, 5);
+    if (ahead) EXPECT_NEAR(src->buffered(), 0.5, 0.05);  // read to the end
+    else EXPECT(src->buffered() < 0);
     EXPECT(first.w == 64 && first.h == 48);
     if (!first.data.empty()) EXPECT_NEAR(int(first.y()[64 * 24 + 32]), fx.y, 4);
     EXPECT(audio.size() > size_t(fx.rate) * 4 / 10 && audio.size() < size_t(fx.rate) * 6 / 10);

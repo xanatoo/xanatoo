@@ -228,6 +228,7 @@ void media_worker(std::shared_ptr<MediaPlayback> pb, std::string url, MediaOptio
     const MediaSource::Got got = src->next(chunk, pts, frame);
     std::lock_guard lock(pb->m);
     pb->info.duration = src->info().duration;  // may become exact
+    pb->buffered = src->buffered();
     if (pb->seek_pending || pb->cancel.load()) continue;  // stale piece
     switch (got) {
       case MediaSource::Got::Audio: {

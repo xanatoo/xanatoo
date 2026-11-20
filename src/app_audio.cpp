@@ -1039,9 +1039,11 @@ void draw_media_panel(App& app) {
   } else if (have_media(a) && a.duration > 0) {
     frac = pos / a.duration;
   }
-  double loaded = 0;  // a streamed file: how much has arrived
-  if (const xanatoo::ByteFeed* feed = live_feed(a); feed && have_media(a))
-    loaded = loaded_fraction(feed->got.load(), feed->total.load());
+  double loaded = 0;  // a stream: how far it has been read ahead
+  if (a.media && have_media(a) && a.duration > 0) {
+    std::lock_guard lock(a.media->m);
+    loaded = a.media->buffered / a.duration;
+  }
   draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, false, loaded);
   // Bookmarked positions: a short green line across the bar each.
   if (seekable(a)) {

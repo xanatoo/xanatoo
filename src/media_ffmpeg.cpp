@@ -5,12 +5,21 @@
 // libavformat opens a local file or streams an http(s) address (its own
 // TLS), libavcodec decodes, libswscale makes I420 pictures, libswresample
 // interleaved float sound (more than two channels mixed down to stereo).
+// A stream gets a reader thread that demuxes up to kReadAhead seconds of
+// packets ahead of the decoder, so a slow or stalling server does not stop
+// the picture at once; seeks go through it.
 
 #if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
+#include <mutex>
+#include <thread>
 
 #include "xanatoo/media.hpp"
 
@@ -60,9 +69,22 @@ bool remote(const std::string& url) {
   return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
 }
 
+// Read ahead of the decoder (streams): this much time, at most this many bytes.
+constexpr double kReadAhead = 30.0;
+constexpr size_t kReadAheadBytes = size_t(96) << 20;
+
 class FfmpegSource final : public MediaSource {
 public:
   ~FfmpegSource() override {
+    if (reader_.joinable()) {
+      {
+        std::lock_guard lock(qm_);
+        stop_.store(true);
+      }
+      qcv_.notify_all();
+      reader_.join();
+    }
+    for (AVPacket*& p : q_) av_packet_free(&p);
     sws_freeContext(sws_);
     swr_free(&swr_);
     av_channel_layout_uninit(&in_layout_);
@@ -77,9 +99,11 @@ public:
     cancel_ = options.cancel;
     fmt_ = avformat_alloc_context();
     if (!fmt_) return fail("out of memory");
+    seeks_ = options.seeks;
     fmt_->interrupt_callback.callback = [](void* self) -> int {
-      const std::atomic<bool>* c = static_cast<FfmpegSource*>(self)->cancel_;
-      return c && c->load() ? 1 : 0;
+      const auto* s = static_cast<FfmpegSource*>(self);
+      return (s->cancel_ && s->cancel_->load()) || s->stop_.load() || s->interrupt_.load() ? 1
+                                                                                           : 0;
     };
     fmt_->interrupt_callback.opaque = this;
     AVDictionary* opts = nullptr;
@@ -139,8 +163,12 @@ public:
     }
     info_.format = media_describe(vname, info_.width, info_.height, aname, info_.rate,
                                   info_.channels);
+    if (options.read_ahead > 0 || (options.read_ahead < 0 && remote(url)))
+      reader_ = std::thread([this] { read_ahead(); });
     return true;
   }
+
+  double buffered() const override { return reader_.joinable() ? buffered_.load() : -1; }
 
   Got next(std::vector<float>& audio, double& pts, VideoFrame& frame) override {
     for (;;) {
@@ -160,9 +188,10 @@ public:
         if (++flush_spins_ > 64) return Got::End;
         continue;
       }
-      const int r = av_read_frame(fmt_, pkt_);
+      const int r = read_packet();
+      if (r == kInterrupted) return Got::Audio;  // nothing: a seek is due
       if (r < 0) {
-        if (r != AVERROR_EOF && !avio_feof(fmt_->pb)) {
+        if (r != AVERROR_EOF) {
           error_ = cancel_ && cancel_->load() ? "cancelled" : av_error(r);
           return Got::Error;
         }
@@ -179,8 +208,7 @@ public:
   }
 
   bool seek(double seconds) override {
-    const int64_t ts = int64_t((seconds + start_) * AV_TIME_BASE);
-    const int r = avformat_seek_file(fmt_, -1, INT64_MIN, ts, ts, 0);
+    const int r = reader_.joinable() ? seek_reader(seconds) : seek_file(seconds);
     if (vdec_) avcodec_flush_buffers(vdec_);
     if (adec_) avcodec_flush_buffers(adec_);
     flushing_ = vdone_ = adone_ = false;
@@ -188,6 +216,132 @@ public:
   }
 
 private:
+  static constexpr int kInterrupted = -0x7A7A;  // read_packet: a newer seek came
+
+  int seek_file(double seconds) {
+    const int64_t ts = int64_t((seconds + start_) * AV_TIME_BASE);
+    return avformat_seek_file(fmt_, -1, INT64_MIN, ts, ts, 0);
+  }
+
+  bool given_up(uint64_t seeks_seen) const {
+    return (cancel_ && cancel_->load()) || (seeks_ && seeks_->load() != seeks_seen);
+  }
+
+  // The next packet into pkt_: read here (a local file), or from the
+  // reader's queue. 0, AVERROR_EOF, another error, or kInterrupted.
+  int read_packet() {
+    if (!reader_.joinable()) {
+      const int r = av_read_frame(fmt_, pkt_);
+      return r < 0 && avio_feof(fmt_->pb) ? AVERROR_EOF : r;
+    }
+    const uint64_t seen = seeks_ ? seeks_->load() : 0;
+    std::unique_lock lock(qm_);
+    while (q_.empty() && !eof_ && read_err_ == 0) {
+      if (given_up(seen)) return kInterrupted;
+      // Timed: the give-up flags belong to others and do not signal us.
+      qcv_.wait_for(lock, std::chrono::milliseconds(50));
+    }
+    if (q_.empty()) return eof_ ? AVERROR_EOF : read_err_;
+    AVPacket* p = q_.front();
+    q_.pop_front();
+    q_bytes_ -= size_t(p->size);
+    qcv_.notify_all();
+    lock.unlock();
+    av_packet_move_ref(pkt_, p);
+    av_packet_free(&p);
+    return 0;
+  }
+
+  // Seconds of the packets queued, first to last.
+  double queued_span() const {
+    if (q_.empty()) return 0;
+    const double first = packet_time(q_.front());
+    return first < 0 ? 0 : q_end_ - first;  // (no time: the byte cap rules)
+  }
+
+  double packet_time(const AVPacket* p) const {
+    const int64_t ts = p->pts != AV_NOPTS_VALUE ? p->pts : p->dts;
+    return seconds_of(p->stream_index, ts);
+  }
+
+  // The reader thread: demux ahead into q_ until full, the end or an error;
+  // seeks on request (the interrupt callback abandons a read for them).
+  void read_ahead() {
+    for (;;) {
+      std::unique_lock lock(qm_);
+      qcv_.wait(lock, [&] {
+        return stop_.load() || seek_req_ ||
+               (!eof_ && read_err_ == 0 && queued_span() < kReadAhead &&
+                q_bytes_ < kReadAheadBytes);
+      });
+      if (stop_.load()) return;
+      if (seek_req_) {
+        seek_req_ = false;
+        interrupt_.store(false);
+        const double to = seek_to_;
+        const uint64_t id = seek_asked_;
+        lock.unlock();
+        const int r = seek_file(to);
+        lock.lock();
+        for (AVPacket*& p : q_) av_packet_free(&p);
+        q_.clear();
+        q_bytes_ = 0;
+        q_end_ = to;
+        buffered_.store(to);
+        eof_ = false;
+        read_err_ = 0;
+        seek_result_ = r;
+        seek_done_ = id;
+        qcv_.notify_all();
+        continue;
+      }
+      lock.unlock();
+      AVPacket* p = av_packet_alloc();
+      const int r = p ? av_read_frame(fmt_, p) : AVERROR(ENOMEM);
+      const bool at_end = r < 0 && (r == AVERROR_EOF || avio_feof(fmt_->pb));
+      lock.lock();
+      if (r < 0 || seek_req_ || stop_.load() ||
+          (p->stream_index != vs_ && p->stream_index != as_)) {
+        av_packet_free(&p);
+        if (r < 0 && !seek_req_ && !stop_.load()) {
+          if (at_end) {
+            eof_ = true;
+            buffered_.store(info_.duration > 0 ? info_.duration : q_end_);
+          } else {
+            read_err_ = r;
+          }
+          qcv_.notify_all();
+        }
+        continue;
+      }
+      double t = packet_time(p);
+      if (p->duration > 0) t += double(p->duration) * av_q2d(fmt_->streams[p->stream_index]->time_base);
+      if (t > q_end_) {
+        q_end_ = t;
+        buffered_.store(t);
+      }
+      q_bytes_ += size_t(p->size);
+      q_.push_back(p);
+      qcv_.notify_all();
+    }
+  }
+
+  // Asks the reader to seek and waits for it (or a newer seek / cancel).
+  int seek_reader(double seconds) {
+    const uint64_t seen = seeks_ ? seeks_->load() : 0;
+    std::unique_lock lock(qm_);
+    seek_req_ = true;
+    seek_to_ = seconds;
+    const uint64_t id = ++seek_asked_;
+    interrupt_.store(true);  // a read in progress gives up
+    qcv_.notify_all();
+    while (seek_done_ < id) {
+      if (given_up(seen)) return -1;
+      qcv_.wait_for(lock, std::chrono::milliseconds(50));
+    }
+    return seek_result_;
+  }
+
   bool fail(std::string why) {
     error_ = std::move(why);
     return false;
@@ -292,6 +446,23 @@ private:
   }
 
   const std::atomic<bool>* cancel_ = nullptr;
+  const std::atomic<uint64_t>* seeks_ = nullptr;
+  // The reader (streams): packets read ahead, under qm_.
+  std::thread reader_;
+  std::mutex qm_;
+  std::condition_variable qcv_;
+  std::deque<AVPacket*> q_;
+  size_t q_bytes_ = 0;
+  double q_end_ = 0;   // seconds: end of the latest packet read
+  bool eof_ = false;
+  int read_err_ = 0;
+  bool seek_req_ = false;
+  double seek_to_ = 0;
+  uint64_t seek_asked_ = 0, seek_done_ = 0;
+  int seek_result_ = 0;
+  std::atomic<bool> stop_{false};       // the source is going away
+  std::atomic<bool> interrupt_{false};  // a seek waits: abandon a read
+  std::atomic<double> buffered_{0};
   AVFormatContext* fmt_ = nullptr;
   AVCodecContext* vdec_ = nullptr;
   AVCodecContext* adec_ = nullptr;

@@ -69,6 +69,12 @@ public:
     return true;
   }
 
+  double buffered() const override {
+    const int64_t total = feed_->total.load();
+    if (total <= 0 || info_.duration <= 0) return -1;
+    return info_.duration * std::min(1.0, double(feed_->got.load()) / double(total));
+  }
+
 private:
   void set_duration() {
     const uint64_t frames = audio_frames(*dec_);

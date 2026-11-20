@@ -490,8 +490,10 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   (Vorbis / Opus) cannot stream built-in: with a backend the address goes
   to it instead, else the open waits for the whole file.
 - The panel: "Downloading N%" while opening, "Buffering… N% loaded" while
-  the pipe has nothing to play (`media_buffering`), the arrived part shaded
-  on the seek bar (`draw_bar` `loaded`). Sound alone decodes 5 s ahead
+  the pipe has nothing to play (`media_buffering`), the part read ahead
+  shaded on the seek bar (`draw_bar` `loaded` from `MediaSource::buffered`,
+  copied to `MediaPlayback::buffered` by the worker; the feed source gives
+  the arrived share of its length). Sound alone decodes 5 s ahead
   (`kMediaAudioAheadSoundOnly`). Local files and single-threaded WASM keep
   the load-then-play path (`AudioLoad`).
 - By Content-Type: a Navigate / Tab response that `is_playable_type`
@@ -521,7 +523,12 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
     `ffmpeg-headless` in the flake): local files and streamed http(s)
     (FFmpeg's own TLS; `user_agent("video")`, interrupt callback on
     cancel), more than two channels mixed to stereo, cover-art streams
-    ignored.
+    ignored. Streams (`MediaOptions::read_ahead`: -1 = http(s), 1 in tests)
+    get a reader thread (`read_ahead`) that demuxes up to 30 s / 96 MiB of
+    packets ahead into a queue; `next()` decodes from it (`read_packet`,
+    waits give up on cancel or a newer seek), seeks are requests the reader
+    carries out (`seek_reader`; the interrupt callback abandons a read in
+    progress). `buffered()` is the end of the latest packet read.
   - `media_android.cpp` (`__ANDROID__`, `-lmediandk`, API 21):
     AMediaExtractor (file descriptor, or the URL with the system's
     networking) + AMediaCodec in ByteBuffer mode. Pictures are copied from

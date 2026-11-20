@@ -105,6 +105,9 @@ struct MediaOptions {
   // Counts seek requests (MediaPlayback::seeks): a source waiting for bytes
   // may give up its read when a newer seek comes. Set by media_worker.
   const std::atomic<uint64_t>* seeks = nullptr;
+  // Demux ahead on a thread of its own (FFmpeg): -1 for http(s) streams,
+  // 1 always (tests), 0 never.
+  int read_ahead = -1;
   // How media_worker opens the source; unset: open_media(url).
   std::function<std::unique_ptr<MediaSource>(const MediaOptions&, std::string* error)> open;
 };
@@ -124,6 +127,9 @@ public:
   // for the caller to drop. False when the source cannot seek.
   virtual bool seek(double seconds) = 0;
   const std::string& error() const { return error_; }
+  // How far into the file (seconds) the source has read ahead: a stream's
+  // downloaded or queued part, for the seek bar. -1 unknown / all of it.
+  virtual double buffered() const { return -1; }
 
 protected:
   MediaInfo info_;
@@ -163,6 +169,7 @@ struct MediaPlayback {
   bool failed = false;
   bool seek_pending = false;
   double seek_to = 0;    // target of the pending / last seek
+  double buffered = -1;  // MediaSource::buffered() after the last piece
   uint64_t played = 0;   // frames handed to the device since the seek
   // Video without sound runs on the wall clock.
   // (and with sound once the sound has ended before the pictures).
