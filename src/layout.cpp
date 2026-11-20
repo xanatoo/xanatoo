@@ -315,7 +315,15 @@ void LayoutEngine::layout_children_sequential(
     if (!floats_.empty() && (clears_floats(kind) || sectioning) && !floating)
       y = clear_floats(x, max_width, y);
     // Side boxes may not advance y: their box height is no hint.
-    if (kind != NodeKind::Aside && !floating &&
+    // A figure beside others in a row is laid out with the row's first
+    // figure; only that one stands for the row's height.
+    const bool row_follower =
+        kind == NodeKind::Figure && !floating && figure_in_row(doc, child) &&
+        [&] {
+          auto row = figure_row(doc, child, max_width);
+          return !row.empty() && row.front().node != child;
+        }();
+    if (kind != NodeKind::Aside && !floating && !row_follower &&
         try_skip_block(child, x, y, max_width, out))
       continue;
     layout_node(doc, child, x, y, max_width, out);
@@ -453,9 +461,9 @@ std::vector<CollectionItem> collection_items(const Document& doc,
 // children (intro paragraphs, …) come first at full width.
 void LayoutEngine::layout_remote_image(const Document& doc, const Node& node,
                                        float x, float& y, float max_width,
-                                       LayoutResult& out) {
+                                       LayoutResult& out, bool center) {
   const float dp = options_.px_scale;
-  const float max_h = 360.f * dp;
+  const float max_h = 480.f * dp;
   float w = std::min(max_width, 320.f * dp);
   float h = 180.f * dp;
   if (images_) {
@@ -472,15 +480,144 @@ void LayoutEngine::layout_remote_image(const Document& doc, const Node& node,
     }
   }
   const float start_y = y;
-  // Centred in its column; the alt text is not laid out below the image
-  // (the loading placeholder shows it instead).
+  // Centred in its column (in a figure: flush with the caption); the alt
+  // text is not laid out below the image (the loading placeholder shows
+  // it instead).
   (void)doc;
-  const float ix = x + std::max(0.f, (max_width - w) * 0.5f);
+  const float ix = center ? x + std::max(0.f, (max_width - w) * 0.5f) : x;
   PositionedImage pi{node.id, ix, y, w, h, node.src, image_base_};
   pi.thumb = kRemoteThumbEdge;
   out.images.push_back(std::move(pi));
   y += h + 14.f * dp;
   out.boxes.push_back({node.id, x, start_y, max_width, y - start_y});
+}
+
+bool LayoutEngine::figure_image_size(const Document& doc, const Node& fig,
+                                     float limit, float& w, float& h) {
+  const float dp = options_.px_scale;
+  w = h = 0.f;
+  for (NodeId child : fig.children) {
+    const Node& image = doc.get(child);
+    if (image.kind != NodeKind::Image || image.src.empty()) continue;
+    if (!images_) return true;
+    if (is_remote_image(image.src)) {
+      // Mirrors layout_remote_image.
+      const Image& img = images_->thumb(image.src, image_base_, kRemoteThumbEdge);
+      if (img.ok && img.width > 0 && img.height > 0) {
+        const float sc = std::min({dp, limit / img.width, 480.f * dp / img.height});
+        w = img.width * sc;
+        h = img.height * sc;
+      } else if (img.pending) {
+        w = std::min(limit, 320.f * dp);
+        h = 180.f * dp;
+      }
+      return true;
+    }
+    // Mirrors the local Image case: never scaled up past its own size.
+    const Image& img = images_->get(image.src, image_base_);
+    if (!img.ok || img.width <= 0 || img.height <= 0) return true;
+    float scale = std::min({1.f, limit / img.width, 480.f / img.height});
+    scale *= image.display_scale > 0.05f ? image.display_scale : 1.f;
+    scale = std::min(scale, limit / img.width);
+    w = img.width * scale;
+    h = img.height * scale;
+    return true;
+  }
+  return false;
+}
+
+bool LayoutEngine::figure_in_row(const Document& doc, NodeId id) {
+  const Node& n = doc.get(id);
+  if (n.kind != NodeKind::Figure) return false;
+  if (n.float_side == "left" || n.float_side == "right") return false;
+  for (NodeId c : n.children)
+    if (doc.get(c).kind == NodeKind::Image && !doc.get(c).src.empty()) return true;
+  return false;
+}
+
+std::vector<LayoutEngine::FigureSlot> LayoutEngine::figure_row(
+    const Document& doc, NodeId id, float max_width) {
+  const float em = static_cast<float>(fonts_.regular.pixel_size());
+  const float gap = 1.5f * em;
+  // One figure alone gets at most ~60% of the column; its caption keeps a
+  // readable measure even under a small image.
+  const float limit = std::min(max_width, std::max(max_width * 0.6f, 16.f * em));
+  const float min_col = std::min(limit, 14.f * em);
+  struct Natural { float w = 0.f, h = 0.f; };
+  auto natural = [&](NodeId f) {
+    Natural n;
+    figure_image_size(doc, doc.get(f), limit, n.w, n.h);
+    return n;
+  };
+  // Column of a figure on its own: its image, a caption measure at least
+  // (just that when the image is missing or failed).
+  auto column = [&](const Natural& n) {
+    return std::clamp(n.w, min_col, limit);
+  };
+  // The run of consecutive row figures around `id`.
+  std::vector<NodeId> run{id};
+  const NodeId parent = doc.get(id).parent;
+  if (parent != INVALID_NODE) {
+    const std::vector<NodeId>& sib = doc.get(parent).children;
+    auto it = std::find(sib.begin(), sib.end(), id);
+    if (it != sib.end()) {
+      auto b = it;
+      while (b != sib.begin() && figure_in_row(doc, *(b - 1))) --b;
+      auto e = it + 1;
+      while (e != sib.end() && figure_in_row(doc, *e)) ++e;
+      run.assign(b, e);
+    }
+  }
+  // Greedy packing into rows of the full width; a figure may shrink to
+  // kMinShare of its own width to share a row. A shared row gives every
+  // image the same height (never above any image's own), so the images
+  // line up; the columns are the image widths.
+  constexpr float kMinShare = 0.75f;
+  struct Item { NodeId node; Natural n; float col; };
+  auto fit = [&](const std::vector<Item>& items) {
+    std::vector<FigureSlot> row;
+    if (items.size() == 1) {
+      row.push_back({items[0].node, items[0].col});
+      return row;
+    }
+    const float room = max_width - gap * static_cast<float>(items.size() - 1);
+    bool sized = true;
+    float aspect_sum = 0.f, h = 0.f;
+    for (const Item& it : items) {
+      if (it.n.w <= 0.f || it.n.h <= 0.f) sized = false;
+      else {
+        aspect_sum += it.n.w / it.n.h;
+        h = h <= 0.f ? it.n.h : std::min(h, it.n.h);
+      }
+    }
+    if (sized && aspect_sum > 0.f) {
+      h = std::min(h, room / aspect_sum);
+      for (const Item& it : items)
+        row.push_back({it.node, it.n.w / it.n.h * h});
+      return row;
+    }
+    float sum = 0.f;
+    for (const Item& it : items) sum += it.col;
+    const float k = sum > room ? room / sum : 1.f;
+    for (const Item& it : items) row.push_back({it.node, it.col * k});
+    return row;
+  };
+  std::vector<Item> items;
+  float sum = 0.f;
+  for (NodeId f : run) {
+    const Natural n = natural(f);
+    const float w = column(n);
+    if (!items.empty() &&
+        (sum + w) * kMinShare + gap * static_cast<float>(items.size()) > max_width) {
+      for (const Item& it : items)
+        if (it.node == id) return fit(items);
+      items.clear();
+      sum = 0.f;
+    }
+    sum += w;
+    items.push_back({f, n, w});
+  }
+  return fit(items);
 }
 
 void LayoutEngine::layout_collection(const Document& doc, NodeId id, float x,
@@ -1497,7 +1634,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
             if (img.ok && img.width > 0 && img.height > 0) {
               float scale = remote
                   ? std::min({options_.px_scale, fw / img.width,
-                              360.f * options_.px_scale / img.height})
+                              480.f * options_.px_scale / img.height})
                   : std::min({1.f, fw / img.width, 480.f / img.height});
               if (!remote) {
                 scale *= image.display_scale > 0.05f ? image.display_scale : 1.f;
@@ -1542,21 +1679,47 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         }
         y = clear_floats(x, max_width, y);
       }
+      const bool was_in_image_float = in_image_float_;
+      if (!was_in_image_float && !in_margin_ && figure_in_row(doc, id)) {
+        // Centred column(s) sized to the image(s); see figure_row.
+        const std::vector<FigureSlot> row = figure_row(doc, id, max_width);
+        if (row.empty() || row.front().node != id) {
+          // Laid out with the row's first figure.
+          break;
+        }
+        const float em = static_cast<float>(fonts_.regular.pixel_size());
+        const float gap = 1.5f * em;
+        float total = gap * static_cast<float>(row.size() - 1);
+        for (const FigureSlot& f : row) total += f.width;
+        y += before(BlockRole::Figure);
+        const float top = y;
+        float bottom = top;
+        float cx = x + std::max(0.f, (max_width - total) * 0.5f);
+        std::vector<size_t> own_box;
+        in_image_float_ = true;
+        in_figure_column_ = true;
+        for (const FigureSlot& f : row) {
+          float fy = top;
+          for (NodeId c : doc.get(f.node).children)
+            layout_node(doc, c, cx, fy, f.width, out);
+          bottom = std::max(bottom, fy);
+          own_box.push_back(out.boxes.size());
+          out.boxes.push_back({f.node, cx, top, f.width, 0.f});
+          cx += f.width + gap;
+        }
+        in_image_float_ = false;
+        in_figure_column_ = false;
+        y = bottom + after(BlockRole::Figure);
+        // Every figure's box spans the row; height hints only use the
+        // first one (the others are never skipped on their own).
+        for (size_t b : own_box) out.boxes[b].height = y - top;
+        break;
+      }
       y += before(BlockRole::Figure);
       float start_y = y;
-      const bool was_in_image_float = in_image_float_;
       in_image_float_ = true;
-      {
-        // A block figure is a centred column of ~60% of the page; the
-        // caption wraps at the same width as the image.
-        const float em = static_cast<float>(fonts_.regular.pixel_size());
-        float cw = max_width;
-        if (!was_in_image_float && !in_margin_)
-          cw = std::min(max_width, std::max(max_width * 0.6f, 16.f * em));
-        const float cx = x + (max_width - cw) * 0.5f;
-        for (NodeId c : node.children)
-          layout_node(doc, c, cx, y, cw, out);
-      }
+      for (NodeId c : node.children)
+        layout_node(doc, c, x, y, max_width, out);
       in_image_float_ = was_in_image_float;
       y += after(BlockRole::Figure);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
@@ -2012,8 +2175,10 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         x += (max_width - cw) * 0.5f;
         max_width = cw;
       }
+      // In a figure the image starts flush with its caption.
+      const bool center = !in_figure_column_;
       if (is_remote_image(node.src)) {
-        layout_remote_image(doc, node, x, y, max_width, out);
+        layout_remote_image(doc, node, x, y, max_width, out, center);
         break;
       }
       float disp_w = max_width;
@@ -2042,7 +2207,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       }
       // Centre the image in its column; the alt text is not shown below
       // it (it stands in for the image only while that is missing).
-      const float ix = x + std::max(0.f, (max_width - disp_w) * 0.5f);
+      const float ix = center ? x + std::max(0.f, (max_width - disp_w) * 0.5f) : x;
       out.images.push_back({id, ix, y, disp_w, disp_h, node.src, image_base_});
       out.boxes.push_back({id, ix, y, disp_w, disp_h});
       y += disp_h + 14.f;
@@ -2455,7 +2620,7 @@ void LayoutEngine::inline_image_size(const InlineSpan& sp, float max_w,
   float nat_w = 0.f, nat_h = 0.f;  // natural size in CSS px
   if (images_ && !sp.src.empty()) {
     const Image& img = remote
-                           ? images_->thumb(sp.src, image_base_, kRemoteThumbEdge)
+                           ? images_->thumb(sp.src, image_base_, kInlineThumbEdge)
                            : images_->get(sp.src, image_base_);
     if (img.ok && img.width > 0 && img.height > 0) {
       nat_w = static_cast<float>(img.width);
@@ -2499,7 +2664,7 @@ void LayoutEngine::layout_text_images(const std::vector<TextImageUrl>& urls,
     float w = std::min(max_width, 320.f * dp);
     float h = 180.f * dp;
     if (images_) {
-      const Image& img = images_->thumb(t.url, image_base_, kRemoteThumbEdge);
+      const Image& img = images_->thumb(t.url, image_base_, kInlineThumbEdge);
       if (!img.ok && !img.pending) continue;
       if (img.ok && img.width > 0 && img.height > 0) {
         const float sc = std::min({dp, max_width / img.width,
@@ -2515,7 +2680,7 @@ void LayoutEngine::layout_text_images(const std::vector<TextImageUrl>& urls,
       row_h = 0.f;
     }
     PositionedImage im{node.id, cx, y, w, h, t.url, image_base_};
-    im.thumb = kRemoteThumbEdge;
+    im.thumb = kInlineThumbEdge;
     im.in_text = true;
     im.span_index = t.span;
     if (!t.link) {
@@ -3059,7 +3224,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
         pg.advance = atom->w;
         PositionedImage im{node.id, lx, baseline - atom->h, atom->w, atom->h,
                            node.spans[c.span_idx].src, image_base_};
-        if (atom->remote) im.thumb = kRemoteThumbEdge;
+        if (atom->remote) im.thumb = kInlineThumbEdge;
         im.in_text = true;
         im.span_index = c.span_idx;
         out.images.push_back(std::move(im));

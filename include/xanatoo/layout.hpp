@@ -392,6 +392,7 @@ private:
   };
   MarginArea margins_[2];  // [0] left, [1] right
   bool in_image_float_ = false;
+  bool in_figure_column_ = false;  // children of a block figure (figure_row)
   bool in_figure_float_ = false;
   bool in_table_float_ = false;
   int in_margin_ = 0;      // > 0 while laying out a margin box
@@ -450,7 +451,25 @@ private:
   // http(s) Image: drawn from its kRemoteThumbEdge thumbnail; a placeholder
   // while it downloads, nothing once it failed.
   void layout_remote_image(const Document& doc, const Node& node, float x,
-                           float& y, float max_width, LayoutResult& out);
+                           float& y, float max_width, LayoutResult& out,
+                           bool center = true);
+  // Block figures: a figure with an image is a column as wide as its image
+  // (at least a caption's measure, at most ~60% of the page), centred.
+  // Consecutive such sibling figures share a row when their columns fit
+  // side by side. The row's first figure lays out the whole row; the others
+  // then emit nothing (stateless, so virtualization can skip rows).
+  struct FigureSlot {
+    NodeId node = INVALID_NODE;
+    float width = 0.f;  // column width
+  };
+  // Display size of the figure's image in a column of `limit` (0 × 0 while
+  // unknown); false without an image child.
+  bool figure_image_size(const Document& doc, const Node& fig, float limit,
+                         float& w, float& h);
+  bool figure_in_row(const Document& doc, NodeId id);
+  // The row of figures `id` belongs to (one slot when it stands alone).
+  std::vector<FigureSlot> figure_row(const Document& doc, NodeId id,
+                                     float max_width);
   // Reader mode: "Reader mode: N parts of the page hidden · Show all".
   void layout_chrome_notice(const Document& doc, float x, float& y,
                             float max_width, LayoutResult& out);

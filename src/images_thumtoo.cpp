@@ -33,8 +33,9 @@ namespace xanatoo {
 
 namespace {
 
-// Largest thumbnail edge ImageCache asks for (its 128 / 256 / 512 steps).
-constexpr int kMaxThumbEdge = 512;
+// Largest thumbnail edge ImageCache asks for (its 128 / 256 / 512 / 1024
+// steps).
+constexpr int kMaxThumbEdge = 1024;
 constexpr unsigned kWorkers = 2;
 
 // sRGB + alpha, 8 bit, EXIF orientation applied; consumes `img`.

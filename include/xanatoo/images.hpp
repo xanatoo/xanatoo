@@ -38,8 +38,12 @@ bool store_remote_image(std::string_view url, std::string_view bytes);
 // File signature of a picture format we decode (PNG, JPEG, GIF, WebP, BMP,
 // TIFF, AVIF, JPEG XL, SVG): for answers without a MIME type (Nex, Gopher).
 bool looks_like_image(std::string_view bytes);
-// Thumbnail edge used for inline remote images; the fetcher prebuilds it.
-constexpr int kRemoteThumbEdge = 512;
+// Thumbnail edge used for block-level remote images (large enough for a
+// figure across a wide column); the fetcher prebuilds it.
+constexpr int kRemoteThumbEdge = 1024;
+// Thumbnail edge for remote images in running text (inline spans, pictures
+// of image addresses): they stay small, so a smaller texture will do.
+constexpr int kInlineThumbEdge = 512;
 
 // Decode `resolved` and write its thumbnail cache file (see
 // ImageCache::thumb). No SDL renderer involved: safe on a worker thread.
@@ -67,7 +71,7 @@ public:
   const Image& get(const std::string& path, const std::string& base = {});
 
   // Downscaled copy whose longer edge is at most `max_px` (rounded up to
-  // 128 / 256 / 512). Thumbnails are a cache, never document data. With
+  // 128 / 256 / 512 / 1024). Thumbnails are a cache, never document data. With
   // thumtoo they come from its tile cache and arrive asynchronously
   // (pending until poll); else built from the original on first use and
   // kept under cache_dir()/thumbs/, keyed by path + size + mtime.

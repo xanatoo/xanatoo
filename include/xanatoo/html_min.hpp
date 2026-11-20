@@ -58,10 +58,14 @@ std::string html_to_plain(std::string_view html);
 std::string html_attr(std::string_view attrs, std::string_view name);
 bool html_has_attr(std::string_view attrs, std::string_view name);
 
-// Image URL of an <img>'s attributes: src, else the lazy-loading
-// data-src / data-lazy-src / data-original, else the first srcset entry
+// Image URL of an <img>'s attributes: the srcset (or data-srcset) pick,
+// else src, else the lazy-loading data-src / data-lazy-src / data-original
 // (data: placeholders skipped); unresolved, empty when there is none.
 std::string html_img_src(std::string_view attrs);
+// Best candidate of a srcset for a figure: the largest width descriptor up
+// to 1600w (else the smallest above), else the largest density up to 2x;
+// empty when it has no usable (non-data:) entry.
+std::string html_srcset_pick(std::string_view srcset);
 
 // Index of the '>' closing the tag that starts at `lt` (quote-aware);
 // npos when unterminated.

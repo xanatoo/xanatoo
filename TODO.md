@@ -29,6 +29,25 @@
   extensionless address is its last path part ("x"); a startup address that
   turns out to be media leaves the "Loading…" page.
 
+## Status (2026-11-20) — Image and figure layout
+
+- Block images and figures: centred, up to ~60% of the page, never scaled
+  up (small images keep their size, still resizable); figure columns follow
+  the image width (caption ≥ 14 em). The alt text is no longer laid out
+  under images.
+- Consecutive figures share a row when they fit at ≥ 75% of their size,
+  with one common image height (`figure_row`, unit test
+  `test_layout_figure_rows`).
+- Web images: `srcset` is preferred over `src` (largest ≤ 1600w / ≤ 2x),
+  block remote images draw from 1024 px thumbnails (was 512; inline ones
+  stay 512), height cap 480 instead of 360.
+- Checked under Xvfb: local Markdown figures (row of two, single small
+  figure), an HTML page with remote images (Wikimedia rejects non-standard
+  thumb widths with 400; failed images leave a caption-width column).
+- Known: no caption centring (no text-align style property yet); alt text
+  is not yet a tooltip; plain consecutive images (not figures) do not share
+  rows.
+
 ## Status (2026-11-19) — LessWrong client (`lesswrong:`)
 
 - New forum site in `forums.hpp` / `forum_lesswrong.cpp`: frontpage, new,

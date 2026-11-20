@@ -1168,23 +1168,59 @@ bool html_has_attr(std::string_view attrs, std::string_view name) {
   return find_attr(attrs, name).has_value();
 }
 
+std::string html_srcset_pick(std::string_view set) {
+  // Candidates: "url [descriptor]" separated by commas. A URL runs to the
+  // next whitespace (it may contain commas itself); a trailing ',' ends
+  // a candidate without a descriptor.
+  constexpr float kMaxW = 1600.f;  // enough for a wide column on HiDPI
+  std::string best_w, small_w, best_x;
+  float best_wv = 0.f, small_wv = 0.f, best_xv = 0.f;
+  size_t i = 0;
+  while (i < set.size()) {
+    while (i < set.size() && (is_space(set[i]) || set[i] == ',')) ++i;
+    size_t u = i;
+    while (i < set.size() && !is_space(set[i])) ++i;
+    std::string url(set.substr(u, i - u));
+    bool ended = false;
+    if (!url.empty() && url.back() == ',') {
+      url.pop_back();
+      ended = true;
+    }
+    std::string desc;
+    if (!ended) {
+      size_t d = i;
+      while (i < set.size() && set[i] != ',') ++i;
+      std::string_view dv = set.substr(d, i - d);
+      trim_ascii(dv);
+      desc = std::string(dv);
+    }
+    if (url.empty() || starts_with(url, "data:")) continue;
+    const float v = desc.empty() ? 1.f : static_cast<float>(std::atof(desc.c_str()));
+    if (!desc.empty() && (desc.back() == 'w' || desc.back() == 'W')) {
+      if (v <= kMaxW && v > best_wv) { best_wv = v; best_w = url; }
+      if (v > kMaxW && (small_w.empty() || v < small_wv)) { small_wv = v; small_w = url; }
+    } else if (v > 0.f && v <= 2.f && v > best_xv) {
+      best_xv = v;
+      best_x = url;
+    }
+  }
+  if (!best_w.empty()) return best_w;
+  if (!small_w.empty()) return small_w;
+  return best_x;
+}
+
 std::string html_img_src(std::string_view attrs) {
+  // srcset (or a lazy data-srcset) offers larger versions than src, which
+  // is often a small fallback: prefer its pick.
+  for (std::string_view a : {"srcset", "data-srcset"}) {
+    std::string v = html_srcset_pick(html_attr(attrs, a));
+    if (!v.empty()) return v;
+  }
   std::string src = html_attr(attrs, "src");
   if (!src.empty() && !starts_with(src, "data:")) return src;
   // Lazy loading: a placeholder (or nothing) in src, the image elsewhere.
   for (std::string_view a : {"data-src", "data-lazy-src", "data-original"}) {
     std::string v = html_attr(attrs, a);
-    if (!v.empty() && !starts_with(v, "data:")) return v;
-  }
-  for (std::string_view a : {"srcset", "data-srcset"}) {
-    const std::string all = html_attr(attrs, a);
-    std::string_view set = all;
-    trim_ascii(set);
-    // First candidate: URL up to whitespace (or the ',' before the next).
-    size_t e = 0;
-    while (e < set.size() && !is_space(set[e])) ++e;
-    std::string v(set.substr(0, e));
-    if (!v.empty() && v.back() == ',') v.pop_back();
     if (!v.empty() && !starts_with(v, "data:")) return v;
   }
   return src;

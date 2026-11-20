@@ -2527,6 +2527,53 @@ void test_style_assignments() {
   fs::remove_all(root);
 }
 
+// Block figures: consecutive figures share a row when their columns fit;
+// a paragraph between them ends the run; a figure alone is centred.
+void test_layout_figure_rows() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_figure_rows (no font)\n");
+    return;
+  }
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  auto figure = [&](const char* caption) {
+    const NodeId f = doc.create(NodeKind::Figure, root);
+    doc.get(doc.create(NodeKind::Image, f)).src = "missing.png";
+    doc.append_text(doc.create(NodeKind::Caption, f), caption);
+    return f;
+  };
+  const NodeId a = figure("First");
+  const NodeId b = figure("Second");
+  doc.append_text(doc.create(NodeKind::Paragraph, root), "Between.");
+  const NodeId c = figure("Alone");
+  DocStyle st = builtin_style();
+  LayoutEngine engine(fonts, nullptr);
+  engine.set_style(&st);
+  const float width = 900.f;
+  LayoutResult lr = engine.layout(doc, width);
+  auto box = [&](NodeId id) {
+    const LayoutBox* found = nullptr;
+    for (const LayoutBox& bx : lr.boxes)
+      if (bx.node == id) found = &bx;
+    return found;
+  };
+  const LayoutBox* ba = box(a);
+  const LayoutBox* bb = box(b);
+  const LayoutBox* bc = box(c);
+  EXPECT(ba && bb && bc);
+  if (ba && bb && bc) {
+    EXPECT(ba->y == bb->y);                    // one row
+    EXPECT(bb->x >= ba->x + ba->width);        // side by side
+    EXPECT(bc->y >= ba->y + ba->height);       // own row below
+    const float left = bc->x, right = width - (bc->x + bc->width);
+    EXPECT(std::fabs(left - right) < 40.f);    // centred (page margins aside)
+    EXPECT(bc->width < width * 0.7f);
+  }
+}
+
 // The hostname must share the title's line without inheriting its heading
 // size. A metadata discussion link keeps its Link kind / href but uses the
 // same muted inline role in a caption.
@@ -4599,6 +4646,17 @@ void test_html_min() {
     EXPECT(doc.get(k[7]).kind == NodeKind::HorizontalRule);
   }
 
+  // srcset: the largest width up to 1600w, density up to 2x.
+  EXPECT_EQ(html_srcset_pick("a.jpg 320w, b.jpg 1200w, c.jpg 2400w"), "b.jpg");
+  EXPECT_EQ(html_srcset_pick("c.jpg 2400w, d.jpg 3000w"), "c.jpg");
+  EXPECT_EQ(html_srcset_pick("x.jpg, y.jpg 1.5x, z.jpg 3x"), "y.jpg");
+  EXPECT_EQ(html_srcset_pick("https://i.example/w_100,h_50/p.jpg 100w,"
+                             " https://i.example/w_800,h_400/p.jpg 800w"),
+            "https://i.example/w_800,h_400/p.jpg");
+  EXPECT_EQ(html_srcset_pick("data:image/gif;base64,R0 1x"), "");
+  EXPECT_EQ(html_img_src("src=\"small.jpg\" srcset=\"small.jpg 300w, big.jpg 1000w\""),
+            "big.jpg");
+
   // images: block-level <img> → Image node; icons and images in list items
   // are inline image spans; data: placeholders stay links.
   Document idoc;
@@ -4642,7 +4700,7 @@ void test_html_min() {
       EXPECT_EQ(plain_text(idoc, fk[1]), "Cap");
     }
     EXPECT(idoc.get(ik[4]).kind == NodeKind::Image);
-    EXPECT_EQ(idoc.get(ik[4]).src, "https://cdn.example/s.webp");
+    EXPECT_EQ(idoc.get(ik[4]).src, "https://cdn.example/l.webp");
     EXPECT(idoc.get(ik[5]).kind == NodeKind::List);
     const auto li = kids_of(idoc, ik[5]);
     EXPECT(li.size() == 1 && idoc.get(li[0]).spans.size() == 2 &&
@@ -7596,6 +7654,7 @@ int main() {
   test_style_choice_variants();
   test_layout_article_gaps();
   test_layout_inline_metadata();
+  test_layout_figure_rows();
   test_nav_history_positions_and_forward_link();
   test_history_context_menu_targets();
   test_style_sheets_shipped();

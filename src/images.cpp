@@ -357,7 +357,8 @@ std::string ImageCache::resolve(const std::string& path,
 
 const Image& ImageCache::thumb(const std::string& path, const std::string& base,
                                int max_px) {
-  const int edge = max_px <= 128 ? 128 : max_px <= 256 ? 256 : 512;
+  const int edge = max_px <= 128 ? 128 : max_px <= 256 ? 256
+                 : max_px <= 512 ? 512 : 1024;
   if (is_remote_image(path))
     if (const Image* ph = remote_placeholder(path)) return *ph;
   const std::string resolved = resolve(path, base);

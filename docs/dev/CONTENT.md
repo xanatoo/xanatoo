@@ -112,8 +112,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   wrappers unwrapped. BlockQuote, ListItem and TableCell are leaves, so
   nested blocks inside them flatten to line breaks / "• " lines.
 - `HtmlOptions::images` (web pages, feeds): block-level `<img>` → Image
-  node (remote ones load like any remote image; lazy `data-src` / `srcset`
-  via `html_img_src`); icons (declared edge ≤ 48) and images inside
+  node (remote ones load like any remote image; `html_img_src` prefers the
+  `srcset` / `data-srcset` pick of `html_srcset_pick` — largest width up to
+  1600w, else up to 2x — over `src`, then lazy `data-src`); icons (declared edge ≤ 48) and images inside
   quotes / list items / cells → inline image spans (`data:` ones stay
   `[image: alt]` links).
 - `HtmlOptions::asides` (the main content of web pages): `<aside>` → Aside
@@ -222,6 +223,22 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   hard-code a smaller size or colour for margin content.
 - No general box model: new floating things (figures, `align=right`
   tables) go through the same `FloatBox` list, not per-kind geometry.
+
+## Block images and figures
+
+- A block Image outside a figure sits centred in a column of ~60% of the
+  page (at least 16 em). Images are never scaled up: a small one keeps its
+  own size (and its interactive `display_scale`). The alt text is not laid
+  out under the image; only the loading placeholder shows it.
+- A non-floating Figure with an image child is a column as wide as its
+  image (at least 14 em for the caption, at most the 60% column), centred;
+  the image starts flush with the caption (`in_figure_column_`).
+- Consecutive such sibling figures share a row (`figure_row`) when their
+  columns fit at ≥ 75% of their own width; a shared row gives all images
+  one height (never above any image's own). Stateless: the row's first
+  figure lays out the whole row, the others emit nothing, and
+  `layout_children_sequential` never skips them on their own (every
+  figure's box spans the row; the first one carries the height hint).
 
 ## Collections
 
@@ -343,8 +360,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   load" on failure) over visible placeholders every frame, on top of the
   pane raster; tiny inline images get a 2 px bar only. The `//gallery`
   viewer shows the same bar and byte count (`draw_image_progress_bar`).
-- Layout draws remote images from their `kRemoteThumbEdge` thumbnail
-  (`layout_remote_image`); a click shows it in the page's `//gallery`.
+- Layout draws block remote images from their `kRemoteThumbEdge` (1024)
+  thumbnail (`layout_remote_image`), images in running text from
+  `kInlineThumbEdge` (512); a click shows it in the page's `//gallery`.
 - Links to images (`is_image_url`: a `has_image_fetch_scheme` URL or local
   path by extension)
   show that image in the page's `//gallery` (`open_link_image`, checked
