@@ -318,6 +318,67 @@ void click_help(App& app, FloatWindow& w, int mx, int my) {
   }
 }
 
+// Context panel client point (mx, my) in layout coordinates; false when
+// the panel shows no laid-out document or the point is outside.
+bool context_local(App& app, int mx, int my, float& lx, float& ly,
+                   bool clamp = false) {
+  if (!app.context_panel_open || !app.context_has_doc ||
+      !app.context_image_src.empty())
+    return false;
+  if (app.context_needs_layout) layout_context(app);
+  auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+  lx = static_cast<float>(mx - cx);
+  ly = static_cast<float>(my - cy);
+  if (clamp) {
+    lx = std::clamp(lx, 0.f, static_cast<float>(cw));
+    ly = std::clamp(ly, 0.f, static_cast<float>(ch));
+    return true;
+  }
+  return lx >= 0 && ly >= 0 && lx <= cw && ly <= ch;
+}
+
+// Caret at a Context panel point; off the text, the nearest line's.
+std::optional<xanatoo::Caret> context_caret(App& app, float lx, float ly) {
+  const float scroll = app.context_win.scroll;
+  if (auto c = xanatoo::hit_test(app.context_layout, lx, ly, scroll)) return c;
+  return xanatoo::nearest_caret(app.context_layout, lx, ly + scroll);
+}
+
+// Context panel body: links open in the focused view; elsewhere a press
+// starts a text selection (Shift extends it), stretchtext toggles.
+void press_context(App& app, int mx, int my) {
+  float lx = 0.f, ly = 0.f;
+  if (!context_local(app, mx, my, lx, ly)) return;
+  const bool shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
+  if (!shift) {
+    if (auto hit = context_link_at(app, mx, my)) {
+      follow_context_link(app, hit->href);
+      return;
+    }
+  }
+  if (app.click_new_tab) return;  // middle-click: links only
+  const float scroll = app.context_win.scroll;
+  if (!shift)
+    if (auto sid = xanatoo::hit_test_stretch(app.context_layout, lx, ly, scroll)) {
+      xanatoo::Node& n = app.context_doc.get(*sid);
+      if (n.kind == xanatoo::NodeKind::Stretch) {
+        n.expanded = !n.expanded;
+        app.context_needs_layout = true;
+        app.context_sel = {};
+        return;
+      }
+    }
+  const auto c = context_caret(app, lx, ly);
+  if (!c) {
+    app.context_sel = {};
+    return;
+  }
+  if (!shift || app.context_sel.anchor.node == xanatoo::INVALID_NODE)
+    app.context_sel.anchor = *c;
+  app.context_sel.focus = *c;
+  app.context_selecting = true;
+}
+
 void press_title(App& app, FloatWindow& w, int mx, int my) {
   if (mx >= w.x && mx < title_close_zone(w).x + title_close_zone(w).w) {
     close_window(app, w);
@@ -407,7 +468,8 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::Bookmarks:
       break;  // ImGui owns the bookmark list inside the native panel.
     case WindowRole::Context:
-      break;  // ImGui owns the context body inside the native panel.
+      press_context(app, mx, my);  // ImGui owns it while there is no page
+      break;
     case WindowRole::Subscriptions:
       break;  // ImGui owns subscription controls in its native window.
     case WindowRole::NostrExplorer:
@@ -440,6 +502,15 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
 }
 
 }  // namespace
+
+std::optional<xanatoo::LinkHit> context_link_at(App& app, int mx, int my) {
+  float lx = 0.f, ly = 0.f;
+  if (!context_local(app, mx, my, lx, ly)) return std::nullopt;
+  // Only the topmost window under the pointer takes it.
+  if (float_at(app, mx, my) != &app.context_win) return std::nullopt;
+  return xanatoo::hit_test_link_ex(app.context_doc, app.context_layout, lx, ly,
+                                   app.context_win.scroll);
+}
 
 KeyFocus float_key_focus(const FloatWindow& w) {
   switch (w.role) {
@@ -742,6 +813,9 @@ bool middle_click_float(App& app, int mx, int my) {
     case WindowRole::Sitemap:
     case WindowRole::Page:
       break;
+    case WindowRole::Context:
+      if (!context_link_at(app, mx, my)) return false;
+      break;
     default:
       return false;
   }
@@ -752,6 +826,24 @@ bool middle_click_float(App& app, int mx, int my) {
 }
 
 bool float_motion(App& app, int mx, int my) {
+  if (app.context_selecting) {
+    float lx = 0.f, ly = 0.f;
+    if (!context_local(app, mx, my, lx, ly, /*clamp=*/true)) {
+      app.context_selecting = false;
+      return false;
+    }
+    // Dragging past the top / bottom edge scrolls the panel along.
+    auto [cx, cy, cw, ch] = float_client_rect(app, app.context_win);
+    (void)cx; (void)cw;
+    if (my < cy)
+      app.context_win.scroll =
+          std::max(0.f, app.context_win.scroll - 20.f);
+    else if (my > cy + ch)
+      app.context_win.scroll = std::min(float_max_scroll(app, app.context_win),
+                                        app.context_win.scroll + 20.f);
+    if (auto c = context_caret(app, lx, ly)) app.context_sel.focus = *c;
+    return true;
+  }
   for (FloatWindow* w : float_stack(app)) {
     if (w->dragging) {
       if (w->dock != Dock::None) {
@@ -821,6 +913,7 @@ bool float_motion(App& app, int mx, int my) {
 }
 
 void float_release(App& app, int mx, int my) {
+  app.context_selecting = false;
   for (FloatWindow* w : float_stack(app)) {
     // A press on a docked title that never moved keeps it docked.
     if (w->dragging && w->dock == Dock::None && app.tab_drop_preview &&

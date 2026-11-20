@@ -1287,6 +1287,13 @@ struct App {
   xanatoo::NodeId context_scroll_to = xanatoo::INVALID_NODE;
   // Footnote whose mark is hovered: washed in the Context panel.
   xanatoo::NodeId context_footnote = xanatoo::INVALID_NODE;
+  // Address context_doc was read from (its page, without fragment); the
+  // panel's links resolve against it. Empty when unknown.
+  std::string context_address;
+  // Text selection in the Context panel (carets into context_doc), started
+  // by a press in its client area and extended while context_selecting.
+  xanatoo::Selection context_sel;
+  bool context_selecting = false;
   std::string status_notice;
   Uint32 status_notice_until = 0;
   bool discard_armed = false;  // only without a revision store (no SQLite)
@@ -1951,6 +1958,15 @@ void collect_context_quotes(App& app, Pane& p, std::optional<xanatoo::Caret> at)
 void jump_quote(App& app, int pi, size_t link, bool to_source);
 // Context panel: fill UiState from hover (quote / transclusion source).
 void refresh_context_panel(App& app);
+// Absolute address of link `href` in the Context panel's document
+// (resolved against App::context_address); empty when it names nothing.
+std::string context_link_target(App& app, const std::string& href);
+// Click on a Context panel link: open it in the focused view (a new tab
+// while App::click_new_tab is set); outside links go to the system browser.
+void follow_context_link(App& app, const std::string& href);
+// Link under window point (mx, my) in the Context panel's page (the hit-test
+// of both its clicks and its hand cursor).
+std::optional<xanatoo::LinkHit> context_link_at(App& app, int mx, int my);
 std::string quote_tooltip(App& app, int pi, size_t link);
 void draw_quote_marks(App& app, int pi, float ox, float py, float draw_scroll);
 // Select the passage of bookmark `address` in view `pi` and scroll to it.

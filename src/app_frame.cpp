@@ -1937,6 +1937,14 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::Copy: {
+      // The Context panel's own selection while it has the keyboard.
+      if (panel_has_keys(app, KeyFocus::Context) && app.context_has_doc &&
+          !app.context_sel.empty()) {
+        const std::string text =
+            xanatoo::selected_text(app.context_doc, app.context_sel);
+        if (!text.empty()) SDL_SetClipboardText(text.c_str());
+        break;
+      }
       std::string text = xanatoo::selected_text(d, p.sel);
       if (!text.empty()) SDL_SetClipboardText(text.c_str());
       break;
@@ -4856,6 +4864,11 @@ void draw_context_window(App& app) {
       app.context_win.scroll - static_cast<float>(cy);
   app.renderer.draw_backdrop(app.context_layout, clip, draw_scroll,
                              static_cast<float>(cx));
+  if (!app.context_sel.empty())
+    app.renderer.draw_selection(
+        xanatoo::selection_rects(app.context_layout, app.context_sel,
+                                 draw_scroll, app.renderer.glyph_extents()),
+        static_cast<float>(cx));
   app.renderer.draw(app.context_layout, draw_scroll, static_cast<float>(cx));
 
   // The footnote whose mark is hovered: wash its block (boxes of the note
@@ -5237,6 +5250,8 @@ void present_frame(App& app) {
       pointer = app.cursor_sizens;
     } else if (edge) {
       pointer = resizing(edge);
+    } else if (context_link_at(app, mx, my)) {
+      pointer = app.cursor_hand;
     } else if (!float_at(app, mx, my)) {
       const auto within = [&](const SDL_Rect& r, int pad = 0) {
         return mx >= r.x - pad && mx < r.x + r.w + pad &&

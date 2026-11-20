@@ -1693,14 +1693,29 @@ static bool handle_page_key(App& app, const SDL_Event& ev, bool ctrl,
   return false;
 }
 
-// The embedded ImGui editor owns selection, arrows and Enter; only the
-// native-panel Escape close shortcut remains here.
+// Escape closes the panel; on a laid-out page Ctrl+C copies and Ctrl+A
+// selects its text (the ImGui fallback body owns its own keys).
 static bool handle_context_key(App& app, const SDL_Event& ev, bool ctrl,
                                bool alt) {
-  (void)ctrl;
-  (void)alt;
   if (!panel_has_keys(app, KeyFocus::Context)) return false;
-  if (xanatoo::sdl::keycode(ev) == SDLK_ESCAPE) {
+  const SDL_Keycode k = xanatoo::sdl::keycode(ev);
+  if (ctrl && !alt && app.context_has_doc && app.context_image_src.empty()) {
+    if (k == SDLK_c || k == SDLK_INSERT) {
+      const std::string text =
+          xanatoo::selected_text(app.context_doc, app.context_sel);
+      if (!text.empty()) SDL_SetClipboardText(text.c_str());
+      return true;
+    }
+    if (k == SDLK_a) {
+      xanatoo::select_all(app.context_doc, app.context_sel);
+      return true;
+    }
+  }
+  if (k == SDLK_ESCAPE && !app.context_sel.empty()) {
+    app.context_sel = {};
+    return true;
+  }
+  if (k == SDLK_ESCAPE) {
     app.context_panel_open = false;
     app.context_pending_url.clear();
     app.key_focus = KeyFocus::Document;

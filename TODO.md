@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Context panel: text selection and live links
+
+- A laid-out page in the Context panel takes a press: links open in the
+  focused view (current tab; middle-click a new tab; outside links in the
+  system browser) and hand keys back to the document; elsewhere the press
+  starts a text selection (drag, Shift+click extends, dragging past the edge
+  scrolls), drawn like page selections. Ctrl+C / Edit → Copy copy it,
+  Ctrl+A selects all, Esc clears it first. Hand cursor over its links
+  (`context_link_at`, same hit-test as the click).
+- Links resolve against the page the panel's document came from
+  (`App::context_address`, set wherever `context_doc` is loaded;
+  `context_link_target`): `#anchor` → that page at the anchor, relative
+  paths beside the file / against the remote or small-net URL.
+- Checked under Xvfb (hover-preview of a local page, drag-select + copy,
+  click on its link opened the target in the tab, Back enabled).
+
 ## Status (2026-11-20) — Panel title strips tinted per family
 
 - Each panel family has its own title hue (`theme::Tint`, `title_tint`,

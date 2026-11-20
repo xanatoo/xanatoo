@@ -6,15 +6,23 @@
 // under quoted text in the original, context menu jumps both ways.
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/cli.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/epub_import.hpp"
+#include "xanatoo/file_url.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/gemini.hpp"
+#include "xanatoo/gopher.hpp"
+#include "xanatoo/html_min.hpp"
 #include "xanatoo/locator.hpp"
+#include "xanatoo/media.hpp"
+#include "xanatoo/nex.hpp"
+#include "xanatoo/spartan.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -328,6 +336,76 @@ void draw_quote_marks(App& app, int pi, float ox, float py,
   }
 }
 
+namespace {
+bool has_scheme(const std::string& href) {
+  if (is_in_app_remote_url(href) || xanatoo::is_file_url(href)) return true;
+  // "scheme:" (RFC 3986): a letter, then letters, digits, + - . up to ':'.
+  if (href.empty() || !std::isalpha(static_cast<unsigned char>(href[0])))
+    return false;
+  for (size_t i = 1; i < href.size(); ++i) {
+    const unsigned char c = static_cast<unsigned char>(href[i]);
+    if (c == ':') return i > 1;  // "C:" stays a (Windows) path
+    if (!std::isalnum(c) && c != '+' && c != '-' && c != '.') return false;
+  }
+  return false;
+}
+
+std::string resolve_smallnet(const std::string& base, const std::string& ref) {
+  if (xanatoo::is_gemini_url(base)) return xanatoo::resolve_gemini_url(base, ref);
+  if (xanatoo::is_gopher_url(base)) return xanatoo::resolve_gopher_url(base, ref);
+  if (xanatoo::is_spartan_url(base)) return xanatoo::resolve_spartan_url(base, ref);
+  if (xanatoo::is_nex_url(base)) return xanatoo::resolve_nex_url(base, ref);
+  return {};
+}
+}  // namespace
+
+std::string context_link_target(App& app, const std::string& href) {
+  if (href.empty()) return {};
+  std::string base = app.context_address;
+  if (href[0] == '#') {
+    if (base.empty()) return {};
+    // The page itself, at the anchor (a remote base drops its own fragment).
+    if (base.find("://") != std::string::npos)
+      if (size_t h = base.find('#'); h != std::string::npos) base.resize(h);
+    return base + href;
+  }
+  if (has_scheme(href)) return href;
+  if (base.empty()) return resolve_doc_href(app, href);
+  if (std::string r = resolve_smallnet(base, href); !r.empty()) return r;
+  if (base.find("://") != std::string::npos && !xanatoo::is_file_url(base))
+    return xanatoo::resolve_url(base, href);
+  if (xanatoo::is_file_url(base)) base = xanatoo::file_url_path(base);
+  return resolve_doc_href(app, href, base);
+}
+
+void follow_context_link(App& app, const std::string& href) {
+  // An anchor of a document with no known page: scroll the panel to it.
+  if (!href.empty() && href[0] == '#' && app.context_address.empty()) {
+    if (auto dest = xanatoo::jump_to_href(app.context_doc, href)) {
+      auto cpos = xanatoo::caret_screen_pos(
+          app.context_layout, *dest, 0.f,
+          static_cast<float>(app.fonts.regular.line_height()));
+      if (cpos.valid) app.context_win.scroll = std::max(0.f, cpos.y - 24.f);
+    }
+    return;
+  }
+  const std::string target = context_link_target(app, href);
+  if (target.empty()) {
+    flash_status(app, "Link target unknown: " + href);
+    return;
+  }
+  const std::string base = xanatoo::parse_locator(target).base;
+  if (is_in_app_remote_url(target) || xanatoo::is_file_url(target) ||
+      xanatoo::is_image_address(target) || xanatoo::is_playable_url(target) ||
+      is_inapp_doc_href(app, base)) {
+    app.key_focus = KeyFocus::Document;  // the page it opens is read next
+    open_address(app, target);
+    return;
+  }
+  flash_status(app, "Opening " + target);
+  xanatoo::open_external_url(target);
+}
+
 void refresh_context_panel(App& app) {
   // Live update from hover. When the pointer is not over a quote / link /
   // transclusion, keep whatever page is already loaded so Context can be
@@ -335,6 +413,7 @@ void refresh_context_panel(App& app) {
   app.context_footnote = xanatoo::INVALID_NODE;  // set below while hovered
 
   auto set_doc = [&](const xanatoo::Document& src, const std::string& key,
+                     const std::string& address,
                      xanatoo::NodeId scroll_to = xanatoo::INVALID_NODE) {
     app.context_pending_url.clear();
     if (app.context_source_key == key && app.context_has_doc) {
@@ -347,6 +426,9 @@ void refresh_context_panel(App& app) {
     }
     app.context_doc = src;
     app.context_source_key = key;
+    app.context_address = address;
+    app.context_sel = {};
+    app.context_selecting = false;
     app.context_image_src.clear();
     app.context_image_base.clear();
     app.context_has_doc = true;
@@ -356,6 +438,10 @@ void refresh_context_panel(App& app) {
   };
   // True when `key` is what the panel already shows. This runs every frame,
   // so callers check it before loading or copying a document.
+  // The page a view shows (its links resolve the same in the panel).
+  auto view_page = [&](int pi) {
+    return xanatoo::parse_locator(pane_address(app, app.panes[pi])).base;
+  };
   auto loaded = [&](const std::string& key) {
     return app.context_has_doc && app.context_source_key == key;
   };
@@ -379,7 +465,7 @@ void refresh_context_panel(App& app) {
     app.context_jump_pane = -1;
     app.context_jump_link = -1;
     const std::string key = "image:" + base + "\n" + src;
-    if (!loaded(key)) set_doc(xanatoo::image_url_document(src), key);
+    if (!loaded(key)) set_doc(xanatoo::image_url_document(src), key, {});
     app.context_image_src = src;
     app.context_image_base = base;
     app.context_pending_url.clear();
@@ -406,7 +492,7 @@ void refresh_context_panel(App& app) {
       app.context_jump_link = -1;
       const std::string key = "fixed:" + url;
       // load_doc reads every page size synchronously: only once per target.
-      if (!loaded(key)) set_doc(load_doc(app, url), key);
+      if (!loaded(key)) set_doc(load_doc(app, url), key, url);
       app.context_pending_url.clear();
       return;
     }
@@ -418,7 +504,7 @@ void refresh_context_panel(App& app) {
       app.context_can_jump = false;
       app.context_jump_pane = -1;
       app.context_jump_link = -1;
-      set_doc(c->doc, "page:" + c->url);
+      set_doc(c->doc, "page:" + c->url, app.context_title);
       return;
     }
     if (app.context_pending_url != url) {
@@ -458,7 +544,7 @@ void refresh_context_panel(App& app) {
           app.context_meta += "\nQuote: “" + quote + "”";
         std::string key = "quote:" + std::to_string(b->id) + ":" +
                           std::to_string(static_cast<unsigned>(l.source_msg));
-        set_doc(d, key, l.source_msg);
+        set_doc(d, key, view_page(pi), l.source_msg);
         app.context_can_jump = true;
         app.context_jump_pane = pi;
         app.context_jump_link = app.hover.quote;
@@ -492,7 +578,7 @@ void refresh_context_panel(App& app) {
         app.context_title = n.label;
       std::string key = "link:" + (b ? std::to_string(b->id) : "?") + ":" +
                         app.hover.href;
-      set_doc(d, key, dest_node);
+      set_doc(d, key, view_page(pi), dest_node);
       app.context_body = xanatoo::plain_text(d, dest_node);
       app.context_footnote = hovered_footnote(app, pi);
       return;
@@ -544,7 +630,7 @@ void refresh_context_panel(App& app) {
           if (auto d = xanatoo::jump_to_href(doc, t.fragment))
             scroll = d->node;
         }
-        set_doc(doc, key, scroll);
+        set_doc(doc, key, xanatoo::parse_locator(t.url).base, scroll);
       }
       app.context_pending_url.clear();
       app.context_kind = "Page";
@@ -623,7 +709,8 @@ void refresh_context_panel(App& app) {
       app.context_meta = "Excerpt label: " + n.summary;
     std::string key = "transclude:" + (b ? std::to_string(b->id) : "?") + ":" +
                       std::to_string(static_cast<unsigned>(app.hover.transclude));
-    set_doc(d, key, app.hover.transclude);
+    set_doc(d, key, view_page(app.hover.transclude_pane),
+            app.hover.transclude);
     std::string body = xanatoo::plain_text(d, app.hover.transclude);
     if (body.empty() && !app.hover.transclude_src.empty())
       body = app.hover.transclude_src;

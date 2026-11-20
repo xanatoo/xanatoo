@@ -540,7 +540,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "All bookmarks: filter, open, remove. Right-click a bookmark for more."},
     {"@panel:context", "Context panel",
      "Shows what the pointer is over in a page: quoted message, include "
-     "source, link target or a picture."},
+     "source, link target or a picture. Select its text and copy it; a "
+     "click on one of its links opens it in the current tab."},
     {"@panel:subscriptions", "Subscriptions panel",
      "Watched sources with unread counts; click to open and mark read."},
     {"@panel:downloads", "Downloads panel",

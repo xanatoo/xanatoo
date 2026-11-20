@@ -1244,6 +1244,11 @@ void poll_fetches(App& app) {
           app.context_source_key =
               "page:" + (job.shared->final_url.empty() ? job.url
                                                        : job.shared->final_url);
+          app.context_address = job.shared->final_url.empty()
+                                    ? job.url
+                                    : job.shared->final_url;
+          app.context_sel = {};
+          app.context_selecting = false;
           app.context_has_doc = true;
           app.context_image_src.clear();
           app.context_image_base.clear();
