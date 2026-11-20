@@ -579,9 +579,25 @@ std::vector<FloatWindow*> float_stack(App& app) {
   };
   std::stable_sort(st.begin(), st.end(),
                    [&](const FloatWindow* a, const FloatWindow* b) {
-                     return layer(a) < layer(b);
+                     if (layer(a) != layer(b)) return layer(a) < layer(b);
+                     return a->z < b->z;
                    });
   return st;
+}
+
+void raise_float(App& app, FloatWindow& w) {
+  w.z = ++app.float_z_top;
+}
+
+void lower_float(App& app, FloatWindow& w) {
+  w.z = --app.float_z_bottom;
+  if (w.role != WindowRole::Document) return;
+  // Keep soft_wins back→front; `w` is stale afterwards.
+  const size_t i = static_cast<size_t>(&w - app.soft_wins.data());
+  if (i == 0 || i >= app.soft_wins.size()) return;
+  FloatWindow sw = std::move(app.soft_wins[i]);
+  app.soft_wins.erase(app.soft_wins.begin() + static_cast<std::ptrdiff_t>(i));
+  app.soft_wins.insert(app.soft_wins.begin(), std::move(sw));
 }
 
 FloatWindow* float_at(App& app, int x, int y) {
@@ -796,9 +812,10 @@ bool float_press(App& app, int mx, int my) {
       begin_resize(*w, bits, mx, my);
       return true;
     }
-    if (my < w->y + float_title_h(*w))
+    if (my < w->y + float_title_h(*w)) {
+      raise_float(app, *w);  // document windows were raised above already
       press_title(app, *w, mx, my);
-    else
+    } else
       press_client(app, *w, mx, my);
     return true;
   }
@@ -807,7 +824,12 @@ bool float_press(App& app, int mx, int my) {
 
 bool middle_click_float(App& app, int mx, int my) {
   FloatWindow* w = float_at(app, mx, my);
-  if (!w || my < w->y + float_title_h(*w)) return false;
+  if (!w) return false;
+  // Title strip: send the window to the back of its layer.
+  if (my < w->y + float_title_h(*w)) {
+    lower_float(app, *w);
+    return true;
+  }
   switch (w->role) {
     case WindowRole::History:
     case WindowRole::Sitemap:
@@ -1002,6 +1024,12 @@ void draw_floats(App& app) {
   for (size_t i = app.soft_wins.size(); i-- > 0;)
     if (!find_buf(app, app.panes[app.soft_wins[i].view].buf))
       close_doc_window(app, i);
+  // Windows opened since the last pass come to the front of their layer.
+  ++app.float_pass;
+  for (FloatWindow* w : float_stack(app)) {
+    if (w->shown_pass + 1 != app.float_pass) raise_float(app, *w);
+    w->shown_pass = app.float_pass;
+  }
   for (FloatWindow* w : float_stack(app)) {
     switch (w->role) {
       case WindowRole::Outline:

@@ -523,7 +523,9 @@ std::string soft_title(App& app, const FloatWindow& sw) {
 }
 
 void raise_soft(App& app, size_t i) {
-  if (i + 1 >= app.soft_wins.size()) return;
+  if (i >= app.soft_wins.size()) return;
+  app.soft_wins[i].z = ++app.float_z_top;
+  if (i + 1 == app.soft_wins.size()) return;
   FloatWindow sw = std::move(app.soft_wins[i]);
   app.soft_wins.erase(app.soft_wins.begin() + static_cast<std::ptrdiff_t>(i));
   app.soft_wins.push_back(std::move(sw));

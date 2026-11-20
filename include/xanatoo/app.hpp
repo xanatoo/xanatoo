@@ -459,6 +459,12 @@ struct FloatWindow {
   bool shaded = false;
   int restore_x = 120, restore_y = 70, restore_w = 540, restore_h = 440;
   Uint32 last_title_click = 0;
+  // Stacking within its layer (free / docked / maximized): higher is in
+  // front, ties keep the float_stack order. Set by raise_float / lower_float.
+  int z = 0;
+  // draw_floats pass that last showed it; a window that was not shown in the
+  // pass before (just opened) comes to the front.
+  uint64_t shown_pass = 0;
   // Geometry + interaction (all roles):
   int x = 120, y = 70, w = 540, h = 440;
   bool dragging = false;
@@ -1163,6 +1169,8 @@ struct App {
   int last_layout_w = 0;
   int last_layout_h = 0;
   std::vector<FloatWindow> soft_wins;  // Document-role floats, back→front
+  int float_z_top = 0, float_z_bottom = 0;  // FloatWindow::z handed out so far
+  uint64_t float_pass = 0;                  // draw_floats calls
   Dock dock_preview = Dock::None;  // drop target while dragging a title
   struct DockSplitDrag {
     Dock side = Dock::None;
@@ -2436,6 +2444,10 @@ void sitemap_step(App& app, int dir);
 // z-order, back→front: docked columns, floating (outline, backlinks, help,
 // document windows), maximized.
 std::vector<FloatWindow*> float_stack(App& app);
+// Bring `w` to the front of its layer (title click) / send it to the back
+// (title middle-click). Document windows also move within soft_wins.
+void raise_float(App& app, FloatWindow& w);
+void lower_float(App& app, FloatWindow& w);
 FloatWindow* float_at(App& app, int x, int y);  // topmost window under (x,y)
 // nullopt = no native frame; Chrome = a native-only panel, which covers any
 // embedded ImGui form belonging to a different window.

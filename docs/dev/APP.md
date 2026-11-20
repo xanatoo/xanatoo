@@ -234,6 +234,12 @@ window title onto the strip (`over_tab_strip`) runs `pop_in_soft`; tab
 reorder is ImGui's own (ids = buffer ids, `ReorderTabs` copies the order
 into `tab_order`). Never add a per-panel
 "docked" flag; set `FloatWindow::dock` through the helpers above.
+Stacking: `float_stack` sorts by layer (docked < free < maximized), then
+`FloatWindow::z`, then its fixed role order. A title click raises the
+window (`raise_float`; document windows raise on any click via
+`raise_soft`), a title middle-click sends it to the back (`lower_float`),
+right-click on the title is reserved for a context menu. A window shown in
+`draw_floats` that was not shown in the pass before (just opened) is raised.
 See `docs/BRAINSTORM.md` "Views, arrangement, documents" for where tabs /
 split / windows are heading.
 
