@@ -4865,6 +4865,33 @@ void test_html_min() {
     EXPECT(doc.get(k[7]).kind == NodeKind::HorizontalRule);
   }
 
+  // Links inside <pre> (directory listings) stay links; <code> does not
+  // turn the rest into inline code.
+  {
+    Document pd;
+    NodeId pr = pd.create(NodeKind::Document);
+    html_append_blocks(pd, pr,
+                       "<pre><a href=\"../\">../</a>\n"
+                       "<code><a href=\"x.zip\">x.zip</a>  12K</code></pre>",
+                       opt);
+    auto pk = kids_of(pd, pr);
+    EXPECT_EQ(pk.size(), 1u);
+    if (pk.size() == 1) {
+      const Node& cb = pd.get(pk[0]);
+      EXPECT(cb.kind == NodeKind::CodeBlock);
+      EXPECT_EQ(plain_text(pd, pk[0]), "../\nx.zip  12K");
+      EXPECT_EQ(cb.spans.size(), 4u);
+      if (cb.spans.size() == 4) {
+        EXPECT(cb.spans[0].kind == InlineKind::Link);
+        EXPECT_EQ(cb.spans[0].href, "https://blog.example/");
+        EXPECT(cb.spans[1].kind == InlineKind::Text);
+        EXPECT(cb.spans[2].kind == InlineKind::Link);
+        EXPECT_EQ(cb.spans[2].href, "https://blog.example/posts/x.zip");
+        EXPECT(cb.spans[3].kind == InlineKind::Text);
+      }
+    }
+  }
+
   // srcset: the largest width up to 1600w, density up to 2x.
   EXPECT_EQ(html_srcset_pick("a.jpg 320w, b.jpg 1200w, c.jpg 2400w"), "b.jpg");
   EXPECT_EQ(html_srcset_pick("c.jpg 2400w, d.jpg 3000w"), "c.jpg");

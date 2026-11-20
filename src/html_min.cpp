@@ -376,7 +376,7 @@ void Builder::emit(std::string s) {
       break;
     }
   InlineKind kind = InlineKind::Text;
-  if (pre_mode()) kind = InlineKind::Text;
+  if (pre_mode() && href.empty()) kind = InlineKind::Text;  // links stay
   else if (!href.empty()) kind = InlineKind::Link;
   else if (code_ > 0) kind = InlineKind::Code;
   else if (strong_ > 0) kind = InlineKind::Strong;
