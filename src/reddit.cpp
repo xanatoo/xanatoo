@@ -379,7 +379,7 @@ Document posts_to_document(const std::string& title,
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title.empty() ? "Reddit" : title;
+  set_thread_title(doc, thread, title.empty() ? "Reddit" : title);
   doc.get(thread).label = "reddit";
 
   for (const auto& p : posts)

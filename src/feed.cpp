@@ -581,18 +581,18 @@ void build_articles(Document& doc, NodeId root, const FeedInfo& f,
 void build_thread(Document& doc, NodeId root, const FeedInfo& f,
                   std::string_view src, const std::string& url,
                   const std::string& title) {
-  NodeId head = doc.create(NodeKind::Paragraph, root);
-  InlineSpan ts;
-  ts.kind = f.link.empty() ? InlineKind::Strong : InlineKind::Link;
-  ts.text = title;
-  ts.href = f.link;
-  doc.get(head).spans.push_back(std::move(ts));
-  if (!f.subtitle.empty() && f.subtitle != title)
-    doc.append_text(head, "\n" + f.subtitle, InlineKind::Emphasis);
-
+  // The thread's title is the feed's (linked to its site), then its subtitle.
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
   doc.get(thread).label = "feed";
+  const NodeId head = set_thread_title(doc, thread, title);
+  if (!f.link.empty()) {
+    InlineSpan& ts = doc.get(head).spans.front();
+    ts.kind = InlineKind::Link;
+    ts.href = f.link;
+  }
+  if (!f.subtitle.empty() && f.subtitle != title)
+    doc.append_text(doc.create(NodeKind::Paragraph, thread), f.subtitle,
+                    InlineKind::Emphasis);
   int n = 0;
   for (const Entry& e : f.entries) {
     NodeId msg = doc.create(NodeKind::Message, thread);

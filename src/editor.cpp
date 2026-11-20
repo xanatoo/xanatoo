@@ -3058,8 +3058,10 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
         root.children.empty() ? INVALID_NODE : root.children.front();
     const NodeKind k =
         first == INVALID_NODE ? NodeKind::Section : doc.get(first).kind;
+    const bool titled =
+        k == NodeKind::Thread && thread_title(doc, first) != INVALID_NODE;
     if (k != NodeKind::Section && k != NodeKind::Article &&
-        k != NodeKind::Header && k != NodeKind::Heading) {
+        k != NodeKind::Header && k != NodeKind::Heading && !titled) {
       OutlineEntry e;
       e.node = first;
       e.level = 1;
@@ -3109,11 +3111,14 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
     if (n.id != fr.id) continue;
     if (skip_chrome && n.kind == NodeKind::Chrome) continue;
 
-    if (n.kind == NodeKind::Section || n.kind == NodeKind::Article) {
+    const bool titled_thread =
+        n.kind == NodeKind::Thread && thread_title(doc, fr.id) != INVALID_NODE;
+    if (n.kind == NodeKind::Section || n.kind == NodeKind::Article ||
+        titled_thread) {
       const int depth = std::max(1, std::min(8, fr.depth + 1));
       OutlineEntry e;
       e.section = fr.id;
-      e.node = first_header_child(n);
+      e.node = titled_thread ? thread_title(doc, fr.id) : first_header_child(n);
       if (e.node == INVALID_NODE) e.node = fr.id;
       e.level = depth;
       if (e.node != INVALID_NODE && e.node != fr.id) {
@@ -3123,7 +3128,7 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
         e.text = node_text(doc, e.node);
       }
       if (e.text.empty()) e.text = "(empty section)";
-      e.has_children = has_nested_section(n);
+      e.has_children = !titled_thread && has_nested_section(n);  // threads do not fold
       e.folded = is_folded(fr.id);
       out.push_back(std::move(e));
       if (e.folded) continue;  // hide nested outline rows while folded
@@ -3135,8 +3140,9 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
     // Legacy ranked heading not wrapped in a Section (older docs).
     if (n.kind == NodeKind::Heading || n.kind == NodeKind::Header) {
       const Node& parent = (n.parent != INVALID_NODE) ? doc.get(n.parent) : n;
-      if ((parent.kind == NodeKind::Section || parent.kind == NodeKind::Article) &&
-          first_header_child(parent) == fr.id) {
+      if (((parent.kind == NodeKind::Section || parent.kind == NodeKind::Article) &&
+           first_header_child(parent) == fr.id) ||
+          thread_title(doc, n.parent) == fr.id) {
         // The section's title: already represented by the section row.
       } else {
         OutlineEntry e;
@@ -3145,7 +3151,7 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
         if (n.level > 0)
           e.level = std::max(1, std::min(8, n.level));
         else
-          e.level = std::max(1, std::min(8, fr.depth > 0 ? fr.depth : 1));
+          e.level = std::max(1, std::min(8, fr.depth + 1));  // below its section
         e.text = node_text(doc, fr.id);
         if (e.text.empty()) e.text = "(empty header)";
         out.push_back(std::move(e));

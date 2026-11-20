@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Thread titles are real headings
+
+- A Thread's title is a `Header` as its first child (`thread_title` /
+  `set_thread_title` in `types.hpp`) instead of `summary`, for every
+  importer (forums, HN, Reddit, Lemmy, Nostr, YouTube, video sites, feeds).
+  Layout draws it in the thread band (editable glyphs, `#label` as
+  decoration); the outline lists a titled thread like a section, messages'
+  headings one level below; no preamble row before a titled thread.
+  Headers that are not a section's title now sit one level below their
+  section in the outline (were on its level).
+- Markdown `subject=` / S-expression `:subject` read as the title and save as
+  `:::heading` / `(heading …)`; `examples/tour.md` uses the canonical form.
+- Micro-blog feeds: the feed title (linked) is the thread title; no more
+  separate head line repeating it.
+- Checked under Xvfb (tour-style thread outline, lemmy.world/c/technology).
+- Later: RFC 4685 `thr:in-reply-to` threading for feeds; smarter overlap
+  detection between Heading outline and Page Navigation.
+
 ## Status (2026-11-20) — Feeds are articles with headings; outline in the URL bar
 
 - RSS / Atom feeds with titled entries render as a section of articles
@@ -13,9 +31,7 @@
 - Location field: a Heading outline button for pages with headings; Page
   Navigation got its own `navigation` icon (it borrowed `outline`). Both
   show side by side for now.
-- Later: thread `summary=` → a real `<h>` title for all forum importers;
-  RFC 4685 `thr:in-reply-to` threading for feeds; smarter overlap detection
-  between Heading outline and Page Navigation.
+- Thread `summary=` → real title: done (see above).
 - Checked under Xvfb (planet.debian.org/rss20.xml outline, debian.org URL bar).
 
 ## Status (2026-11-20) — Gutters and scrollbars show hover and press

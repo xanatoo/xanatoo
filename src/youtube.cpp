@@ -539,7 +539,7 @@ Document yt_listing_document(const YtListing& l, const YtRef& ref, bool has_prev
   if (ref.page == 1 && !l.description.empty()) append_plain(doc, root, l.description);
 
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
+  set_thread_title(doc, thread, title);
   doc.get(thread).label = "youtube";
   for (const YtVideo& v : l.videos) {
     NodeId art = doc.create(NodeKind::Article, thread);
@@ -630,7 +630,7 @@ Document yt_video_document(const YtVideoInfo& v, const YtComments& c,
   }
 
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
+  set_thread_title(doc, thread, title);
   doc.get(thread).label = "comments";
   for (const YtComment& cm : c.comments) {
     NodeId msg = doc.create(NodeKind::Message, thread);

@@ -252,9 +252,14 @@ the *Structure* section, and it changes when that passage changes.
 Threads hold messages with an author, a date and a stable id. Replies
 point at their parent with `in-reply-to`, and layout derives the
 indentation from that. A message may also comment on a passage instead of
-a person with `about="#…"`.
+a person with `about="#…"`. A heading at the top of the thread is its
+title; the outline lists it with the messages' own headings below.
 
-:::thread id="thread-include" subject="RFC: typed includes"
+:::thread id="thread-include"
+
+:::heading
+RFC: typed includes
+:::
 
 :::message id="m-alice-1" from="Alice Example <alice@example.org>" date="2026-02-28T09:14:00Z"
 I keep wanting includes to say whether they are a **citation** or a

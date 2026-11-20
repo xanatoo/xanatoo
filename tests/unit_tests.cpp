@@ -6361,15 +6361,19 @@ void test_parse_feeds() {
   EXPECT(micro.has_value());
   if (micro) {
     const Node* thread = first_of_kind(*micro, NodeKind::Thread);
-    EXPECT(thread && thread->children.size() == 1);
-    if (thread && !thread->children.empty()) {
-      const Node& m = micro->get(thread->children[0]);
+    // The feed title is the thread's title Header, then the one message.
+    EXPECT(thread && thread->children.size() == 2);
+    if (thread && thread->children.size() == 2) {
+      const NodeId title = thread_title(*micro, thread->id);
+      EXPECT(title == thread->children[0]);
+      EXPECT_EQ(plain_text(*micro, title), "M");
+      const Node& m = micro->get(thread->children[1]);
       EXPECT(m.kind == NodeKind::Message);
       EXPECT_EQ(m.src, "M");
       EXPECT_EQ(plain_text(*micro, m.children.at(0)), "Hi");
       EXPECT_EQ(micro->get(m.children.back()).spans.at(0).href, "https://m.example/1");
     }
-    EXPECT(!document_has_headings(*micro));
+    EXPECT(document_has_headings(*micro));  // the thread title
   }
 
   // An entry's own headings nest below its title in the outline.
@@ -7637,6 +7641,56 @@ static void test_font_face_index() {
   EXPECT(!missing.load(negative, 18, nullptr));
 }
 
+// Thread titles are a leading Header: `subject=` is read as one, saved as
+// `:::heading`, and the outline nests the messages' headings below it.
+static void test_thread_titles() {
+  using namespace xanatoo;
+  Document d = parse_markup(
+      ":::thread id=\"t\" subject=\"RFC: typed includes\"\n"
+      ":::message id=\"m1\" from=\"A\"\n"
+      ":::heading\nFirst post\n:::\n\nBody\n:::\n:::\n");
+  const Node* thread = first_of_kind(d, NodeKind::Thread);
+  EXPECT(thread != nullptr);
+  if (!thread) return;
+  const NodeId title = thread_title(d, thread->id);
+  EXPECT(title != INVALID_NODE);
+  EXPECT_EQ(plain_text(d, title), "RFC: typed includes");
+  EXPECT(thread->summary.empty());
+  const std::string md = serialize_markup(d);
+  EXPECT(md.find("subject=") == std::string::npos);
+  EXPECT(md.find(":::heading\nRFC: typed includes") != std::string::npos);
+  Document back = parse_markup(md);
+  const Node* t2 = first_of_kind(back, NodeKind::Thread);
+  EXPECT(t2 && plain_text(back, thread_title(back, t2->id)) == "RFC: typed includes");
+
+  std::vector<OutlineEntry> ol;
+  collect_outline(d, ol);
+  EXPECT_EQ(ol.size(), 2u);  // no preamble row before a titled thread
+  if (ol.size() == 2) {
+    EXPECT_EQ(ol[0].text, "RFC: typed includes");
+    EXPECT_EQ(ol[0].level, 1);
+    EXPECT(!ol[0].has_children);
+    EXPECT_EQ(ol[1].text, "First post");
+    EXPECT_EQ(ol[1].level, 1 + 1);
+  }
+
+  Document s = parse_sexpr("(document (thread :subject \"S\" (message (p \"x\"))))");
+  const Node* t3 = first_of_kind(s, NodeKind::Thread);
+  EXPECT(t3 && plain_text(s, thread_title(s, t3->id)) == "S");
+
+  // Replacing and removing the title.
+  Document e;
+  const NodeId root = e.create(NodeKind::Document);
+  const NodeId th = e.create(NodeKind::Thread, root);
+  e.create(NodeKind::Message, th);
+  const NodeId h = set_thread_title(e, th, "One");
+  EXPECT(e.get(th).children.size() == 2 && e.get(th).children[0] == h);
+  EXPECT(set_thread_title(e, th, "Two") == h);
+  EXPECT_EQ(plain_text(e, h), "Two");
+  set_thread_title(e, th, "");
+  EXPECT(thread_title(e, th) == INVALID_NODE && e.get(th).children.size() == 1);
+}
+
 static void test_plain_text_files() {
   using namespace xanatoo;
   EXPECT(path_uses_plain_text("/x/notes.TXT"));
@@ -7742,6 +7796,7 @@ int main() {
   test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();
+  test_thread_titles();
   test_page_links();
   test_opensearch();
   test_hn_urls_and_html();

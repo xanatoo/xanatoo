@@ -26,6 +26,12 @@ read-only service clients. Every client is read-only: never post or log in.
   clients; the part after the prefix mirrors the web path (`hn:item?id=1`,
   `reddit:r/linux/`, `lemmy:lemmy.world/c/technology`). `web_url_for`
   maps a ref back to https for the API clients, which still take web URLs.
+- Every importer titles its Thread with `set_thread_title` (a `Header` as
+  the thread's first child, `thread_title` finds it), never `summary`: the
+  title is drawn in the thread band and the Heading Outline lists it with
+  the messages' own headings (post titles) one level below. Markdown
+  `subject=` / S-expression `:subject` are read as that title and saved as
+  a `heading`; a bare `summary` is only a layout fallback.
 - Plain https URLs of those sites open as web pages. Links inside native
   views stay native: `native_rewrite_links` (HN, Reddit) or refs emitted by
   `lemmy.cpp` (its path test is too loose for arbitrary links).

@@ -206,6 +206,13 @@ struct Document {
   bool insert_after(NodeId after, NodeId child);
 };
 
+// A Thread's title is a Header as its first child (shown in the thread's
+// band, listed by the Heading Outline). Returns it, or INVALID_NODE.
+NodeId thread_title(const Document& doc, NodeId thread);
+// Gives `thread` that title Header (created as the first child, or its text
+// replaced) and returns it; an empty title removes it from the thread.
+NodeId set_thread_title(Document& doc, NodeId thread, const std::string& title);
+
 // An Image node's link target (an HTML <a> around a block <img>) is kept as
 // one empty Link span. Returns its href, or nullptr when the image's spans
 // are not exactly that. Both native formats store it as an `href`.

@@ -888,7 +888,8 @@ Document parse_markup(std::string_view source) {
       if (!id.empty()) doc.get(n).label = id;
       std::string sub = fence_attr(trimmed, "subject");
       if (sub.empty()) sub = fence_attr(trimmed, "title");
-      if (!sub.empty()) doc.get(n).summary = sub;
+      // subject= is a migration alias for a leading :::heading.
+      if (!sub.empty()) set_thread_title(doc, n, sub);
       push_fence(n);
       ++i;
       continue;
@@ -2792,7 +2793,7 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
       i += 2;
     }
     if (!label.empty()) doc.get(n).label = label;
-    if (!subject.empty()) doc.get(n).summary = subject;
+    if (!subject.empty()) set_thread_title(doc, n, subject);  // alias of (heading …)
     parse_sexpr_children(doc, n, e.kids, i);
     return;
   }

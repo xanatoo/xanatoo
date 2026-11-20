@@ -580,7 +580,7 @@ NodeId start_document(Document& doc, const std::string& title,
     }
   }
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
+  set_thread_title(doc, thread, title);
   doc.get(thread).label = thread_label;
   return thread;
 }

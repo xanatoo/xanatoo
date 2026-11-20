@@ -125,6 +125,37 @@ InlineSpan inline_math(std::string tex, bool display) {
   return s;
 }
 
+NodeId thread_title(const Document& doc, NodeId thread) {
+  const Node& t = doc.get(thread);
+  if (t.id != thread || t.kind != NodeKind::Thread || t.children.empty())
+    return INVALID_NODE;
+  const NodeId first = t.children.front();
+  return doc.get(first).kind == NodeKind::Header ? first : INVALID_NODE;
+}
+
+NodeId set_thread_title(Document& doc, NodeId thread, const std::string& title) {
+  NodeId h = thread_title(doc, thread);
+  if (title.empty()) {
+    if (h != INVALID_NODE) {
+      Node& t = doc.get(thread);
+      t.children.erase(t.children.begin());
+      doc.get(h).parent = INVALID_NODE;  // detached
+    }
+    return INVALID_NODE;
+  }
+  if (h == INVALID_NODE) {
+    Node& t = doc.get(thread);
+    if (t.id != thread || t.kind != NodeKind::Thread) return INVALID_NODE;
+    h = doc.create(NodeKind::Header);
+    Node& tt = doc.get(thread);
+    tt.children.insert(tt.children.begin(), h);
+    doc.get(h).parent = thread;
+  }
+  doc.get(h).spans.clear();
+  doc.append_text(h, title);
+  return h;
+}
+
 const std::string* image_link_href(const Node& node) {
   if (node.kind != NodeKind::Image || node.spans.size() != 1) return nullptr;
   const InlineSpan& sp = node.spans[0];

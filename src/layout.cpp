@@ -1416,21 +1416,39 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
 
     case NodeKind::Thread: {
       float start_y = y;
-      // Subject line
-      Node header = node;
+      // Subject line: the title Header (editable, in the outline), else the
+      // legacy `summary`; the thread's #label follows as decoration.
+      const NodeId title = thread_title(doc, id);
+      Node header = title != INVALID_NODE ? doc.get(title) : node;
       header.kind = NodeKind::Paragraph;
-      header.spans.clear();
-      InlineSpan hs;
-      hs.kind = InlineKind::Strong;
-      hs.text = node.summary.empty() ? "Thread" : node.summary;
+      if (title == INVALID_NODE) header.spans.clear();
+      const size_t own_spans = header.spans.size();
+      for (InlineSpan& sp : header.spans)
+        if (sp.kind == InlineKind::Text) sp.kind = InlineKind::Strong;
+      std::string tail = header.spans.empty()
+                             ? (node.summary.empty() ? "Thread" : node.summary)
+                             : std::string();
       if (!node.label.empty()) {
-        hs.text += "  ·  #";
-        hs.text += node.label;
+        tail += "  ·  #";
+        tail += node.label;
       }
-      header.spans.push_back(std::move(hs));
+      if (!tail.empty()) {
+        InlineSpan hs;
+        hs.kind = InlineKind::Strong;
+        hs.text = std::move(tail);
+        header.spans.push_back(std::move(hs));
+      }
       y += before(BlockRole::Thread);
       const float text_y = y;
+      const size_t glyph0 = out.glyphs.size();
       layout_role_text(doc, header, BlockRole::Thread, x, y, max_width, out);
+      if (title != INVALID_NODE) {
+        for (size_t gi = glyph0; gi < out.glyphs.size(); ++gi) {
+          auto& g = out.glyphs[gi];
+          g.node = g.span_index < own_spans ? title : INVALID_NODE;
+        }
+        out.boxes.push_back({title, x, text_y, max_width, y - text_y});
+      }
       add_role_band(BlockRole::Thread, id, x, text_y, max_width, y, out);
       y += 8.f;
       // Replies by the thread starter get the `message-op` author colour.
@@ -1443,7 +1461,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           break;
         }
       }
-      layout_children_sequential(doc, node.children, x, y, max_width, out);
+      if (title != INVALID_NODE) {
+        const std::vector<NodeId> rest(node.children.begin() + 1,
+                                       node.children.end());
+        layout_children_sequential(doc, rest, x, y, max_width, out);
+      } else {
+        layout_children_sequential(doc, node.children, x, y, max_width, out);
+      }
       thread_op_ = outer_op;
       y += after(BlockRole::Thread);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});

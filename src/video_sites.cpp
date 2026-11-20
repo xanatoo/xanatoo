@@ -862,7 +862,7 @@ Document vs_listing_document(const VsListing& l, const VsRef& ref) {
   if (ref.page == 1 && !l.description.empty()) append_plain(doc, root, l.description);
 
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
+  set_thread_title(doc, thread, title);
   doc.get(thread).label = ascii_lower(std::string_view(site));
   for (const VsVideo& v : l.videos) {
     NodeId art = doc.create(NodeKind::Article, thread);
@@ -953,7 +953,7 @@ Document vs_video_document(const VsVideoInfo& v, const VsComments& c, const VsRe
   }
 
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title;
+  set_thread_title(doc, thread, title);
   doc.get(thread).label = "comments";
   for (const VsComment& cm : c.comments) {
     NodeId msg = doc.create(NodeKind::Message, thread);

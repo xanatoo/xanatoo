@@ -418,7 +418,7 @@ std::optional<Document> fetch_list(const HnUrl& u, std::string* err) {
   NodeId root = doc.create(NodeKind::Document);
   append_nav(doc, root, u.list);
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = std::string("Hacker News — ") + list_title(u.list);
+  set_thread_title(doc, thread, std::string("Hacker News — ") + list_title(u.list));
   doc.get(thread).label = "hn";
   for (size_t i = 0; i < ids.size(); ++i) {
     auto it = by_id.find(ids[i]);
@@ -482,7 +482,7 @@ std::optional<Document> fetch_item(const HnUrl& u, std::string* err) {
   doc.get(thread).label = "hn";
   if (root_item.title.empty()) {
     // A comment permalink: show it as the head of its own subtree.
-    doc.get(thread).summary = "Hacker News comment";
+    set_thread_title(doc, thread, "Hacker News comment");
     NodeId msg = doc.create(NodeKind::Message, thread);
     Node& n = doc.get(msg);
     n.label = std::to_string(root_item.id);
@@ -497,7 +497,7 @@ std::optional<Document> fetch_item(const HnUrl& u, std::string* err) {
     }
   } else {
     root_item.comments = count_comments(root_item);
-    doc.get(thread).summary = "Hacker News — discussion";
+    set_thread_title(doc, thread, "Hacker News — discussion");
     doc.meta.title = root_item.title;
     append_story(doc, thread, root_item, {}, true);
   }

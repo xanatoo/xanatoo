@@ -927,7 +927,7 @@ Document events_to_document(const std::string& root_id,
   NodeId root = doc.create(NodeKind::Document);
   NodeId thread = doc.create(NodeKind::Thread, root);
   doc.get(thread).label = root_id.substr(0, 12);
-  doc.get(thread).summary = "Nostr discussion";
+  set_thread_title(doc, thread, "Nostr discussion");
 
   for (const auto& e : events) {
     if (e.id == root_id && (e.kind == 1 || e.kind == 9 || e.kind == 11)) {
@@ -938,7 +938,7 @@ Document events_to_document(const std::string& root_id,
       }
       for (char& c : sub)
         if (c == '\n' || c == '\r') c = ' ';
-      doc.get(thread).summary = sub.empty() ? "Nostr note" : sub;
+      set_thread_title(doc, thread, sub.empty() ? "Nostr note" : sub);
       break;
     }
   }
@@ -1002,7 +1002,7 @@ Document author_feed_document(const std::string& pubkey,
   }
 
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = "Notes by " + name;
+  set_thread_title(doc, thread, "Notes by " + name);
 
   std::sort(events.begin(), events.end(),
             [](const NostrEvent& a, const NostrEvent& b) {
@@ -1404,7 +1404,7 @@ Document group_timeline_document(std::string_view relay, std::string_view group_
                   " · " + metadata_status +
                   ". Membership and moderation still belong to the relay.");
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = name + " · observed group messages";
+  set_thread_title(doc, thread, name + " · observed group messages");
   std::vector<NostrEvent> events;
   for (auto& kv : by_id) {
     auto& e = kv.second;
@@ -1667,7 +1667,7 @@ std::optional<Document> nostr_fetch_thread(std::string_view ref,
     if (root != INVALID_NODE) {
       for (NodeId c : doc.get(root).children) {
         if (doc.get(c).kind == NodeKind::Thread) {
-          doc.get(c).summary = "Recent public notes (firehose sample)";
+          set_thread_title(doc, c, "Recent public notes (firehose sample)");
           doc.get(c).label = "recent";
           break;
         }

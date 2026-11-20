@@ -320,7 +320,7 @@ Document build_document(const std::string& title,
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
   NodeId thread = doc.create(NodeKind::Thread, root);
-  doc.get(thread).summary = title.empty() ? "Lemmy" : title;
+  set_thread_title(doc, thread, title.empty() ? "Lemmy" : title);
   doc.get(thread).label = "lemmy";
 
   int64_t root_post_id = posts.empty() || profile ? 0 : posts.front().id;
