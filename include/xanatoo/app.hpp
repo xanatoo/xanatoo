@@ -188,6 +188,7 @@ struct FootnoteOverlay {
   float column_w = 0.f;
   float gap = 0.f;
   float pad = 0.f;
+  xanatoo::Document doc;  // the notes, as laid out in `layout`
   xanatoo::LayoutResult layout;
   float content_h = 0.f;  // tallest column
   float y = 0.f;  // strip top, viewport y (0 = top of the pane content)
@@ -533,6 +534,9 @@ struct Hover {
   size_t link_span = 0;
   uint32_t link_auto = 0;  // PositionedGlyph::auto_link of the hovered text
   int link_pane = -1;
+  // link_node / link_span name a node of link_pane's footnote overlay
+  // (FootnoteOverlay::doc), not of the pane's document.
+  bool link_in_footnotes = false;
   xanatoo::NodeId stretch = xanatoo::INVALID_NODE;
   int stretch_pane = -1;
   xanatoo::NodeId image = xanatoo::INVALID_NODE;
@@ -2080,6 +2084,10 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip);
 bool in_footnote_overlay(const App& app, int pi, float lx, float my);
 // Press on the strip: jump to the note under it. True = press consumed.
 bool click_footnote_overlay(App& app, int pi, float lx, float my);
+// Link in pane `pi`'s footnote strip at pane-local (lx, viewport y); its
+// node / span are of FootnoteOverlay::doc.
+std::optional<xanatoo::LinkHit> footnote_overlay_link(const App& app, int pi,
+                                                      float lx, float my);
 // Footnote node whose reference mark is under the pointer in pane `pi`
 // (INVALID_NODE = none); highlighted in the strip and the Context panel.
 xanatoo::NodeId hovered_footnote(App& app, int pi);

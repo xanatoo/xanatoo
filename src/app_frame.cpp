@@ -3485,7 +3485,7 @@ static void draw_pane_overlays(App& app, int i) {
       }
     }
     // Link / cite run: soft wash + thicker underline
-    if (app.hover.link_pane == i &&
+    if (app.hover.link_pane == i && !app.hover.link_in_footnotes &&
         app.hover.link_node != xanatoo::INVALID_NODE &&
         !app.hover.href.empty()) {
       for_each_link_run(

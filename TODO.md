@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Footnote strip: divider and links
+
+- The footnote overlay sits on a sheet a shade darker than the paper under
+  a 3px rule (footnote border colour, else a paper/ink mix) with a deeper
+  shadow, so it no longer reads as part of the page.
+- Links in the strip's notes are live: hover shows the target and an
+  underline, a press follows the link exactly as on the page (link-follow
+  code factored into `follow_link_hit`); unresolved anchors fall back to
+  jumping to the note.
+
 ## Status (2026-11-20) — Hovered footnote mark highlights its note
 
 - Hovering a footnote mark washes its note in the style's `mark` colour, in

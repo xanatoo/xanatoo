@@ -232,6 +232,95 @@ static void on_mousewheel(App& app, SDL_Event& ev, bool imgui_mouse,
 }
 
 // Left press: floats, scrollbar, split gutter, then document hit-tests.
+// Follow the link `hit` from the focused pane: internal #anchors jump
+// in-document; http(s)/mailto open externally. False when nothing happened
+// (an anchor that names nothing in the document).
+static bool follow_link_hit(App& app, const xanatoo::LinkHit& hit) {
+  Pane& p = focused_pane(app);
+  const std::string& href = hit.href;
+  const bool ctrl_click = (SDL_GetModState() & KMOD_CTRL) != 0;
+  if (!ctrl_click && open_link_image(app, app.focus, href)) return true;
+  // Trail mode: first-tile links open in the second, then shift along.
+  if (!ctrl_click && follow_link_split(app, app.focus, href)) {
+    reset_blink(app);
+    return true;
+  }
+  if (auto dest = xanatoo::jump_to_href(doc_of(app, p), href)) {
+    if (!ctrl_click && !split_browsing(app) &&
+        navigate_anchor_link(app, app.focus, href,
+                             NavLink{href, {}, hit.node,
+                                     hit.span_index})) {
+      flash_status(app, "Followed " + href);
+      reset_blink(app);
+      return true;
+    }
+    expand_ancestors_for_node(app, dest->node);
+    // Ctrl+click: open target in the other pane (enable split)
+    if (ctrl_click) {
+      if (!app.split && app.focus < kCentreViews) {
+        app.split = true;
+        app.tile_mode = TileMode::Independent;
+        app.needs_layout = true;
+      }
+      int other = other_pane(app);
+      app.panes[other].sel.focus = *dest;
+      app.panes[other].sel.anchor = *dest;
+      scroll_caret_into_view(app, app.panes[other]);
+      flash_status(app, "Link in other pane: " + href);
+      std::cout << "Opened link in other pane: " << href << "\n";
+    } else {
+      p.sel.focus = *dest;
+      p.sel.anchor = p.sel.focus;
+      scroll_caret_into_view(app, p);
+      // Dual-pane shared doc: mirror target in the other view
+      if (app.split && shared_doc(app) && app.focus < kCentreViews) {
+        int other = other_pane(app);
+        app.panes[other].sel.focus = *dest;
+        app.panes[other].sel.anchor = *dest;
+        scroll_caret_into_view(app, app.panes[other]);
+      }
+      flash_status(app, "Followed " + href);
+      std::cout << "Followed link: " << href << "\n";
+    }
+    reset_blink(app);
+    return true;
+  } else if (!href.empty() && (href)[0] != '#') {
+    std::string abs = href;
+    const std::string base = link_base_url(app, app.focus);
+    if (!(xanatoo::is_gemini_url(abs) || xanatoo::is_gopher_url(abs) ||
+          xanatoo::is_spartan_url(abs) || xanatoo::is_nex_url(abs) ||
+          xanatoo::is_finger_url(abs)) && !base.empty()) {
+      std::string resolved;
+      if (xanatoo::is_gemini_url(base))
+        resolved = xanatoo::resolve_gemini_url(base, abs);
+      else if (xanatoo::is_gopher_url(base))
+        resolved = xanatoo::resolve_gopher_url(base, abs);
+      else if (xanatoo::is_spartan_url(base))
+        resolved = xanatoo::resolve_spartan_url(base, abs);
+      else if (xanatoo::is_nex_url(base))
+        resolved = xanatoo::resolve_nex_url(base, abs);
+      if (!resolved.empty()) abs = resolved;
+    }
+    if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
+        xanatoo::is_image_address(abs) ||
+        (xanatoo::is_playable_url(abs) && !is_inapp_doc_href(app, abs))) {
+      navigate_to_url(app, std::move(abs), true,
+                      NavLink{href, {}, hit.node, hit.span_index});
+      return true;
+    }
+    if (is_inapp_doc_href(app, abs)) {
+      navigate_to_url(app, resolve_doc_href(app, abs), true,
+                      NavLink{href, {}, hit.node, hit.span_index});
+      return true;
+    }
+    flash_status(app, "Opening " + href);
+    std::cout << "Opening external link: " << href << "\n";
+    xanatoo::open_external_url(href);
+    return true;
+  }
+  return false;
+}
+
 void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     const int mxw = x, myw = y;
 
@@ -389,8 +478,15 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     Pane& p = focused_pane(app);
     float lx = local_x(app, mx, app.focus);
 
-    // Footnote strip over the pane's bottom edge: jump to the note.
-    if (click_footnote_overlay(app, app.focus, lx, my)) {
+    // Footnote strip over the pane's bottom edge: follow a link in a note,
+    // else jump to the note.
+    if (in_footnote_overlay(app, app.focus, lx, my)) {
+      if (auto hit = footnote_overlay_link(app, app.focus, lx, my)) {
+        hit->node = xanatoo::INVALID_NODE;  // not of the pane's document
+        hit->span_index = 0;
+        if (follow_link_hit(app, *hit)) return;
+      }
+      click_footnote_overlay(app, app.focus, lx, my);
       reset_blink(app);
       return;
     }
@@ -488,88 +584,8 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     // externally
     if (auto hit = xanatoo::hit_test_link_ex(doc_of(app, p), p.layout, lx,
                                              my, p.scroll_y)) {
-      const std::optional<std::string> href = hit->href;
       app.quote_click = {};  // a link inside a quote follows the link
-      const bool ctrl_click = (SDL_GetModState() & KMOD_CTRL) != 0;
-      if (!ctrl_click && open_link_image(app, app.focus, *href)) return;
-      // Trail mode: first-tile links open in the second, then shift along.
-      if (!ctrl_click && follow_link_split(app, app.focus, *href)) {
-        reset_blink(app);
-        return;
-      }
-      if (auto dest = xanatoo::jump_to_href(doc_of(app, p), *href)) {
-        if (!ctrl_click && !split_browsing(app) &&
-            navigate_anchor_link(app, app.focus, *href,
-                                 NavLink{*href, {}, hit->node,
-                                         hit->span_index})) {
-          flash_status(app, "Followed " + *href);
-          reset_blink(app);
-          return;
-        }
-        expand_ancestors_for_node(app, dest->node);
-        // Ctrl+click: open target in the other pane (enable split)
-        if (ctrl_click) {
-          if (!app.split && app.focus < kCentreViews) {
-            app.split = true;
-            app.tile_mode = TileMode::Independent;
-            app.needs_layout = true;
-          }
-          int other = other_pane(app);
-          app.panes[other].sel.focus = *dest;
-          app.panes[other].sel.anchor = *dest;
-          scroll_caret_into_view(app, app.panes[other]);
-          flash_status(app, "Link in other pane: " + *href);
-          std::cout << "Opened link in other pane: " << *href << "\n";
-        } else {
-          p.sel.focus = *dest;
-          p.sel.anchor = p.sel.focus;
-          scroll_caret_into_view(app, p);
-          // Dual-pane shared doc: mirror target in the other view
-          if (app.split && shared_doc(app) && app.focus < kCentreViews) {
-            int other = other_pane(app);
-            app.panes[other].sel.focus = *dest;
-            app.panes[other].sel.anchor = *dest;
-            scroll_caret_into_view(app, app.panes[other]);
-          }
-          flash_status(app, "Followed " + *href);
-          std::cout << "Followed link: " << *href << "\n";
-        }
-        reset_blink(app);
-        return;
-      } else if (!href->empty() && (*href)[0] != '#') {
-        std::string abs = *href;
-        const std::string base = link_base_url(app, app.focus);
-        if (!(xanatoo::is_gemini_url(abs) || xanatoo::is_gopher_url(abs) ||
-              xanatoo::is_spartan_url(abs) || xanatoo::is_nex_url(abs) ||
-              xanatoo::is_finger_url(abs)) && !base.empty()) {
-          std::string resolved;
-          if (xanatoo::is_gemini_url(base))
-            resolved = xanatoo::resolve_gemini_url(base, abs);
-          else if (xanatoo::is_gopher_url(base))
-            resolved = xanatoo::resolve_gopher_url(base, abs);
-          else if (xanatoo::is_spartan_url(base))
-            resolved = xanatoo::resolve_spartan_url(base, abs);
-          else if (xanatoo::is_nex_url(base))
-            resolved = xanatoo::resolve_nex_url(base, abs);
-          if (!resolved.empty()) abs = resolved;
-        }
-        if (is_in_app_remote_url(abs) || xanatoo::is_file_url(abs) ||
-            xanatoo::is_image_address(abs) ||
-        (xanatoo::is_playable_url(abs) && !is_inapp_doc_href(app, abs))) {
-          navigate_to_url(app, std::move(abs), true,
-                          NavLink{*href, {}, hit->node, hit->span_index});
-          return;
-        }
-        if (is_inapp_doc_href(app, abs)) {
-          navigate_to_url(app, resolve_doc_href(app, abs), true,
-                          NavLink{*href, {}, hit->node, hit->span_index});
-          return;
-        }
-        flash_status(app, "Opening " + *href);
-        std::cout << "Opening external link: " << *href << "\n";
-        xanatoo::open_external_url(*href);
-        return;
-      }
+      if (follow_link_hit(app, *hit)) return;
     }
 
     // Click list-item marker column → toggle GFM task checkbox
@@ -1222,9 +1238,24 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Links / cites (skip stretch-marker glyphs — those are stretch)
-      if (!app.hover.col_gap && app.hover.stretch == xanatoo::INVALID_NODE &&
-          app.hover.image == xanatoo::INVALID_NODE &&
-          !in_footnote_overlay(app, hover_pane, lx, my)) {
+      // The footnote strip covers the page: its links come first.
+      if (in_footnote_overlay(app, hover_pane, lx, my)) {
+        if (auto hit = footnote_overlay_link(app, hover_pane, lx, my);
+            hit && !hit->href.empty()) {
+          app.hover.href = hit->href;
+          app.hover.rel = hit->rel;
+          app.hover.is_cite = (hit->kind == xanatoo::InlineKind::Cite);
+          app.hover.link_node = hit->node;
+          app.hover.link_span = hit->span_index;
+          app.hover.link_auto = hit->auto_link;
+          app.hover.link_pane = hover_pane;
+          app.hover.link_in_footnotes = true;
+          if (auto prev = xanatoo::link_preview_text(hd, hit->href))
+            app.hover.preview = *prev;
+        }
+      } else if (!app.hover.col_gap &&
+                 app.hover.stretch == xanatoo::INVALID_NODE &&
+                 app.hover.image == xanatoo::INVALID_NODE) {
         if (auto hit =
                 xanatoo::hit_test_link_ex(hd, hp.layout, lx, my, hp.scroll_y)) {
           // Stretch summaries are laid out as Link-styled glyphs on a

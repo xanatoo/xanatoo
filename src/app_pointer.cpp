@@ -47,6 +47,7 @@ void clear_interaction_hover(App& app) {
   app.hover.link_span = 0;
   app.hover.link_auto = 0;
   app.hover.link_pane = -1;
+  app.hover.link_in_footnotes = false;
   app.hover.stretch = xanatoo::INVALID_NODE;
   app.hover.stretch_pane = -1;
   app.hover.image = xanatoo::INVALID_NODE;

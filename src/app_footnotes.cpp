@@ -5,13 +5,16 @@
 // a strip along the pane's bottom edge, laid out with the document style like
 // the foot of a printed page. A wide text column holds several columns of
 // notes side by side, balanced by height. Notes whose own block is on screen
-// are left out; a press on a note jumps to it. The note of the mark under
-// the pointer is washed in the style's `mark` colour.
+// are left out; a press on a link in a note follows it, elsewhere on a note
+// jumps to the note. The note of the mark under the pointer is washed in
+// the style's `mark` colour. A thick rule and a slightly darker sheet set
+// the strip apart from the page above it.
 
 #include <algorithm>
 #include <utility>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/editor.hpp"
 #include "xanatoo/util.hpp"
 
 namespace xanatoo::app {
@@ -24,6 +27,16 @@ constexpr int kFadePx = 12;         // fade where notes are cut off
 constexpr float kMinColumnEm = 18.f;  // narrowest note column
 constexpr float kGapEm = 2.f;         // between note columns
 constexpr size_t kMaxColumns = 6;
+constexpr float kRulePx = 3.f;        // divider above the strip (× ui scale)
+constexpr int kShadePct = 5;          // strip sheet: paper this % toward ink
+constexpr int kShadowPx = 6;          // soft shadow onto the page above
+
+xanatoo::Rgba mix(xanatoo::Rgba a, xanatoo::Rgba b, int pct) {
+  auto m = [&](uint8_t x, uint8_t y) {
+    return static_cast<uint8_t>((x * (100 - pct) + y * pct) / 100);
+  };
+  return {m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), 255};
+}
 
 // Lay out the notes for `keys` in columns across the pane's text column.
 void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
@@ -33,8 +46,8 @@ void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
   fo.note_y.clear();
   fo.note_bottom.clear();
   fo.columns.clear();
-  xanatoo::Document notes =
-      xanatoo::extract_footnotes(doc_of(app, pane), keys, &fo.notes);
+  fo.doc = xanatoo::extract_footnotes(doc_of(app, pane), keys, &fo.notes);
+  const xanatoo::Document& notes = fo.doc;
   const auto& tops = notes.get(notes.root).children;
 
   // As many columns as fit the text column the pane's own layout uses.
@@ -117,6 +130,24 @@ std::pair<int, int> column_span(const Pane& pane, const SDL_Rect& strip,
   return {std::max(x0, strip.x), std::min(x1, strip.x + strip.w)};
 }
 
+// Column under pane-local x `lx` and the layout y of viewport y `my` in it.
+struct NotePoint {
+  size_t column = 0;
+  float y = 0.f;  // in fo.layout
+  bool inside = false;  // within the column's notes (not below its end)
+};
+NotePoint note_point(const FootnoteOverlay& fo, float lx, float my) {
+  NotePoint np;
+  if (fo.columns.empty()) return np;
+  while (np.column + 1 < fo.columns.size() &&
+         lx >= fo.columns[np.column + 1].x - fo.gap * 0.5f)
+    ++np.column;
+  const auto& col = fo.columns[np.column];
+  np.y = my - fo.y - fo.pad + col.y0;
+  np.inside = my - fo.y < col.h;
+  return np;
+}
+
 }  // namespace
 
 void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
@@ -151,19 +182,24 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
   const xanatoo::DocStyle& st = app.style;
   xanatoo::sdl::set_clip_rect(app.sdl, &clip);
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
-  for (int k = 1; k <= 4; ++k) {  // soft shadow onto the text above
-    SDL_SetRenderDrawColor(app.sdl, 0, 0, 0, static_cast<Uint8>(32 / k));
-    xanatoo::sdl::draw_line(app.sdl, strip.x, strip.y - k, strip.x + strip.w - 1,
-                       strip.y - k);
+  for (int k = 1; k <= kShadowPx; ++k) {  // soft shadow onto the text above
+    SDL_SetRenderDrawColor(app.sdl, 0, 0, 0,
+                           static_cast<Uint8>(48 * (kShadowPx + 1 - k) /
+                                              (kShadowPx * k)));
+    xanatoo::sdl::draw_line(app.sdl, strip.x, strip.y - k,
+                            strip.x + strip.w - 1, strip.y - k);
   }
-  SDL_SetRenderDrawColor(app.sdl, st.paper.r, st.paper.g, st.paper.b, 255);
+  // A sheet of its own, a shade off the page, under a thick rule.
+  const xanatoo::Rgba sheet = mix(st.paper, st.ink, kShadePct);
+  SDL_SetRenderDrawColor(app.sdl, sheet.r, sheet.g, sheet.b, 255);
   xanatoo::sdl::fill_rect(app.sdl, &strip);
-  const xanatoo::Rgba rule = st[xanatoo::BlockRole::Footnote].border;
-  if (rule.visible()) {
-    SDL_SetRenderDrawColor(app.sdl, rule.r, rule.g, rule.b, rule.a);
-    xanatoo::sdl::draw_line(app.sdl, strip.x, strip.y, strip.x + strip.w - 1,
-                       strip.y);
-  }
+  xanatoo::Rgba rule = st[xanatoo::BlockRole::Footnote].border;
+  if (!rule.visible()) rule = mix(st.paper, st.ink, 45);
+  const int rule_h = std::max(2, static_cast<int>(kRulePx * app.ui_scale));
+  const SDL_Rect rr{strip.x, strip.y, strip.w, std::min(rule_h, strip.h)};
+  SDL_SetRenderDrawColor(app.sdl, rule.r, rule.g, rule.b,
+                         std::max<Uint8>(rule.a, 160));
+  xanatoo::sdl::fill_rect(app.sdl, &rr);
 
   const auto hot =
       std::find(fo.notes.begin(), fo.notes.end(), hovered_footnote(app, pi));
@@ -196,12 +232,31 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
         xanatoo::sdl::fill_rect(app.sdl, &hr);
       }
     }
+    // The hovered link, when it is one of the strip's.
+    if (app.hover.link_pane == pi && app.hover.link_in_footnotes) {
+      SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+      const float ox = static_cast<float>(pane.x) + col.x;
+      for (const auto& pg : fo.layout.glyphs) {
+        if (pg.node != app.hover.link_node ||
+            pg.span_index != app.hover.link_span ||
+            pg.auto_link != app.hover.link_auto)
+          continue;
+        xanatoo::Font& font = app.fonts.pick(pg.font);
+        const xanatoo::Glyph& g = font.glyph(pg.codepoint);
+        const int adv = (g.advance >> 6) > 0 ? (g.advance >> 6) : g.width + 1;
+        const int uy = static_cast<int>(pg.y + 3.f - scroll);
+        SDL_SetRenderDrawColor(app.sdl, 20, 80, 190, 255);
+        const int gx = static_cast<int>(pg.x + ox);
+        xanatoo::sdl::draw_line(app.sdl, gx, uy, gx + adv - 1, uy);
+        xanatoo::sdl::draw_line(app.sdl, gx, uy + 1, gx + adv - 1, uy + 1);
+      }
+    }
     if (col.h > static_cast<float>(h)) {
       // More notes than fit: fade the cut edge into the paper.
       SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
       const int y0 = strip.y + strip.h - kFadePx;
       for (int k = 0; k < kFadePx; ++k) {
-        SDL_SetRenderDrawColor(app.sdl, st.paper.r, st.paper.g, st.paper.b,
+        SDL_SetRenderDrawColor(app.sdl, sheet.r, sheet.g, sheet.b,
                                static_cast<Uint8>(255 * (k + 1) / kFadePx));
         xanatoo::sdl::draw_line(app.sdl, x0, y0 + k, x1 - 1, y0 + k);
       }
@@ -225,14 +280,12 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my) {
   Pane& pane = app.panes[pi];
   const FootnoteOverlay& fo = pane.footnotes;
   if (fo.columns.empty()) return true;
-  size_t c = 0;  // column under the press
-  while (c + 1 < fo.columns.size() &&
-         lx >= fo.columns[c + 1].x - fo.gap * 0.5f)
-    ++c;
+  const NotePoint np = note_point(fo, lx, my);
+  const size_t c = np.column;
   const auto& col = fo.columns[c];
   const size_t end =
       c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.note_y.size();
-  const float cy = my - fo.y - fo.pad + col.y0;  // y inside the laid-out notes
+  const float cy = np.y;  // y inside the laid-out notes
   size_t k = col.first;
   while (k + 1 < end && fo.note_y[k + 1] <= cy) ++k;
   if (k >= fo.notes.size()) return true;
@@ -249,6 +302,17 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my) {
     flash_status(app, "Footnote " + key);
   }
   return true;
+}
+
+std::optional<xanatoo::LinkHit> footnote_overlay_link(const App& app, int pi,
+                                                      float lx, float my) {
+  if (!in_footnote_overlay(app, pi, lx, my)) return std::nullopt;
+  const FootnoteOverlay& fo = app.panes[pi].footnotes;
+  const NotePoint np = note_point(fo, lx, my);
+  if (!np.inside) return std::nullopt;
+  const float x = lx - fo.columns[np.column].x;
+  if (x < 0.f || x > fo.column_w) return std::nullopt;
+  return xanatoo::hit_test_link_ex(fo.doc, fo.layout, x, np.y, 0.f);
 }
 
 xanatoo::NodeId hovered_footnote(App& app, int pi) {
