@@ -29,6 +29,7 @@
 #include "xanatoo/nostr_relays.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/nostr_verify.hpp"
+#include "xanatoo/media.hpp"
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/reddit_credentials.hpp"
 #include "xanatoo/catalog_credentials.hpp"
@@ -646,6 +647,23 @@ void test_related_sites() {
 }
 
 void test_reddit_urls() {
+  {
+    // A v.redd.it post: its HLS playlist plays in the Media panel.
+    const char* post = R"({"title":"t","url":"https://v.redd.it/abc","secure_media":{"reddit_video":{
+      "fallback_url":"https://v.redd.it/abc/CMAF_720.mp4?source=fallback","has_audio":true,
+      "hls_url":"https://v.redd.it/abc/HLSPlaylist.m3u8?a=1&amp;v=1"}}})";
+    const xanatoo::RedditVideo v = xanatoo::reddit_video(post);
+    if (xanatoo::media_backend_plays_playlists()) {
+      EXPECT_EQ(v.url, "https://v.redd.it/abc/HLSPlaylist.m3u8?a=1&v=1");
+      EXPECT(!v.silent);
+    } else if (xanatoo::media_backend_available()) {
+      EXPECT_EQ(v.url, "https://v.redd.it/abc/CMAF_720.mp4?source=fallback");
+      EXPECT(v.silent);
+    }
+    EXPECT(xanatoo::reddit_video(R"({"title":"t","secure_media":null,"media":null})").url.empty());
+    EXPECT(xanatoo::reddit_video(R"({"secure_media":{"oembed":{"provider_name":"YouTube"}}})").url.empty());
+  }
+
   using namespace xanatoo;
   EXPECT(is_reddit_url("https://www.reddit.com/r/linux"));
   EXPECT(is_reddit_url("https://old.reddit.com/r/linux/"));
@@ -6413,7 +6431,7 @@ void test_parse_feeds() {
         EXPECT(rss->get(parts[1]).kind == NodeKind::Caption);
         EXPECT_EQ(plain_text(*rss, parts[1]), "Ann · 2026-10-27 10:05 UTC");
         EXPECT_EQ(plain_text(*rss, parts[2]), "Full text");
-        EXPECT_EQ(plain_text(*rss, parts[4]), "Enclosure: audio/mpeg (2.5 MB)");
+        EXPECT_EQ(plain_text(*rss, parts[4]), "\xE2\x96\xB6 Play: audio/mpeg (2.5 MB)");
       }
       // Untitled entry among titled ones: a placeholder title to the guid.
       const Node& a2 = rss->get(arts[1]);

@@ -74,6 +74,9 @@ struct VsComment {
 struct VsVideoInfo {
   std::string title, owner, owner_ref, views, date, likes, duration;
   std::string description, thumb, web_url, play_url;
+  // The video itself for the Media panel (a file or an HLS playlist; empty:
+  // none known), its quality ("720p"), and a sound-only file.
+  std::string stream_url, stream_label, audio_url;
   int comment_count = 0;
 };
 
@@ -106,6 +109,8 @@ VsComments od_parse_comments(const Json& reply, int page);
 const Json* od_first_claim(const Json& reply, std::string_view lbry_url);
 // Header of a resolved channel claim into `l`.
 void od_parse_channel_header(const Json& claim, VsListing& l);
+// The stream address of a `get` reply (`result.streaming_url`), or "".
+std::string od_parse_streaming_url(const Json& reply);
 // "@chan:8/slug:e" (possibly percent-encoded) → "lbry://@chan#8/slug#e".
 std::string od_lbry_url(std::string_view id);
 

@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Media panel for PeerTube, Odysee and more
+
+- PeerTube and Odysee video pages get "▶ Play (720p)" / "♪ Sound only"
+  links that stream in the Media panel; Internet Archive movies / audio get
+  "▶ Play"; playable feed enclosures read "▶ Play: …"; Reddit video posts
+  get "▶ Play video" (HLS). HLS / DASH playlists count as playable with
+  the FFmpeg backend (`media_backend_plays_playlists`).
+- Checked under Xvfb: PeerTube (skeptikon.fr, 720p), Odysee and archive.org
+  play in the Media panel. Not checked live: Reddit (blocks anonymous
+  fetches), Android.
+- Open: YouTube (signature cipher) and Dailymotion (403 on the stream
+  metadata) stay on mpv; the player title is the file name, not the video
+  title (a link cannot carry a title to `play_audio` yet).
+
 ## Status (2026-11-20) — Bookmark folders
 
 - Bookmarks have a folder path (`Bookmark::folder`, "Video/YouTube");

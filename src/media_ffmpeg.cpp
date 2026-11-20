@@ -48,6 +48,7 @@ std::string media_backend_name() {
 }
 
 bool media_backend_reads_feeds() { return true; }
+bool media_backend_plays_playlists() { return true; }
 
 namespace {
 

@@ -127,6 +127,33 @@ static void test_peertube() {
   assert(info.web_url == "https://a.org/videos/watch/u1" && info.owner_ref == "peertube:a.org/c/c");
   assert(info.thumb == "https://b.org/t.jpg" && info.comment_count == 2);
   assert(pt_parse_description(parse(R"({"description":"Full\r\ntext"})")) == "Full\ntext");
+  assert(info.stream_url.empty() && info.audio_url.empty());  // no files in the reply
+
+  // Streams: picture + sound up to 720p, the sound-only file apart.
+  VsVideoInfo files = pt_parse_video(parse(R"({"uuid":"u2","name":"F",
+    "files":[{"resolution":{"id":0,"label":"Audio only"},"fileUrl":"https://a.org/static/web-videos/u2-0.mp4","hasVideo":false}],
+    "streamingPlaylists":[{"type":1,"playlistUrl":"https://a.org/hls/u2/m-master.m3u8","files":[
+      {"resolution":{"id":1080,"label":"1080p"},"fileUrl":"https://a.org/hls/u2/a-1080-fragmented.mp4"},
+      {"resolution":{"id":720,"label":"720p"},"fileUrl":"https://a.org/hls/u2/b-720-fragmented.mp4"},
+      {"resolution":{"id":480,"label":"480p"},"fileUrl":"https://a.org/hls/u2/c-480-fragmented.mp4"}]}]})"), "a.org");
+  assert(files.stream_url == "https://a.org/hls/u2/b-720-fragmented.mp4" && files.stream_label == "720p");
+  assert(files.audio_url == "https://a.org/static/web-videos/u2-0.mp4");
+  VsVideoInfo big = pt_parse_video(parse(R"({"uuid":"u3","files":[
+      {"resolution":{"id":2160,"label":"2160p"},"fileUrl":"https://a.org/x-2160.mp4"},
+      {"resolution":{"id":1080,"label":"1080p"},"fileUrl":"https://a.org/x-1080.mp4"}]})"), "a.org");
+  assert(big.stream_url == "https://a.org/x-1080.mp4");  // the lowest above 720p
+  VsVideoInfo split = pt_parse_video(parse(R"({"uuid":"u4","streamingPlaylists":[{"playlistUrl":"https://a.org/m.m3u8","files":[
+      {"resolution":{"id":720,"label":"720p"},"fileUrl":"https://a.org/v-720.mp4","hasAudio":false,"hasVideo":true},
+      {"resolution":{"id":0,"label":"Audio only"},"fileUrl":"https://a.org/v-0.mp4","hasAudio":true,"hasVideo":false}]}]})"), "a.org");
+  assert(split.stream_url == "https://a.org/m.m3u8" && split.stream_label == "HLS");
+  assert(split.audio_url == "https://a.org/v-0.mp4");
+  VsRef fref;
+  fref.host = "a.org";
+  fref.kind = VsRef::Kind::Video;
+  fref.id = "u2";
+  Document fd = vs_video_document(files, VsComments{}, fref);
+  assert(has_href(fd, "https://a.org/hls/u2/b-720-fragmented.mp4") && has(all_text(fd), "Play (720p)"));
+  assert(has_href(fd, "https://a.org/static/web-videos/u2-0.mp4") && has(all_text(fd), "Sound only"));
 
   Json threads = parse(R"({"total":30,"data":[
     {"id":7,"text":"<p>Hello <b>you</b></p>","createdAt":"2026-06-24T17:23:41.000Z","totalReplies":2,
@@ -177,6 +204,19 @@ static void test_odysee() {
   assert(info.title == "Channel Roundup" && info.owner == "Odysee");
   assert(info.web_url == "https://odysee.com/@Odysee:8/channel-roundup-may-2026:e");
   assert(info.description == "Hi\n\nthere");
+  assert(info.stream_url.empty());  // no source in the claim
+  {
+    Json sc = parse(R"({"claim_id":"6eb3","name":"n","canonical_url":"lbry://@a#f/n#6",
+      "value":{"title":"T","source":{"media_type":"video/mp4","sd_hash":"f79c8fc63f82"}}})");
+    VsVideoInfo s = od_parse_claim(sc);
+    assert(s.stream_url == "https://player.odycdn.com/v6/streams/6eb3/f79c8f.mp4" && s.audio_url.empty());
+    Json ac = parse(R"({"claim_id":"ab","name":"n","value":{"source":{"media_type":"audio/mpeg","sd_hash":"123456789"}}})");
+    VsVideoInfo a = od_parse_claim(ac);
+    assert(a.stream_url.empty() && a.audio_url == "https://player.odycdn.com/v6/streams/ab/123456.mp4");
+    assert(od_parse_streaming_url(parse(R"({"result":{"streaming_url":"https://player.odycdn.com/v6/streams/x/y.mp4"}})")) ==
+           "https://player.odycdn.com/v6/streams/x/y.mp4");
+    assert(od_parse_streaming_url(parse(R"({"error":{"message":"purchase required"}})")).empty());
+  }
 
   Json resolved = parse(R"({"result":{"lbry://@Odysee#8":{"claim_id":"c1","name":"@Odysee","value":{"title":"Odysee","description":"D"}},
                             "lbry://nope":{"error":{"name":"NOT_FOUND"}}}})");

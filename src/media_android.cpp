@@ -29,6 +29,8 @@ namespace xanatoo {
 
 std::string media_backend_name() { return "Android MediaCodec"; }
 bool media_backend_reads_feeds() { return false; }
+// AMediaExtractor reads files and progressive http(s), no HLS / DASH.
+bool media_backend_plays_playlists() { return false; }
 
 namespace {
 

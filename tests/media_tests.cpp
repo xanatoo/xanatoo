@@ -178,6 +178,12 @@ void test_media(int& passed, int& failed) {
   EXPECT(!needs_media_backend("song.mp3"));
   EXPECT(is_playable_url("song.mp3"));
   EXPECT_EQ(is_playable_url("clip.mp4"), media_backend_available());
+  // HLS / DASH playlists: only a backend that streams them.
+  EXPECT(is_stream_playlist_url("https://h.org/hls/x-master.m3u8"));
+  EXPECT(is_stream_playlist_url("https://h.org/a.mpd?sig=1"));
+  EXPECT(!is_stream_playlist_url("https://h.org/a.m3u8.html"));
+  EXPECT(needs_media_backend("https://h.org/x.m3u8"));
+  EXPECT_EQ(is_playable_url("https://h.org/x.m3u8"), media_backend_plays_playlists());
   EXPECT_EQ(media_describe("H.264", 640, 360, "AAC", 44100, 2),
             "H.264 640\xC3\x97" "360 \xC2\xB7 AAC 44100 Hz stereo");
   EXPECT_EQ(media_describe("", 0, 0, "Opus", 48000, 1), "Opus 48000 Hz mono");
@@ -220,6 +226,11 @@ void test_media(int& passed, int& failed) {
   EXPECT(!type_needs_media_backend("audio/flac"));
   EXPECT(!type_needs_media_backend("application/octet-stream"));
   EXPECT_EQ(is_playable_type("video/webm"), media_backend_available());
+  EXPECT(is_stream_playlist_type("application/x-mpegURL"));
+  EXPECT(is_stream_playlist_type("application/vnd.apple.mpegurl; charset=utf-8"));
+  EXPECT(!is_stream_playlist_type("audio/x-mpegurl"));  // a plain .m3u list
+  EXPECT(type_needs_media_backend("application/dash+xml"));
+  EXPECT_EQ(is_playable_type("application/x-mpegurl"), media_backend_plays_playlists());
 
   // A built-in format streams through the pipe while its feed arrives: it
   // opens on the first bytes, plays all of it, and the end comes after.

@@ -17,6 +17,7 @@
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
+#include "xanatoo/media.hpp"  // is_playable_url
 #endif
 
 namespace xanatoo {
@@ -271,7 +272,7 @@ std::string ia_mediatype(std::string_view metadata_json) {
 }
 
 std::string ia_markdown(std::string_view metadata_json, std::string_view members_json,
-                        const IaRef& ref) {
+                        const IaRef& ref, bool (*playable)(std::string_view)) {
   auto reply = json_parse(metadata_json);
   const Json* meta = reply ? json_get(*reply, "metadata") : nullptr;
   if (!meta || meta->type != Json::Type::Object) {
@@ -331,11 +332,18 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
       return (a.source == "original") > (b.source == "original");
     });
     const std::string base = "https://archive.org/download/" + ref.id + "/";
-    for (const F& f : list)
-      if (playable_format(f.format) && (type == "movies" || type == "audio" || type == "etree")) {
-        md += link("Watch / listen with mpv", "external:mpv:" + base + percent_encode(f.name)) + "\n\n";
-        break;
+    if (type == "movies" || type == "audio" || type == "etree") {
+      // The first file the Media panel takes plays there; mpv gets the
+      // first media file of any kind.
+      std::string here, mpv;
+      for (const F& f : list) {
+        if (!playable_format(f.format)) continue;
+        if (mpv.empty()) mpv = base + percent_encode(f.name);
+        if (here.empty() && playable && playable(f.name)) here = base + percent_encode(f.name);
       }
+      if (!here.empty()) md += link("\xE2\x96\xB6 Play", here) + (mpv.empty() ? "\n\n" : " \xC2\xB7 ");
+      if (!mpv.empty()) md += link("Watch / listen with mpv", "external:mpv:" + mpv) + "\n\n";
+    }
     if (!list.empty()) {
       md += "## Files\n\n";
       size_t n = 0;
@@ -385,7 +393,7 @@ std::optional<Document> ia_fetch(std::string_view ref, std::string* err) {
     std::string ignored;
     if (auto m = get(ia_members_url(*r), &ignored)) members = std::move(*m);
   }
-  return parse_document(ia_markdown(*meta, members, *r), "archive.md");
+  return parse_document(ia_markdown(*meta, members, *r, &is_playable_url), "archive.md");
 }
 #endif
 

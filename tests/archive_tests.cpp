@@ -58,6 +58,15 @@ int main() {
   const char* movie = R"({"files":[{"name":"a.mp4","format":"MPEG4","source":"original"}],
     "metadata":{"identifier":"m","title":"Film","mediatype":"movies"}})";
   assert(has(ia_markdown(movie, "", {"m", 1}), "external:mpv:https://archive.org/download/m/a.mp4"));
+  // ... and a Media panel link where this build plays the file.
+  assert(!has(ia_markdown(movie, "", {"m", 1}), "Play]("));
+  auto mp3_only = [](std::string_view name) { return name.size() > 4 && name.substr(name.size() - 4) == ".mp3"; };
+  const char* album = R"({"files":[{"name":"a.ogv","format":"Ogg Video","source":"original"},
+    {"name":"t 1.mp3","format":"VBR MP3","source":"derivative"}],
+    "metadata":{"identifier":"al","title":"Album","mediatype":"audio"}})";
+  const std::string am = ia_markdown(album, "", {"al", 1}, +mp3_only);
+  assert(has(am, "Play](https://archive.org/download/al/t%201.mp3)"));
+  assert(has(am, "external:mpv:https://archive.org/download/al/a.ogv"));
 
   // A collection lists its members and pages.
   const char* coll = R"({"metadata":{"identifier":"c","title":"Coll","mediatype":"collection"}})";

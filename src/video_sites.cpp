@@ -23,6 +23,8 @@
 #include <ctime>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace xanatoo {
 
@@ -499,6 +501,61 @@ VsListing pt_parse_videos(const Json& reply, std::string_view host, int page, in
   return out;
 }
 
+namespace {
+// The file the Media panel plays: one with picture and sound, the highest
+// resolution up to 720p (else the lowest above it), web videos before HLS
+// pieces; without one the HLS playlist (split audio / video). A sound-only
+// file too.
+void pt_pick_stream(const Json& v, VsVideoInfo& o) {
+  struct Cand {
+    std::string url, label;
+    long long res;
+  };
+  std::vector<Cand> av;
+  auto scan = [&](const Json* files) {
+    if (!files || files->type != Json::Type::Array) return;
+    for (const Json& f : files->items) {
+      std::string url = json_string(json_get(f, "fileUrl"));
+      if (!starts_with(url, "https://") && !starts_with(url, "http://")) continue;
+      const Json* res = json_get(f, "resolution");
+      const long long id = res ? json_number(json_get(*res, "id")) : 0;
+      const Json* ha = json_get(f, "hasAudio");
+      const Json* hv = json_get(f, "hasVideo");
+      const bool audio = !ha || ha->type != Json::Type::Bool || ha->b;
+      const bool video = id > 0 && (!hv || hv->type != Json::Type::Bool || hv->b);
+      if (video && audio)
+        av.push_back({std::move(url), res ? json_string(json_get(*res, "label")) : std::string(), id});
+      else if (!video && audio && o.audio_url.empty())
+        o.audio_url = std::move(url);
+    }
+  };
+  scan(json_get(v, "files"));
+  const Json* lists = json_get(v, "streamingPlaylists");
+  if (lists && lists->type == Json::Type::Array)
+    for (const Json& p : lists->items) scan(json_get(p, "files"));
+  const Cand* best = nullptr;
+  for (const Cand& c : av) {
+    if (!best) best = &c;
+    else if (c.res <= 720 ? (best->res > 720 || c.res > best->res) : (best->res > 720 && c.res < best->res))
+      best = &c;
+  }
+  if (best) {
+    o.stream_url = best->url;
+    o.stream_label = best->label;
+    return;
+  }
+  if (lists && lists->type == Json::Type::Array)
+    for (const Json& p : lists->items) {
+      const std::string url = json_string(json_get(p, "playlistUrl"));
+      if (starts_with(url, "https://") || starts_with(url, "http://")) {
+        o.stream_url = url;
+        o.stream_label = "HLS";
+        return;
+      }
+    }
+}
+}  // namespace
+
 VsVideoInfo pt_parse_video(const Json& v, std::string_view host) {
   VsVideoInfo o;
   o.title = json_string(json_get(v, "name"));
@@ -526,6 +583,7 @@ VsVideoInfo pt_parse_video(const Json& v, std::string_view host) {
   if (o.thumb.empty()) o.thumb = pt_abs(host, json_string(json_get(v, "thumbnailPath")));
   o.description = text_of(json_string(json_get(v, "truncatedDescription")), false);
   o.comment_count = static_cast<int>(json_number(json_get(v, "comments")));
+  pt_pick_stream(v, o);
   return o;
 }
 
@@ -708,7 +766,21 @@ VsVideoInfo od_parse_claim(const Json& c) {
   if (url.empty()) url = json_string(json_get(c, "permanent_url"));
   if (!url.empty()) o.web_url = "https://odysee.com/" + od_path_of(url);
   o.play_url = o.web_url;
+  // The CDN address the `get` call names (od_parse_streaming_url replaces
+  // it when that answers): claim id + the start of the stream's sd_hash.
+  const std::string claim_id = json_string(json_get(c, "claim_id"));
+  const std::string sd = json_string(json_path(c, "value/source/sd_hash"));
+  if (id_ok(claim_id) && sd.size() >= 6 && id_ok(sd.substr(0, 6))) {
+    o.stream_url = "https://player.odycdn.com/v6/streams/" + claim_id + "/" + sd.substr(0, 6) + ".mp4";
+    if (starts_with(json_string(json_path(c, "value/source/media_type")), "audio/"))
+      std::swap(o.stream_url, o.audio_url);
+  }
   return o;
+}
+
+std::string od_parse_streaming_url(const Json& reply) {
+  std::string url = json_string(json_path(reply, "result/streaming_url"));
+  return starts_with(url, "https://") ? url : std::string();
 }
 
 void od_parse_channel_header(const Json& c, VsListing& l) {
@@ -935,11 +1007,26 @@ Document vs_video_document(const VsVideoInfo& v, const VsComments& c, const VsRe
       doc.get(im).src = v.thumb;
       doc.get(im).float_side = "left";
     }
+    // Play in the Media panel (plain links: the player takes them by name or
+    // by the answer's Content-Type), then the site and mpv.
+    std::vector<std::pair<std::string, std::string>> watch_links;
+    if (!v.stream_url.empty())
+      watch_links.emplace_back(
+          "\xE2\x96\xB6 Play" + (v.stream_label.empty() ? std::string() : " (" + v.stream_label + ")"),
+          v.stream_url);
+    if (!v.audio_url.empty())
+      watch_links.emplace_back(v.stream_url.empty() ? "\xE2\x96\xB6 Play" : "\xE2\x99\xAA Sound only",
+                               v.audio_url);
     if (!v.play_url.empty()) {
+      watch_links.emplace_back(std::string("\xE2\x96\xB6 Watch on ") + site, external(v.play_url));
+      watch_links.emplace_back("\xE2\x96\xB6 Watch with mpv", external("mpv:" + v.play_url));
+    }
+    if (!watch_links.empty()) {
       NodeId watch = doc.create(NodeKind::Paragraph, root);
-      add_link(doc, watch, std::string("\xE2\x96\xB6 Watch on ") + site, external(v.play_url));
-      add_meta(doc, watch, kDot);
-      add_link(doc, watch, "\xE2\x96\xB6 Watch with mpv", external("mpv:" + v.play_url));
+      for (const auto& [text, href] : watch_links) {
+        if (!doc.get(watch).spans.empty()) add_meta(doc, watch, kDot);
+        add_link(doc, watch, text, href);
+      }
     }
     if (!v.description.empty()) append_plain(doc, root, v.description);
   }
@@ -1171,6 +1258,9 @@ std::optional<Document> od_fetch_video(const VsRef& ref, std::string* err) {
   }
   VsVideoInfo info = od_parse_claim(*claim);
   const std::string claim_id = json_string(json_get(*claim, "claim_id"));
+  if (ref.page == 1 && ref.thread.empty() && !info.stream_url.empty())
+    if (auto got = od_rpc("get", R"({"uri":)" + json_quote(url) + R"(,"save_file":false})", nullptr))
+      if (std::string s = od_parse_streaming_url(*got); !s.empty()) info.stream_url = std::move(s);
   std::string params = R"({"claim_id":)" + json_quote(claim_id) + R"(,"page":)" + std::to_string(ref.page) +
                        R"(,"page_size":20,"sort_by":3,"top_level":)" +
                        (ref.thread.empty() ? "true" : "false");

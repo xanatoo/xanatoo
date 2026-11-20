@@ -24,8 +24,19 @@ Code: `include/xanatoo/video_sites.hpp`, `src/video_sites.cpp`. Parsers
 | `dailymotion:user/ID`, `dailymotion:search?search=Q` | channel videos / search |
 
 Search-bar engines: `peertube` (`pt`), `odysee` (`od`), `dailymotion` (`dm`).
-Video pages carry "Watch on X" (`external:URL`) and "Watch with mpv"
-(`external:mpv:URL`) links. A PeerTube video's ref uses the host it really
+Video pages carry "▶ Play (label)" (the stream itself, plays in the Media
+panel), "♪ Sound only" when the site has a separate audio file, "Watch on X"
+(`external:URL`) and "Watch with mpv" (`external:mpv:URL`) links.
+
+- PeerTube (`pt_pick_stream`): files with picture and sound from `files[]`
+  and `streamingPlaylists[].files[]` (web videos first); the highest ≤ 720p,
+  else the lowest above. The first sound-only file is "Sound only". When
+  only split audio / video pieces exist, the HLS master (`playlistUrl`).
+- Odysee: `player.odycdn.com/v6/streams/{claim_id}/{sd_hash[:6]}.mp4` from the
+  claim, replaced by the `get` RPC's `streaming_url` on the video page
+  (`od_parse_streaming_url`). Audio claims get "▶ Play" on the sound.
+- Dailymotion: no Play link (the metadata m3u8 answers 403,
+  protected delivery). A PeerTube video's ref uses the host it really
 lives on (search results can span instances).
 
 Web URLs map through `video_site_ref_from_web_url` (native toggle):

@@ -29,22 +29,29 @@ namespace xanatoo {
 
 struct ByteFeed;
 
-// Named like a video file (.mp4 .m4v .webm .mkv .mov .ogv .avi .3gp), by its
+// Named like a video file (.mp4 .m4v .webm .mkv .mov .ogv .avi .3gp …), by its
 // path; local paths, file: and http(s) as for is_audio_url.
 bool is_video_url(std::string_view url);
 // Audio that only a backend decodes (.m4a .aac .opus, …): not one of the
 // built-in formats (MP3, FLAC, Ogg Vorbis, WAV by name).
 bool needs_media_backend(std::string_view url);
+// An HLS / DASH playlist by name (.m3u8, .mpd): its pieces are other
+// addresses, which the backend fetches itself.
+bool is_stream_playlist_url(std::string_view url);
 // A link the player takes in this build: built-in audio, or with a backend
-// video and the other audio formats.
+// video and the other audio formats (playlists where the backend streams
+// them, media_backend_plays_playlists).
 bool is_playable_url(std::string_view url);
 
 // The same by a response's Content-Type ("video/mp4; codecs=…"): sound or
 // video the player takes in this build (the built-in audio types: MP3, FLAC,
 // Ogg, WAV; with a backend every audio/* and video/*).
 bool is_playable_type(std::string_view content_type);
-// A type only a backend decodes (video/*, audio/mp4, audio/aac, …).
+// A type only a backend decodes (video/*, audio/mp4, audio/aac, …, and the
+// HLS / DASH playlist types).
 bool type_needs_media_backend(std::string_view content_type);
+// application/vnd.apple.mpegurl, application/x-mpegurl, application/dash+xml.
+bool is_stream_playlist_type(std::string_view content_type);
 
 // Media Fragments URI, temporal dimension (W3C): `#t=10`, `#t=1:02.5`,
 // `#t=npt:10,20` (only the start is used), also as one `&` part of the
@@ -66,6 +73,8 @@ std::string media_backend_name();
 inline bool media_backend_available() { return !media_backend_name().empty(); }
 // The backend reads an http(s) file through MediaOptions::feed (FFmpeg).
 bool media_backend_reads_feeds();
+// The backend plays HLS / DASH playlists from their address (FFmpeg).
+bool media_backend_plays_playlists();
 
 // One decoded picture, I420 (planar Y, U, V; chroma at half size, rounded
 // up), rows packed: Y is w×h bytes, U and V each ((w+1)/2)×((h+1)/2).

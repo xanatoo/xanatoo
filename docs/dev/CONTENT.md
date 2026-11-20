@@ -575,6 +575,15 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   `is_playable_url` (built-in audio, or backend formats when
   `media_backend_available()`) is what links, `navigate_pane` and startup
   arguments test. Without a backend video links go to the system as before.
+- HLS / DASH playlists (`.m3u8` / `.mpd`, `is_stream_playlist_url` /
+  `is_stream_playlist_type`) count as playable when
+  `media_backend_plays_playlists()` (FFmpeg yes, Android no).
+- Service pages link streams directly so they open in the Media panel:
+  PeerTube / Odysee "▶ Play" (docs/VIDEO_SITES.md), Internet Archive
+  "▶ Play", feed enclosures the build plays ("▶ Play: type (size)"),
+  Reddit posts with a `reddit_video` ("▶ Play video", the HLS address, or
+  the sound-less `fallback_url` without playlist support). YouTube and
+  Dailymotion keep mpv / the browser.
 - Backends (`MediaSource`: `info()`, `next()` gives one piece — float
   sound or an I420 `VideoFrame` — `seek()` to the key frame before):
   - `media_ffmpeg.cpp` (`XANATOO_FFMPEG`, desktop; pkg-config

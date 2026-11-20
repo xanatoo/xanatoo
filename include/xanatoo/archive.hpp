@@ -47,9 +47,12 @@ std::string ia_mediatype(std::string_view metadata_json);
 
 // Markdown of a /metadata/ID reply. `members_json` is the advancedsearch
 // reply for a collection's members (may be empty). Pure; an empty or
-// malformed reply gives a short "not found" page.
+// malformed reply gives a short "not found" page. `playable` (a file name
+// the Media panel takes in this build, is_playable_url) picks the "Play"
+// link of movies and audio; none without it.
 std::string ia_markdown(std::string_view metadata_json,
-                        std::string_view members_json, const IaRef& ref);
+                        std::string_view members_json, const IaRef& ref,
+                        bool (*playable)(std::string_view) = nullptr);
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 std::optional<Document> ia_fetch(std::string_view ref, std::string* err = nullptr);

@@ -19,7 +19,9 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
   `*_files.xml`, torrents, item tiles) are left out, originals come first, at
   most 100 are listed. PDFs / EPUBs / images route through the usual
   download / viewer handling.
-- Movies and audio get a "Watch / listen with mpv" link (`external:mpv:URL`).
+- Movies, audio and etree items get "▶ Play" (the first file this build plays,
+  `is_playable_url` passed into `ia_markdown`; opens the Media panel) and a
+  "Watch / listen with mpv" link (`external:mpv:URL`).
 - Web URLs `archive.org/details|download|stream|embed/ID` map to `ia:ID` (native
   toggle); search, account and Wayback pages stay web pages.
 - The `ia` search engine's results link to `ia:ID`.

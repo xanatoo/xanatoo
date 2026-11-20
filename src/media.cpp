@@ -23,12 +23,17 @@ bool is_video_url(std::string_view url) {
       url, {".mp4", ".m4v", ".webm", ".mkv", ".mov", ".ogv", ".avi", ".3gp", ".mpg", ".mpeg"});
 }
 
+bool is_stream_playlist_url(std::string_view url) {
+  return url_has_extension(url, {".m3u8", ".mpd"});
+}
+
 bool needs_media_backend(std::string_view url) {
-  return is_video_url(url) ||
+  return is_video_url(url) || is_stream_playlist_url(url) ||
          url_has_extension(url, {".opus", ".m4a", ".aac", ".mka", ".weba"});
 }
 
 bool is_playable_url(std::string_view url) {
+  if (is_stream_playlist_url(url)) return media_backend_plays_playlists();
   return is_audio_url(url) || (needs_media_backend(url) && media_backend_available());
 }
 
@@ -49,12 +54,20 @@ bool builtin_audio_type(const std::string& t) {
 }
 }  // namespace
 
+bool is_stream_playlist_type(std::string_view content_type) {
+  const std::string t = mime_base(content_type);
+  return t == "application/vnd.apple.mpegurl" || t == "application/x-mpegurl" ||
+         t == "application/dash+xml";
+}
+
 bool type_needs_media_backend(std::string_view content_type) {
   const std::string t = mime_base(content_type);
-  return !builtin_audio_type(t) && (starts_with(t, "audio/") || starts_with(t, "video/"));
+  return is_stream_playlist_type(t) ||
+         (!builtin_audio_type(t) && (starts_with(t, "audio/") || starts_with(t, "video/")));
 }
 
 bool is_playable_type(std::string_view content_type) {
+  if (is_stream_playlist_type(content_type)) return media_backend_plays_playlists();
   const std::string t = mime_base(content_type);
   return builtin_audio_type(t) ||
          (type_needs_media_backend(content_type) && media_backend_available());
@@ -129,6 +142,7 @@ std::string media_time_address(std::string_view base, double seconds) {
 #if !(defined(XANATOO_FFMPEG) && XANATOO_FFMPEG) && !defined(__ANDROID__)
 std::string media_backend_name() { return {}; }
 bool media_backend_reads_feeds() { return false; }
+bool media_backend_plays_playlists() { return false; }
 
 std::unique_ptr<MediaSource> open_media(const std::string&, const MediaOptions&,
                                         std::string* error) {

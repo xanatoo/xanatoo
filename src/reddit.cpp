@@ -12,6 +12,7 @@
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/json_min.hpp"
 #include "xanatoo/markdown_body.hpp"
+#include "xanatoo/media.hpp"  // is_playable_url
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
 
@@ -174,6 +175,22 @@ std::string reddit_rss_url(std::string_view s) {
   return "https://www.reddit.com" + route + suffix;
 }
 
+RedditVideo reddit_video(std::string_view data) {
+  auto clean = [](std::string u) {  // without raw_json=1, & comes as &amp;
+    for (size_t at; (at = u.find("&amp;")) != std::string::npos;) u.replace(at, 5, "&");
+    return starts_with(u, "https://") ? u : std::string();
+  };
+  for (const char* key : {"secure_media", "media"}) {
+    const std::string_view rv = json_object_after_key(json_object_after_key(data, key), "reddit_video");
+    if (rv.empty()) continue;
+    if (std::string hls = clean(json_str_field(rv, "hls_url")); !hls.empty() && is_playable_url(hls))
+      return {hls, false};
+    if (std::string mp4 = clean(json_str_field(rv, "fallback_url")); !mp4.empty() && is_playable_url(mp4))
+      return {mp4, true};
+  }
+  return {};
+}
+
 #if defined(XANATOO_REDDIT) && XANATOO_REDDIT
 
 namespace {
@@ -273,6 +290,7 @@ struct RedditPost {
   int64_t score = 0;
   int64_t num_comments = 0;
   bool is_self = false;
+  RedditVideo video;  // a v.redd.it post's own video
   std::string kind;  // t3 / t1
   std::string parent_id;
 };
@@ -298,6 +316,7 @@ RedditPost parse_thing_data(std::string_view thing_json) {
   p.num_comments = json_int_field(data, "num_comments");
   p.is_self = json_bool_field(data, "is_self");
   p.parent_id = json_str_field(data, "parent_id");
+  if (p.kind != "t1") p.video = reddit_video(data);
   return p;
 }
 
@@ -357,6 +376,14 @@ void append_post_message(Document& doc, NodeId thread, const RedditPost& post,
     link.kind = InlineKind::Link;
     link.text = post.url;
     link.href = post.url;
+    doc.get(para).spans.push_back(std::move(link));
+  }
+  if (!is_comment && !post.video.url.empty()) {  // in the Media panel
+    NodeId para = doc.create(NodeKind::Paragraph, msg);
+    InlineSpan link;
+    link.kind = InlineKind::Link;
+    link.text = post.video.silent ? "\xE2\x96\xB6 Play video (no sound)" : "\xE2\x96\xB6 Play video";
+    link.href = post.video.url;
     doc.get(para).spans.push_back(std::move(link));
   }
 

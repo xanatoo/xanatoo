@@ -9,6 +9,7 @@
 
 #include "xanatoo/feed.hpp"
 #include "xanatoo/http_status.hpp"
+#include "xanatoo/media.hpp"  // is_playable_type
 #include "xanatoo/util.hpp"
 
 #include "xanatoo/html_min.hpp"
@@ -333,7 +334,9 @@ void append_enclosure(Document& doc, NodeId msg, const std::string& url,
     append_link_para(doc, msg, "Link", url);
     return;
   }
-  std::string label = "Enclosure";
+  // Sound / video the Media panel plays (podcast episodes): say so.
+  const bool plays = !type.empty() ? is_playable_type(type) : is_playable_url(url);
+  std::string label = plays ? "\xE2\x96\xB6 Play" : "Enclosure";
   if (!type.empty()) label += ": " + type;
   if (std::string sz = human_size(length); !sz.empty()) label += " (" + sz + ")";
   append_link_para(doc, msg, label, url);

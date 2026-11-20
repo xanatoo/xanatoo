@@ -23,6 +23,15 @@ std::string reddit_json_url(std::string_view s);
 // Empty for non-Reddit URLs and redd.it short links (no subreddit path).
 std::string reddit_rss_url(std::string_view s);
 
+// A post's own video (v.redd.it) for the Media panel, from its `data`
+// object: the HLS playlist (with sound) where this build plays it, else the
+// progressive MP4 (`fallback_url`, picture only). Empty url: none.
+struct RedditVideo {
+  std::string url;
+  bool silent = false;  // the fallback: no sound track
+};
+RedditVideo reddit_video(std::string_view post_data_json);
+
 #if defined(XANATOO_REDDIT) && XANATOO_REDDIT
 // Fetch a subreddit listing or post+comments via the public .json API.
 // Builds a Document with Thread + Message nodes (read-only).
