@@ -2932,15 +2932,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     force_menu("Bookmarks");
     if (ImGui::BeginMenu("Bookmarks")) {
-      if (ImGui::MenuItem(state.current_subscribed ? "Unsubscribe current feed" :
-                          "Subscribe to current feed", nullptr, false,
-                          state.current_subscribed || state.current_subscribable)) {
-        cmd = state.current_subscribed ? UiCommand::Unsubscribe : UiCommand::Subscribe;
-        result.arg = state.subscription_address;
-      }
-      if (ImGui::MenuItem("Show Subscriptions…", nullptr, state.subscriptions_open))
-        cmd = UiCommand::ToggleSubscriptions;
-      ImGui::Separator();
       const char* add_label = state.current_bookmarked ? "Remove Bookmark"
                               : state.selection        ? "Bookmark Selection"
                                                        : "Bookmark This Page";
