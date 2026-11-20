@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Slashdot: story no longer inside the navigation
+
+- Slashdot stories were empty in reader mode: the whole page after the
+  login bar became one "navigation" Chrome node. Cause: `html_element_end`
+  read `<!-- //…/index2.pl" -->` as a tag, its stray quote made `tag_end`
+  run on to the next quote past `</nav>`. It now skips comments,
+  `<script>` / `<style>` bodies and `<` that starts no tag (unit test).
+- Open idea: user-editable per-site hints (which element is main / nav /
+  comments) for pages without landmarks, as an S-expression sheet like
+  the `.xss` style sheets; not started.
+
 ## Status (2026-11-20) — Odysee: newer videos play as HLS
 
 - Newer (transcoded) Odysee uploads failed with "401 Unauthorized": the

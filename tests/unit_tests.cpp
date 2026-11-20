@@ -6667,6 +6667,33 @@ void test_html_page() {
   EXPECT(path_uses_html("/tmp/A.HTM"));
   EXPECT(!(path_uses_html("a.md")));
 
+  // An element's end skips comments (a stray quote in one hid slashdot's
+  // </nav> and made the whole page navigation), script bodies and "a < b".
+  {
+    const std::string h =
+        "<nav><!-- //x/index2.pl\" --><p>Login</nav>"
+        "<script>var s = \"</nav>\";</script><p>a < b</p>";
+    const std::string inner = "<!-- //x/index2.pl\" --><p>Login</nav>";
+    EXPECT_EQ(html_element_end(h, 5, "nav"), 5 + inner.size());
+    EXPECT_EQ(html_element_end("<div><script>x='</div>'</script></div>!", 5,
+                               "div"),
+              38u);
+    Document d = parse_html_page(
+        "<body><nav><div><!-- a\" --><a href=/l>Login</a></nav></div>"
+        "<p>Story text</p></body>",
+        "https://example.org/s");
+    bool story_in_chrome = false, story = false;
+    for (const Node& n : d.nodes)
+      for (const InlineSpan& s : n.spans)
+        if (s.text.find("Story text") != std::string::npos) {
+          story = true;
+          for (NodeId p = n.parent; p != INVALID_NODE; p = d.get(p).parent)
+            if (d.get(p).kind == NodeKind::Chrome) story_in_chrome = true;
+        }
+    EXPECT(story);
+    EXPECT(!story_in_chrome);
+  }
+
   const char* page =
       "<!doctype html><html><head><title>T &amp; t</title>"
       "<meta property=\"og:title\" content=\"OG title\"></head><body>"

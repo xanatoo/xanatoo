@@ -1325,11 +1325,33 @@ size_t html_element_end(std::string_view html, size_t after_open,
   while (i < html.size()) {
     size_t lt = html.find('<', i);
     if (lt == std::string_view::npos) break;
+    // Comments are no tags: a stray quote in one (slashdot.org's
+    // `<!-- //x/index2.pl" -->`) would make tag_end run on to the next
+    // quote and skip the closing tag.
+    if (html.compare(lt, 4, "<!--") == 0) {
+      size_t c = html.find("-->", lt + 4);
+      if (c == std::string_view::npos) break;
+      i = c + 3;
+      continue;
+    }
     const bool closing = lt + 1 < html.size() && html[lt + 1] == '/';
     const size_t at = lt + 1 + (closing ? 1 : 0);
+    // "a < b" in text, "<!DOCTYPE", "<?xml": no element tag.
+    if (at >= html.size() ||
+        !std::isalpha(static_cast<unsigned char>(html[at]))) {
+      i = lt + 1;
+      continue;
+    }
     size_t e = tag_end(html, lt);
     if (e == std::string_view::npos) break;
-    if (tag_name(html.substr(at)) == tag) {
+    const std::string name = tag_name(html.substr(at));
+    // Script / style bodies are raw text ("</div>" in a JS string).
+    if (!closing && (name == "script" || name == "style") &&
+        !ends_self_closed(html.substr(lt, e - lt))) {
+      i = html_element_end(html, e + 1, name);
+      continue;
+    }
+    if (name == tag) {
       const bool self_close = ends_self_closed(html.substr(lt, e - lt));
       if (closing) {
         if (--depth == 0) return e + 1;
