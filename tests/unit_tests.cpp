@@ -2624,6 +2624,28 @@ void test_layout_figure_rows() {
     EXPECT(std::fabs((g0 - bc->x) - (bc->x + bc->width - g1)) < 12.f);
   }
 
+  // A floating image stays at its float's edge: the text beside it wraps
+  // at the drawn width (regression: centring it in the reserved slot ran
+  // the image into the text, e.g. 4chan thread thumbnails).
+  {
+    Document fdoc;
+    const NodeId froot = fdoc.create(NodeKind::Document);
+    const NodeId fim = fdoc.create(NodeKind::Image, froot);
+    fdoc.get(fim).src = "https://example.org/thumb.jpg";
+    fdoc.get(fim).float_side = "left";
+    const NodeId fp = fdoc.create(NodeKind::Paragraph, froot);
+    fdoc.append_text(fp, "Text beside the floating thumbnail.");
+    LayoutResult fl = engine.layout(fdoc, width);
+    const PositionedImage* pi = nullptr;
+    for (const PositionedImage& im : fl.images)
+      if (im.node == fim) pi = &im;
+    float text_x = 1e9f;
+    for (const PositionedGlyph& g : fl.glyphs)
+      if (g.node == fp) text_x = std::min(text_x, g.x);
+    EXPECT(pi != nullptr);
+    if (pi) EXPECT(text_x >= pi->x + pi->width);
+  }
+
   // Plain block images share rows the same way; one alone does not.
   Document idoc;
   const NodeId iroot = idoc.create(NodeKind::Document);

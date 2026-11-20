@@ -2203,8 +2203,11 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         x += (max_width - cw) * 0.5f;
         max_width = cw;
       }
-      // In a figure: per the figure style (else flush with its caption).
-      const bool center = !in_figure_column_ || figure_centered();
+      // Centred as a block image, or in a figure column per the figure
+      // style; a floating image stays at its float's edge (text wraps at
+      // the width it draws, measured from there).
+      const bool center =
+          block_image || (in_figure_column_ && figure_centered());
       if (is_remote_image(node.src)) {
         layout_remote_image(doc, node, x, y, max_width, out, center);
         break;
