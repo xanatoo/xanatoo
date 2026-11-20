@@ -3321,6 +3321,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         if (ImGui::MenuItem("Fullscreen Video", nullptr, state.audio_fullscreen,
                             state.audio_video))
           cmd = UiCommand::AudioFullscreen;
+        if (ImGui::MenuItem("Hide Player Controls", "H", state.audio_controls_hidden,
+                            state.audio_video))
+          cmd = UiCommand::AudioControls;
         ImGui::Separator();
         if (ImGui::MenuItem("Stop")) cmd = UiCommand::AudioStop;
         ImGui::EndMenu();
@@ -3652,6 +3655,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (mm.video &&
           ImGui::MenuItem(mm.fullscreen ? "Leave Fullscreen" : "Fullscreen", "F", mm.fullscreen))
         cmd = UiCommand::AudioFullscreen;
+      if (mm.video && !mm.fullscreen &&
+          ImGui::MenuItem("Hide Controls", "H", mm.controls_hidden))
+        cmd = UiCommand::AudioControls;
       ImGui::Separator();
       if (mm.file_bookmarked)
         item("Remove File Bookmark", "unbookmark-file");

@@ -556,7 +556,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "in the file; back 10 s, play / pause, forward 30 s, stop, volume. "
      "A-B sets two markers (drag their tabs) for a section: playing stops "
      "at B, or loops with Loop (the whole file without markers). "
-     "Right-click to bookmark or copy a position or the section. "
+     "Right-click to bookmark or copy a position or the section, or to "
+     "hide the controls so the video fills the panel (H). "
      "Closing the panel stops it."},
     {"@panel:reply", "Reply panel",
      "Draft a reply to a message (a mockup: nothing is posted)."},

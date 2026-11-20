@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Media panel: hide the controls
+
+- Right-click → Hide Controls, Go → Sound → Hide Player Controls, or H in
+  the focused panel: the video alone fills the panel (click play / pause,
+  double click fullscreen, right-click / H shows them again). Sound-only
+  files and fullscreen keep their controls; the setting stays for the next
+  video (not saved across sessions).
+- Checked under Xvfb (WebM): menu entry, H both ways, F / Esc round trip
+  back to the bare panel.
+
 ## Status (2026-11-20) — Media panel: keys, frame steps
 
 - The focused Media panel (not fullscreen) now takes the player keys:

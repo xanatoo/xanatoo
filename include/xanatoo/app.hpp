@@ -1479,6 +1479,9 @@ struct App {
   std::shared_ptr<xanatoo::DownloadProgress> download_menu;
   MediaMenu media_menu;
   MediaFullscreen media_full;
+  // The Media panel shows only the picture, over its whole client area
+  // (toggle_media_controls); the controls are back with a file without one.
+  bool media_controls_hidden = false;
   uint64_t next_fetch_id = 1;
   std::shared_ptr<ImageFetchShared> image_fetch =
       std::make_shared<ImageFetchShared>();
@@ -2415,6 +2418,11 @@ bool right_click_media_panel(App& app, int mx, int my);
 // (UiCommand::AudioFullscreen, the panel's button, a double click on it).
 void toggle_media_fullscreen(App& app);
 inline bool media_fullscreen(const App& app) { return app.media_full.on; }
+// The panel's controls hidden / shown (UiCommand::AudioControls, H): the
+// video alone fills the panel.
+void toggle_media_controls(App& app);
+// The panel shows the picture alone (controls hidden, a video, not fullscreen).
+bool media_bare(const App& app);
 // While fullscreen: takes the pointer, wheel and keys (true = taken).
 bool media_fullscreen_event(App& app, const SDL_Event& ev);
 // The Media panel with key focus (not fullscreen): Space, arrows, F, ',' / '.'

@@ -714,6 +714,14 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   F11 leave, Space / K play-pause, Left / Right 10 s (Shift 60 s), ',' /
   '.' a picture back / on, Home / End, Up / Down / M volume; keys with Ctrl /
   Alt go on as usual.
+- Hidden controls (`toggle_media_controls`, `App::media_controls_hidden`,
+  `UiCommand::AudioControls`): the right-click menu's Hide Controls, Go →
+  Sound → Hide Player Controls or H in the focused panel. While a video plays
+  outside fullscreen (`media_bare`), `media_layout` gives the picture the
+  whole client area and no control rects, so every point is
+  `MediaPart::Video` (click play / pause, double click fullscreen,
+  right-click the menu to show them again). Sound-only files and fullscreen
+  show the controls as usual; the flag stays for the next video.
 - Keys in the panel: with `KeyFocus::Panel` on `WindowRole::Media`,
   `media_panel_key` (in `on_keydown`, before `panel_key_unused`) gives the
   same `player_key`s (F enters fullscreen, Esc does not) and eats their

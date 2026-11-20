@@ -503,6 +503,14 @@ MediaLayout media_layout(const App& app) {
     L.times_y += vh;
     L.buttons_y += vh;
   }
+  // Controls hidden: the picture takes the whole panel, nothing else is there.
+  if (media_bare(app)) {
+    MediaLayout bare;
+    bare.client = L.client;
+    bare.video = L.client;
+    bare.pad = L.pad;
+    return bare;
+  }
   return L;
 }
 
@@ -525,7 +533,7 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
   if (!inside(L.client, x, y) ||
       (!fs && (!app.media_panel_open || float_shaded(app.media_win))))
     return MediaPart::None;
-  if (fs && !controls_shown(app, L)) return MediaPart::Video;
+  if ((fs && !controls_shown(app, L)) || media_bare(app)) return MediaPart::Video;
   // Bars take a few pixels more height: they are thin.
   auto grow = [](SDL_Rect r) { return SDL_Rect{r.x - 2, r.y - 6, r.w + 4, r.h + 12}; };
   if (inside(L.full, x, y)) return MediaPart::Fullscreen;
@@ -1341,7 +1349,8 @@ std::string media_panel_hover(const App& app, int mx, int my) {
     case MediaPart::Video:
       return std::string(a.state == AudioState::Playing ? "Click to pause" : "Click to play") +
              (app.media_full.on ? ", double-click to leave fullscreen"
-                                : ", double-click for fullscreen");
+                                : ", double-click for fullscreen") +
+             (media_bare(app) ? " (H: show the controls)" : "");
     case MediaPart::Fullscreen:
       return app.media_full.on ? "Leave fullscreen (Esc)" : "Fullscreen (F)";
     case MediaPart::Toggle:
@@ -1556,7 +1565,7 @@ void draw_media_panel(App& app) {
   const MediaLayout L = media_layout(app);
   xanatoo::sdl::set_clip_rect(app.sdl, &L.client);
   draw_media_video(app, L);
-  draw_media_controls(app, L);
+  if (!media_bare(app)) draw_media_controls(app, L);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 }
 
@@ -1608,6 +1617,20 @@ void toggle_media_fullscreen(App& app) {
   app.media_panel_open = true;
 }
 
+bool media_bare(const App& app) {
+  return app.media_controls_hidden && !app.media_full.on && app.audio.video_w > 0;
+}
+
+void toggle_media_controls(App& app) {
+  if (!app.media_controls_hidden && app.audio.video_w <= 0) {
+    flash_status(app, "No video playing");
+    return;
+  }
+  app.media_controls_hidden = !app.media_controls_hidden;
+  app.audio.drag = AudioPlayer::Drag::None;
+  if (app.media_controls_hidden) flash_status(app, "Controls hidden (H or right-click to show)");
+}
+
 namespace {
 
 // The player's keys, fullscreen and in the focused panel: F (and fullscreen
@@ -1626,6 +1649,10 @@ bool player_key(App& app, SDL_Keycode key, SDL_Keymod mod) {
       return true;
     case SDLK_f:
       toggle_media_fullscreen(app);
+      return true;
+    case SDLK_h:
+      if (app.media_full.on) return false;
+      toggle_media_controls(app);
       return true;
     case SDLK_SPACE:
     case SDLK_k:

@@ -226,6 +226,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.audio_loop = app.audio.loop;
   ui_state.audio_video = app.audio.video_w > 0;
   ui_state.audio_fullscreen = media_fullscreen(app);
+  ui_state.audio_controls_hidden = app.media_controls_hidden;
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
@@ -468,6 +469,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     mm.loop = app.audio.loop;
     mm.video = app.audio.video_w > 0;
     mm.fullscreen = media_fullscreen(app);
+    mm.controls_hidden = app.media_controls_hidden;
     const MediaMenu& m = app.media_menu;
     if (m.sec_b > m.sec_a) {
       mm.section = xanatoo::format_audio_time(m.sec_a) + "\xE2\x80\x93" +
@@ -2507,6 +2509,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::AudioFullscreen:
       toggle_media_fullscreen(app);
+      break;
+    case C::AudioControls:
+      toggle_media_controls(app);
       break;
     case C::FocusSearchBar:
       show_search_bar(app);

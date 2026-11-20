@@ -231,6 +231,7 @@ enum class UiCommand {
   AudioAB,            // sound player: A–B markers on / off
   AudioLoop,          // sound player: loop on / off (the A–B section or the file)
   AudioFullscreen,    // sound player: the video fills the screen / back
+  AudioControls,      // sound player: the panel's controls hidden / shown
   ToggleSearchBar,    // show / hide the search bar (Ctrl+K focuses it)
   FocusSearchBar,     // show the search bar and focus its field
   Search,             // search bar committed (arg = what was typed)
@@ -482,6 +483,7 @@ struct UiState {
   bool audio_loop = false;     // … looping
   bool audio_video = false;       // … showing pictures
   bool audio_fullscreen = false;  // … fullscreen
+  bool audio_controls_hidden = false;  // … the panel shows the picture alone
   std::vector<UiSearchEngine> search_engines;
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service
@@ -595,6 +597,7 @@ struct UiState {
     bool seekable = false;
     bool ab = false, loop = false;  // markers on, looping
     bool video = false, fullscreen = false;  // pictures; filling the screen
+    bool controls_hidden = false;            // the panel shows the picture alone
     std::string section;            // "0:10–0:20" ("" = no section)
     bool section_bookmarked = false;
     bool section_selected = false;  // it is the A–B markers' section
