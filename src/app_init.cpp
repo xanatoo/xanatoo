@@ -288,6 +288,7 @@ bool app_init(App& app) {
       continue;
     std::string u = std::move(b.path);
     b.path.clear();
+    b.placeholder = true;  // the "Loading…" stand-in
     app.focus = pi;
     app.visit_hint = xanatoo::VisitKind::External;
     navigate_to_url(app, std::move(u));

@@ -34,7 +34,8 @@ struct DownloadProgress {
   // do not save until the user confirms (start_download dialog).
   std::atomic<bool> offered{false};
   // The response is sound or video the player takes (is_playable_type), in
-  // a Navigate/Tab: not saved, not shown as a page; `mime` holds its type.
+  // a Navigate/Tab: not saved, not shown as a page; `mime` holds its type,
+  // `name` the file name of a Content-Disposition.
   std::atomic<bool> playable{false};
 };
 

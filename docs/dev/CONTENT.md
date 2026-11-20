@@ -516,7 +516,11 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   an attachment, sets `DownloadProgress::playable` in `web_fetch` instead of
   the download offer; `finish_navigate` / `finish_tab` hand the address and
   type to `play_audio(app, url, mime)` (the type picks backend or built-in
-  as the extension does) and record a media visit. Such addresses have no
+  as the extension does) and record a media visit. A Content-Disposition
+  file name comes along (`DownloadProgress::name`) as the player's title
+  until the file's own tags name one. A pane still showing its stand-in
+  (`DocBuffer::placeholder`, also the startup address's "Loading…") gets
+  a small page about what plays (`media_page`). Such addresses have no
   playing-link wash or bookmark marks yet (those test `is_playable_url`).
 - Not yet: built-in Opus (without a backend); range requests (a seek far
   ahead of a built-in download waits for it).

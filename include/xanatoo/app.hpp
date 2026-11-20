@@ -2256,9 +2256,11 @@ bool page_key(App& app, SDL_Keycode sym);
 // for the file already in the player it only goes there. True = started
 // loading (or went there). `mime`: the Content-Type the address answered
 // with, when known (an address without a file name extension); it picks the
-// decoder as the extension does otherwise. Remote files play while they
-// download.
-bool play_audio(App& app, const std::string& url, std::string_view mime = {});
+// decoder as the extension does otherwise. `name`: the file name the server
+// gave (Content-Disposition), else the title comes from the address. Remote
+// files play while they download.
+bool play_audio(App& app, const std::string& url, std::string_view mime = {},
+                std::string_view name = {});
 void audio_toggle(App& app);        // play / pause (replay once ended)
 void audio_stop(App& app);          // stop and hide the player
 void audio_seek(App& app, double seconds);  // to this position

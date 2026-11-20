@@ -597,7 +597,8 @@ void apply_drag(App& app, int x) {
 
 }  // namespace
 
-bool play_audio(App& app, const std::string& address, std::string_view mime) {
+bool play_audio(App& app, const std::string& address, std::string_view mime,
+                std::string_view name) {
   // `#t=30` (Media Fragments): where to start; the rest is the file.
   const xanatoo::MediaAddress split = xanatoo::split_media_address(address);
   const std::string& url_in = split.base;
@@ -630,7 +631,7 @@ bool play_audio(App& app, const std::string& address, std::string_view mime) {
   a.volume = volume;
   a.url = url;
   if (split.start) a.start_at = *split.start;
-  a.title = xanatoo::audio_name_of(url);
+  a.title = name.empty() ? xanatoo::audio_name_of(url) : std::string(name);
   a.state = AudioState::Loading;
   const bool backend = xanatoo::media_backend_available();
   if (backend && (mime.empty() ? xanatoo::needs_media_backend(url)

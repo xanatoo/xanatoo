@@ -37,9 +37,12 @@
 - Not yet: a streaming VBR MP3 seeks by average frame size (approximate
   place; the in-memory takeover then corrects it); a jump waits for the
   download's next piece (no abort of a stalled read); a seek back in an
-  FFmpeg stream fetches again (no cache of what was read); the title of an
-  extensionless address is its last path part ("x"); a startup address that
-  turns out to be media leaves the "Loading…" page.
+  FFmpeg stream fetches again (no cache of what was read); an extensionless
+  address without Content-Disposition or tags is still titled by its last
+  path part.
+- Then: a Content-Disposition file name titles the player; a startup
+  address that turns out to be media replaces its "Loading…" page with a
+  page about it.
 
 ## Status (2026-11-20) — Image and figure layout
 

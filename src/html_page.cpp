@@ -417,6 +417,8 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
             !ascii_lower(h.content_disposition).starts_with("attachment") &&
             is_playable_type(h.content_type)) {
           download->mime = h.content_type;
+          if (!h.content_disposition.empty())  // its file name, for the title
+            download->name = download_filename(url, h.content_disposition);
           download->playable.store(true, std::memory_order_release);
           return false;
         }

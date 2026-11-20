@@ -35,12 +35,14 @@
 #include "xanatoo/matrix.hpp"
 #include "xanatoo/video_sites.hpp"
 #include "xanatoo/archive.hpp"
+#include "xanatoo/audio.hpp"
 #include "xanatoo/youtube.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/search_results.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/url_cache.hpp"
@@ -48,6 +50,17 @@
 namespace xanatoo::app {
 
 namespace {
+
+// The page of an address that turned out to be sound or video (in place of
+// the startup "Loading…" stand-in).
+xanatoo::Document media_page(App& app, const std::string& url) {
+  const std::string title = app.audio.url == url && !app.audio.title.empty()
+                                ? app.audio.title
+                                : xanatoo::audio_name_of(url);
+  return xanatoo::parse_document("# " + xanatoo::markdown_escape_inline(title) +
+                                     "\n\nPlays in the Media panel.\n\n`" + url + "`\n",
+                                 {});
+}
 
 constexpr size_t kPageCacheMax = 16;
 constexpr Uint32 kPageCacheTtl = 5 * 60 * 1000;
@@ -760,7 +773,8 @@ void finish_tab(App& app, const FetchJob& job) {
   }
   if (r.download && r.download->playable.load(std::memory_order_acquire)) {
     if (b->placeholder) remove_buffer(app, job.buf);
-    play_audio(app, !r.final_url.empty() ? r.final_url : job.url, r.download->mime);
+    play_audio(app, !r.final_url.empty() ? r.final_url : job.url, r.download->mime,
+               r.download->name);
     return;
   }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
@@ -816,8 +830,12 @@ void finish_navigate(App& app, const FetchJob& job) {
     const auto hint = std::exchange(h.pending_kind, std::nullopt);
     h.restoring = -1;
     const std::string url = !r.final_url.empty() ? r.final_url : job.url;
-    if (play_audio(app, url, r.download->mime))
+    if (play_audio(app, url, r.download->mime, r.download->name))
       record_media_visit(app, job.pane, url, hint, 0, via);
+    // A stand-in page (the address given at startup) has nothing to keep:
+    // a page about what plays takes its place.
+    if (const DocBuffer* b = find_buf(app, app.panes[job.pane].buf); b && b->placeholder)
+      show_doc_in_pane(app, job.pane, media_page(app, url), url);
     return;
   }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
