@@ -2155,6 +2155,18 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
     return;
   }
 
+  // Ctrl+PgDn / Ctrl+PgUp — next / previous document tab (like Ctrl+Tab).
+  {
+    const SDL_Keycode k = xanatoo::sdl::keycode(ev);
+    if (!status_prompt && ctrl && !alt && !shift &&
+        (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN)) {
+      execute_command(app, k == SDLK_PAGEDOWN ? UiCommand::NextTab
+                                              : UiCommand::PrevTab,
+                      {});
+      return;
+    }
+  }
+
   // The site map is mostly used on (read-only) web pages: its keys come
   // before the browse-mode filter below.
   if (!status_prompt && handle_sitemap_key(app, ev, ctrl, alt)) return;
