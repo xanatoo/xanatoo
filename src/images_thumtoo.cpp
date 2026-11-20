@@ -127,12 +127,18 @@ struct ImageBackend {
       finish(uri);
       return;
     }
-    if (client->get_pixels_from_tiles(uri, kMaxThumbEdge)) {
-      finish(uri);
-      return;
+    const int native = std::max(reply.size->width, reply.size->height);
+    // Cached tiles serve only when fine enough: get_pixels_from_tiles falls
+    // back to the finest stored scale, so a pyramid built for a smaller
+    // largest edge (512 before) would keep big images small for good.
+    if (auto px = client->get_pixels_from_tiles(uri, kMaxThumbEdge)) {
+      const int need = std::min(native, kMaxThumbEdge) * 9 / 10;
+      if (std::max(px->width, px->height) >= need) {
+        finish(uri);
+        return;
+      }
     }
     // Coarsest scale whose long edge still covers the largest thumbnail.
-    const int native = std::max(reply.size->width, reply.size->height);
     int min_scale = 0;
     while (thumtoo::dim_at_tile_scale(native, min_scale + 1) >=
            kMaxThumbEdge * 9 / 10)
