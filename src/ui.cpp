@@ -2991,9 +2991,39 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         menu_request_.clear();
       }
     };
+    // Fitts's law: the menu titles reach the screen edge. ImGui clips the
+    // bar half a border below its top (rounded to a whole pixel) and a title
+    // only covers its label plus half the item spacing, which leaves dead
+    // rows above (and below) the titles — the pointer pushed against the top
+    // edge, mouse or gamepad stick, hit nothing. Clip to the full bar and
+    // grow each title's spacing to the bar height; popped again before the
+    // menu's own items, so the popups keep the normal spacing. The bar also
+    // starts max(WindowPadding.x, ItemSpacing.x) in, which left the corner
+    // dead: start "File" so its box (label minus ItemSpacing.x / 2) begins at
+    // the left edge.
+    const ImVec2 bar_min = ImGui::GetWindowPos();
+    const ImVec2 bar_max(bar_min.x + ImGui::GetWindowWidth(),
+                         bar_min.y + ImGui::GetFrameHeight());
+    ImGui::PushClipRect(bar_min, bar_max, false);
+    {
+      const float sx = ImGui::GetStyle().ItemSpacing.x;
+      const ImVec2 cur = ImGui::GetCursorScreenPos();
+      const float edge_x = bar_min.x + sx - std::floor(sx * 0.5f);
+      if (cur.x > edge_x) ImGui::SetCursorScreenPos(ImVec2(edge_x, cur.y));
+    }
+    const float title_gap = ImGui::GetStyle().FramePadding.y -
+                            std::floor(ImGui::GetStyle().ItemSpacing.y * 0.5f);
+    auto bar_menu = [&](const char* label, bool enabled = true) {
+      ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                          ImVec2(ImGui::GetStyle().ItemSpacing.x,
+                                 2.f * ImGui::GetStyle().FramePadding.y));
+      const bool open = ImGui::BeginMenu(label, enabled);
+      ImGui::PopStyleVar();
+      return open;
+    };
 
     force_menu("File");
-    if (ImGui::BeginMenu("File")) {
+    if (bar_menu("File")) {
       menu_item_cmd("New", UiCommand::NewDocument, cmd, true, "Ctrl+N");
       menu_item_cmd("Open…", UiCommand::OpenDocument, cmd, true, "Ctrl+O");
       menu_item_cmd("Open URL…", UiCommand::OpenUrlBar, cmd, true, "Ctrl+L");
@@ -3032,7 +3062,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Edit");
-    if (ImGui::BeginMenu("Edit")) {
+    if (bar_menu("Edit")) {
       menu_item_cmd("Undo", UiCommand::Undo, cmd, true, "Ctrl+Z");
       menu_item_cmd("Redo", UiCommand::Redo, cmd, true, "Ctrl+Y");
       ImGui::Separator();
@@ -3061,7 +3091,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     // Format / Insert only edit: not shown while browsing.
     if (!state.browse) force_menu("Format");
-    if (!state.browse && ImGui::BeginMenu("Format")) {
+    if (!state.browse && bar_menu("Format")) {
       menu_item_cmd("Bold", UiCommand::Bold, cmd, state.selection, "Ctrl+B");
       menu_item_cmd("Italic", UiCommand::Italic, cmd, state.selection, "Ctrl+I");
       menu_item_cmd("Strikethrough", UiCommand::Strike, cmd, state.selection,
@@ -3078,12 +3108,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     if (!state.browse) force_menu("Insert");
-    if (!state.browse && ImGui::BeginMenu("Insert")) {
+    if (!state.browse && bar_menu("Insert")) {
       menu_insert_items(cmd);
       ImGui::EndMenu();
     }
     force_menu("View");
-    if (ImGui::BeginMenu("View")) {
+    if (bar_menu("View")) {
       menu_item_cmd(state.native_view ? "Web Page View" : "Native View",
                     UiCommand::ToggleNative, cmd, !state.alternate_url.empty());
       menu_item_cmd(state.archive_view ? "Live Page" : "Old Version (archive.org)",
@@ -3139,7 +3169,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Layout");
-    if (ImGui::BeginMenu("Layout")) {
+    if (bar_menu("Layout")) {
       if (ImGui::MenuItem("Paged Reading", "F8", state.paged))
         cmd = UiCommand::TogglePaged;
       if (ImGui::BeginMenu("Page columns", state.paged)) {
@@ -3189,7 +3219,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Panels");
-    if (ImGui::BeginMenu("Panels")) {
+    if (bar_menu("Panels")) {
       if (ImGui::MenuItem("Keyboard Reference", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
       if (ImGui::MenuItem("Help Panel", "Shift+F1", state.hover_help))
@@ -3243,7 +3273,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     // Go: moving through and between pages, plus the panels that do so.
     force_menu("Go");
-    if (ImGui::BeginMenu("Go")) {
+    if (bar_menu("Go")) {
       menu_item_cmd("Back", UiCommand::NavBack, cmd, state.can_nav_back, "Alt+Left");
       menu_item_cmd("Forward", UiCommand::NavForward, cmd, state.can_nav_forward,
                     "Alt+Right");
@@ -3298,7 +3328,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Bookmarks");
-    if (ImGui::BeginMenu("Bookmarks")) {
+    if (bar_menu("Bookmarks")) {
       const char* add_label = state.current_bookmarked ? "Remove Bookmark"
                               : state.selection        ? "Bookmark Selection"
                                                        : "Bookmark This Page";
@@ -3318,7 +3348,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("History");
-    if (ImGui::BeginMenu("History")) {
+    if (bar_menu("History")) {
       menu_item_cmd("Back", UiCommand::NavBack, cmd, state.can_nav_back, "Alt+Left");
       menu_item_cmd("Forward", UiCommand::NavForward, cmd, state.can_nav_forward,
                     "Alt+Right");
@@ -3344,11 +3374,11 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     uint32_t subs_unread = 0;
     for (const auto& sub : state.subscriptions) subs_unread += sub.unread;
     // New-items marker: an orange dot after the menu title.
-    const bool subs_open = ImGui::BeginMenu("Subscriptions");
+    const bool subs_open = bar_menu("Subscriptions");
     if (subs_unread) {
       const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
       ImGui::GetWindowDrawList()->AddCircleFilled(
-          ImVec2(b.x - 3.0f, a.y + 5.0f), 3.5f,
+          ImVec2(b.x - 3.0f, a.y + title_gap + 5.0f), 3.5f,
           IM_COL32(240, 130, 20, 255));
     }
     if (subs_open) {
@@ -3387,7 +3417,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Services");
-    if (ImGui::BeginMenu("Services")) {
+    if (bar_menu("Services")) {
       for (const UiService& s : state.services) {
         if (s.separator_before) ImGui::Separator();
         if (ImGui::MenuItem(s.label.c_str(), nullptr, false, s.enabled)) {
@@ -3405,7 +3435,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::EndMenu();
     }
     force_menu("Help");
-    if (ImGui::BeginMenu("Help")) {
+    if (bar_menu("Help")) {
       if (ImGui::MenuItem("Keyboard Reference", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
       if (ImGui::MenuItem("Help Panel", "Shift+F1", state.hover_help))
@@ -3425,6 +3455,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     // Unmatched Alt+letter request (e.g. after menus reordered) — drop it.
     menu_request_.clear();
     result.top_reserved = ImGui::GetFrameHeight();
+    ImGui::PopClipRect();
     ImGui::EndMainMenuBar();
   }
 
