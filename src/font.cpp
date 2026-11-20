@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include FT_OUTLINE_H
+#include FT_DRIVER_H
+#include FT_MODULE_H
 #ifndef XANATOO_FONTCONFIG
 #define XANATOO_FONTCONFIG 1
 #endif
@@ -54,9 +56,18 @@ bool Font::load(const FontFace& file, int pixel_size, SDL_Renderer* renderer) {
     FT_Done_Face(face_);
     face_ = nullptr;
   }
-  if (!library_ && FT_Init_FreeType(&library_)) {
-    std::cerr << "FreeType init failed\n";
-    return false;
+  if (!library_) {
+    if (FT_Init_FreeType(&library_)) {
+      std::cerr << "FreeType init failed\n";
+      return false;
+    }
+    // Stem darkening (auto-hinter, which light hinting uses for TrueType,
+    // and the CFF / Type 1 drivers) emboldens small sizes to make up for
+    // the thinning of gamma-correct coverage (kTextGamma); it fades out
+    // towards large sizes.
+    FT_Bool no_darkening = 0;
+    for (const char* module : {"autofitter", "cff", "type1", "t1cid"})
+      FT_Property_Set(library_, module, "no-stem-darkening", &no_darkening);
   }
   if (file.index < 0 ||
       FT_New_Face(library_, file.path.c_str(), file.index, &face_)) {
