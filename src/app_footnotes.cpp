@@ -5,7 +5,8 @@
 // a strip along the pane's bottom edge, laid out with the document style like
 // the foot of a printed page. A wide text column holds several columns of
 // notes side by side, balanced by height. Notes whose own block is on screen
-// are left out; a press on a link in a note follows it, elsewhere on a note
+// are left out, and so are the last notes when their marks would sit under
+// the strip (fit_footnote_strip); a press on a link in a note follows it, elsewhere on a note
 // jumps to the note. The note of the mark under the pointer is washed in
 // the style's `mark` colour. A thick rule and a slightly darker sheet set
 // the strip apart from the page above it.
@@ -36,6 +37,33 @@ xanatoo::Rgba mix(xanatoo::Rgba a, xanatoo::Rgba b, int pct) {
     return static_cast<uint8_t>((x * (100 - pct) + y * pct) / 100);
   };
   return {m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), 255};
+}
+
+// Columns for the first `count` notes of the laid-out ones: whole notes
+// balanced by height; sets columns, content_h and shown.
+void arrange_columns(FootnoteOverlay& fo, size_t count) {
+  count = std::min(count, fo.note_y.size());
+  fo.columns.clear();
+  fo.content_h = 0.f;
+  fo.shown = count;
+  if (count == 0) return;
+  std::vector<float> heights(fo.note_h.begin(), fo.note_h.begin() + count);
+  heights.back() = fo.note_bottom[count - 1] - fo.note_y[count - 1];
+  const std::vector<size_t> starts =
+      xanatoo::balance_columns(heights, fo.max_columns);
+  for (size_t c = 0; c < starts.size(); ++c) {
+    const size_t end = c + 1 < starts.size() ? starts[c + 1] : count;
+    FootnoteOverlay::Column col;
+    col.first = starts[c];
+    col.x = fo.left + static_cast<float>(c) * (fo.column_w + fo.gap);
+    col.y0 = fo.note_y[col.first];
+    float bot = col.y0;
+    for (size_t k = col.first; k < end; ++k)
+      bot = std::max(bot, fo.note_bottom[k]);
+    col.h = bot - col.y0 + 2.f * fo.pad;
+    fo.content_h = std::max(fo.content_h, col.h);
+    fo.columns.push_back(col);
+  }
 }
 
 // Lay out the notes for `keys` in columns across the pane's text column.
@@ -87,32 +115,26 @@ void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
     float& bot = bottom[(it - fo.note_y.begin()) - 1];
     bot = std::max(bot, g.y + descent);
   }
-  std::vector<float> heights(tops.size(), 0.f);
+  fo.note_h.assign(tops.size(), 0.f);
   for (size_t k = 0; k < tops.size(); ++k)
-    heights[k] =
+    fo.note_h[k] =
         (k + 1 < tops.size() ? fo.note_y[k + 1] : bottom[k]) - fo.note_y[k];
-
-  const std::vector<size_t> starts = xanatoo::balance_columns(heights, n);
-  fo.content_h = 0.f;
-  for (size_t c = 0; c < starts.size(); ++c) {
-    const size_t end = c + 1 < starts.size() ? starts[c + 1] : tops.size();
-    FootnoteOverlay::Column col;
-    col.first = starts[c];
-    col.x = left + static_cast<float>(c) * (col_w + gap);
-    col.y0 = fo.note_y[col.first];
-    float bot = col.y0;
-    for (size_t k = col.first; k < end; ++k) bot = std::max(bot, bottom[k]);
-    col.h = bot - col.y0 + 2.f * o.margin_y;
-    fo.content_h = std::max(fo.content_h, col.h);
-    fo.columns.push_back(col);
-  }
-  fo.note_bottom = bottom;
+  fo.note_bottom = std::move(bottom);
   fo.column_w = col_w;
   fo.gap = gap;
   fo.pad = o.margin_y;
+  fo.left = left;
+  fo.max_columns = n;
   fo.keys = std::move(keys);
   fo.layout_gen = pane.layout.generation;
   fo.width = width;
+  // Strip height for each count of leading notes.
+  fo.strip_h.assign(tops.size() + 1, 0.f);
+  for (size_t k = 1; k <= tops.size(); ++k) {
+    arrange_columns(fo, k);
+    fo.strip_h[k] = fo.content_h;
+  }
+  arrange_columns(fo, tops.size());
 }
 
 // Screen x range [x0, x1) of column `c`: half the gap to each neighbour,
@@ -158,17 +180,40 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
 
   const float top = pane.scroll_y;
   const float bottom = top + static_cast<float>(clip.h);
-  std::vector<std::string> keys = xanatoo::visible_footnote_keys(
+  std::vector<xanatoo::FootnoteMark> marks = xanatoo::visible_footnote_marks(
       doc_of(app, pane), pane.layout, top, bottom);
+  // Top to bottom, so the notes the strip leaves out are always the last.
+  std::stable_sort(marks.begin(), marks.end(),
+                   [](const auto& a, const auto& b) { return a.y < b.y; });
+  std::vector<std::string> keys;
+  std::vector<float> mark_top, mark_bottom;
+  for (const auto& m : marks) {
+    if (xanatoo::find_footnote(doc_of(app, pane), m.key) ==
+        xanatoo::INVALID_NODE)
+      continue;  // no note to show
+    const xanatoo::Font& f = app.fonts.pick(pane.layout.glyphs[m.glyph].font);
+    keys.push_back(m.key);
+    mark_top.push_back(m.y - static_cast<float>(f.ascender()));
+    mark_bottom.push_back(m.y - static_cast<float>(f.descender()));
+  }
   if (keys.empty()) return;
   const int width = std::max(40, pane.w - sb_gutter(pane));
   if (keys != fo.keys || fo.layout_gen != pane.layout.generation ||
       fo.width != width)
     build_overlay(app, pane, std::move(keys), width);
+  if (fo.strip_h.size() < 2) return;
+
+  // Leave out the notes of marks the strip would cover, at a height that
+  // follows from the scroll position alone (no feedback from the strip).
+  const float max_h = static_cast<float>(clip.h) * kMaxShare;
+  std::vector<float> strip_h = fo.strip_h;
+  for (float& sh : strip_h) sh = std::min(sh, max_h);
+  const xanatoo::FootnoteStripFit fit = xanatoo::fit_footnote_strip(
+      mark_top, mark_bottom, strip_h, bottom, max_h);
+  if (fit.notes != fo.shown) arrange_columns(fo, fit.notes);
   if (fo.content_h < 1.f) return;
 
-  const int h = static_cast<int>(
-      std::min(fo.content_h, static_cast<float>(clip.h) * kMaxShare));
+  const int h = static_cast<int>(fit.height);
   const SDL_Rect strip{clip.x, clip.y + clip.h - h, clip.w, h};
 
   // Step aside while the caret is under the strip so typing stays visible.
@@ -216,7 +261,7 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
     app.renderer.draw(fo.layout, scroll, static_cast<float>(pane.x) + col.x);
     // The note of the hovered mark, when it is in this column.
     const size_t end =
-        c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.notes.size();
+        c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.shown;
     if (hot != fo.notes.end()) {
       const size_t k = static_cast<size_t>(hot - fo.notes.begin());
       if (k >= col.first && k < end && k < fo.note_bottom.size()) {
@@ -284,7 +329,7 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my) {
   const size_t c = np.column;
   const auto& col = fo.columns[c];
   const size_t end =
-      c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.note_y.size();
+      c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.shown;
   const float cy = np.y;  // y inside the laid-out notes
   size_t k = col.first;
   while (k + 1 < end && fo.note_y[k + 1] <= cy) ++k;

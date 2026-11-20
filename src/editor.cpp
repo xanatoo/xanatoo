@@ -2280,10 +2280,10 @@ std::optional<Caret> jump_to_href(const Document& doc, const std::string& href) 
   return Caret{id, 0, 0};
 }
 
-std::vector<std::string> visible_footnote_keys(const Document& doc,
-                                               const LayoutResult& layout,
-                                               float top, float bottom) {
-  std::vector<std::string> keys;
+std::vector<FootnoteMark> visible_footnote_marks(const Document& doc,
+                                                 const LayoutResult& layout,
+                                                 float top, float bottom) {
+  std::vector<FootnoteMark> marks;
   std::unordered_set<std::string> shown;  // Footnote blocks in the band
   for (const LayoutBox& b : layout.boxes) {
     if (b.y > bottom || b.y + b.height < top) continue;
@@ -2293,7 +2293,8 @@ std::vector<std::string> visible_footnote_keys(const Document& doc,
   }
   NodeId last_node = INVALID_NODE;
   size_t last_span = 0;
-  for (const PositionedGlyph& g : layout.glyphs) {
+  for (size_t gi = 0; gi < layout.glyphs.size(); ++gi) {
+    const PositionedGlyph& g = layout.glyphs[gi];
     if (g.kind != InlineKind::FootnoteRef || g.node == INVALID_NODE) continue;
     if (g.y < top || g.y > bottom) continue;
     if (g.node == last_node && g.span_index == last_span) continue;
@@ -2303,10 +2304,48 @@ std::vector<std::string> visible_footnote_keys(const Document& doc,
     if (n.id != g.node || g.span_index >= n.spans.size()) continue;
     const std::string& key = n.spans[g.span_index].href;
     if (key.empty() || shown.count(ascii_lower(key))) continue;
-    if (std::find(keys.begin(), keys.end(), key) == keys.end())
-      keys.push_back(key);
+    auto it = std::find_if(marks.begin(), marks.end(),
+                           [&](const FootnoteMark& m) { return m.key == key; });
+    if (it == marks.end())
+      marks.push_back({key, g.y, gi});
+    else if (g.y < it->y) {
+      it->y = g.y;
+      it->glyph = gi;
+    }
   }
+  return marks;
+}
+
+std::vector<std::string> visible_footnote_keys(const Document& doc,
+                                               const LayoutResult& layout,
+                                               float top, float bottom) {
+  std::vector<std::string> keys;
+  for (auto& m : visible_footnote_marks(doc, layout, top, bottom))
+    keys.push_back(std::move(m.key));
   return keys;
+}
+
+FootnoteStripFit fit_footnote_strip(const std::vector<float>& mark_top,
+                                    const std::vector<float>& mark_bottom,
+                                    const std::vector<float>& strip_h,
+                                    float bottom, float max_h) {
+  const size_t m = std::min({mark_top.size(), mark_bottom.size(),
+                             strip_h.empty() ? 0 : strip_h.size() - 1});
+  if (m == 0) return {};
+  std::vector<float> low(m);  // lowest bottom among marks [0, i]
+  for (size_t i = 0; i < m; ++i)
+    low[i] = i ? std::max(low[i - 1], mark_bottom[i]) : mark_bottom[i];
+  for (size_t n = m; n >= 1; --n) {
+    float lo = strip_h[n];
+    if (n < m) lo = std::max(lo, bottom - mark_top[n]);
+    const float hi = std::min(max_h, bottom - low[n - 1]);
+    if (lo <= hi) return {n, lo};
+  }
+  // The notes overflow the strip: at its full height, the marks above it.
+  size_t n = 0;
+  while (n < m && low[n] <= bottom - max_h) ++n;
+  if (n == 0) return {m, strip_h[m]};
+  return {n, std::min(max_h, strip_h[n])};
 }
 
 static NodeId copy_subtree(const Document& src, NodeId id, Document& dst,

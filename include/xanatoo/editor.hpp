@@ -300,6 +300,37 @@ std::vector<std::string> visible_footnote_keys(const Document& doc,
                                                const LayoutResult& layout,
                                                float top, float bottom);
 
+// Like visible_footnote_keys, with each key's topmost mark in the band.
+struct FootnoteMark {
+  std::string key;
+  float y = 0.f;     // its baseline (content y)
+  size_t glyph = 0;  // its first glyph in layout.glyphs
+};
+std::vector<FootnoteMark> visible_footnote_marks(const Document& doc,
+                                                 const LayoutResult& layout,
+                                                 float top, float bottom);
+
+// Footnote strip that stays clear of the marks it explains. Mark i spans
+// content y [mark_top[i], mark_bottom[i]], sorted by mark_top; the notes of
+// the first n marks need a strip of strip_h[n] (strip_h[0] = 0,
+// nondecreasing), rising from content y `bottom`, at most `max_h` tall.
+// Picks the most notes n for which a height h exists with every shown mark
+// above the strip and every other mark under it:
+//   max(strip_h[n], bottom - mark_top[n]) <= h <= min(max_h, bottom - mark_bottom[n-1]),
+// taking the smallest such h. It depends on nothing but these inputs (not on
+// the strip drawn the frame before), so hiding notes cannot feed back into
+// the strip's size. No n fits (the notes overflow max_h) → the notes of the
+// marks above a strip of max_h, at most max_h tall; all notes at strip_h[m]
+// when no mark is above that (marks covered, as before).
+struct FootnoteStripFit {
+  size_t notes = 0;
+  float height = 0.f;
+};
+FootnoteStripFit fit_footnote_strip(const std::vector<float>& mark_top,
+                                    const std::vector<float>& mark_bottom,
+                                    const std::vector<float>& strip_h,
+                                    float bottom, float max_h);
+
 // Copies of the Footnotes named by `keys` (unknown keys skipped) as the
 // top-level blocks of a new document; `sources` gets the original id of each.
 Document extract_footnotes(const Document& doc,

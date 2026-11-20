@@ -4577,6 +4577,31 @@ void test_footnotes() {
   EXPECT((balance_columns({10.f, 10.f}, 4) == std::vector<size_t>{0, 1}));
   EXPECT((balance_columns({5.f, 5.f, 5.f, 20.f, 5.f, 5.f}, 3) ==
           std::vector<size_t>{0, 3, 4}));
+
+  // Strip fit: band ends at 500; marks 10px tall at tops 100, 300, 450.
+  const std::vector<float> mt{100.f, 300.f, 450.f}, mb{110.f, 310.f, 460.f};
+  auto fit = fit_footnote_strip(mt, mb, {0.f, 50.f, 100.f, 150.f}, 500.f, 400.f);
+  // All three need 150, which covers the mark at 450: two fit at max(100, 50).
+  EXPECT_EQ(fit.notes, 2u);
+  EXPECT_EQ(fit.height, 100.f);
+  // Small notes: all fit, the strip just its own height.
+  fit = fit_footnote_strip(mt, mb, {0.f, 10.f, 20.f, 30.f}, 500.f, 400.f);
+  EXPECT_EQ(fit.notes, 3u);
+  EXPECT_EQ(fit.height, 30.f);
+  // Two notes need 250 > room under mark 2 (190): one note, strip grown to
+  // cover mark 2 (200), not just its own 60.
+  fit = fit_footnote_strip(mt, mb, {0.f, 60.f, 250.f, 300.f}, 500.f, 400.f);
+  EXPECT_EQ(fit.notes, 1u);
+  EXPECT_EQ(fit.height, 200.f);
+  // Notes overflow max_h 150: the marks above a full strip (1 and 2).
+  fit = fit_footnote_strip(mt, mb, {0.f, 160.f, 250.f, 300.f}, 500.f, 150.f);
+  EXPECT_EQ(fit.notes, 2u);
+  EXPECT_EQ(fit.height, 150.f);
+  // No mark above a full strip: all notes as before.
+  fit = fit_footnote_strip({450.f}, {460.f}, {0.f, 80.f}, 500.f, 60.f);
+  EXPECT_EQ(fit.notes, 1u);
+  EXPECT_EQ(fit.height, 80.f);
+  EXPECT_EQ(fit_footnote_strip({}, {}, {0.f}, 500.f, 400.f).notes, 0u);
 }
 
 void test_hn_urls_and_html() {

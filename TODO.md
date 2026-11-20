@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Footnote strip leaves out notes of covered marks
+
+- The strip no longer lists notes whose marks it covers. Marks are sorted
+  top to bottom and the strip shows the first n notes; `fit_footnote_strip`
+  (editor.cpp, pure, tested) picks the most n for which one height keeps
+  every shown mark above the strip and every left-out mark under it, then
+  the smallest such height (the sheet may extend a little below the notes
+  to cover the next mark). It reads only the scroll position and the note
+  heights per n (`FootnoteOverlay::strip_h`, from the one layout of all
+  visible notes), never the previous strip, so shrinking cannot uncover a
+  mark and re-grow it: no feedback, no flicker.
+- When the notes overflow the 40% cap: the notes of marks above a full
+  strip; when no mark is above it, all notes as before.
+
 ## Status (2026-11-20) — Footnote strip: divider and links
 
 - The footnote overlay sits on a sheet a shade darker than the paper under

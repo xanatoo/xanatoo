@@ -176,6 +176,14 @@ struct FootnoteOverlay {
   std::vector<xanatoo::NodeId> notes;  // source Footnote per laid-out note
   std::vector<float> note_y;           // top of each note in `layout`
   std::vector<float> note_bottom;      // bottom of each note's last line
+  // The strip shows the first `shown` notes (marks sorted top to bottom),
+  // so it can stay clear of the marks it explains (fit_footnote_strip);
+  // strip_h[n] = height of the columns of the first n notes.
+  std::vector<float> note_h;  // each note incl. the space to the next
+  std::vector<float> strip_h;
+  size_t shown = 0;
+  size_t max_columns = 1;
+  float left = 0.f;  // text column's left edge, pane-local
   // Notes are laid out once at one column's width and shown in columns side
   // by side, each a run of whole notes (as many as the text width allows).
   struct Column {
@@ -190,7 +198,7 @@ struct FootnoteOverlay {
   float pad = 0.f;
   xanatoo::Document doc;  // the notes, as laid out in `layout`
   xanatoo::LayoutResult layout;
-  float content_h = 0.f;  // tallest column
+  float content_h = 0.f;  // tallest column of the shown notes
   float y = 0.f;  // strip top, viewport y (0 = top of the pane content)
   float h = 0.f;
   float w = 0.f;
