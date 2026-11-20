@@ -201,8 +201,10 @@ std::vector<fs::path> sheet_files(std::string* signature) {
     std::sort(files.begin(), files.end());
     for (const fs::path& p : files) {
       const auto size = fs::file_size(p, ec);
-      const auto time = fs::last_write_time(p, ec).time_since_epoch().count();
-      *signature += p.string() + ":" + std::to_string(size) + ":" +
+      // The rep is __int128 on the Android NDK's libc++: no to_string.
+      const auto time = static_cast<long long>(
+          fs::last_write_time(p, ec).time_since_epoch().count());
+      *signature += p.string() + ":" + std::to_string(static_cast<unsigned long long>(size)) + ":" +
                     std::to_string(time) + "\n";
       out.push_back(p);
     }
