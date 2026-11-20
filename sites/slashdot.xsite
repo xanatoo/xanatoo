@@ -1,4 +1,5 @@
 ; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 ; Site hints for slashdot.org (docs/SITEHINTS.md).
 ;
 ; A story page has two <article>s (the story and the login pop-up) and
