@@ -214,6 +214,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.sitemap = app.sitemap.shown;
   ui_state.page_panel = app.page.shown;
   ui_state.has_nav = page_has_navigation(app);
+  ui_state.has_headings = focused_pane(app).has_headings;
 #if defined(XANATOO_WEB) && XANATOO_WEB
   ui_state.has_site = sitemap_button_shown(app);
 #endif

@@ -373,6 +373,8 @@ struct OutlineEntry {
   bool folded = false;        // view-local: body (and outline children) hidden
   bool preamble = false;      // top row: title + content before 1st heading
 };
+// Whether the document tree has a Header / Heading the outline can list.
+bool document_has_headings(const Document& doc);
 // skip_chrome: reader mode, headings inside Chrome nodes are left out.
 void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
                      const std::unordered_set<NodeId>* folded_sections = nullptr,

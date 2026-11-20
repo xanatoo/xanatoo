@@ -239,6 +239,11 @@ def draw_icon(name: str, size: int = 20) -> bytes:
         rect(buf, size, size, S(7), S(2), S(6), S(4), INK, ACCENT)
         rect(buf, size, size, S(1), S(12), S(6), S(5), INK, SOFT)
         rect(buf, size, size, S(13), S(12), S(6), S(5), INK, SOFT)
+    elif name == "navigation":
+        rect(buf, size, size, S(3), S(3), S(14), S(14), INK, SOFT)
+        rect(buf, size, size, S(3), S(3), S(14), S(4), INK, ACCENT)
+        for y in (10, 13):
+            line(buf, size, size, S(5), S(y), S(15), S(y), INK, 1)
     elif name == "outline":
         line(buf, size, size, S(4), S(5), S(16), S(5), INK, 2)
         line(buf, size, size, S(6), S(10), S(16), S(10), INK, 1)

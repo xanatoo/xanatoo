@@ -74,7 +74,15 @@ read-only service clients. Every client is read-only: never post or log in.
 
 - `src/feed.cpp`, gated by `XANATOO_FEEDS` (default ON). Small tolerant XML
   reader (names lower-cased, prefixes kept: `content:encoded`), RSS 2.0,
-  RSS 1.0 (RDF) and Atom (text / html / xhtml content) → Thread + Message.
+  RSS 1.0 (RDF) and Atom (text / html / xhtml content). A feed with any
+  titled entry is a list of articles: `Section` (label `feed`, `Header` =
+  feed title linked to the site) of `Article`s (label `e1`…, `Header` =
+  title linked to the entry, `(untitled)` when missing; `Caption` = author
+  · date), like the HN / StackExchange lists, so the Heading Outline lists
+  the entries. The entry's own `<h1>`… are demoted so the shallowest is
+  level 3 (`demote_headings`). Feeds without any titles (micro-blogs) stay
+  a `Thread` of `Message` cards with a Permalink. RFC 4685 threading
+  (`thr:in-reply-to`) is not read.
 - `is_feed_url`: `feed:` prefix (HTML pages autodiscover via
   `<link rel=alternate>`), *.rss / .atom / .rdf / .xml, /feed, /rss,
   /feeds/…, ?feed=rss2. Checked before the other services in dispatch.

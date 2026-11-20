@@ -364,6 +364,7 @@ struct Pane {
   std::optional<bool> reader;
   size_t chrome_parts = 0;  // top-level Chrome nodes at the last layout
   size_t nav_parts = 0;  // Page panel regions (navigation) at the last layout
+  bool has_headings = false;  // headings for the Heading Outline, last layout
   // Paged reading of this view (ebook style pages instead of scrolling).
   // Unset = ViewSettings::paged; view state like `reader`. Use pane_paged.
   std::optional<bool> paged;

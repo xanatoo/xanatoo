@@ -2758,6 +2758,21 @@ void paste_plain_text(Document& doc, Caret& caret, const std::string& text) {
   }
 }
 
+bool document_has_headings(const Document& doc) {
+  if (doc.root == INVALID_NODE) return false;
+  std::vector<NodeId> stack{doc.root};
+  while (!stack.empty()) {
+    const NodeId id = stack.back();
+    stack.pop_back();
+    if (id == INVALID_NODE || id >= doc.next_id) continue;
+    const Node& n = doc.get(id);
+    if (n.id != id) continue;
+    if (n.kind == NodeKind::Heading || n.kind == NodeKind::Header) return true;
+    stack.insert(stack.end(), n.children.begin(), n.children.end());
+  }
+  return false;
+}
+
 DocStats document_stats(const Document& doc) {
   DocStats s;
   std::vector<NodeId> nodes;
@@ -3120,8 +3135,9 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
     // Legacy ranked heading not wrapped in a Section (older docs).
     if (n.kind == NodeKind::Heading || n.kind == NodeKind::Header) {
       const Node& parent = (n.parent != INVALID_NODE) ? doc.get(n.parent) : n;
-      if (parent.kind == NodeKind::Section || parent.kind == NodeKind::Article) {
-        // Already represented by the section row.
+      if ((parent.kind == NodeKind::Section || parent.kind == NodeKind::Article) &&
+          first_header_child(parent) == fr.id) {
+        // The section's title: already represented by the section row.
       } else {
         OutlineEntry e;
         e.node = fr.id;

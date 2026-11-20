@@ -445,6 +445,7 @@ void layout_panes(App& app) {
       app.layout_engine.set_hide_chrome(false);
       pane.chrome_parts = xanatoo::chrome_regions(doc_of(app, pane)).size();
       pane.nav_parts = page_nav_regions(doc_of(app, pane));
+      pane.has_headings = xanatoo::document_has_headings(doc_of(app, pane));
       if (paged) {
         paginate_pane(app, pane, columns, layout_w);
         pane.materialised_top = 0.f;

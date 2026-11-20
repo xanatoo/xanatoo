@@ -6240,28 +6240,50 @@ void test_parse_feeds() {
       "</item><item><description>&lt;p&gt;No title&lt;/p&gt;</description>"
       "<guid>https://b.example/2</guid></item></channel></rss>",
       "https://b.example/feed");
+  // A feed of titled entries: a section of articles with real headings.
+  auto articles = [](const Document& d) {
+    std::vector<NodeId> out;
+    if (const Node* sec = first_of_kind(d, NodeKind::Section))
+      for (NodeId c : sec->children)
+        if (d.get(c).kind == NodeKind::Article) out.push_back(c);
+    return out;
+  };
   EXPECT(rss.has_value());
   if (rss) {
-    const Node* thread = first_of_kind(*rss, NodeKind::Thread);
-    EXPECT(thread && thread->summary == "Blog & Co");
-    if (thread) {
-      EXPECT_EQ(thread->children.size(), 2u);
-      const Node& m = rss->get(thread->children.at(0));
-      EXPECT_EQ(m.src, "Ann");
-      EXPECT_EQ(m.summary, "2026-10-27 10:05 UTC");
-      auto parts = m.children;
-      EXPECT_EQ(parts.size(), 4u);  // title, 2 paragraphs, enclosure
-      if (parts.size() == 4) {
+    EXPECT(first_of_kind(*rss, NodeKind::Thread) == nullptr);
+    const Node* feed = first_of_kind(*rss, NodeKind::Section);
+    EXPECT(feed && feed->label == "feed");
+    if (feed) {
+      const Node& head = rss->get(feed->children.at(0));
+      EXPECT(head.kind == NodeKind::Header);
+      EXPECT_EQ(plain_text(*rss, head.id), "Blog & Co");
+      EXPECT_EQ(head.spans.at(0).href, "https://b.example/");
+      EXPECT_EQ(plain_text(*rss, feed->children.at(1)), "Notes");
+    }
+    const auto arts = articles(*rss);
+    EXPECT_EQ(arts.size(), 2u);
+    if (arts.size() == 2) {
+      const Node& a = rss->get(arts[0]);
+      EXPECT_EQ(a.label, "e1");
+      auto parts = a.children;
+      EXPECT_EQ(parts.size(), 5u);  // title, caption, 2 paragraphs, enclosure
+      if (parts.size() == 5) {
+        EXPECT(rss->get(parts[0]).kind == NodeKind::Header);
         EXPECT_EQ(plain_text(*rss, parts[0]), "First & best");
         EXPECT_EQ(rss->get(parts[0]).spans.at(0).href, "https://b.example/1");
-        EXPECT_EQ(plain_text(*rss, parts[1]), "Full text");
-        EXPECT_EQ(plain_text(*rss, parts[3]), "Enclosure: audio/mpeg (2.5 MB)");
+        EXPECT(rss->get(parts[1]).kind == NodeKind::Caption);
+        EXPECT_EQ(plain_text(*rss, parts[1]), "Ann · 2026-10-27 10:05 UTC");
+        EXPECT_EQ(plain_text(*rss, parts[2]), "Full text");
+        EXPECT_EQ(plain_text(*rss, parts[4]), "Enclosure: audio/mpeg (2.5 MB)");
       }
-      const Node& m2 = rss->get(thread->children.at(1));
-      EXPECT_EQ(m2.src, "Blog & Co");
-      EXPECT_EQ(plain_text(*rss, m2.children.at(0)), "No title");
-      EXPECT_EQ(rss->get(m2.children.back()).spans.at(0).href, "https://b.example/2");
+      // Untitled entry among titled ones: a placeholder title to the guid.
+      const Node& a2 = rss->get(arts[1]);
+      EXPECT_EQ(a2.children.size(), 2u);  // title, body (no author / date)
+      EXPECT_EQ(plain_text(*rss, a2.children.at(0)), "(untitled)");
+      EXPECT_EQ(rss->get(a2.children.at(0)).spans.at(0).href, "https://b.example/2");
+      EXPECT_EQ(plain_text(*rss, a2.children.at(1)), "No title");
     }
+    EXPECT(document_has_headings(*rss));
   }
 
   auto atom = parse_feed(
@@ -6277,15 +6299,14 @@ void test_parse_feeds() {
   EXPECT(atom.has_value());
   if (atom) {
     EXPECT_EQ(atom->meta.title, "A bold feed");
-    const Node* thread = first_of_kind(*atom, NodeKind::Thread);
-    if (thread && thread->children.size() == 2) {
-      const Node& e1 = atom->get(thread->children[0]);
-      EXPECT_EQ(e1.src, "Zed");
-      EXPECT_EQ(e1.summary, "2026-10-01 08:30 UTC");
+    const auto arts = articles(*atom);
+    if (arts.size() == 2) {
+      const Node& e1 = atom->get(arts[0]);
       EXPECT_EQ(atom->get(e1.children.at(0)).spans.at(0).href, "https://a.example/e1");
-      EXPECT_EQ(atom->get(e1.children.at(1)).spans.at(1).href, "https://a.example/x");
-      const Node& e2 = atom->get(thread->children[1]);
-      EXPECT_EQ(e2.children.size(), 3u);  // title + 2 text paragraphs
+      EXPECT_EQ(plain_text(*atom, e1.children.at(1)), "Zed · 2026-10-01 08:30 UTC");
+      EXPECT_EQ(atom->get(e1.children.at(2)).spans.at(1).href, "https://a.example/x");
+      const Node& e2 = atom->get(arts[1]);
+      EXPECT_EQ(e2.children.size(), 4u);  // title, caption, 2 text paragraphs
     } else {
       EXPECT(false);
     }
@@ -6306,13 +6327,15 @@ void test_parse_feeds() {
       "https://www.youtube.com/feeds/videos.xml?channel_id=x");
   EXPECT(yt.has_value());
   if (yt) {
-    const Node* thread = first_of_kind(*yt, NodeKind::Thread);
-    if (thread && thread->children.size() == 1) {
-      const Node& e = yt->get(thread->children[0]);
-      EXPECT_EQ(e.children.size(), 4u);  // title, thumbnail, stats, description
-      if (e.children.size() == 4) {
-        EXPECT_EQ(yt->get(e.children[1]).src, "https://i.ytimg.com/vi/abc/hqdefault.jpg");
-        EXPECT_EQ(yt->get(e.children[2]).spans.at(0).text,
+    const auto arts = articles(*yt);
+    if (arts.size() == 1) {
+      const Node& e = yt->get(arts[0]);
+      // title, caption, thumbnail, stats, description
+      EXPECT_EQ(e.children.size(), 5u);
+      if (e.children.size() == 5) {
+        EXPECT_EQ(plain_text(*yt, e.children[1]), "2026-10-01 08:30 UTC");
+        EXPECT_EQ(yt->get(e.children[2]).src, "https://i.ytimg.com/vi/abc/hqdefault.jpg");
+        EXPECT_EQ(yt->get(e.children[3]).spans.at(0).text,
                   "1,234,567 views · ★ 4.50/5 (1,234 ratings)");
       }
     } else {
@@ -6327,9 +6350,49 @@ void test_parse_feeds() {
       "<link>https://r.example/1</link></item></rdf:RDF>",
       "https://r.example/rss");
   EXPECT(rdf.has_value());
-  if (rdf) {
-    const Node* thread = first_of_kind(*rdf, NodeKind::Thread);
+  if (rdf) EXPECT_EQ(articles(*rdf).size(), 1u);
+
+  // Untitled posts only (micro-blogs): message cards in a thread.
+  auto micro = parse_feed(
+      "<rss version=\"2.0\"><channel><title>M</title>"
+      "<item><link>https://m.example/1</link><description>&lt;p&gt;Hi&lt;/p&gt;"
+      "</description></item></channel></rss>",
+      "https://m.example/feed.rss");
+  EXPECT(micro.has_value());
+  if (micro) {
+    const Node* thread = first_of_kind(*micro, NodeKind::Thread);
     EXPECT(thread && thread->children.size() == 1);
+    if (thread && !thread->children.empty()) {
+      const Node& m = micro->get(thread->children[0]);
+      EXPECT(m.kind == NodeKind::Message);
+      EXPECT_EQ(m.src, "M");
+      EXPECT_EQ(plain_text(*micro, m.children.at(0)), "Hi");
+      EXPECT_EQ(micro->get(m.children.back()).spans.at(0).href, "https://m.example/1");
+    }
+    EXPECT(!document_has_headings(*micro));
+  }
+
+  // An entry's own headings nest below its title in the outline.
+  auto nested = parse_feed(
+      "<rss version=\"2.0\"><channel><title>N</title>"
+      "<item><title>Post</title><description>&lt;h1&gt;A&lt;/h1&gt;&lt;p&gt;x&lt;/p&gt;"
+      "&lt;h2&gt;B&lt;/h2&gt;</description></item></channel></rss>",
+      "https://n.example/feed.rss");
+  EXPECT(nested.has_value());
+  if (nested) {
+    std::vector<OutlineEntry> ol;
+    collect_outline(*nested, ol);
+    EXPECT_EQ(ol.size(), 4u);
+    if (ol.size() == 4) {
+      EXPECT_EQ(ol[0].text, "N");
+      EXPECT_EQ(ol[0].level, 1);
+      EXPECT_EQ(ol[1].text, "Post");
+      EXPECT_EQ(ol[1].level, 2);
+      EXPECT_EQ(ol[2].text, "A");
+      EXPECT_EQ(ol[2].level, 3);
+      EXPECT_EQ(ol[3].text, "B");
+      EXPECT_EQ(ol[3].level, 4);
+    }
   }
   EXPECT(!parse_feed("<html><body>x</body></html>", "https://x").has_value());
 }

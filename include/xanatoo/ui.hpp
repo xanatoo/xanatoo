@@ -474,6 +474,7 @@ struct UiState {
   std::vector<UiOfferedEngine> offered_engines;
   bool adding_engine = false;  // a description is being read
   bool has_nav = false;  // focused page has navigation for the panel
+  bool has_headings = false;  // focused page has headings for the outline
   bool has_site = false; // focused site is known to have a sitemap (or panel open)
   bool diff = false;
   bool can_diff = false;  // two independent documents loaded

@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Feeds are articles with headings; outline in the URL bar
+
+- RSS / Atom feeds with titled entries render as a section of articles
+  (`Article` + `Header` + `Caption`), not a message thread, so the Heading
+  Outline lists feed › entries › the entries' own (demoted) headings.
+  Untitled-only feeds (micro-blogs) keep the thread of message cards.
+- `collect_outline` skipped every heading directly inside a Section /
+  Article as its title; now only the first one.
+- Location field: a Heading outline button for pages with headings; Page
+  Navigation got its own `navigation` icon (it borrowed `outline`). Both
+  show side by side for now.
+- Later: thread `summary=` → a real `<h>` title for all forum importers;
+  RFC 4685 `thr:in-reply-to` threading for feeds; smarter overlap detection
+  between Heading outline and Page Navigation.
+- Checked under Xvfb (planet.debian.org/rss20.xml outline, debian.org URL bar).
+
 ## Status (2026-11-20) — Gutters and scrollbars show hover and press
 
 - Tile divider (and its mode badge), dock gutters and pane / panel

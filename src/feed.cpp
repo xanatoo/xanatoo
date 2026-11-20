@@ -3,8 +3,9 @@
 //
 // RSS 2.0 / RSS 1.0 / Atom reader. A small tolerant XML reader builds an
 // element tree (names lower-cased, prefixes kept: "content:encoded");
-// entries become Thread + Message nodes and their HTML goes through
-// html_min.
+// a feed of titled entries becomes a Section of Article + Header + Caption
+// nodes (real headings for the outline); one without titles (micro-blogs)
+// a Thread of Message cards. Entry HTML goes through html_min.
 
 #include "xanatoo/feed.hpp"
 #include "xanatoo/http_status.hpp"
@@ -14,6 +15,7 @@
 #include "xanatoo/https.hpp"
 #include "xanatoo/version.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
@@ -480,13 +482,105 @@ void read_rss(const XmlTree& t, const XmlNode& channel,
   }
 }
 
-Document build_document(const FeedInfo& f, std::string_view src,
-                        const std::string& url) {
-  Document doc;
-  NodeId root = doc.create(NodeKind::Document);
-  const std::string title = f.title.empty() ? url : f.title;
-  doc.meta.title = title;
+// The entry's own headings sit below its title: the shallowest becomes
+// level `top` (feed = 1, entry = 2), the rest keep their distance to it.
+void demote_headings(Document& doc, NodeId first_new, int top) {
+  int shallowest = 0;
+  for (NodeId id = first_new; id < doc.next_id; ++id) {
+    const Node& n = doc.get(id);
+    if (n.id == id && n.kind == NodeKind::Heading && n.level > 0 &&
+        (shallowest == 0 || n.level < shallowest))
+      shallowest = n.level;
+  }
+  if (shallowest == 0 || shallowest >= top) return;
+  for (NodeId id = first_new; id < doc.next_id; ++id) {
+    Node& n = doc.get(id);
+    if (n.id == id && n.kind == NodeKind::Heading && n.level > 0)
+      n.level = std::min(6, n.level + top - shallowest);
+  }
+}
 
+// Thumbnail, statistics, body and enclosures of an entry.
+void append_entry_body(Document& doc, NodeId parent, const Entry& e,
+                       std::string_view src, const std::string& url) {
+  if (!e.thumb.empty()) {
+    NodeId im = doc.create(NodeKind::Image, parent);
+    doc.get(im).src = resolve_url(url, e.thumb);
+    doc.get(im).float_side = "left";  // text and stats run beside it
+  }
+  if (std::string stats = media_stats_line(e); !stats.empty()) {
+    NodeId sp = doc.create(NodeKind::Paragraph, parent);
+    InlineSpan ss;
+    ss.text = std::move(stats);
+    ss.role = InlineRole::Metadata;
+    doc.get(sp).spans.push_back(std::move(ss));
+  }
+  if (e.body) {
+    const std::string base = e.link.empty() ? url : e.link;
+    const NodeId first_new = doc.next_id;
+    append_content(doc, parent, src, *e.body, base, e.body_html);
+    demote_headings(doc, first_new, 3);
+  }
+  for (const XmlNode* enc : e.enclosures) {
+    std::string href = html_attr(enc->attrs, "url");
+    if (href.empty()) href = html_attr(enc->attrs, "href");
+    append_enclosure(doc, parent, resolve_url(url, href),
+                     html_attr(enc->attrs, "type"),
+                     html_attr(enc->attrs, "length"));
+  }
+}
+
+// A feed of articles: the feed is a section headed by its title, each entry
+// an article headed by its title, with author and date as its caption.
+void build_articles(Document& doc, NodeId root, const FeedInfo& f,
+                    std::string_view src, const std::string& url,
+                    const std::string& title) {
+  NodeId feed = doc.create(NodeKind::Section, root);
+  doc.get(feed).label = "feed";
+  {
+    NodeId head = doc.create(NodeKind::Header, feed);
+    InlineSpan ts;
+    ts.kind = f.link.empty() ? InlineKind::Text : InlineKind::Link;
+    ts.text = title;
+    ts.href = f.link;
+    doc.get(head).spans.push_back(std::move(ts));
+  }
+  if (!f.subtitle.empty() && f.subtitle != title)
+    doc.append_text(doc.create(NodeKind::Paragraph, feed), f.subtitle,
+                    InlineKind::Emphasis);
+  int n = 0;
+  for (const Entry& e : f.entries) {
+    NodeId art = doc.create(NodeKind::Article, feed);
+    doc.get(art).label = "e" + std::to_string(++n);
+    NodeId head = doc.create(NodeKind::Header, art);
+    InlineSpan ts;
+    ts.kind = e.link.empty() ? InlineKind::Text : InlineKind::Link;
+    ts.text = e.title.empty() ? "(untitled)" : e.title;
+    ts.href = e.link;
+    doc.get(head).spans.push_back(std::move(ts));
+    const std::string& author = !e.author.empty() ? e.author : f.author;
+    const std::string date = format_date(e.date);
+    if (!author.empty() || !date.empty()) {
+      NodeId cap = doc.create(NodeKind::Caption, art);
+      std::string meta = author;
+      if (!author.empty() && !date.empty()) meta += " · ";
+      meta += date;
+      InlineSpan ms;
+      ms.text = std::move(meta);
+      ms.role = InlineRole::Metadata;
+      doc.get(cap).spans.push_back(std::move(ms));
+    }
+    append_entry_body(doc, art, e, src, url);
+  }
+  if (f.entries.empty())
+    doc.append_text(doc.create(NodeKind::Paragraph, feed),
+                    "This feed has no entries.");
+}
+
+// A feed of untitled posts (micro-blogs): message cards in a thread.
+void build_thread(Document& doc, NodeId root, const FeedInfo& f,
+                  std::string_view src, const std::string& url,
+                  const std::string& title) {
   NodeId head = doc.create(NodeKind::Paragraph, root);
   InlineSpan ts;
   ts.kind = f.link.empty() ? InlineKind::Strong : InlineKind::Link;
@@ -502,46 +596,34 @@ Document build_document(const FeedInfo& f, std::string_view src,
   int n = 0;
   for (const Entry& e : f.entries) {
     NodeId msg = doc.create(NodeKind::Message, thread);
-    {
-      Node& m = doc.get(msg);
-      m.label = "e" + std::to_string(++n);
-      m.src = !e.author.empty() ? e.author : !f.author.empty() ? f.author : title;
-      m.summary = format_date(e.date);
-    }
-    if (!e.title.empty())
-      append_link_para(doc, msg, e.title, e.link, InlineKind::Strong);
-    if (!e.thumb.empty()) {
-      NodeId im = doc.create(NodeKind::Image, msg);
-      doc.get(im).src = resolve_url(url, e.thumb);
-      doc.get(im).float_side = "left";  // text and stats run beside it
-    }
-    if (std::string stats = media_stats_line(e); !stats.empty())
-    {
-      NodeId sp = doc.create(NodeKind::Paragraph, msg);
-      InlineSpan ss;
-      ss.text = std::move(stats);
-      ss.role = InlineRole::Metadata;
-      doc.get(sp).spans.push_back(std::move(ss));
-    }
-    if (e.body) {
-      const std::string base = e.link.empty() ? url : e.link;
-      append_content(doc, msg, src, *e.body, base, e.body_html);
-    }
-    for (const XmlNode* enc : e.enclosures) {
-      std::string href = html_attr(enc->attrs, "url");
-      if (href.empty()) href = html_attr(enc->attrs, "href");
-      append_enclosure(doc, msg, resolve_url(url, href),
-                       html_attr(enc->attrs, "type"),
-                       html_attr(enc->attrs, "length"));
-    }
-    // Untitled entries (Mastodon, micro-blogs): keep a way to the original.
-    if (e.title.empty() && !e.link.empty()) append_link_para(doc, msg, "Permalink", e.link);
+    Node& m = doc.get(msg);
+    m.label = "e" + std::to_string(++n);
+    m.src = !e.author.empty() ? e.author : !f.author.empty() ? f.author : title;
+    m.summary = format_date(e.date);
+    append_entry_body(doc, msg, e, src, url);
+    // Keep a way to the original.
+    if (!e.link.empty()) append_link_para(doc, msg, "Permalink", e.link);
   }
   if (f.entries.empty()) {
     NodeId msg = doc.create(NodeKind::Message, thread);
     doc.get(msg).src = "xanatoo";
     doc.append_text(doc.create(NodeKind::Paragraph, msg), "This feed has no entries.");
   }
+}
+
+Document build_document(const FeedInfo& f, std::string_view src,
+                        const std::string& url) {
+  Document doc;
+  NodeId root = doc.create(NodeKind::Document);
+  const std::string title = f.title.empty() ? url : f.title;
+  doc.meta.title = title;
+  bool titled = f.entries.empty();
+  for (const Entry& e : f.entries)
+    if (!e.title.empty()) titled = true;
+  if (titled)
+    build_articles(doc, root, f, src, url, title);
+  else
+    build_thread(doc, root, f, src, url, title);
   NodeId foot = doc.create(NodeKind::Paragraph, root);
   doc.append_text(foot, std::to_string(f.entries.size()) + " entries · ");
   InlineSpan fs;

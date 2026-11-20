@@ -39,7 +39,12 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   hover and sink only while pressed. Browsing is now the default: the
   **Edit Mode** pencil button (F2) stays recessed when editing is enabled,
   as do toggles that retain the same graphic (native view, outline,
-  history, downloads and the contextual reader/navigation/site-map buttons).
+  history, downloads and the contextual reader/outline/navigation/site-map
+  buttons).
+- Location-field buttons: **Heading outline** (`outline` icon) whenever the
+  page has headings, **Page Navigation** (`navigation` icon) for `<nav>` /
+  sidebar regions or page links. Both may show side by side: pages differ in
+  how much the two overlap, so neither hides the other yet.
 - The document tab's right-click menu restores normal menu item spacing and
   window padding instead of inheriting the tightly packed tab-strip style.
 - **Split Panes** becomes **Join Panes** with a different icon while the

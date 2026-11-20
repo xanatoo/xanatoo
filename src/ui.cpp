@@ -627,7 +627,7 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "strike", "cite", "h1", "h2", "h3", "para", "task", "table",
       "figure", "note", "replace", "outline", "paste", "copy", "new", "open",
       "zoomin", "zoomout", "structure", "diff",
-      "back", "forward", "up", "home", "reload", "stop", "bookmark", "bookmark-outline", "history", "downloads", "edit", "native", "reader", "sitemap",
+      "back", "forward", "up", "home", "reload", "stop", "bookmark", "bookmark-outline", "history", "downloads", "edit", "native", "reader", "sitemap", "navigation",
       "linespacing", "measure", "style", "gemini", "gemini-changed",
       "site-file", "site-folder", "site-about", "site-store", "site-web",
       "site-feed", "site-nostr", "language",
@@ -1369,6 +1369,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                          (state.page_languages.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
                          (state.has_nav ? 1 : 0) + (state.has_site ? 1 : 0) +
+                         (state.has_headings ? 1 : 0) +
                          (state.site_search.empty() ? 0 : 1);
   // The location field has a row of its own, shared with the search bar.
   // Both fields carry their icon at the left end inside the frame (favicon,
@@ -1858,8 +1859,13 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       if (state.has_chrome)
         extra("url_reader", "reader", "R", state.reader ? "Show the whole page (F9)" : "Reader mode (F9)",
               UiCommand::ToggleReader, state.reader);
+      if (state.has_headings)
+        extra("url_outline", "outline", "H",
+              state.outline ? "Close heading outline (Ctrl+Shift+O)"
+                            : "Heading outline (Ctrl+Shift+O)",
+              UiCommand::ToggleOutline, state.outline);
       if (state.has_nav)
-        extra("url_nav", "outline", "N", state.page_panel ? "Close page navigation" : "Open page navigation",
+        extra("url_nav", "navigation", "N", state.page_panel ? "Close page navigation" : "Open page navigation",
               UiCommand::TogglePage, state.page_panel);
       if (state.has_site)
         extra("url_sitemap", "sitemap", "S", state.sitemap ? "Close site map" : "Open site map",
