@@ -5035,6 +5035,39 @@ void draw_dock_preview(App& app) {
   }
 }
 
+// Alt text of the hovered block image (its description, shown instead of
+// under the picture), wrapped to tooltip lines; empty when there is none.
+static std::string image_alt_tooltip(App& app) {
+  if (app.hover.image == xanatoo::INVALID_NODE || app.hover.image_handle ||
+      app.hover.image_card || app.hover.image_pane < 0 ||
+      app.hover.image_pane >= static_cast<int>(std::size(app.panes)))
+    return {};
+  const xanatoo::Document& d = doc_of(app, app.panes[app.hover.image_pane]);
+  if (app.hover.image > d.nodes.size()) return {};
+  const std::string& alt = d.get(app.hover.image).alt;
+  if (alt.empty()) return {};
+  // Word wrap at ~72 bytes (the tooltip cuts lines past 96).
+  std::string out;
+  size_t line = 0;
+  size_t i = 0;
+  while (i < alt.size()) {
+    size_t e = alt.find(' ', i);
+    if (e == std::string::npos) e = alt.size();
+    const size_t n = e - i;
+    if (line > 0 && line + 1 + n > 72) {
+      out += '\n';
+      line = 0;
+    } else if (line > 0) {
+      out += ' ';
+      ++line;
+    }
+    out.append(alt, i, n);
+    line += n;
+    i = e + 1;
+  }
+  return out;
+}
+
 void draw_hover_tooltip(App& app) {
   {
     const bool prompt = prompt_active(app) || app.help_mode;
@@ -5045,6 +5078,9 @@ void draw_hover_tooltip(App& app) {
       } else if (!app.hover.datetime.empty()) {
         tip = xanatoo::timestamp_hover_text(
             app.hover.datetime, static_cast<int64_t>(std::time(nullptr)));
+        if (!app.hover.href.empty()) tip += "\nClick: " + app.hover.href;
+      } else if (std::string alt = image_alt_tooltip(app); !alt.empty()) {
+        tip = std::move(alt);
         if (!app.hover.href.empty()) tip += "\nClick: " + app.hover.href;
       } else if (!app.hover.href.empty()) {
         tip = app.hover.href;
