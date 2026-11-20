@@ -8,17 +8,15 @@
 
 #pragma once
 
+#include "xanatoo/byte_feed.hpp"
+
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace xanatoo {
@@ -75,53 +73,7 @@ bool audio_seek(AudioDecoder& d, uint64_t frame);
 std::string audio_describe(const AudioDecoder& d);
 
 // ---- streaming --------------------------------------------------------------
-// Bytes arriving over time (a download on one thread) for a decoder on
-// another: its reads past what arrived wait for more. Once `done` nothing is
-// written any more and the bytes stay put.
-//
-// A feed whose server takes range requests is `sparse`: `bytes` is as long
-// as the file and `have` says which parts arrived. A read far from where the
-// download is writes its position to `want`, and feed_download fetches from
-// there; the gaps are filled afterwards.
-struct ByteFeed {
-  std::mutex m;
-  std::condition_variable cv;
-  std::vector<uint8_t> bytes;  // under m
-  bool sparse = false;         // under m
-  std::vector<std::pair<int64_t, int64_t>> have;  // under m, sparse: [from, to), sorted, apart
-  bool done = false;           // under m: nothing more comes
-  std::string error;           // under m, once done: why it ended early ("" = all of it)
-  std::atomic<int64_t> got{0};      // bytes arrived, for progress
-  std::atomic<int64_t> total{-1};   // expected (Content-Length), -1 unknown
-  std::atomic<bool> cancel{false};  // nobody reads any more: stop the download
-  std::atomic<int64_t> at{0};       // where the download writes next
-  std::atomic<int64_t> want{-1};    // sparse: a reader waits here, far from `at`
-  std::atomic<int64_t> reading{0};  // where the reader reads
-};
-void feed_append(ByteFeed& f, std::string_view chunk);
-// The download is ranged from now on: `bytes` gets the file's `total` length.
-void feed_begin_sparse(ByteFeed& f, int64_t total);
-// Bytes at `offset` (sparse; else only at or before the end).
-void feed_write(ByteFeed& f, int64_t offset, std::string_view chunk);
-void feed_end(ByteFeed& f, std::string error = {});
-// The whole file arrived.
-bool feed_complete(ByteFeed& f);
-// Where the bytes that arrived from `pos` on end (`pos` itself: none there).
-int64_t feed_reach(ByteFeed& f, int64_t pos);
-
-// One request of feed_download: the file from byte `from` on (from > 0 asks
-// for a range). `head(start, total, ranged)` first: the answer starts at
-// `start` of `total` bytes (-1 unknown), `ranged` for a 206 answer; then the
-// body in pieces to `body`. Either returning false stops the request. ""
-// when it ended (or was stopped), else why it failed.
-using FeedFetch = std::function<std::string(
-    int64_t from, const std::function<bool(int64_t, int64_t, bool)>& head,
-    const std::function<bool(std::string_view)>& body)>;
-// Downloads into `f` until it is complete, failed or cancelled, then
-// feed_end. Asks for ranges from the start; with a server that answers
-// them, jumps to where the reader `want`s, fills the gaps after, and picks up
-// a broken connection where it broke.
-void feed_download(ByteFeed& f, const FeedFetch& fetch);
+// Reading a ByteFeed (byte_feed.hpp) while it downloads.
 
 // What makes a waiting read give up: the owner's stop flag, and a counter of
 // seek requests (a newer seek than audio_rearm saw abandons the read).

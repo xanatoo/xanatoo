@@ -16,7 +16,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <atomic>
+#include <fstream>
 #include <functional>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -401,16 +405,45 @@ void test_media(int& passed, int& failed) {
     const char* name;
     int rate, y;  // sample rate, luma of the colour
   };
-  // Read directly, and through the reader thread streams use.
-  for (int ahead : {0, 1})
+  // Read directly, through the reader thread streams use, and (2) as an
+  // http file through a ByteFeed (the media cache's way).
+  for (int mode : {0, 1, 2})
   for (const Fixture& fx : {Fixture{"red.mp4", 8000, 81}, Fixture{"blue.webm", 48000, 41}}) {
+    const int ahead = mode > 0;
     std::string err;
     MediaOptions o;
     o.read_ahead = ahead;
-    auto src = open_media(std::string(XANATOO_TEST_DATA) + "/video/" + fx.name, o, &err);
+    std::string url = std::string(XANATOO_TEST_DATA) + "/video/" + fx.name;
+    std::shared_ptr<ByteFeed> feed;
+    std::thread download;
+    std::atomic<int> requests{0};
+    if (mode == 2) {
+      std::ifstream in(url, std::ios::binary);
+      std::string whole((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      feed = std::make_shared<ByteFeed>();
+      download = std::thread([&, whole] {
+        feed_download(*feed, [&](int64_t from, const auto& head, const auto& body) {
+          ++requests;
+          FeedHead h;
+          h.start = from;
+          h.total = int64_t(whole.size());
+          h.ranged = true;
+          h.content_type = "video/whatever";
+          if (!head(h)) return std::string();
+          for (size_t at = size_t(from); at < whole.size(); at += 1000)
+            if (!body(std::string_view(whole).substr(at, 1000))) break;
+          return std::string();
+        });
+      });
+      o.feed = feed;
+      url = std::string("http://example.test/") + fx.name;
+    }
+    auto src = open_media(url, o, &err);
     EXPECT(src != nullptr);
     if (!src) {
       std::fprintf(stderr, "  %s: %s\n", fx.name, err.c_str());
+      if (feed) feed->cancel.store(true);
+      if (download.joinable()) download.join();
       continue;
     }
     const MediaInfo& i = src->info();
@@ -450,6 +483,17 @@ void test_media(int& passed, int& failed) {
     while (g == MediaSource::Got::Audio);
     EXPECT(g == MediaSource::Got::Video);
     EXPECT(f.pts > 0.25 && f.pts < 0.35);
+    if (download.joinable()) {
+      download.join();
+      EXPECT(feed_complete(*feed));
+      // Back to the start from what arrived: no new request.
+      const int asked = requests.load();
+      EXPECT(src->seek(0));
+      do g = src->next(audio, pts, f);
+      while (g == MediaSource::Got::Audio);
+      EXPECT(g == MediaSource::Got::Video && f.pts < 0.05);
+      EXPECT_EQ(requests.load(), asked);
+    }
   }
 #endif
 

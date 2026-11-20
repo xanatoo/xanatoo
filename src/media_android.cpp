@@ -28,6 +28,7 @@
 namespace xanatoo {
 
 std::string media_backend_name() { return "Android MediaCodec"; }
+bool media_backend_reads_feeds() { return false; }
 
 namespace {
 

@@ -128,6 +128,7 @@ std::string media_time_address(std::string_view base, double seconds) {
 
 #if !(defined(XANATOO_FFMPEG) && XANATOO_FFMPEG) && !defined(__ANDROID__)
 std::string media_backend_name() { return {}; }
+bool media_backend_reads_feeds() { return false; }
 
 std::unique_ptr<MediaSource> open_media(const std::string&, const MediaOptions&,
                                         std::string* error) {

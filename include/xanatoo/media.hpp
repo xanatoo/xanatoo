@@ -64,6 +64,8 @@ std::string media_time_address(std::string_view base, double seconds);
 // "FFmpeg 7.1", "Android MediaCodec"; "" when this build has no backend.
 std::string media_backend_name();
 inline bool media_backend_available() { return !media_backend_name().empty(); }
+// The backend reads an http(s) file through MediaOptions::feed (FFmpeg).
+bool media_backend_reads_feeds();
 
 // One decoded picture, I420 (planar Y, U, V; chroma at half size, rounded
 // up), rows packed: Y is w×h bytes, U and V each ((w+1)/2)×((h+1)/2).
@@ -93,6 +95,7 @@ struct MediaInfo {
   double duration = 0;         // seconds; 0 = unknown (a live stream)
   std::string title;           // from the container's tags; may be ""
   std::string format;          // "H264 640×360 · AAC 44100 Hz stereo"
+  bool builtin = false;        // the built-in decoders (open_audio_stream)
 };
 
 class MediaSource;
@@ -108,6 +111,11 @@ struct MediaOptions {
   // Demux ahead on a thread of its own (FFmpeg): -1 for http(s) streams,
   // 1 always (tests), 0 never.
   int read_ahead = -1;
+  // The download of an http(s) file (byte_feed.hpp) for a backend that
+  // media_backend_reads_feeds: it reads the file from there (cached, seeks
+  // back without the network) when the server answered byte ranges, and
+  // else cancels it and fetches the address itself (also playlists).
+  std::shared_ptr<ByteFeed> feed;
   // How media_worker opens the source; unset: open_media(url).
   std::function<std::unique_ptr<MediaSource>(const MediaOptions&, std::string* error)> open;
 };

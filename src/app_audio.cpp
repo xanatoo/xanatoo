@@ -27,6 +27,7 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/audio.hpp"
 #include "xanatoo/file_url.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
@@ -178,28 +179,29 @@ void download_feed(const std::string& url, const std::shared_ptr<xanatoo::ByteFe
   xanatoo::feed_download(*feed, [&](int64_t from, const auto& head, const auto& body) {
     std::string err;
     int status = 0;
-    bool too_large = false, stopped = false;
+    bool stopped = false;
     const bool ok = xanatoo::https_get_follow_stream(
         url, xanatoo::user_agent("audio"),
         [&](const xanatoo::HttpStreamHeaders& h) {
           status = h.status;
           if (h.status < 200 || h.status >= 300) return false;
-          int64_t start = 0, total = h.content_length;
-          bool ranged = false;
+          xanatoo::FeedHead fh;
+          fh.total = h.content_length;
           if (h.status == 206) {
             const auto r = xanatoo::parse_content_range(h.content_range);
             if (!r || r->first != from) return false;
-            start = r->first;
-            total = r->total;
-            ranged = true;
+            fh.start = r->first;
+            fh.total = r->total;
+            fh.ranged = true;
           }
-          if (total > kMaxAudioBytes) return !(too_large = true);
-          return head(start, total, ranged) || !(stopped = true);
+          fh.content_type = h.content_type;
+          fh.etag = h.etag;
+          fh.last_modified = h.last_modified;
+          return head(fh) || !(stopped = true);
         },
         [&](std::string_view bytes) { return body(bytes) || !(stopped = true); }, &err,
         nullptr, "Range: bytes=" + std::to_string(from) + "-\r\n");
     if (ok || stopped || feed->cancel.load()) return std::string();
-    if (too_large) return std::string("file too large to play");
     if (status != 0 && (status < 200 || status >= 300)) return "HTTP " + std::to_string(status);
     if (status == 206) return std::string("bad Content-Range");
     return err.empty() ? std::string("download failed") : err;
@@ -209,6 +211,30 @@ void download_feed(const std::string& url, const std::shared_ptr<xanatoo::ByteFe
   xanatoo::feed_end(*feed, "this build has no HTTP client");
 #endif
 }
+
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+// The media cache (cache_dir()/media/): this much in all, half of it for
+// one file.
+constexpr int64_t kMediaCacheBytes = int64_t(2) << 30;
+
+// A feed of a remote file with its download started: in the media cache,
+// else (no cache directory, or the file busy) in memory when `memory`.
+std::shared_ptr<xanatoo::ByteFeed> start_feed(const std::string& url, bool memory) {
+  std::shared_ptr<xanatoo::ByteFeed> feed;
+  if (const std::string cache = xanatoo::cache_dir(); !cache.empty())
+    feed = xanatoo::feed_open_cached(cache + "/media", url, kMediaCacheBytes);
+  if (feed) {
+    feed->limit = kMediaCacheBytes / 2;
+  } else if (memory) {
+    feed = std::make_shared<xanatoo::ByteFeed>();
+    feed->limit = kMaxAudioBytes;
+  } else {
+    return nullptr;
+  }
+  std::thread([url, feed] { download_feed(url, feed); }).detach();
+  return feed;
+}
+#endif
 
 void run_load(const std::string& url, AudioLoad& load) {
   std::vector<uint8_t> bytes =
@@ -303,7 +329,11 @@ void start_media(App& app) {
   a.start_at = -1;
   std::cerr << "media: " << a.url << " (" << info.format << ", "
             << xanatoo::format_audio_time(a.duration) << ", "
-            << (live_feed(a) ? std::string("built-in, streaming") : xanatoo::media_backend_name())
+            << (info.builtin ? std::string("built-in") : xanatoo::media_backend_name())
+            << (!live_feed(a)                       ? ""
+                : !info.builtin                     ? ", through the media cache"
+                : xanatoo::feed_complete(*a.feed) ? ", from the media cache"
+                                                    : ", streaming")
             << ")\n";
 }
 
@@ -638,6 +668,11 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
                                : xanatoo::type_needs_media_backend(mime))) {
     xanatoo::MediaOptions options;
     options.user_agent = xanatoo::user_agent("video");
+#if !defined(__EMSCRIPTEN__)
+    // Through the media cache, so what arrived stays (seeks back, replays).
+    if (remote(url) && xanatoo::media_backend_reads_feeds())
+      a.feed = options.feed = start_feed(url, false);
+#endif
     a.media = xanatoo::media_start(url, std::move(options));
     app.media_panel_open = true;
     flash_status(app, "Opening " + a.title);
@@ -647,8 +682,7 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
   // A remote file of a built-in format plays while it downloads: the
   // download fills a feed, the pipe's worker decodes from it.
   if (remote(url)) {
-    auto feed = std::make_shared<xanatoo::ByteFeed>();
-    std::thread([url, feed] { download_feed(url, feed); }).detach();
+    auto feed = start_feed(url, true);
     xanatoo::MediaOptions options;
     options.user_agent = xanatoo::user_agent("audio");
     options.open = [url, feed, backend](const xanatoo::MediaOptions& o, std::string* error) {
@@ -658,8 +692,12 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
       wait.cancel = o.cancel;
       const xanatoo::AudioFormat f = xanatoo::feed_sniff(*feed, wait);
       if (backend && !xanatoo::audio_streamable(f) && !o.cancel->load()) {
-        feed->cancel.store(true);
-        return xanatoo::open_media(url, o, error);
+        xanatoo::MediaOptions through = o;
+        if (xanatoo::media_backend_reads_feeds())
+          through.feed = feed;  // on with what arrived
+        else
+          feed->cancel.store(true);
+        return xanatoo::open_media(url, through, error);
       }
       return xanatoo::open_audio_stream(feed, o, error);
     };

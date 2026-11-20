@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <functional>
@@ -137,17 +138,23 @@ struct FakeServer {
   std::vector<uint8_t> whole;
   bool ranges = true;
   int64_t break_at = -1;
+  std::string etag;
   std::mutex m;
   std::vector<int64_t> asked;
 
-  std::string get(int64_t from, const std::function<bool(int64_t, int64_t, bool)>& head,
+  std::string get(int64_t from, const std::function<bool(const xanatoo::FeedHead&)>& head,
                   const std::function<bool(std::string_view)>& body) {
     {
       std::lock_guard lock(m);
       asked.push_back(from);
     }
     if (!ranges) from = 0;
-    if (!head(from, int64_t(whole.size()), ranges)) return {};
+    xanatoo::FeedHead h;
+    h.start = from;
+    h.total = int64_t(whole.size());
+    h.ranged = ranges;
+    h.etag = etag;
+    if (!head(h)) return {};
     const bool breaks = from == break_at;
     if (breaks) break_at = -1;
     for (int64_t at = from; at < int64_t(whole.size()); at += 4096) {
@@ -462,6 +469,106 @@ void test_audio(int& passed, int& failed) {
              rest <= audio_frames(*ref) - half + 2 * 1152);
     }
     more.join();
+  }
+
+  // The media cache: what arrived stays for the next feed of the address.
+  {
+    namespace fs = std::filesystem;
+    const std::string dir =
+        (fs::temp_directory_path() /
+         ("xanatoo-media-cache-" +
+          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
+            .string();
+    const std::string url = "http://example.test/a.wav";
+    const int64_t budget = int64_t(1) << 30;
+    FakeServer server;
+    server.whole = make_wav(44100);  // 176 KB
+    server.etag = "\"1\"";
+    auto same = [](ByteFeed& f, const std::vector<uint8_t>& whole) {
+      const uint8_t* p = nullptr;
+      size_t n = 0;
+      const std::vector<uint8_t> keep = feed_whole(f, &p, &n);
+      return n == whole.size() && std::memcmp(p, whole.data(), n) == 0;
+    };
+    {  // A part of it, then stopped.
+      auto feed = feed_open_cached(dir, url, budget);
+      EXPECT(feed != nullptr);
+      if (!feed) return;
+      std::thread download = serve(feed, server);
+      while (feed->got.load() < 60000) sleep_ms(1);
+      feed->cancel.store(true);
+      download.join();
+      EXPECT(!feed_complete(*feed));
+      // One file, one feed at a time.
+      EXPECT(feed_open_cached(dir, url, budget, 0) == nullptr);
+    }
+    {  // Next time on from there.
+      server.asked.clear();
+      auto feed = feed_open_cached(dir, url, budget);
+      EXPECT(feed && feed->sparse && feed->got.load() >= 60000);
+      std::thread download = serve(feed, server);
+      download.join();
+      EXPECT(feed_complete(*feed) && same(*feed, server.whole));
+      EXPECT(server.asked.size() == 1 && server.asked[0] >= 60000);
+    }
+    {  // Complete: no network; decodes as the file does.
+      server.asked.clear();
+      auto feed = feed_open_cached(dir, url, budget);
+      std::thread download = serve(feed, server);
+      download.join();
+      EXPECT(feed_complete(*feed) && server.asked.empty());
+      AudioDecoderPtr d = open_audio_feed(feed, FeedWait{}, nullptr);
+      const auto ref = open_audio(server.whole, nullptr);
+      EXPECT(d && ref && !audio_streaming(*d));
+      if (d && ref) EXPECT(max_diff(decode_all(*d), decode_all(*ref)) < 1e-6f);
+    }
+    {  // Changed on the server (another ETag) while half cached: starts over.
+      const std::string url2 = "http://example.test/b.wav";
+      auto feed = feed_open_cached(dir, url2, budget);
+      std::thread download = serve(feed, server);
+      while (feed->got.load() < 60000) sleep_ms(1);
+      feed->cancel.store(true);
+      download.join();
+      feed.reset();
+      server.whole = make_wav(44100);
+      for (size_t i = 44; i < server.whole.size(); ++i) server.whole[i] ^= 0x55;
+      server.etag = "\"2\"";
+      feed = feed_open_cached(dir, url2, budget);
+      download = serve(feed, server);
+      download.join();
+      EXPECT(feed_complete(*feed) && same(*feed, server.whole));
+    }
+    {  // Past the budget the older files go.
+      auto feed = feed_open_cached(dir, "http://example.test/c.wav", 1000);
+      EXPECT(feed != nullptr);
+      std::error_code ec;
+      int files = 0;
+      for (const auto& e : fs::directory_iterator(dir, ec))
+        if (!e.path().has_extension()) ++files;
+      EXPECT_EQ(files, 1);  // only the live one
+    }
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+  }
+
+  // The download stays near the reader in a large file.
+  {
+    FakeServer server;
+    server.whole = make_wav(220500);  // 882 KB
+    auto feed = std::make_shared<ByteFeed>();
+    feed->ahead = 100000;
+    feed->fill_whole = 0;
+    std::thread download = serve(feed, server);
+    sleep_ms(400);  // (all of it would take ~220 ms)
+    EXPECT(feed->got.load() <= 100000 + 8192);
+    // A read far ahead: fetched from there.
+    EXPECT(feed_wait(*feed, 500000, 501000, nullptr) >= 501000);
+    std::vector<uint8_t> b(1000);
+    EXPECT_EQ(feed_copy(*feed, 500000, b.data(), b.size()), size_t(1000));
+    EXPECT(std::memcmp(b.data(), server.whole.data() + 500000, 1000) == 0);
+    feed->cancel.store(true);
+    download.join();
+    EXPECT(!feed_complete(*feed));
   }
 
   passed += g_passed;

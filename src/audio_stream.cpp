@@ -36,6 +36,7 @@ public:
     info_.channels = audio_channels(*dec_);
     info_.title = audio_title(*dec_);
     info_.format = audio_describe(*dec_);
+    info_.builtin = true;
     set_duration();
     return true;
   }

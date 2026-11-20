@@ -7,7 +7,11 @@
 // interleaved float sound (more than two channels mixed down to stereo).
 // A stream gets a reader thread that demuxes up to kReadAhead seconds of
 // packets ahead of the decoder, so a slow or stalling server does not stop
-// the picture at once; seeks go through it.
+// the picture at once; seeks go through it. A single http(s) file whose
+// server answers byte ranges is read through MediaOptions::feed (the media
+// cache, byte_feed.hpp) with an AVIOContext of ours: what arrived stays, a
+// seek back needs no network. Playlists (HLS / DASH) and servers without
+// ranges keep FFmpeg's own http.
 
 #if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
 
@@ -21,7 +25,9 @@
 #include <mutex>
 #include <thread>
 
+#include "xanatoo/byte_feed.hpp"
 #include "xanatoo/media.hpp"
+#include "xanatoo/util.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -40,6 +46,8 @@ std::string media_backend_name() {
   if (!v.empty() && v[0] == 'n') v.erase(0, 1);
   return "FFmpeg " + v;
 }
+
+bool media_backend_reads_feeds() { return true; }
 
 namespace {
 
@@ -69,6 +77,17 @@ bool remote(const std::string& url) {
   return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
 }
 
+// An HLS / DASH playlist: its pieces are other addresses, FFmpeg fetches them.
+bool playlist(const std::string& url, std::string_view content_type) {
+  const std::string type = ascii_lower(content_type);
+  if (type.find("mpegurl") != std::string::npos || type.find("dash+xml") != std::string::npos)
+    return true;
+  const std::string path = ascii_lower(url.substr(0, url.find_first_of("?#")));
+  return ends_with(path, ".m3u8") || ends_with(path, ".m3u") || ends_with(path, ".mpd");
+}
+
+constexpr int kIoBuffer = 64 * 1024;
+
 // Read ahead of the decoder (streams): this much time, at most this many bytes.
 constexpr double kReadAhead = 30.0;
 constexpr size_t kReadAheadBytes = size_t(96) << 20;
@@ -93,17 +112,18 @@ public:
     avcodec_free_context(&vdec_);
     avcodec_free_context(&adec_);
     avformat_close_input(&fmt_);
+    if (pb_) av_freep(&pb_->buffer);
+    avio_context_free(&pb_);
   }
 
   bool open(const std::string& url, const MediaOptions& options) {
     cancel_ = options.cancel;
     fmt_ = avformat_alloc_context();
     if (!fmt_) return fail("out of memory");
+    if (remote(url) && options.feed && !read_from_feed(url, options.feed)) return false;
     seeks_ = options.seeks;
     fmt_->interrupt_callback.callback = [](void* self) -> int {
-      const auto* s = static_cast<FfmpegSource*>(self);
-      return (s->cancel_ && s->cancel_->load()) || s->stop_.load() || s->interrupt_.load() ? 1
-                                                                                           : 0;
+      return static_cast<FfmpegSource*>(self)->interrupted() ? 1 : 0;
     };
     fmt_->interrupt_callback.opaque = this;
     AVDictionary* opts = nullptr;
@@ -170,6 +190,10 @@ public:
 
   double buffered() const override { return reader_.joinable() ? buffered_.load() : -1; }
 
+  bool interrupted() const {
+    return (cancel_ && cancel_->load()) || stop_.load() || interrupt_.load();
+  }
+
   Got next(std::vector<float>& audio, double& pts, VideoFrame& frame) override {
     for (;;) {
       if (vdec_ && !vdone_) {
@@ -217,6 +241,73 @@ public:
 
 private:
   static constexpr int kInterrupted = -0x7A7A;  // read_packet: a newer seek came
+
+  // Reads `url` from `feed` once its server answered byte ranges and it is
+  // no playlist; else FFmpeg fetches the address itself and the feed stops.
+  // False: cancelled while waiting for the answer.
+  bool read_from_feed(const std::string& url, const std::shared_ptr<ByteFeed>& feed) {
+    if (!feed_wait_answer(*feed, [this] { return cancel_ && cancel_->load(); }))
+      return fail("cancelled");
+    bool use;
+    {
+      std::lock_guard lock(feed->m);
+      use = feed->sparse && !playlist(url, feed->content_type);
+    }
+    if (!use) {
+      feed->cancel.store(true);
+      return true;
+    }
+    auto* buf = static_cast<uint8_t*>(av_malloc(kIoBuffer));
+    if (!buf) return fail("out of memory");
+    pb_ = avio_alloc_context(buf, kIoBuffer, 0, this, &FfmpegSource::io_read, nullptr,
+                             &FfmpegSource::io_seek);
+    if (!pb_) {
+      av_free(buf);
+      return fail("out of memory");
+    }
+    feed_ = feed;
+    fmt_->pb = pb_;
+    fmt_->flags |= AVFMT_FLAG_CUSTOM_IO;
+    return true;
+  }
+
+  // The AVIOContext over feed_: reads wait for the bytes (and give up like
+  // FFmpeg's own on cancel / stop / a seek), a far read makes the download
+  // jump there.
+  static int io_read(void* opaque, uint8_t* buf, int size) {
+    auto* s = static_cast<FfmpegSource*>(opaque);
+    ByteFeed& f = *s->feed_;
+    const int64_t total = f.total.load();
+    if (size <= 0 || (total >= 0 && s->io_pos_ >= total)) return AVERROR_EOF;
+    if (feed_wait(f, s->io_pos_, s->io_pos_ + 1, [s] { return s->interrupted(); }) < 0)
+      return AVERROR_EXIT;
+    const size_t n = feed_copy(f, s->io_pos_, buf, size_t(size));
+    if (n == 0) {
+      std::lock_guard lock(f.m);
+      return f.error.empty() ? AVERROR_EOF : AVERROR(EIO);
+    }
+    s->io_pos_ += int64_t(n);
+    return int(n);
+  }
+
+  static int64_t io_seek(void* opaque, int64_t offset, int whence) {
+    auto* s = static_cast<FfmpegSource*>(opaque);
+    const int64_t total = s->feed_->total.load();
+    int64_t to;
+    switch (whence & ~AVSEEK_FORCE) {
+      case AVSEEK_SIZE: return total >= 0 ? total : AVERROR(ENOSYS);
+      case SEEK_SET: to = offset; break;
+      case SEEK_CUR: to = s->io_pos_ + offset; break;
+      case SEEK_END:
+        if (total < 0) return AVERROR(ENOSYS);
+        to = total + offset;
+        break;
+      default: return AVERROR(EINVAL);
+    }
+    if (to < 0) return AVERROR(EINVAL);
+    s->io_pos_ = to;
+    return to;
+  }
 
   int seek_file(double seconds) {
     const int64_t ts = int64_t((seconds + start_) * AV_TIME_BASE);
@@ -447,6 +538,10 @@ private:
 
   const std::atomic<bool>* cancel_ = nullptr;
   const std::atomic<uint64_t>* seeks_ = nullptr;
+  // Reading through the feed (read_from_feed).
+  std::shared_ptr<ByteFeed> feed_;
+  AVIOContext* pb_ = nullptr;
+  int64_t io_pos_ = 0;
   // The reader (streams): packets read ahead, under qm_.
   std::thread reader_;
   std::mutex qm_;

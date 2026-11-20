@@ -287,6 +287,7 @@ add_executable(xanatoo
   src/markdown_body.cpp
   src/native.cpp
   src/audio.cpp
+  src/byte_feed.cpp
   src/audio_codecs.cpp
   src/app_audio.cpp
   src/media.cpp
@@ -830,6 +831,7 @@ add_executable(xanatoo_tests
   src/images.cpp
   src/url_cache.cpp
   src/audio.cpp
+  src/byte_feed.cpp
   src/audio_codecs.cpp
   src/media.cpp
   src/audio_stream.cpp

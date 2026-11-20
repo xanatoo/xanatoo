@@ -34,10 +34,18 @@
   connections resume. Checked at 100 KB/s: 14 MB MP3 seek to 7:30 plays
   within 1.5 s (was ~100 s), back to 1:03 jumps again; FLAC without a seek
   table 4 requests (binary search); WAV one.
+- Then: a media cache (byte_feed.hpp, `cache_dir()/media/`, 2 GiB LRU):
+  remote files the player opens go to a file with a map of what arrived,
+  FFmpeg reads single http(s) files through it (own AVIOContext), and
+  large files download at most 64 MiB ahead of playback. Checked at
+  1 MB/s: 720p MP4 seek to 2:06 fetches from 33 MB, back to 0:04 plays at
+  once without a request; after a restart only the first gap is fetched
+  and 2:06 plays from disk; a complete MP3 replays with no request.
 - Not yet: a streaming VBR MP3 seeks by average frame size (approximate
   place; the in-memory takeover then corrects it); a jump waits for the
-  download's next piece (no abort of a stalled read); a seek back in an
-  FFmpeg stream fetches again (no cache of what was read); an extensionless
+  download's next piece (no abort of a stalled read); a complete cached
+  file is never revalidated, and there is no "clear media cache" command
+  yet; HLS / DASH and servers without ranges are not cached; an extensionless
   address without Content-Disposition or tags is still titled by its last
   path part.
 - Then: a Content-Disposition file name titles the player; a startup

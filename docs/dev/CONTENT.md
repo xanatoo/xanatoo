@@ -473,8 +473,8 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   player it only seeks (and plays). Visits store `canonical_media_address`
   (the locator form would percent-encode `t=`).
 - Streaming (remote files of the built-in formats, threaded builds): a
-  detached thread downloads into a `ByteFeed` (audio.hpp: growing bytes,
-  `got` / `total`, `done` + error, `cancel`; 512 MiB cap) while the media
+  detached thread downloads into a `ByteFeed` (byte_feed.hpp, see "Media
+  cache" below; `got` / `total`, `done` + error, `cancel`) while the media
   pipe plays it through `open_audio_stream` (`audio_stream.cpp`, a
   `MediaSource` over the built-in decoders). `open_audio_feed` sniffs the
   first bytes (`feed_sniff`, past an ID3v2 tag), then opens MP3 / FLAC / WAV
@@ -487,11 +487,11 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `info.duration` follows) and seeks it to the same frame. Waiting reads
   give up on the pipe's cancel or a newer seek (`MediaOptions::seeks`,
   counted in `media_seek`; `audio_rearm` / `audio_interrupted`).
-- Ranges: `feed_download` (audio.cpp, offline-testable over a `FeedFetch`;
-  `download_feed` sends `Range: bytes=N-` and reads `Content-Range` via
-  `parse_content_range`) asks for ranges from the first request. A 206
-  answer makes the feed `sparse` (`bytes` as long as the file, `have` the
-  arrived extents, `feed_reach`). A read waiting for a byte behind `at` or
+- Ranges: `feed_download` (byte_feed.cpp, offline-testable over a
+  `FeedFetch`; `download_feed` sends `Range: bytes=N-` and reads
+  `Content-Range` via `parse_content_range` into a `FeedHead`) asks for
+  ranges from the first request. A 206 answer makes the feed `sparse` (it
+  knows the length; `have` the arrived extents, `feed_reach`). A read waiting for a byte behind `at` or
   more than 256 KiB ahead of it stores it in `want`; the download breaks
   off and fetches from there, and when a request ends (or runs into bytes
   already there) goes on with the gap behind the reader (`reading`), then
@@ -501,9 +501,30 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   size (`mp3_jump`: dr_mp3 restarted at the byte, `streamStartOffset`
   moved for the moment), so the place is exact only for constant bitrate.
   The jump is noticed on the download's next piece: a stalled connection
-  delays it. Ogg
+  delays it. Files over `fill_whole` (128 MiB) are fetched at most `ahead`
+  (64 MiB) in front of the reader (on again when it comes within half of
+  that) and their gaps are not filled; smaller ones download whole. Ogg
   (Vorbis / Opus) cannot stream built-in: with a backend the address goes
   to it instead, else the open waits for the whole file.
+- Media cache (byte_feed.hpp / .cpp): every remote file the player opens
+  in a threaded build gets a feed (`start_feed` in app_audio.cpp) — the
+  built-in streaming path and, through `MediaOptions::feed`, FFmpeg. With a
+  cache directory its bytes go to `cache_dir()/media/<FNV-1a of the
+  address>` (written in place, holes where nothing arrived) and a text map
+  `<name>.map` (address, length, type, ETag, Last-Modified, `have` lines;
+  rewritten every 8 MiB, at the end and when the feed goes). The next feed
+  of the address (`feed_open_cached`) starts with what is there: a
+  complete file plays without the network (no revalidation), a partial one
+  asks from its first gap and starts over when the length, ETag or
+  Last-Modified changed. One live feed per file (a registry; a second open
+  waits up to 2 s for the first to go, else takes a memory feed); files
+  are pruned least recently used past 2 GiB (`kMediaCacheBytes`, one file
+  at most half). Without a cache directory the built-in path keeps a
+  memory feed (512 MiB cap) and FFmpeg fetches by itself. Readers:
+  `feed_wait` (wants far bytes; while waiting `reading` is the missing
+  byte, so the download follows), `feed_copy`, `feed_head` (format checks
+  and tags), `feed_whole` (a complete file for the in-memory decoders,
+  read from the cache file).
 - The panel: "Downloading N%" while opening, "Buffering… N% loaded" while
   the pipe has nothing to play (`media_buffering`), the part read ahead
   shaded on the seek bar (`draw_bar` `loaded` from `MediaSource::buffered`,
@@ -547,7 +568,14 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
     packets ahead into a queue; `next()` decodes from it (`read_packet`,
     waits give up on cancel or a newer seek), seeks are requests the reader
     carries out (`seek_reader`; the interrupt callback abandons a read in
-    progress). `buffered()` is the end of the latest packet read.
+    progress). `buffered()` is the end of the latest packet read. With
+    `MediaOptions::feed` (`media_backend_reads_feeds`) an http(s) address
+    waits for the feed's answer (`feed_wait_answer`); a ranged answer that is
+    no playlist (`playlist`: HLS / DASH by type or extension) is read
+    through an AVIOContext of ours (`read_from_feed`, `io_read` / `io_seek`:
+    `feed_wait` + `feed_copy`, AVSEEK_SIZE = the length), else the feed is
+    cancelled and FFmpeg fetches the address itself (servers without
+    ranges, live streams, playlists).
   - `media_android.cpp` (`__ANDROID__`, `-lmediandk`, API 21):
     AMediaExtractor (file descriptor, or the URL with the system's
     networking) + AMediaCodec in ByteBuffer mode. Pictures are copied from
