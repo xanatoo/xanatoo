@@ -102,7 +102,7 @@ let
     root = ../.;
     fileset = pkgs.lib.fileset.unions [
       ../src ../include ../external
-      ../examples ../styles ../icons/svg ../scripts/rasterize_icons.py
+      ../examples ../styles ../sites ../icons/svg ../scripts/rasterize_icons.py
       ../FORMAT.md
       ../data/fonts/latinmodern-math.otf ../data/fonts/LICENSE-LatinModernMath.txt
     ];

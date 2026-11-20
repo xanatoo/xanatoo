@@ -281,10 +281,11 @@ let
     dontPatchShebangs = true;
     dontFixup = true;
     installPhase = ''
-      mkdir -p $out/xanatoo/examples $out/xanatoo/styles $out/xanatoo/icons $out/xanatoo/fonts
+      mkdir -p $out/xanatoo/examples $out/xanatoo/styles $out/xanatoo/sites $out/xanatoo/icons $out/xanatoo/fonts
       install -m755 ${app}/bin/xanatoo $out/xanatoo/xanatoo
       cp -r ${../examples}/. $out/xanatoo/examples/
       cp ${../styles}/*.xss $out/xanatoo/styles/
+      cp ${../sites}/*.xsite $out/xanatoo/sites/
       cp ${../FORMAT.md} $out/xanatoo/FORMAT.md
       if [ -d ${app}/share/xanatoo/icons ]; then
         cp -r ${app}/share/xanatoo/icons/. $out/xanatoo/icons/
