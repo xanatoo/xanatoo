@@ -408,3 +408,29 @@ under `~/.cache/xanatoo/epub-import/<stem>-<hash>/`. The editor loads the
 derived Markdown; media paths resolve relative to that directory. Re-import
 is skipped when `content.md` is newer than the EPUB. Requires `pandoc` on
 `PATH` (provided in `nix develop` / wrapped `nix run`).
+
+## Site-specific bookmarks and subscriptions (2026-11-20)
+
+Goal: on YouTube, see the YouTube bookmarks / subscriptions at a glance,
+without hiding the rest and without digging through submenus.
+
+1. **Folders (first).** `Bookmark::folder`, a `/`-separated path
+   (`Video/YouTube`), stored as one more `folder=` field of the bookmark
+   line (old lines stay valid). Bookmarks menu: folders as submenus above
+   the loose items; Bookmarks panel: a tree, "Move to folder…" in the
+   context menu, drag between folders. Subscriptions may get the same
+   field later.
+2. **Site button in the URL bar.** When the current domain has saved items,
+   a small marker with a count; a click opens one flat popup: "Bookmark
+   here" / "Subscribe here" on top, then that site's bookmarks (any
+   folder), its subscriptions with unread counts, recent history on it.
+   Domain match by registrable domain (`www.` / `m.` stripped; youtu.be ==
+   youtube.com), service refs (`lemmy:host/…`, `yt:`) mapped to their host.
+3. **"On this site" group** at the top of the Bookmarks and Subscriptions
+   menus (only when non-empty), then a separator and the full list as now.
+4. **Group by site** in the Bookmarks / Subscriptions panels: a "Folder /
+   Site / Flat" switch; site grouping is derived from the address, nothing
+   stored.
+5. Later: `site:` filter in the panel search, pre-filled from the page.
+
+Order: 1 → 2 → 3; 4 and 5 when the lists grow.
