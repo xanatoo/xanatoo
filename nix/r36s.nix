@@ -289,9 +289,12 @@ let
       if [ -d ${app}/share/xanatoo/icons ]; then
         cp -r ${app}/share/xanatoo/icons/. $out/xanatoo/icons/
       fi
-      # Not every ArkOS image has SQLite; ship the sysroot's (eoan 3.29).
+      # Not every ArkOS/dArkOS image has SQLite or OpenSSL 1.1; ship the
+      # sysroot copies (eoan). Newer CFWs often only provide libssl3.
       mkdir -p $out/xanatoo/libs
       cp -L ${sysroot}/usr/lib/${multiarch}/libsqlite3.so.0 $out/xanatoo/libs/
+      cp -L ${sysroot}/usr/lib/${multiarch}/libssl.so.1.1 $out/xanatoo/libs/
+      cp -L ${sysroot}/usr/lib/${multiarch}/libcrypto.so.1.1 $out/xanatoo/libs/
       cp ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf \
          $out/xanatoo/fonts/DejaVuSans.ttf
       cp ${../data/fonts/latinmodern-math.otf} $out/xanatoo/fonts/latinmodern-math.otf

@@ -41,8 +41,10 @@ UI menus use DejaVu Sans when available (same as the body font).
 
 ## Network
 
-Local `.gmi` / `.org` examples work offline. `gemini://` links need OpenSSL
-(enabled in current R36S builds; the device must provide `libssl.so.1.1`).
+Local `.gmi` / `.org` examples work offline. Network clients that need TLS
+(gemini, HTTPS feeds, etc.) use OpenSSL 1.1. The PortMaster package ships
+`libssl.so.1.1` and `libcrypto.so.1.1` in `libs/` so it works on images that
+only have OpenSSL 3 (e.g. newer dArkOS) as well as classic ArkOS.
 
 ## Controls
 

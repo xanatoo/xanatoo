@@ -29,7 +29,8 @@ export XDG_STATE_HOME="$GAMEDIR/conf/state"
 export XDG_DATA_HOME="$GAMEDIR/conf/data"
 export XDG_CACHE_HOME="$GAMEDIR/conf/cache"
 
-# Bundled libraries the device may lack (libsqlite3).
+# Bundled libraries the device may lack (libsqlite3; OpenSSL 1.1 for TLS on
+# CFWs that only ship libssl3).
 export LD_LIBRARY_PATH="$GAMEDIR/libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 if [ -f "$GAMEDIR/fonts/DejaVuSans.ttf" ]; then
