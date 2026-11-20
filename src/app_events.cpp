@@ -2166,6 +2166,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_context_key(app, ev, ctrl, alt)) return;
+  if (!status_prompt && media_panel_key(app, ev)) return;
   // A panel whose keys ImGui did not take: the key goes to the document.
   if (!status_prompt && app.key_focus == KeyFocus::Panel)
     panel_key_unused(app, ev, ctrl, alt);

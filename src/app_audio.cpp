@@ -322,6 +322,7 @@ void start_media(App& app) {
   if (info.has_video) {
     a.video_w = info.width;
     a.video_h = info.height;
+    if (info.frame_rate > 0) a.frame_dt = 1.0 / info.frame_rate;
     fit_panel_to_video(app);
   }
   xanatoo::media_set_paused(m, false, now_s());
@@ -345,6 +346,12 @@ void show_frame(App& app) {
   if (!xanatoo::media_take_frame(*a.media, xanatoo::media_clock(*a.media, now_s()), f) ||
       f.w <= 0 || f.h <= 0)
     return;
+  // Pictures one after the other give the rate when the file did not.
+  if (const double d = f.pts - a.frame_pts; a.frame_pts >= 0 && d > 0.001 && d < 0.5 &&
+                                            a.media->info.frame_rate <= 0)
+    a.frame_dt = a.frame_dt > 0 ? std::min(a.frame_dt, d) : d;
+  a.frame_pts = f.pts;
+  a.step_to = -1;
   if (!a.video_tex || a.tex_w != f.w || a.tex_h != f.h) {
     if (a.video_tex) SDL_DestroyTexture(a.video_tex);
     a.video_tex = SDL_CreateTexture(app.sdl, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING,
@@ -397,7 +404,7 @@ enum class MediaPart : uint8_t {
 };
 
 // Fullscreen: the controls hide this long after the pointer last moved.
-constexpr double kControlsLinger = 2.5;
+constexpr double kControlsLinger = 1.0;
 
 // The shortest A–B section (seconds).
 constexpr double kMinSection = 0.2;
@@ -977,6 +984,7 @@ void audio_seek(App& app, double seconds) {
   AudioPlayer& a = app.audio;
   a.at_b = false;
   a.last_pos = seconds;  // a jump past B is not B reached
+  a.step_to = -1;
   if (a.media && have_media(a)) {
     xanatoo::media_seek(*a.media, seconds, now_s());
     if (a.play) xanatoo::sdl::flush_audio_out(a.play->out);
@@ -999,6 +1007,20 @@ void audio_seek(App& app, double seconds) {
 
 void audio_skip(App& app, double delta) {
   if (have_media(app.audio)) audio_seek(app, audio_position(app) + delta);
+}
+
+void audio_step_frame(App& app, int dir) {
+  AudioPlayer& a = app.audio;
+  if (!a.media || !have_media(a) || a.video_w <= 0 || !seekable(a)) return;
+  if (a.state == AudioState::Playing) audio_toggle(app);  // pause
+  const double dt = a.frame_dt > 0 ? a.frame_dt : 1.0 / 25;
+  const double at = a.step_to >= 0 ? a.step_to : a.frame_pts >= 0 ? a.frame_pts : audio_position(app);
+  // A seek shows the first picture at or after its target: aim a quarter
+  // picture before the one wanted (the worker drops those before it).
+  const double want = std::max(0.0, at + (dir > 0 ? dt : -dt));
+  if (a.duration > 0 && want >= a.duration) return;
+  audio_seek(app, std::max(0.0, want - dt / 4));
+  a.step_to = want;
 }
 
 double audio_position(const App& app) {
@@ -1588,57 +1610,82 @@ void toggle_media_fullscreen(App& app) {
 
 namespace {
 
-// Fullscreen keys: Esc / F leave, Space / K play-pause, Left / Right 10 s
-// (Shift: 60 s), Home / End, Up / Down and M the volume; all other plain
-// keys are taken too. With Ctrl / Alt (Ctrl+Q, …) they go on as usual.
-bool fullscreen_key(App& app, const SDL_Event& ev) {
-  const SDL_Keycode key = xanatoo::sdl::keycode(ev);
-  const SDL_Keymod mod = xanatoo::sdl::keymod(ev);
+// The player's keys, fullscreen and in the focused panel: F (and fullscreen
+// Esc / F11) in / out of fullscreen, Space / K / P play-pause, Left / Right
+// (J / L) 10 s (Shift: 60 s), ',' / '.' a picture back / on, Home / End,
+// Up / Down and M the volume. False for any other key, or with Ctrl / Alt.
+bool player_key(App& app, SDL_Keycode key, SDL_Keymod mod) {
   if (mod & (KMOD_CTRL | KMOD_ALT)) return false;
   const double step = (mod & KMOD_SHIFT) ? 60 : 10;
   AudioPlayer& a = app.audio;
   switch (key) {
     case SDLK_ESCAPE:
-    case SDLK_f:
     case SDLK_F11:
+      if (!app.media_full.on) return false;
       toggle_media_fullscreen(app);
-      break;
+      return true;
+    case SDLK_f:
+      toggle_media_fullscreen(app);
+      return true;
     case SDLK_SPACE:
     case SDLK_k:
     case SDLK_p:
       audio_toggle(app);
-      break;
+      return true;
     case SDLK_LEFT:
     case SDLK_j:
       audio_skip(app, -step);
-      break;
+      return true;
     case SDLK_RIGHT:
     case SDLK_l:
       audio_skip(app, step);
-      break;
+      return true;
+    case SDLK_COMMA:
+      audio_step_frame(app, -1);
+      return true;
+    case SDLK_PERIOD:
+      audio_step_frame(app, 1);
+      return true;
     case SDLK_HOME:
       if (have_media(a)) audio_seek(app, 0);
-      break;
+      return true;
     case SDLK_END:
       if (have_media(a) && a.duration > 0) audio_seek(app, std::max(0.0, a.duration - 1));
-      break;
+      return true;
     case SDLK_UP:
       audio_set_volume(app, a.volume + 0.1f);
-      break;
+      return true;
     case SDLK_DOWN:
       audio_set_volume(app, a.volume - 0.1f);
-      break;
+      return true;
     case SDLK_m:
       audio_set_volume(app, a.volume > 0 ? 0.f : 1.f);
-      break;
+      return true;
     default:
-      break;  // taken anyway: the hidden page gets no keys
+      return false;
   }
+}
+
+// Fullscreen: the player's keys, and all other plain keys are taken too
+// (the hidden page gets none). With Ctrl / Alt (Ctrl+Q, …) they go on.
+bool fullscreen_key(App& app, const SDL_Event& ev) {
+  const SDL_Keymod mod = xanatoo::sdl::keymod(ev);
+  if (mod & (KMOD_CTRL | KMOD_ALT)) return false;
+  player_key(app, xanatoo::sdl::keycode(ev), mod);
   app.media_full.moved_at = now_s();  // show where it went
   return true;
 }
 
 }  // namespace
+
+bool media_panel_key(App& app, const SDL_Event& ev) {
+  if (app.media_full.on || !app.media_panel_open || float_shaded(app.media_win) ||
+      app.key_focus != KeyFocus::Panel || app.panel_focus != WindowRole::Media)
+    return false;
+  if (!player_key(app, xanatoo::sdl::keycode(ev), xanatoo::sdl::keymod(ev))) return false;
+  app.eat_text_input = true;  // Space / ',' / '.' type nothing
+  return true;
+}
 
 bool media_fullscreen_event(App& app, const SDL_Event& ev) {
   if (!app.media_full.on) return false;

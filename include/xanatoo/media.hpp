@@ -113,6 +113,7 @@ struct MediaInfo {
   int width = 0, height = 0;   // display size of the picture
   int rate = 0, channels = 0;  // of the float samples next() gives
   double duration = 0;         // seconds; 0 = unknown (a live stream)
+  double frame_rate = 0;       // pictures per second; 0 = unknown
   std::string title;           // from the container's tags; may be ""
   std::string format;          // "H264 640×360 · AAC 44100 Hz stereo"
   bool builtin = false;        // the built-in decoders (open_audio_stream)

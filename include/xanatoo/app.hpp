@@ -781,6 +781,10 @@ struct AudioPlayer {
   SDL_Texture* video_tex = nullptr;
   int tex_w = 0, tex_h = 0;      // size of video_tex
   int video_w = 0, video_h = 0;  // display size; 0 = sound only
+  // Frame steps (audio_step_frame): the picture on screen, the time between
+  // pictures (the file's rate, else as seen), and a step's picture not yet
+  // shown (< 0: none), which the next step goes on from.
+  double frame_pts = -1, frame_dt = 0, step_to = -1;
   int64_t visit = 0;  // its visit in the log (record_media_visit), 0 = none
   double start_at = -1;  // a `#t=` start, applied once it is open (< 0: none)
   // A / B markers (the panel's A–B button, a `#t=a,b` address): a section
@@ -2384,6 +2388,8 @@ void audio_toggle(App& app);        // play / pause (replay once ended)
 void audio_stop(App& app);          // stop and hide the player
 void audio_seek(App& app, double seconds);  // to this position
 void audio_skip(App& app, double delta);    // forward (+) / back (-)
+// Video: pause and show the next (dir > 0) / previous picture.
+void audio_step_frame(App& app, int dir);
 double audio_position(const App& app);      // seconds
 // A / B markers on / off (on: around the current position, 10 s).
 void audio_toggle_ab(App& app);
@@ -2411,6 +2417,9 @@ void toggle_media_fullscreen(App& app);
 inline bool media_fullscreen(const App& app) { return app.media_full.on; }
 // While fullscreen: takes the pointer, wheel and keys (true = taken).
 bool media_fullscreen_event(App& app, const SDL_Event& ev);
+// The Media panel with key focus (not fullscreen): Space, arrows, F, ',' / '.'
+// … control the player (true = taken); other keys go on to the document.
+bool media_panel_key(App& app, const SDL_Event& ev);
 // While fullscreen: the picture and its controls over the whole window.
 void draw_media_fullscreen(App& app);
 // UiCommand::MediaAction on App::media_menu: bookmark-time / unbookmark-time

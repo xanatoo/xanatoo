@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Media panel: keys, frame steps
+
+- The focused Media panel (not fullscreen) now takes the player keys:
+  before, any key moved the focus to the document and did nothing. Space /
+  K / P, Left / Right (Shift), Home / End, Up / Down / M, F fullscreen.
+- ',' / '.' step one picture back / on (pausing), in the panel and
+  fullscreen.
+- Fullscreen controls hide 1 s (was 2.5 s) after the pointer stops.
+- Checked under Xvfb (VP9 with frame numbers): window keys keep the focus,
+  '.' ×3 / ',' step exactly, F in / Esc out, steps in fullscreen.
+
 ## Status (2026-11-20) — Media panel: fullscreen video
 
 - Fullscreen button at the right end of the panel's buttons (while a video

@@ -702,12 +702,24 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   `kControlsLinger` after the pointer moved, and the pointer hides with it.
   Input is modal (`media_fullscreen_event`, first in `handle_event`): the
   pointer and wheel (volume) go to the controls, plain keys to
-  `fullscreen_key` — Esc / F / F11 leave, Space / K play-pause, Left /
-  Right 10 s (Shift 60 s), Home / End, Up / Down / M volume; keys with Ctrl /
-  Alt go on as usual. While an ImGui popup is open (the right-click menu)
+  `fullscreen_key` (all taken) and through it to `player_key` — Esc / F /
+  F11 leave, Space / K play-pause, Left / Right 10 s (Shift 60 s), ',' /
+  '.' a picture back / on, Home / End, Up / Down / M volume; keys with Ctrl /
+  Alt go on as usual.
+- Keys in the panel: with `KeyFocus::Panel` on `WindowRole::Media`,
+  `media_panel_key` (in `on_keydown`, before `panel_key_unused`) gives the
+  same `player_key`s (F enters fullscreen, Esc does not) and eats their
+  text input; other keys go on to the document, which takes the focus.
+- Frame steps (`audio_step_frame`): pause, then seek a quarter picture
+  before the next / previous picture (the worker drops pictures before a
+  seek's target; `want_first` shows the first after it). The spacing is
+  `MediaInfo::frame_rate` (FFmpeg `av_guess_frame_rate`, Android
+  `KEY_FRAME_RATE`), else the smallest pts step `show_frame` saw, else
+  1/25 s. `AudioPlayer::step_to` holds a step whose picture is not shown
+  yet, so quick presses go on from it. While an ImGui popup is open (the right-click menu)
   events go to ImGui only. `update_audio` leaves fullscreen when the player
   stops, the panel closes or a file without pictures plays.
 - `examples/video.md` (synthesised H.264 + AAC MP4 and VP9 + Opus WebM);
   fixtures `tests/data/video` (0.5 s, 64×48, red / blue).
-- Next: keyboard keys in the panel, playing the stream URLs of YouTube /
+- Next: playing the stream URLs of YouTube /
   PeerTube pages here instead of mpv, `<video>` in web pages, subtitles.

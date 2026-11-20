@@ -104,6 +104,7 @@ public:
           info_.has_video = true;
           info_.width = width_ = get_int(fmt, AMEDIAFORMAT_KEY_WIDTH, 0);
           info_.height = height_ = get_int(fmt, AMEDIAFORMAT_KEY_HEIGHT, 0);
+          info_.frame_rate = get_int(fmt, AMEDIAFORMAT_KEY_FRAME_RATE, 0);
           stride_ = width_;  // until the decoder's output format says
           slice_ = height_;
           vname = codec_label(mime);

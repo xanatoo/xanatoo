@@ -168,6 +168,8 @@ public:
       const AVRational sar = av_guess_sample_aspect_ratio(fmt_, st, nullptr);
       if (sar.num > 0 && sar.den > 0 && sar.num != sar.den)
         info_.width = int(int64_t(info_.width) * sar.num / sar.den);
+      const AVRational fr = av_guess_frame_rate(fmt_, st, nullptr);
+      if (fr.num > 0 && fr.den > 0) info_.frame_rate = av_q2d(fr);
       vname = codec_label(vdec_->codec_id);
     }
     if (as_ >= 0) {
