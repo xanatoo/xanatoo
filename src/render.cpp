@@ -12,6 +12,11 @@ namespace xanatoo {
 // clip top — the pane raster cache relies on this to blit scrolled content.
 static int px(float v) { return static_cast<int>(std::floor(v)); }
 
+// Light text takes the other coverage curve (Font::raster).
+static bool light_text(const Rgba& c) {
+  return 2126 * c.r + 7152 * c.g + 722 * c.b > 10000 * 128;
+}
+
 static void set_color(SDL_Renderer* sdl, const Rgba& c) {
   SDL_SetRenderDrawColor(sdl, c.r, c.g, c.b, c.a);
 }
@@ -349,8 +354,8 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
       }
       Font& font = fonts_.pick(pg.font);
       const Glyph& g = font.glyph(pg.codepoint);
-      float adv = static_cast<float>((g.advance >> 6) > 0 ? (g.advance >> 6)
-                                                          : (g.width + 1));
+      float adv = g.advance > 0 ? g.advance_px()
+                                : static_cast<float>(g.width + 1);
       float top = pg.y - static_cast<float>(font.ascender());
       if (!in_run) {
         run_x0 = pg.x;
@@ -390,15 +395,19 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
     const Glyph& g = font.glyph(pg.codepoint);
 
     if (g.texture) {
+      // pg.x is the phase-0 bitmap's left edge; draw from the pen.
       SDL_Rect dst;
-      dst.x = static_cast<int>(pg.x + origin_x);
-      dst.y = px(pg.y - g.bearing_y - scroll_y);
-      dst.w = g.width;
-      dst.h = g.height;
-      if (visible(dst.x, dst.y, dst.w, dst.h)) {
-        SDL_SetTextureColorMod(g.texture, pg.color.r, pg.color.g, pg.color.b);
-        SDL_SetTextureAlphaMod(g.texture, pg.color.a);
-        xanatoo::sdl::copy(sdl_, g.texture, nullptr, &dst);
+      const Glyph& rg =
+          font.raster(pg.codepoint, pg.x + origin_x - g.bearing_x,
+                      light_text(pg.color), &dst.x);
+      dst.y = px(pg.y - rg.bearing_y - scroll_y);
+      dst.w = rg.width;
+      dst.h = rg.height;
+      if (rg.texture && visible(dst.x, dst.y, dst.w, dst.h)) {
+        SDL_SetTextureColorMod(rg.texture, pg.color.r, pg.color.g,
+                               pg.color.b);
+        SDL_SetTextureAlphaMod(rg.texture, pg.color.a);
+        xanatoo::sdl::copy(sdl_, rg.texture, nullptr, &dst);
       }
     }
 
@@ -418,8 +427,8 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
       const int ux = static_cast<int>(pg.x + origin_x);
       const int uw =
           joins ? static_cast<int>(next->x + origin_x) - ux
-                : static_cast<int>((g.advance >> 6) > 0 ? (g.advance >> 6)
-                                                        : (g.width + 1));
+                : (g.advance > 0 ? static_cast<int>(std::lround(g.advance_px()))
+                                 : g.width + 1);
       if (!visible(ux, px(pg.y - g.bearing_y - scroll_y), uw,
                    g.height + 4))
         continue;
@@ -527,17 +536,16 @@ void Renderer::draw_text(Font& font, float x, float y_baseline,
       continue;
     }
     i += len;
-    const Glyph& gl = font.glyph(cp);
+    int gx = 0;
+    const Glyph& gl = font.raster(cp, pen, light_text(Rgba{r, g, b, 255}), &gx);
     if (gl.texture) {
       SDL_SetTextureColorMod(gl.texture, r, g, b);
       SDL_SetTextureAlphaMod(gl.texture, 255);  // glyphs share textures
-      SDL_Rect dst{
-          static_cast<int>(pen + gl.bearing_x),
-          static_cast<int>(y_baseline - gl.bearing_y),
-          gl.width, gl.height};
+      SDL_Rect dst{gx, static_cast<int>(y_baseline - gl.bearing_y), gl.width,
+                   gl.height};
       xanatoo::sdl::copy(sdl_, gl.texture, nullptr, &dst);
     }
-    pen += static_cast<float>(gl.advance >> 6);
+    pen += gl.advance_px();
   }
 }
 

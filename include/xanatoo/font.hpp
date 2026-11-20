@@ -29,8 +29,13 @@ struct Glyph {
   int height = 0;
   int bearing_x = 0;
   int bearing_y = 0;
-  int advance = 0;  // in 1/64th pixels
+  int advance = 0;  // in 1/64th pixels, unhinted (fractional)
+  float advance_px() const { return static_cast<float>(advance) / 64.f; }
 };
+
+// Glyph bitmaps are rasterised at this many horizontal sub-pixel phases,
+// so text keeps the fractional pen positions of its unhinted advances.
+constexpr int kSubpixelSteps = 4;
 
 class Font {
 public:
@@ -46,7 +51,13 @@ public:
   }
   void set_size(int pixel_size);
 
+  // Metrics (and the phase-0 bitmap for dark text) of `codepoint`.
   const Glyph& glyph(uint32_t codepoint);
+  // The bitmap to draw `codepoint` with its pen (origin, before the
+  // bearing) at `pen_x`: the nearest quarter-pixel phase, with coverage
+  // gamma-corrected for dark or light text. `*x` gets the bitmap's left.
+  const Glyph& raster(uint32_t codepoint, float pen_x, bool light_text,
+                      int* x);
   // True when the face maps `codepoint` (no .notdef fallback). glyph()
   // still draws unmapped codepoints from a fallback face when one has it.
   bool has_glyph(uint32_t codepoint) const {
@@ -74,11 +85,13 @@ private:
   int line_height_ = 0;
   int ascender_ = 0;
   int descender_ = 0;
-  std::unordered_map<uint32_t, Glyph> cache_;
+  // Keyed by codepoint * kVariants + variant (phase, light text).
+  std::unordered_map<uint64_t, Glyph> cache_;
   // Direct lookup for Latin-1 (most text): layout measures every character
   // of a block, so a hash lookup each is the hot path. Points into
   // `cache_` (node-based, so stable); cleared with it.
-  std::array<const Glyph*, 256> latin1_{};
+  static constexpr int kVariants = kSubpixelSteps * 2;
+  std::array<const Glyph*, 256 * kVariants> latin1_{};
   // Faces opened for codepoints the primary face lacks, same pixel size.
   struct FallbackFace {
     FontFace file;
@@ -86,7 +99,8 @@ private:
   };
   std::vector<FallbackFace> fallbacks_;
 
-  Glyph load_glyph(uint32_t codepoint);
+  Glyph load_glyph(uint32_t codepoint, int variant);
+  const Glyph& variant(uint32_t codepoint, int variant);
   FT_Face fallback_face(uint32_t codepoint);
   void drop_cache();
 };

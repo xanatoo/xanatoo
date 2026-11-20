@@ -288,7 +288,8 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
           continue;
         xanatoo::Font& font = app.fonts.pick(pg.font);
         const xanatoo::Glyph& g = font.glyph(pg.codepoint);
-        const int adv = (g.advance >> 6) > 0 ? (g.advance >> 6) : g.width + 1;
+        const int adv = g.advance > 0 ? static_cast<int>(std::lround(g.advance_px()))
+                                      : g.width + 1;
         const int uy = static_cast<int>(pg.y + 3.f - scroll);
         SDL_SetRenderDrawColor(app.sdl, 20, 80, 190, 255);
         const int gx = static_cast<int>(pg.x + ox);

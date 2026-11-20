@@ -28,6 +28,13 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   lookup (cached), with style from flags, then style name, then the file
   name (single-face files only). Pass `face()`, not `path()`, when
   reopening a loaded font.
+- Glyph rasterisation (`Font::load_glyph`): light hinting (vertical only,
+  no whole-pixel stroke snapping), unhinted fractional advances
+  (`Glyph::advance_px`; layout keeps float pens), bitmaps at
+  `kSubpixelSteps` horizontal phases, and coverage curves for dark vs
+  light text (`kTextGamma`). Metrics come from `Font::glyph`; drawing goes
+  through `Font::raster(cp, pen_x, light_text, &x)`, which takes the pen
+  (bitmap left minus `bearing_x`), not the bitmap edge.
 - `ViewSettings::style` (view.conf) is the global *fallback* sheet; the toolbar
   and View menu issue `UiCommand::SelectStyle` / `ReloadStyles`. The dockable
   Styles panel uses an embedded ImGui editor and `style.cpp` helpers to create,

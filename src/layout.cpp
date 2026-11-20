@@ -808,10 +808,9 @@ void LayoutEngine::layout_collection(const Document& doc, NodeId id, float x,
           float right = text_x;
           while (b < out.glyphs.size() && out.glyphs[b].y == out.glyphs[a].y) {
             const auto& g = out.glyphs[b];
-            right = std::max(right, g.x + static_cast<float>(
-                                              fonts_.pick(g.font)
-                                                  .glyph(g.codepoint)
-                                                  .advance >> 6));
+            right = std::max(
+                right,
+                g.x + fonts_.pick(g.font).glyph(g.codepoint).advance_px());
             ++b;
           }
           const float shift = std::max(0.f, (text_w - (right - text_x)) * 0.5f);
@@ -2085,7 +2084,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           }
           widest = std::max(widest, it->second);
         }
-        const float gap = static_cast<float>(mf.glyph(' ').advance >> 6);
+        const float gap = mf.glyph(' ').advance_px();
         hang = std::max(hang, std::min(widest + gap, 0.25f * max_width));
       }
       const size_t first = out.glyphs.size();
@@ -2124,9 +2123,9 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         pg.kind = InlineKind::FootnoteRef;
         pg.font = mrole;
         pg.color = st.text_color(BlockRole::Footnote, InlineKind::FootnoteRef);
-        pg.advance = mx + static_cast<float>(g.advance >> 6) - pg.x;
+        pg.advance = mx + g.advance_px() - pg.x;
         out.glyphs.push_back(pg);
-        mx += static_cast<float>(g.advance >> 6);
+        mx += g.advance_px();
       }
       if (node.children.empty()) y += mf.line_height();
       y += after(BlockRole::Footnote);
@@ -2369,9 +2368,9 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         pg.kind = InlineKind::Text;
         pg.font = FontRole::Body;
         pg.color = st.text_color(BlockRole::ListItem, InlineKind::Text);
-        pg.advance = mx + static_cast<float>(g.advance >> 6) - pg.x;
+        pg.advance = mx + g.advance_px() - pg.x;
         out.glyphs.push_back(pg);
-        mx += static_cast<float>(g.advance >> 6);
+        mx += g.advance_px();
       }
       // Long ordered lists: grow the slot so "100." etc. never run into
       // the text; sized by the list's widest number so items stay aligned.
@@ -2393,9 +2392,8 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         float wide = 0.f;
         // Measure with '0's: the widest digit in most faces.
         for (char c : std::to_string(widest) + ".")
-          wide += static_cast<float>(
-              marker_font.glyph(c == '.' ? '.' : '0').advance >> 6);
-        const float gap = static_cast<float>(marker_font.glyph(' ').advance >> 6);
+          wide += marker_font.glyph(c == '.' ? '.' : '0').advance_px();
+        const float gap = marker_font.glyph(' ').advance_px();
         slot = std::max(slot, wide + gap);
       }
       float text_x = x + slot;
@@ -3391,7 +3389,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
   auto char_adv = [&](const CharInfo& c) -> float {
     if (const float w = atom_w(c); w > 0.f) return w;
-    return static_cast<float>(fonts_.pick(c.role).glyph(c.cp).advance >> 6);
+    return fonts_.pick(c.role).glyph(c.cp).advance_px();
   };
 
   // Line-level virtualization: a line wholly outside the materialised band
@@ -3443,8 +3441,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     bool in_space = false;
     float img_up = 0.f;  // inline images taller than the ascender lower the line
     float img_down = 0.f;  // formulas deeper than the descender: extra below
-    float space_adv =
-        static_cast<float>(metrics.glyph(' ').advance >> 6);
+    float space_adv = metrics.glyph(' ').advance_px();
     if (space_adv < 1.f) space_adv = 4.f;
     for (size_t i = lo; i < content_hi; ++i) {
       natural += char_adv(chars[i]);
@@ -3565,7 +3562,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       }
       Font& font = fonts_.pick(c.role);
       const Glyph& g = font.glyph(c.cp);
-      const float adv = static_cast<float>(g.advance >> 6);
+      const float adv = g.advance_px();
       pg.x = lx + static_cast<float>(g.bearing_x);
       pg.advance = lx + adv - pg.x;
       out.glyphs.push_back(pg);
@@ -3615,7 +3612,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     const PositionedGlyph& previous = out.glyphs.back();
     mark.x = previous.x + std::max(previous.advance, 1.f);
     mark.y = previous.y;
-    mark.advance = static_cast<float>(glyph.advance >> 6);
+    mark.advance = glyph.advance_px();
     // Very narrow float bands (or a wide fallback glyph) may not have room
     // for the decoration. Never let the decoration itself spill outside the
     // available line; the content break still happens without it.
@@ -3632,7 +3629,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     constexpr uint32_t kFallbackMark = 0x21B5;
     Font& font = fonts_.pick(role);
     const uint32_t cp = font.has_glyph(kReturnMark) ? kReturnMark : kFallbackMark;
-    return static_cast<float>(font.glyph(cp).advance >> 6);
+    return font.glyph(cp).advance_px();
   };
 
   // Lines above the table range.

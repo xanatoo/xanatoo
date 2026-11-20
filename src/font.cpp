@@ -5,6 +5,8 @@
 #include "xanatoo/math_font.hpp"
 #include "xanatoo/paths.hpp"
 #include <algorithm>
+#include <cmath>
+#include FT_OUTLINE_H
 #ifndef XANATOO_FONTCONFIG
 #define XANATOO_FONTCONFIG 1
 #endif
@@ -115,7 +117,29 @@ FT_Face Font::fallback_face(uint32_t codepoint) {
   return nullptr;
 }
 
-Glyph Font::load_glyph(uint32_t codepoint) {
+// Coverage curves for blending in sRGB: plain alpha blending makes dark
+// text on a light page too heavy and light text on a dark page too thin.
+// Blending as if in a space of gamma kTextGamma evens both out; the full
+// sRGB 2.2 looks washed out, so this stays near what browsers show.
+static constexpr double kTextGamma = 1.45;
+
+static const std::array<uint8_t, 256>& coverage_curve(bool light_text) {
+  static const auto curves = [] {
+    std::array<std::array<uint8_t, 256>, 2> c{};
+    for (int i = 0; i < 256; ++i) {
+      const double a = i / 255.0;
+      const double dark = 1.0 - std::pow(1.0 - a, 1.0 / kTextGamma);
+      const double light = std::pow(a, 1.0 / kTextGamma);
+      c[0][i] = static_cast<uint8_t>(std::lround(dark * 255.0));
+      c[1][i] = static_cast<uint8_t>(std::lround(light * 255.0));
+    }
+    return c;
+  }();
+  return curves[light_text ? 1 : 0];
+}
+
+// `variant` = sub-pixel phase + kSubpixelSteps * light_text.
+Glyph Font::load_glyph(uint32_t codepoint, int variant) {
   Glyph g;
   FT_Face face = face_;
   if (codepoint >= 0x20 && FT_Get_Char_Index(face_, codepoint) == 0) {
@@ -125,25 +149,42 @@ Glyph Font::load_glyph(uint32_t codepoint) {
   // fractional, as browsers / fontconfig "hintslight" do. Full native
   // hinting rounds strokes to whole pixels, so text visibly jumps in
   // weight between sizes (DejaVu Sans: 1 px bars at 16 px, 2 px at 17 px).
-  if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT)) {
-    return g;
-  }
+  // It leaves x alone, so outlines can shift by sub-pixel phases.
+  if (FT_Load_Char(face, codepoint, FT_LOAD_TARGET_LIGHT)) return g;
   FT_GlyphSlot slot = face->glyph;
+  const int phase = variant % kSubpixelSteps;
+  const bool light_text = variant >= kSubpixelSteps;
+  if (slot->format == FT_GLYPH_FORMAT_OUTLINE && phase != 0)
+    FT_Outline_Translate(&slot->outline, phase * 64 / kSubpixelSteps, 0);
+  if (slot->format != FT_GLYPH_FORMAT_BITMAP &&
+      FT_Render_Glyph(slot, FT_RENDER_MODE_LIGHT))
+    return g;
   g.width = slot->bitmap.width;
   g.height = slot->bitmap.rows;
   g.bearing_x = slot->bitmap_left;
   g.bearing_y = slot->bitmap_top;
-  g.advance = static_cast<int>(slot->advance.x);
+  // Unhinted advance (16.16 → 26.6): pens keep fractional positions.
+  g.advance = FT_IS_SCALABLE(face)
+                  ? static_cast<int>((slot->linearHoriAdvance + 512) >> 10)
+                  : static_cast<int>(slot->advance.x);
 
   if (g.width > 0 && g.height > 0 && renderer_) {
-    // Convert grayscale bitmap to RGBA for SDL (skip when metrics-only).
-    std::vector<uint8_t> rgba(g.width * g.height * 4);
-    for (int i = 0; i < g.width * g.height; ++i) {
-      uint8_t a = slot->bitmap.buffer[i];
-      rgba[i * 4 + 0] = 255;
-      rgba[i * 4 + 1] = 255;
-      rgba[i * 4 + 2] = 255;
-      rgba[i * 4 + 3] = a;
+    // Convert the coverage bitmap to RGBA for SDL (skip when metrics-only).
+    const FT_Bitmap& bm = slot->bitmap;
+    const auto& curve = coverage_curve(light_text);
+    std::vector<uint8_t> rgba(static_cast<size_t>(g.width) * g.height * 4);
+    for (int y = 0; y < g.height; ++y) {
+      const uint8_t* row = bm.buffer + static_cast<ptrdiff_t>(y) * bm.pitch;
+      for (int x = 0; x < g.width; ++x) {
+        uint8_t a = 0;
+        if (bm.pixel_mode == FT_PIXEL_MODE_MONO)
+          a = (row[x >> 3] & (0x80 >> (x & 7))) ? 255 : 0;
+        else
+          a = curve[row[x]];
+        uint8_t* px = &rgba[(static_cast<size_t>(y) * g.width + x) * 4];
+        px[0] = px[1] = px[2] = 255;
+        px[3] = a;
+      }
     }
     SDL_Surface* surf = xanatoo::sdl::rgba_surface_from(
         rgba.data(), g.width, g.height, g.width * 4);
@@ -159,14 +200,31 @@ Glyph Font::load_glyph(uint32_t codepoint) {
   return g;
 }
 
-const Glyph& Font::glyph(uint32_t codepoint) {
-  if (codepoint < latin1_.size() && latin1_[codepoint])
-    return *latin1_[codepoint];
-  auto it = cache_.find(codepoint);
+const Glyph& Font::variant(uint32_t codepoint, int variant) {
+  const size_t slot = static_cast<size_t>(codepoint) * kVariants + variant;
+  if (slot < latin1_.size() && latin1_[slot]) return *latin1_[slot];
+  auto it = cache_.find(slot);
   if (it == cache_.end())
-    it = cache_.emplace(codepoint, load_glyph(codepoint)).first;
-  if (codepoint < latin1_.size()) latin1_[codepoint] = &it->second;
+    it = cache_.emplace(slot, load_glyph(codepoint, variant)).first;
+  if (slot < latin1_.size()) latin1_[slot] = &it->second;
   return it->second;
+}
+
+const Glyph& Font::glyph(uint32_t codepoint) { return variant(codepoint, 0); }
+
+const Glyph& Font::raster(uint32_t codepoint, float pen_x, bool light_text,
+                          int* x) {
+  const float fl = std::floor(pen_x);
+  int ix = static_cast<int>(fl);
+  int phase = static_cast<int>(std::lround((pen_x - fl) * kSubpixelSteps));
+  if (phase >= kSubpixelSteps) {
+    phase = 0;
+    ++ix;
+  }
+  const Glyph& g =
+      variant(codepoint, phase + (light_text ? kSubpixelSteps : 0));
+  *x = ix + g.bearing_x;
+  return g;
 }
 
 int Font::measure(const std::string& text) {
@@ -193,9 +251,9 @@ int Font::measure(const std::string& text) {
       continue;
     }
     const Glyph& g = glyph(cp);
-    width += g.advance >> 6;
+    width += g.advance;
   }
-  return width;
+  return (width + 63) >> 6;
 }
 
 #if XANATOO_FONTCONFIG

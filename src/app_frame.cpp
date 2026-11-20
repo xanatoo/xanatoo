@@ -3142,8 +3142,8 @@ static void for_each_link_run(App& app, const Pane& pane, Match match,
     }
     xanatoo::Font& font = app.fonts.pick(pg.font);
     const xanatoo::Glyph& g = font.glyph(pg.codepoint);
-    float adv = static_cast<float>((g.advance >> 6) > 0 ? (g.advance >> 6)
-                                                        : (g.width + 1));
+    float adv = g.advance > 0 ? g.advance_px()
+                              : static_cast<float>(g.width + 1);
     float top = pg.y - static_cast<float>(font.ascender());
     float bot = top + static_cast<float>(font.line_height());
     if (in_run && std::abs(pg.y - run_base) < 0.5f && pg.x <= run_x1 + 2.f) {
