@@ -2337,6 +2337,37 @@ Document extract_footnotes(const Document& doc,
   return out;
 }
 
+std::vector<size_t> balance_columns(const std::vector<float>& heights,
+                                    size_t columns) {
+  const size_t m = heights.size();
+  const size_t n = std::min(columns, m);
+  if (n == 0) return {};
+  std::vector<float> sum(m + 1, 0.f);  // prefix sums
+  for (size_t i = 0; i < m; ++i) sum[i + 1] = sum[i] + heights[i];
+  // best[c][j]: tallest run when items [0, j) fill c + 1 runs; cut[c][j] the
+  // first item of the last of those runs.
+  constexpr float kInf = 1e30f;
+  std::vector<std::vector<float>> best(n, std::vector<float>(m + 1, kInf));
+  std::vector<std::vector<size_t>> cut(n, std::vector<size_t>(m + 1, 0));
+  for (size_t j = 1; j <= m; ++j) best[0][j] = sum[j];
+  for (size_t c = 1; c < n; ++c)
+    for (size_t j = c + 1; j <= m; ++j)
+      for (size_t i = c; i < j; ++i) {
+        const float v = std::max(best[c - 1][i], sum[j] - sum[i]);
+        if (v < best[c][j]) {
+          best[c][j] = v;
+          cut[c][j] = i;
+        }
+      }
+  std::vector<size_t> starts(n, 0);
+  size_t j = m;
+  for (size_t c = n - 1; c > 0; --c) {
+    starts[c] = cut[c][j];
+    j = starts[c];
+  }
+  return starts;
+}
+
 std::optional<std::string> link_preview_text(const Document& doc,
                                             const std::string& href) {
   if (href.empty() || href[0] != '#') return std::nullopt;

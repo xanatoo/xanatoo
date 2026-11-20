@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Footnote strip in columns
+
+- The footnote overlay lays its notes out once at one column's width and
+  shows them in columns side by side: as many as the pane's text column
+  (`LayoutEngine::text_column`, same margins / measure as the page) fits at
+  18em + 2em gap, at most 6 and never more than notes. Whole notes per
+  column, balanced by height (`balance_columns`, min–max DP); clicks pick the
+  column first. Fade-out per overflowing column.
+- Checked under Xvfb (1 / 2 / 3 columns by window width, click in column 2).
+- Notes sit at the bare text margin, 8px left of section-indented body text
+  (as before).
+
 ## Status (2026-11-20) — Outline panel: articles bold, no 1–9 column
 
 - Outline rows of an `Article` (and the preamble title row) are bold;

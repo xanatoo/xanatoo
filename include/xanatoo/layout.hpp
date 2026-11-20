@@ -13,6 +13,7 @@
 #include <string>
 #include <map>
 #include <unordered_map>
+#include <utility>
 #include <unordered_set>
 
 #include "xanatoo/view_settings.hpp"
@@ -316,6 +317,10 @@ public:
   // focus_section: when not INVALID_NODE, only that Section/Article (and its
   // descendants) is fully laid out; ancestors show header only; other
   // branches are omitted. View filter — document unchanged.
+  // Left inset and width of the text column layout() uses at `max_width`
+  // (margins, measure cap) with the current options.
+  std::pair<float, float> text_column(float max_width);
+
   LayoutResult layout(const Document& doc, float max_width,
                       const std::string& image_base = {},
                       const LayoutViewport& viewport = {},

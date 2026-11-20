@@ -306,6 +306,13 @@ Document extract_footnotes(const Document& doc,
                            const std::vector<std::string>& keys,
                            std::vector<NodeId>* sources = nullptr);
 
+// Split items of heights `heights` (in order) into at most `columns`
+// contiguous runs so the tallest run is as short as possible (footnote
+// overlay columns). Returns the first item of each non-empty run; empty for
+// no items.
+std::vector<size_t> balance_columns(const std::vector<float>& heights,
+                                    size_t columns);
+
 // Short preview of an internal #anchor target (first ~80 chars of the node).
 // Empty optional for external or unresolved hrefs.
 std::optional<std::string> link_preview_text(const Document& doc,

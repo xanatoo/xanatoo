@@ -4564,6 +4564,19 @@ void test_footnotes() {
   EXPECT((src == std::vector<NodeId>{fns[1], fns[0]}));
   EXPECT_EQ(notes.get(notes.root).children.size(), 2u);
   EXPECT_EQ(nodes_of(notes, NodeKind::Paragraph).size(), 3u);
+
+  // Overlay columns: contiguous runs, tallest run minimal
+  EXPECT(balance_columns({}, 3).empty());
+  EXPECT((balance_columns({10.f}, 3) == std::vector<size_t>{0}));
+  EXPECT((balance_columns({10.f, 10.f, 10.f, 10.f}, 1) ==
+          std::vector<size_t>{0}));
+  EXPECT((balance_columns({10.f, 10.f, 10.f, 10.f}, 2) ==
+          std::vector<size_t>{0, 2}));
+  EXPECT((balance_columns({30.f, 10.f, 10.f, 10.f}, 2) ==
+          std::vector<size_t>{0, 1}));
+  EXPECT((balance_columns({10.f, 10.f}, 4) == std::vector<size_t>{0, 1}));
+  EXPECT((balance_columns({5.f, 5.f, 5.f, 20.f, 5.f, 5.f}, 3) ==
+          std::vector<size_t>{0, 3, 4}));
 }
 
 void test_hn_urls_and_html() {

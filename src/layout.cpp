@@ -851,20 +851,8 @@ LayoutResult LayoutEngine::layout(
     if (n.kind == NodeKind::Message && !n.label.empty())
       g_msg_label_map.emplace(n.label, n.id);
   }
-  float mx = std::max(options_.margin_x, options_.margin_pct * max_width);
+  auto [mx, content_w] = text_column(max_width);
   float y = options_.margin_y;
-  float content_w = std::max(40.f, max_width - 2.f * mx);
-  if (options_.measure_chars > 0) {
-    // Average lowercase advance of the body font: follows zoom and sheet.
-    const float ch =
-        fonts_.pick(FontRole::Body).measure("abcdefghijklmnopqrstuvwxyz") /
-        26.f;
-    const float cap = std::max(40.f, options_.measure_chars * ch);
-    if (content_w > cap) {
-      mx += (content_w - cap) * 0.5f;
-      content_w = cap;
-    }
-  }
   setup_margins(doc, mx, content_w, max_width);
   if (style_->has_margin()) {
     const float pad = 0.75f * static_cast<float>(fonts_.regular.pixel_size());
@@ -892,6 +880,23 @@ LayoutResult LayoutEngine::layout(
   folded_sections_ = nullptr;
   focus_section_ = INVALID_NODE;
   return result;
+}
+
+std::pair<float, float> LayoutEngine::text_column(float max_width) {
+  float mx = std::max(options_.margin_x, options_.margin_pct * max_width);
+  float content_w = std::max(40.f, max_width - 2.f * mx);
+  if (options_.measure_chars > 0) {
+    // Average lowercase advance of the body font: follows zoom and sheet.
+    const float ch =
+        fonts_.pick(FontRole::Body).measure("abcdefghijklmnopqrstuvwxyz") /
+        26.f;
+    const float cap = std::max(40.f, options_.measure_chars * ch);
+    if (content_w > cap) {
+      mx += (content_w - cap) * 0.5f;
+      content_w = cap;
+    }
+  }
+  return {mx, content_w};
 }
 
 void LayoutEngine::layout_spanned_table(const Document& doc, NodeId table,

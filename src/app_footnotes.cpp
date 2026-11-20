@@ -3,10 +3,12 @@
 
 // Footnote overlay: the notes of the footnote marks visible in a pane show in
 // a strip along the pane's bottom edge, laid out with the document style like
-// the foot of a printed page. Notes whose own block is on screen are left
-// out; a press on a note jumps to it.
+// the foot of a printed page. A wide text column holds several columns of
+// notes side by side, balanced by height. Notes whose own block is on screen
+// are left out; a press on a note jumps to it.
 
 #include <algorithm>
+#include <utility>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/util.hpp"
@@ -15,45 +17,101 @@ namespace xanatoo::app {
 
 namespace {
 
-constexpr float kMaxShare = 0.4f;  // of the pane height
-constexpr float kPadPx = 8.f;      // above the first note (× ui scale)
-constexpr int kFadePx = 12;        // fade where notes are cut off
+constexpr float kMaxShare = 0.4f;   // of the pane height
+constexpr float kPadPx = 8.f;       // above the first note (× ui scale)
+constexpr int kFadePx = 12;         // fade where notes are cut off
+constexpr float kMinColumnEm = 18.f;  // narrowest note column
+constexpr float kGapEm = 2.f;         // between note columns
+constexpr size_t kMaxColumns = 6;
 
-// Lay out the notes for `keys` at the pane's text width.
+// Lay out the notes for `keys` in columns across the pane's text column.
 void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
                    int width) {
   FootnoteOverlay& fo = pane.footnotes;
   fo.notes.clear();
   fo.note_y.clear();
+  fo.columns.clear();
   xanatoo::Document notes =
       xanatoo::extract_footnotes(doc_of(app, pane), keys, &fo.notes);
+  const auto& tops = notes.get(notes.root).children;
+
+  // As many columns as fit the text column the pane's own layout uses.
+  const auto [left, text_w] =
+      app.layout_engine.text_column(static_cast<float>(width));
+  const float em = static_cast<float>(app.fonts.regular.pixel_size());
+  const float gap = kGapEm * em;
+  size_t n = static_cast<size_t>((text_w + gap) / (kMinColumnEm * em + gap));
+  n = std::clamp<size_t>(n, 1, std::max<size_t>(1, tops.size()));
+  n = std::min(n, kMaxColumns);
+  const float col_w = std::max(
+      40.f, (text_w - static_cast<float>(n - 1) * gap) / static_cast<float>(n));
+
   const xanatoo::LayoutOptions saved = app.layout_engine.options();
   xanatoo::LayoutOptions o = saved;
+  o.margin_x = 0.f;
+  o.margin_pct = 0.f;
+  o.measure_chars = 0;
   o.margin_y = kPadPx * app.ui_scale;
   app.layout_engine.set_options(o);
-  fo.layout = app.layout_engine.layout(notes, static_cast<float>(width),
-                                       base_of(app, pane));
+  fo.layout = app.layout_engine.layout(notes, col_w, base_of(app, pane));
   app.layout_engine.set_options(saved);
 
-  // Top of each note (top-level blocks of `notes`, in order); the strip ends
-  // one pad below the last line, not after the blocks' trailing space.
-  const auto& tops = notes.get(notes.root).children;
+  // Top of each note (top-level blocks of `notes`, in order) and the bottom
+  // of its last line; a column ends one pad below its last line, not after
+  // the blocks' trailing space.
   fo.note_y.assign(tops.size(), 0.f);
   for (const auto& b : fo.layout.boxes) {
     auto it = std::find(tops.begin(), tops.end(), b.node);
     if (it != tops.end()) fo.note_y[it - tops.begin()] = b.y;
   }
-  float last_baseline = 0.f;
-  for (const auto& g : fo.layout.glyphs)
-    last_baseline = std::max(last_baseline, g.y);
-  fo.content_h = tops.empty() ? 0.f
-                              : last_baseline +
-                                    static_cast<float>(
-                                        -app.fonts.regular.descender()) +
-                                    o.margin_y;
+  std::vector<float> bottom = fo.note_y;
+  const float descent = static_cast<float>(-app.fonts.regular.descender());
+  for (const auto& g : fo.layout.glyphs) {
+    auto it = std::upper_bound(fo.note_y.begin(), fo.note_y.end(), g.y);
+    if (it == fo.note_y.begin()) continue;
+    float& bot = bottom[(it - fo.note_y.begin()) - 1];
+    bot = std::max(bot, g.y + descent);
+  }
+  std::vector<float> heights(tops.size(), 0.f);
+  for (size_t k = 0; k < tops.size(); ++k)
+    heights[k] =
+        (k + 1 < tops.size() ? fo.note_y[k + 1] : bottom[k]) - fo.note_y[k];
+
+  const std::vector<size_t> starts = xanatoo::balance_columns(heights, n);
+  fo.content_h = 0.f;
+  for (size_t c = 0; c < starts.size(); ++c) {
+    const size_t end = c + 1 < starts.size() ? starts[c + 1] : tops.size();
+    FootnoteOverlay::Column col;
+    col.first = starts[c];
+    col.x = left + static_cast<float>(c) * (col_w + gap);
+    col.y0 = fo.note_y[col.first];
+    float bot = col.y0;
+    for (size_t k = col.first; k < end; ++k) bot = std::max(bot, bottom[k]);
+    col.h = bot - col.y0 + 2.f * o.margin_y;
+    fo.content_h = std::max(fo.content_h, col.h);
+    fo.columns.push_back(col);
+  }
+  fo.column_w = col_w;
+  fo.gap = gap;
+  fo.pad = o.margin_y;
   fo.keys = std::move(keys);
   fo.layout_gen = pane.layout.generation;
   fo.width = width;
+}
+
+// Screen x range [x0, x1) of column `c`: half the gap to each neighbour,
+// the strip's edge for the outer columns.
+std::pair<int, int> column_span(const Pane& pane, const SDL_Rect& strip,
+                                size_t c) {
+  const FootnoteOverlay& fo = pane.footnotes;
+  const auto& col = fo.columns[c];
+  const int x0 = c == 0 ? strip.x
+                        : pane.x + static_cast<int>(col.x - fo.gap * 0.5f);
+  const int x1 = c + 1 == fo.columns.size()
+                     ? strip.x + strip.w
+                     : pane.x + static_cast<int>(col.x + fo.column_w +
+                                                 fo.gap * 0.5f);
+  return {std::max(x0, strip.x), std::min(x1, strip.x + strip.w)};
 }
 
 }  // namespace
@@ -104,18 +162,26 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
                        strip.y);
   }
 
-  xanatoo::sdl::set_clip_rect(app.sdl, &strip);
-  app.renderer.draw(fo.layout, -static_cast<float>(strip.y),
-                    static_cast<float>(pane.x));
-  if (fo.content_h > static_cast<float>(h)) {
-    // More notes than fit: fade the cut edge into the paper.
-    SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
-    const int y0 = strip.y + strip.h - kFadePx;
-    for (int k = 0; k < kFadePx; ++k) {
-      SDL_SetRenderDrawColor(app.sdl, st.paper.r, st.paper.g, st.paper.b,
-                             static_cast<Uint8>(255 * (k + 1) / kFadePx));
-      xanatoo::sdl::draw_line(app.sdl, strip.x, y0 + k, strip.x + strip.w - 1,
-                         y0 + k);
+  for (size_t c = 0; c < fo.columns.size(); ++c) {
+    // Each column shows its run of notes; the clip keeps the next column's
+    // notes (further down the same layout) out of it.
+    const auto& col = fo.columns[c];
+    const auto [x0, x1] = column_span(pane, strip, c);
+    const int ch = std::min(strip.h, static_cast<int>(col.h + 0.5f));
+    const SDL_Rect cr{x0, strip.y, x1 - x0, ch};
+    if (cr.w <= 0 || cr.h <= 0) continue;
+    xanatoo::sdl::set_clip_rect(app.sdl, &cr);
+    app.renderer.draw(fo.layout, col.y0 - fo.pad - static_cast<float>(strip.y),
+                      static_cast<float>(pane.x) + col.x);
+    if (col.h > static_cast<float>(h)) {
+      // More notes than fit: fade the cut edge into the paper.
+      SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+      const int y0 = strip.y + strip.h - kFadePx;
+      for (int k = 0; k < kFadePx; ++k) {
+        SDL_SetRenderDrawColor(app.sdl, st.paper.r, st.paper.g, st.paper.b,
+                               static_cast<Uint8>(255 * (k + 1) / kFadePx));
+        xanatoo::sdl::draw_line(app.sdl, x0, y0 + k, x1 - 1, y0 + k);
+      }
     }
   }
   xanatoo::sdl::set_clip_rect(app.sdl, &clip);
@@ -135,9 +201,17 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my) {
   if (!in_footnote_overlay(app, pi, lx, my)) return false;
   Pane& pane = app.panes[pi];
   const FootnoteOverlay& fo = pane.footnotes;
-  const float cy = my - fo.y;  // y inside the laid-out notes
-  size_t k = 0;
-  while (k + 1 < fo.note_y.size() && fo.note_y[k + 1] <= cy) ++k;
+  if (fo.columns.empty()) return true;
+  size_t c = 0;  // column under the press
+  while (c + 1 < fo.columns.size() &&
+         lx >= fo.columns[c + 1].x - fo.gap * 0.5f)
+    ++c;
+  const auto& col = fo.columns[c];
+  const size_t end =
+      c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.note_y.size();
+  const float cy = my - fo.y - fo.pad + col.y0;  // y inside the laid-out notes
+  size_t k = col.first;
+  while (k + 1 < end && fo.note_y[k + 1] <= cy) ++k;
   if (k >= fo.notes.size()) return true;
   const xanatoo::Document& doc = doc_of(app, pane);
   const xanatoo::Node& fn = doc.get(fo.notes[k]);
