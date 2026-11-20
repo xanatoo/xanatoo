@@ -54,19 +54,30 @@ bool type_needs_media_backend(std::string_view content_type);
 bool is_stream_playlist_type(std::string_view content_type);
 
 // Media Fragments URI, temporal dimension (W3C): `#t=10`, `#t=1:02.5`,
-// `#t=npt:10,20` (only the start is used), also as one `&` part of the
-// fragment and percent-encoded (`#t%3D10`, as format_locator writes it).
+// `#t=npt:10,20`, also as one `&` part of the fragment and percent-encoded
+// (`#t%3D10`, as format_locator writes it).
 // The start in seconds; nullopt when the fragment names no time.
 std::optional<double> parse_media_time(std::string_view fragment);
-// An address split at a time fragment: `x.mp4#t=30` → {"x.mp4", 30}.
+// Start and end: `t=10,20` → {10, 20}; `t=10` has no end; an end not after
+// the start is none.
+struct MediaTimeRange {
+  double start = 0;
+  std::optional<double> end;
+};
+std::optional<MediaTimeRange> parse_media_range(std::string_view fragment);
+// An address split at a time fragment: `x.mp4#t=30` → {"x.mp4", 30};
+// `x.mp4#t=30,40` also has the end (a section).
 // Without one the address is the base, unchanged (other fragments stay).
 struct MediaAddress {
   std::string base;
   std::optional<double> start;
+  std::optional<double> end;
 };
 MediaAddress split_media_address(std::string_view address);
 // `base#t=12.5`: seconds rounded to tenths, without trailing zeros.
 std::string media_time_address(std::string_view base, double seconds);
+// `base#t=12.5,20`: a section, the same rounding.
+std::string media_range_address(std::string_view base, double start, double end);
 
 // "FFmpeg 7.1", "Android MediaCodec"; "" when this build has no backend.
 std::string media_backend_name();

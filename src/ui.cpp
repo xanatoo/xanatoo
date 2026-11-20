@@ -3280,6 +3280,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           result.arg = "30";
         }
         ImGui::Separator();
+        if (ImGui::MenuItem("A-B Markers", nullptr, state.audio_ab)) cmd = UiCommand::AudioAB;
+        if (ImGui::MenuItem(state.audio_ab ? "Loop Section" : "Loop", nullptr, state.audio_loop))
+          cmd = UiCommand::AudioLoop;
+        ImGui::Separator();
         if (ImGui::MenuItem("Stop")) cmd = UiCommand::AudioStop;
         ImGui::EndMenu();
       }
@@ -3591,6 +3595,21 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         item("Bookmark Position " + mm.time, "bookmark-time");
       item("Go to " + mm.time, "seek", mm.seekable);
       item("Copy Address at " + mm.time, "copy-time");
+      item("Set A at " + mm.time, "set-a", mm.seekable);
+      item("Set B at " + mm.time, "set-b", mm.seekable);
+      if (!mm.section.empty()) {
+        ImGui::Separator();
+        if (mm.section_bookmarked)
+          item("Remove Section Bookmark " + mm.section, "unbookmark-section");
+        else
+          item("Bookmark Section " + mm.section, "bookmark-section");
+        item("Copy Section Address", "copy-section");
+        if (!mm.section_selected) item("Set A-B to " + mm.section, "use-section", mm.seekable);
+      }
+      ImGui::Separator();
+      if (ImGui::MenuItem("A-B Markers", nullptr, mm.ab, mm.seekable)) cmd = UiCommand::AudioAB;
+      if (ImGui::MenuItem(mm.ab ? "Loop Section" : "Loop File", nullptr, mm.loop))
+        cmd = UiCommand::AudioLoop;
       ImGui::Separator();
       if (mm.file_bookmarked)
         item("Remove File Bookmark", "unbookmark-file");

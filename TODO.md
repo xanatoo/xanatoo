@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Media panel: A–B section, loop
+
+- A-B button: two markers on the seek bar (10 s from the position),
+  dragged by their tabs under the bar; playing stops at B. Loop button:
+  loops the section, or the whole file without markers (kept across files).
+  Both also in Go → Sound and the panel's right-click menu.
+- Right-click: Set A / Set B at the pointer; Bookmark / Remove Section,
+  Copy Section Address (`file#t=5,25.1`, Media Fragments start,end),
+  "Set A-B to" a bookmarked section. Section bookmarks show as a green
+  strip; opening a `#t=a,b` address plays that section.
+- Checked under Xvfb (WAV): `#t=5,8` stops at 0:08, dragging B, Loop wraps
+  B → A, section bookmark stored. Not checked: video / backend files (same
+  seek path), Android.
+
 ## Status (2026-11-20) — Slashdot: story out of the navigation, site hints
 
 - Slashdot stories were empty in reader mode: the whole page after the

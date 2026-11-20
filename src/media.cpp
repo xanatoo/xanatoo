@@ -106,7 +106,7 @@ std::optional<double> parse_clock(std::string_view s) {
 
 }  // namespace
 
-std::optional<double> parse_media_time(std::string_view fragment) {
+std::optional<MediaTimeRange> parse_media_range(std::string_view fragment) {
   const std::string frag = percent_decode(fragment);
   std::string_view rest = frag;
   while (!rest.empty()) {
@@ -118,25 +118,49 @@ std::optional<double> parse_media_time(std::string_view fragment) {
     if (part.substr(0, 4) == "npt:") part.remove_prefix(4);
     const size_t comma = part.find(',');
     const std::string_view start = part.substr(0, comma);
-    if (start.empty()) return 0.0;  // "t=,20": from the start
-    return parse_clock(start);
+    MediaTimeRange r;
+    if (!start.empty()) {  // "t=,20": from the start
+      const std::optional<double> s = parse_clock(start);
+      if (!s) return std::nullopt;
+      r.start = *s;
+    }
+    if (comma != std::string_view::npos)
+      if (const std::optional<double> e = parse_clock(part.substr(comma + 1)); e && *e > r.start)
+        r.end = e;
+    return r;
   }
+  return std::nullopt;
+}
+
+std::optional<double> parse_media_time(std::string_view fragment) {
+  if (const std::optional<MediaTimeRange> r = parse_media_range(fragment)) return r->start;
   return std::nullopt;
 }
 
 MediaAddress split_media_address(std::string_view address) {
   const size_t hash = address.find('#');
   if (hash != std::string_view::npos)
-    if (auto t = parse_media_time(address.substr(hash + 1)))
-      return {std::string(address.substr(0, hash)), t};
-  return {std::string(address), std::nullopt};
+    if (auto r = parse_media_range(address.substr(hash + 1)))
+      return {std::string(address.substr(0, hash)), r->start, r->end};
+  return {std::string(address), std::nullopt, std::nullopt};
 }
 
-std::string media_time_address(std::string_view base, double seconds) {
+namespace {
+// Seconds rounded to tenths, without trailing zeros.
+std::string tenths_text(double seconds) {
   const long tenths = std::lround(std::max(0.0, seconds) * 10);
   std::string t = std::to_string(tenths / 10);
   if (tenths % 10) t += "." + std::to_string(tenths % 10);
-  return std::string(base) + "#t=" + t;
+  return t;
+}
+}  // namespace
+
+std::string media_time_address(std::string_view base, double seconds) {
+  return std::string(base) + "#t=" + tenths_text(seconds);
+}
+
+std::string media_range_address(std::string_view base, double start, double end) {
+  return std::string(base) + "#t=" + tenths_text(start) + "," + tenths_text(end);
 }
 
 #if !(defined(XANATOO_FFMPEG) && XANATOO_FFMPEG) && !defined(__ANDROID__)

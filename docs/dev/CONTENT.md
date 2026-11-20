@@ -503,6 +503,24 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   knob, a ribbon right of the title for the file. A press near a line
   goes to exactly its position; `mark_near` is the hit-test for click,
   hover and menu.
+- A–B section and loop: the A-B button (`audio_toggle_ab`, Go → Sound,
+  `UiCommand::AudioAB`) turns on two markers (`AudioPlayer::ab` / `ab_a` /
+  `ab_b`; 10 s from the current position), drawn as a shaded span with a
+  bracket under the seek bar and tabs in their own row (`MediaLayout::
+  mark_a` / `mark_b`, `MediaPart::MarkA` / `MarkB`, dragged through
+  `Drag::MarkA` / `MarkB`; at least `kMinSection` apart). `follow_section`
+  (each frame) watches for the position crossing B — `last_pos`, which
+  `audio_seek` resets, so a seek past B plays on — and then pauses
+  (`at_b`: Play starts at A again) or, with Loop (`audio_toggle_loop`,
+  `AudioPlayer::loop`, kept across files), seeks to A. Loop without markers
+  restarts the file at its end instead of stopping. A `#t=a,b` address
+  (`split_media_address` reads the end, `media_range_address` writes it)
+  opens with the markers on that section. The right-click menu also sets A
+  / B at the pointer and, for the section (a bookmarked one under the
+  pointer, else the markers: `MediaMenu::sec_a` / `sec_b`), bookmarks /
+  removes it, copies its address or makes it the A–B section. Section
+  bookmarks are a green strip along the bar; a press on its start line
+  also selects the section.
 - `#t=` start: `navigate_pane` / startup split the time off before the
   selector test; `play_audio` keeps it in `AudioPlayer::start_at` and seeks
   once open (`start_playing` / `start_media`). For the file already in the

@@ -765,9 +765,10 @@ struct AudioPlayer {
   double duration = 0;  // seconds; 0 = unknown
   std::string format;   // "MP3 · 44100 Hz · stereo", once open
   float volume = 1.f;   // 0..1, applied in the callback
-  // Dragging in the panel: the seek bar or the volume slider, while the
-  // left button that pressed it is down (update_audio follows the pointer).
-  enum class Drag : uint8_t { None, Seek, Volume } drag = Drag::None;
+  // Dragging in the panel: the seek bar, the volume slider or an A / B
+  // marker, while the left button that pressed it is down (update_audio
+  // follows the pointer).
+  enum class Drag : uint8_t { None, Seek, Volume, MarkA, MarkB } drag = Drag::None;
   int drag_x = -1;      // pointer x last applied
   std::shared_ptr<AudioShared> play;  // the sound device, while open
   std::shared_ptr<AudioLoad> load;    // built-in formats while loading (local)
@@ -782,10 +783,19 @@ struct AudioPlayer {
   int video_w = 0, video_h = 0;  // display size; 0 = sound only
   int64_t visit = 0;  // its visit in the log (record_media_visit), 0 = none
   double start_at = -1;  // a `#t=` start, applied once it is open (< 0: none)
+  // A / B markers (the panel's A–B button, a `#t=a,b` address): a section
+  // of the file. Playing stops at B, or goes back to A with `loop`.
+  bool ab = false;
+  double ab_a = 0, ab_b = 0;  // seconds, ab_a < ab_b
+  bool at_b = false;          // paused at B: Play starts at A again
+  // Loop: the section while `ab`, else the whole file. Kept across files.
+  bool loop = false;
+  double last_pos = -1;  // position the last frame (B is crossed, not reached)
   // Bookmarks of this file (update_media_marks), keyed on bookmarks_gen and
   // url: the whole file, and positions (`#t=`) drawn on the seek bar.
   struct Mark {
     double t = 0;
+    double end = -1;      // a section's end (`#t=a,b`), < 0: a position
     std::string address;  // as stored
   };
   std::vector<Mark> marks;
@@ -800,6 +810,10 @@ struct MediaMenu {
   bool open = false;
   double t = 0;          // the position it is for (seconds)
   std::string mark;      // a position bookmark under the pointer, as stored
+  // The section it is for: a bookmarked one under the pointer, else the
+  // A–B markers (sec_b <= sec_a: none).
+  double sec_a = 0, sec_b = 0;
+  std::string sec_mark;  // that section's bookmark, as stored ("" = none)
 };
 
 // Search bar (app_search.cpp). The engine in use is
@@ -2358,6 +2372,10 @@ void audio_stop(App& app);          // stop and hide the player
 void audio_seek(App& app, double seconds);  // to this position
 void audio_skip(App& app, double delta);    // forward (+) / back (-)
 double audio_position(const App& app);      // seconds
+// A / B markers on / off (on: around the current position, 10 s).
+void audio_toggle_ab(App& app);
+// Loop on / off: the A–B section while the markers are on, else the file.
+void audio_toggle_loop(App& app);
 // Per frame: finished loads start playing, the end of the file is noted.
 void update_audio(App& app);
 void shutdown_audio(App& app);
@@ -2375,7 +2393,8 @@ std::string media_panel_hover(const App& app, int mx, int my);
 // press was inside the client area (taken, menu or not).
 bool right_click_media_panel(App& app, int mx, int my);
 // UiCommand::MediaAction on App::media_menu: bookmark-time / unbookmark-time
-// / bookmark-file / unbookmark-file / seek / copy-time.
+// / bookmark-file / unbookmark-file / seek / copy-time / set-a / set-b /
+// bookmark-section / unbookmark-section / copy-section / use-section.
 void media_action(App& app, const std::string& action);
 // The address a played file is stored under (visits, bookmarks): the base
 // as canonical_address, a `#t=` start kept in Media Fragments form.

@@ -1030,7 +1030,9 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
       xanatoo::is_playable_url(media.base) &&
       !xanatoo::parse_locator(media.base).has_selectors()) {
     const std::string addr =
-        media.start ? xanatoo::media_time_address(media.base, *media.start) : media.base;
+        media.start && media.end ? xanatoo::media_range_address(media.base, *media.start, *media.end)
+        : media.start            ? xanatoo::media_time_address(media.base, *media.start)
+                                 : media.base;
     if (!play_audio(app, addr)) return false;
     if (record_history) record_media_visit(app, pi, addr, hint, from, via);
     return true;

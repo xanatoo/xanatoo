@@ -228,6 +228,8 @@ enum class UiCommand {
   AudioToggle,        // sound player: play / pause
   AudioStop,          // sound player: stop and hide
   AudioSkip,          // sound player: arg = seconds forward (negative: back)
+  AudioAB,            // sound player: A–B markers on / off
+  AudioLoop,          // sound player: loop on / off (the A–B section or the file)
   ToggleSearchBar,    // show / hide the search bar (Ctrl+K focuses it)
   FocusSearchBar,     // show the search bar and focus its field
   Search,             // search bar committed (arg = what was typed)
@@ -475,6 +477,8 @@ struct UiState {
   bool searchbar = false;  // the search bar row is shown
   bool audio = false;          // the sound player is shown
   bool audio_playing = false;  // … and playing (not paused / ended)
+  bool audio_ab = false;       // … with its A–B markers on
+  bool audio_loop = false;     // … looping
   std::vector<UiSearchEngine> search_engines;
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service
@@ -586,6 +590,10 @@ struct UiState {
     bool time_bookmarked = false;  // a bookmark at that position
     bool file_bookmarked = false;
     bool seekable = false;
+    bool ab = false, loop = false;  // markers on, looping
+    std::string section;            // "0:10–0:20" ("" = no section)
+    bool section_bookmarked = false;
+    bool section_selected = false;  // it is the A–B markers' section
   } media_menu;
   bool styles_open = false;
   bool styles_manager_open = false;

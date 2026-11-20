@@ -214,6 +214,23 @@ void test_media(int& passed, int& failed) {
   EXPECT_EQ(media_time_address("a.mp4", 12.34), "a.mp4#t=12.3");
   EXPECT_EQ(media_time_address("a.mp4", 59.96), "a.mp4#t=60");
   EXPECT_EQ(media_time_address("a.mp4", -1), "a.mp4#t=0");
+  // Sections: start and end.
+  {
+    const auto r = parse_media_range("t=10,20.5");
+    EXPECT(r && r->start == 10.0 && r->end == 20.5);
+    EXPECT(!parse_media_range("t=10")->end);
+    EXPECT(!parse_media_range("t=20,10")->end);  // not after the start
+    EXPECT(!parse_media_range("t=10,x")->end);
+    EXPECT(parse_media_range("t=,1:00")->end == 60.0);
+    EXPECT(parse_media_range("t%3Dnpt%3A5%2C7")->end == 7.0);
+    EXPECT(!parse_media_range("t=x,20"));
+    const MediaAddress a = split_media_address("song.mp3#t=1:00,1:30");
+    EXPECT_EQ(a.base, "song.mp3");
+    EXPECT(a.start == 60.0 && a.end == 90.0);
+    EXPECT(!split_media_address("song.mp3#t=5").end);
+  }
+  EXPECT_EQ(media_range_address("a.mp4", 12.0, 20.04), "a.mp4#t=12,20");
+  EXPECT_EQ(media_range_address("a.mp4", 1.25, 2.5), "a.mp4#t=1.3,2.5");
 
   // Content types.
   EXPECT(is_playable_type("audio/mpeg"));

@@ -6,8 +6,8 @@
 // open_audio, which scans the file for its length / seek table); the
 // decoder then feeds SDL's audio callback (sdl::AudioOut) under a mutex. The
 // controls are the Media panel (WindowRole::Media): title and format, a
-// seek bar (click or drag), times, back / play-pause / forward / stop and a
-// volume slider. media_layout places them for drawing, clicks and hover.
+// seek bar (click or drag), times, back / play-pause / forward / stop, A–B
+// markers and loop, and a volume slider. media_layout places them for drawing, clicks and hover.
 // Video and the formats only a backend decodes (media.hpp) go through a
 // MediaPlayback instead: its worker decodes ahead, the same callback pulls
 // the sound, and update_audio shows the picture due at the sound's clock
@@ -391,8 +391,13 @@ void start_playing(App& app) {
 // The panel's parts, placed in its client rect (shared by draw, click and
 // hover: the same hit-test as the action).
 enum class MediaPart : uint8_t {
-  None, Video, Back, Toggle, Forward, Stop, Seek, Volume, FileMark
+  None, Video, Back, Toggle, Forward, Stop, AB, Loop, Seek, Volume, FileMark, MarkA, MarkB
 };
+
+// The shortest A–B section (seconds).
+constexpr double kMinSection = 0.2;
+// The section the A–B button sets around the current position (seconds).
+constexpr double kNewSection = 10;
 
 struct MediaLayout {
   SDL_Rect client{};
@@ -400,8 +405,10 @@ struct MediaLayout {
   int controls_h = 0;
   int pad = 0;
   int title_y = 0, info_y = 0, times_y = 0;  // text baselines
-  SDL_Rect seek{}, back{}, toggle{}, forward{}, stop{}, volume{};
+  SDL_Rect seek{}, back{}, toggle{}, forward{}, stop{}, ab{}, loop{}, volume{};
   SDL_Rect file_mark{};  // ribbon right of the title while bookmarked (w = 0: none)
+  // Tabs under the seek bar to drag the A / B markers by (w = 0: none).
+  SDL_Rect mark_a{}, mark_b{};
   int volume_label_x = 0, buttons_y = 0;
 };
 
@@ -421,6 +428,12 @@ MediaLayout media_layout(const App& app) {
   const int bar_h = std::max(10, lh * 2 / 3);
   L.seek = {cx + L.pad, y, std::max(10, cw - 2 * L.pad), bar_h};
   y += bar_h + 4;
+  // While the A–B markers are on, their tabs get a row under the bar.
+  const AudioPlayer& a = app.audio;
+  const bool tabs = a.ab && a.duration > 0 && a.state != AudioState::Idle &&
+                    a.state != AudioState::Loading && a.state != AudioState::Failed;
+  const int tab_w = std::max(12, lh), tab_h = std::max(12, lh);
+  if (tabs) y += tab_h;
   L.times_y = y + f.ascender();
   y += lh + L.pad;
   const int b = lh + 14;
@@ -431,12 +444,24 @@ MediaLayout media_layout(const App& app) {
     x += r->w + 6;
   }
   L.stop.x += 6;  // a little apart from the transport buttons
-  const int vx = L.stop.x + L.stop.w + 2 * L.pad;
+  L.ab = {L.stop.x + L.stop.w + 12, y,
+          std::max(b, const_cast<App&>(app).ui_font.measure("A-B") + 12), b};
+  L.loop = {L.ab.x + L.ab.w + 6, y, b, b};
+  const int vx = L.loop.x + L.loop.w + 2 * L.pad;
   L.volume_label_x = vx;
   const int label_w = lh * 2;
   const int vw = std::min(160, cx + cw - L.pad - (vx + label_w));
   L.volume = {vx + label_w, y + (b - bar_h) / 2, std::max(0, vw), bar_h};
   L.controls_h = y + b + L.pad - cy;
+  if (tabs) {
+    auto tab = [&](double t) {
+      const int x = L.seek.x + static_cast<int>(std::lround(
+                                   L.seek.w * std::clamp(t / a.duration, 0.0, 1.0)));
+      return SDL_Rect{x - tab_w / 2, L.seek.y + L.seek.h + 4, tab_w, tab_h - 2};
+    };
+    L.mark_a = tab(a.ab_a);
+    L.mark_b = tab(a.ab_b);
+  }
   if (!app.audio.file_mark.empty() && app.audio.state != AudioState::Idle) {
     const int rw = std::max(8, lh / 2), rh = std::max(12, lh * 4 / 5);
     L.file_mark = {cx + cw - L.pad - rw, L.title_y - f.ascender() + (lh - rh) / 2, rw, rh};
@@ -446,7 +471,8 @@ MediaLayout media_layout(const App& app) {
     const int vh = std::max(0, ch - L.controls_h);
     L.video = {cx, cy, cw, vh};
     for (SDL_Rect* r :
-         {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.volume, &L.file_mark})
+         {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.ab, &L.loop, &L.volume,
+          &L.file_mark, &L.mark_a, &L.mark_b})
       r->y += vh;
     L.title_y += vh;
     L.info_y += vh;
@@ -470,7 +496,21 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
   if (inside(L.toggle, x, y)) return MediaPart::Toggle;
   if (inside(L.forward, x, y)) return MediaPart::Forward;
   if (inside(L.stop, x, y)) return MediaPart::Stop;
+  if (inside(L.ab, x, y)) return MediaPart::AB;
+  if (inside(L.loop, x, y)) return MediaPart::Loop;
   if (inside(L.file_mark, x, y)) return MediaPart::FileMark;
+  // The marker tabs before the bar (its grown rect reaches them); when they
+  // overlap, the one whose centre is nearer.
+  {
+    const bool in_a = inside(L.mark_a, x, y), in_b = inside(L.mark_b, x, y);
+    if (in_a && in_b)
+      return std::abs(x - (L.mark_a.x + L.mark_a.w / 2)) <
+                     std::abs(x - (L.mark_b.x + L.mark_b.w / 2))
+                 ? MediaPart::MarkA
+                 : MediaPart::MarkB;
+    if (in_a) return MediaPart::MarkA;
+    if (in_b) return MediaPart::MarkB;
+  }
   if (inside(grow(L.seek), x, y)) return MediaPart::Seek;
   if (L.volume.w > 0 && inside(grow(L.volume), x, y)) return MediaPart::Volume;
   return MediaPart::None;
@@ -504,6 +544,33 @@ const AudioPlayer::Mark* mark_near(const AudioPlayer& a, const SDL_Rect& bar, in
   return best;
 }
 
+// The shortest bookmarked section (`#t=a,b`) over x on the seek bar.
+const AudioPlayer::Mark* section_at(const AudioPlayer& a, const SDL_Rect& bar, int x) {
+  if (!seekable(a)) return nullptr;
+  const AudioPlayer::Mark* best = nullptr;
+  for (const AudioPlayer::Mark& m : a.marks)
+    if (m.end > m.t && x >= seek_x(bar, m.t, a.duration) - 2 &&
+        x <= seek_x(bar, m.end, a.duration) + 2 && (!best || m.end - m.t < best->end - best->t))
+      best = &m;
+  return best;
+}
+
+// Sets the A–B markers to a section (on).
+void set_section(AudioPlayer& a, double from, double to) {
+  if (a.duration > 0) to = std::min(to, a.duration);
+  from = std::max(0.0, from);
+  if (to - from < kMinSection) to = from + kMinSection;
+  a.ab = true;
+  a.ab_a = from;
+  a.ab_b = to;
+  a.at_b = false;
+}
+
+// "0:10–0:20".
+std::string section_text(double from, double to) {
+  return xanatoo::format_audio_time(from) + "\xE2\x80\x93" + xanatoo::format_audio_time(to);
+}
+
 // A bookmark ribbon (as in the document margin): body, notch at the foot.
 void ribbon(App& app, const SDL_Rect& r, xanatoo::Rgba c, Uint8 alpha) {
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
@@ -534,7 +601,7 @@ void update_media_marks(App& app) {
     const xanatoo::MediaAddress m = xanatoo::split_media_address(b.address);
     if (!xanatoo::is_playable_url(m.base) || canonical_address(m.base) != self) continue;
     if (m.start)
-      a.marks.push_back({*m.start, b.address});
+      a.marks.push_back({*m.start, m.end ? *m.end : -1.0, b.address});
     else if (a.file_mark.empty())
       a.file_mark = b.address;
   }
@@ -555,12 +622,14 @@ void triangle(App& app, int x0, int y0, int s, int dir, xanatoo::theme::Rgb ink)
   }
 }
 
+// `playing`: the toggle shows pause; A–B and Loop are pressed in (on).
 void draw_button(App& app, const SDL_Rect& r, MediaPart part, bool hot, bool enabled,
                  bool playing) {
   namespace th = xanatoo::theme;
   const th::Palette& p = th::palette();
-  th::fill(app.sdl, r, hot && enabled ? p.face_light : p.face);
-  th::bevel(app.sdl, r, th::Bevel::Raised);
+  const bool down = playing && (part == MediaPart::AB || part == MediaPart::Loop);
+  th::fill(app.sdl, r, down ? p.accent_soft : hot && enabled ? p.face_light : p.face);
+  th::bevel(app.sdl, r, down ? th::Bevel::Sunken : th::Bevel::Raised);
   const th::Rgb ink = enabled ? p.text : p.text_dim;
   const int s = std::max(6, r.h * 2 / 5);
   const int cx = r.x + r.w / 2, y0 = r.y + (r.h - s) / 2;
@@ -585,8 +654,41 @@ void draw_button(App& app, const SDL_Rect& r, MediaPart part, bool hot, bool ena
       triangle(app, cx - s * 9 / 10, y0, s, 1, ink);
       triangle(app, cx, y0, s, 1, ink);
       break;
+    case MediaPart::AB: {
+      xanatoo::Font& f = app.ui_font;
+      const std::string label = "A-B";
+      app.renderer.draw_text(f, static_cast<float>(cx - f.measure(label) / 2),
+                             static_cast<float>(r.y + (r.h - f.line_height()) / 2 + f.ascender()),
+                             label, ink.r, ink.g, ink.b);
+      break;
+    }
+    case MediaPart::Loop: {
+      // A closed loop of two strokes with a gap top right, an arrow into it.
+      const int lw = s * 2, lh = s, t = std::max(2, s / 6);
+      const int x0 = cx - lw / 2, y1 = y0, x1 = x0 + lw, y2 = y1 + lh;
+      const int gap = x0 + lw / 2;
+      th::fill(app.sdl, {x0, y1, gap - x0, t}, ink);
+      th::fill(app.sdl, {x1 - t, y1 + t + 1, t, y2 - y1 - t - 1}, ink);
+      th::fill(app.sdl, {x0, y2 - t, lw, t}, ink);
+      th::fill(app.sdl, {x0, y1, t, lh}, ink);
+      const int ah = std::max(7, s * 2 / 3);
+      triangle(app, gap, y1 + t / 2 - ah / 2, ah, 1, ink);
+      break;
+    }
     default: break;
   }
+}
+
+// A marker's tab under the seek bar: a raised flag with its letter.
+void draw_marker_tab(App& app, const SDL_Rect& r, const char* letter, bool hot) {
+  namespace th = xanatoo::theme;
+  const th::Palette& p = th::palette();
+  th::fill(app.sdl, r, hot ? p.accent_soft : p.face_light);
+  th::bevel(app.sdl, r, th::Bevel::Raised);
+  xanatoo::Font& f = app.ui_font_bold;
+  app.renderer.draw_text(f, static_cast<float>(r.x + (r.w - f.measure(letter)) / 2 + 1),
+                         static_cast<float>(r.y + (r.h - f.line_height()) / 2 + f.ascender()),
+                         letter, p.text.r, p.text.g, p.text.b);
 }
 
 // The raised knob of a bar at `frac`.
@@ -622,6 +724,14 @@ void apply_drag(App& app, int x) {
     audio_seek(app, frac_in(L.seek, x) * a.duration);
   else if (a.drag == AudioPlayer::Drag::Volume)
     audio_set_volume(app, static_cast<float>(frac_in(L.volume, x)));
+  else if (a.drag == AudioPlayer::Drag::MarkA && a.ab && a.duration > 0)
+    a.ab_a = std::clamp(frac_in(L.seek, x) * a.duration, 0.0, std::max(0.0, a.ab_b - kMinSection));
+  else if (a.drag == AudioPlayer::Drag::MarkB && a.ab && a.duration > 0) {
+    a.ab_b = std::clamp(frac_in(L.seek, x) * a.duration, a.ab_a + kMinSection,
+                        std::max(a.ab_a + kMinSection, a.duration));
+    // Moved behind the playing position: the section ends there now.
+    if (audio_position(app) > a.ab_b) a.last_pos = a.ab_b - 0.001;
+  }
   a.drag_x = x;
 }
 
@@ -645,6 +755,7 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
   if (split.start && a.url == url && have_media(a) && a.state != AudioState::Failed) {
     if (a.visit) xanatoo::store_visit_leave(a.visit, xanatoo::now_epoch_ms());
     a.visit = 0;
+    if (split.end) set_section(a, *split.start, *split.end);
     audio_seek(app, *split.start);
     if (a.state != AudioState::Playing) audio_toggle(app);
     app.media_panel_open = true;
@@ -653,14 +764,19 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
   }
   if (split.start && a.url == url && a.state == AudioState::Loading) {
     a.start_at = *split.start;  // still opening: start there
+    if (split.end) set_section(a, *split.start, *split.end);
     return true;
   }
   close_player(a);
   const float volume = a.volume;
+  const bool loop = a.loop;
   a = {};
   a.volume = volume;
+  a.loop = loop;
   a.url = url;
   if (split.start) a.start_at = *split.start;
+  // `#t=a,b`: a section, played from A to B (Media Fragments).
+  if (split.end) set_section(a, *split.start, *split.end);
   a.title = name.empty() ? xanatoo::audio_name_of(url) : std::string(name);
   a.state = AudioState::Loading;
   const bool backend = xanatoo::media_backend_available();
@@ -746,9 +862,11 @@ void audio_toggle(App& app) {
       pause(true);
       break;
     case AudioState::Ended:
-      audio_seek(app, 0);
-      [[fallthrough]];
+      audio_seek(app, a.ab ? a.ab_a : 0);
+      pause(false);
+      break;
     case AudioState::Paused:
+      if (a.at_b && a.ab) audio_seek(app, a.ab_a);  // the section again
       pause(false);
       break;
     default: break;
@@ -758,8 +876,41 @@ void audio_toggle(App& app) {
 void audio_stop(App& app) {
   close_player(app.audio);
   const float volume = app.audio.volume;
+  const bool loop = app.audio.loop;
   app.audio = {};
   app.audio.volume = volume;
+  app.audio.loop = loop;
+}
+
+void audio_toggle_ab(App& app) {
+  AudioPlayer& a = app.audio;
+  if (a.ab) {
+    a.ab = false;
+    a.at_b = false;
+    return;
+  }
+  if (!seekable(a)) {
+    flash_status(app, "A-B markers need a file of known length");
+    return;
+  }
+  const double pos = audio_position(app);
+  const double span = std::min(kNewSection, a.duration);
+  double from = pos, to = pos + span;
+  if (to > a.duration) {
+    to = a.duration;
+    from = std::max(0.0, to - span);
+  }
+  set_section(a, from, to);
+  a.last_pos = pos;
+  flash_status(app, "A-B " + section_text(a.ab_a, a.ab_b) + ": drag A and B on the seek bar");
+}
+
+void audio_toggle_loop(App& app) {
+  AudioPlayer& a = app.audio;
+  a.loop = !a.loop;
+  flash_status(app, !a.loop ? std::string("Loop off")
+                    : a.ab  ? "Looping the section " + section_text(a.ab_a, a.ab_b)
+                            : std::string("Looping the whole file"));
 }
 
 void audio_set_volume(App& app, float volume) {
@@ -769,6 +920,8 @@ void audio_set_volume(App& app, float volume) {
 
 void audio_seek(App& app, double seconds) {
   AudioPlayer& a = app.audio;
+  a.at_b = false;
+  a.last_pos = seconds;  // a jump past B is not B reached
   if (a.media && have_media(a)) {
     xanatoo::media_seek(*a.media, seconds, now_s());
     if (a.play) xanatoo::sdl::flush_audio_out(a.play->out);
@@ -805,6 +958,26 @@ double audio_position(const App& app) {
   return static_cast<double>(s->pos.load(std::memory_order_relaxed)) / s->rate;
 }
 
+namespace {
+// While the A–B markers are on: playing across B goes back to A (loop) or
+// pauses there. Only a crossing counts, so a seek past B plays on.
+void follow_section(App& app) {
+  AudioPlayer& a = app.audio;
+  if (a.state != AudioState::Playing) return;
+  const double pos = audio_position(app);
+  const double last = std::exchange(a.last_pos, pos);
+  if (!a.ab || a.drag == AudioPlayer::Drag::Seek || last < 0 || last >= a.ab_b ||
+      pos < a.ab_b)
+    return;
+  if (a.loop) {
+    audio_seek(app, a.ab_a);
+  } else {
+    audio_toggle(app);  // pause
+    a.at_b = true;
+  }
+}
+}  // namespace
+
 void update_audio(App& app) {
   AudioPlayer& a = app.audio;
   update_media_marks(app);
@@ -836,25 +1009,40 @@ void update_audio(App& app) {
       }
       if (a.video_w > 0) show_frame(app);
       if (a.state == AudioState::Playing && xanatoo::media_finished(*a.media)) {
-        if (a.play) xanatoo::sdl::pause_audio_out(a.play->out, true);
-        xanatoo::media_set_paused(*a.media, true, now_s());
-        std::lock_guard lock(a.media->m);
-        if (a.media->failed) {
-          if (a.feed) a.feed->cancel.store(true);
-          a.state = AudioState::Failed;
-          a.error = a.media->error;
+        bool failed;
+        {
+          std::lock_guard lock(a.media->m);
+          failed = a.media->failed;
+        }
+        if (!failed && a.loop) {
+          audio_seek(app, a.ab ? a.ab_a : 0);  // round again, still playing
         } else {
-          a.state = AudioState::Ended;
+          if (a.play) xanatoo::sdl::pause_audio_out(a.play->out, true);
+          xanatoo::media_set_paused(*a.media, true, now_s());
+          std::lock_guard lock(a.media->m);
+          if (a.media->failed) {
+            if (a.feed) a.feed->cancel.store(true);
+            a.state = AudioState::Failed;
+            a.error = a.media->error;
+          } else {
+            a.state = AudioState::Ended;
+          }
         }
       }
+      follow_section(app);
     }
     return;
   }
   if (a.play && a.state == AudioState::Playing &&
       a.play->ended.load(std::memory_order_acquire)) {
-    xanatoo::sdl::pause_audio_out(a.play->out, true);
-    a.state = AudioState::Ended;
+    if (a.loop) {
+      audio_seek(app, a.ab ? a.ab_a : 0);  // the device keeps running
+    } else {
+      xanatoo::sdl::pause_audio_out(a.play->out, true);
+      a.state = AudioState::Ended;
+    }
   }
+  if (a.play) follow_section(app);
 }
 
 void shutdown_audio(App& app) { audio_stop(app); }
@@ -904,11 +1092,21 @@ void click_media_panel(App& app, int mx, int my) {
     case MediaPart::Video:
     case MediaPart::Toggle: audio_toggle(app); break;
     case MediaPart::Stop: audio_stop(app); break;
+    case MediaPart::AB: audio_toggle_ab(app); break;
+    case MediaPart::Loop: audio_toggle_loop(app); break;
+    case MediaPart::MarkA:
+    case MediaPart::MarkB:
+      a.drag = media_part_at(app, L, mx, my) == MediaPart::MarkA ? AudioPlayer::Drag::MarkA
+                                                                 : AudioPlayer::Drag::MarkB;
+      a.drag_x = mx;  // moves only once the pointer does
+      break;
     case MediaPart::Seek:
       if (have_media(a) && a.duration > 0) {
         a.drag = AudioPlayer::Drag::Seek;
-        // A press on a bookmark's line goes to exactly its position.
+        // A press on a bookmark's line goes to exactly its position; a
+        // section's also sets the A–B markers to it.
         if (const AudioPlayer::Mark* m = mark_near(a, L.seek, mx)) {
+          if (m->end > m->t) set_section(a, m->t, m->end);
           audio_seek(app, m->t);
           a.drag_x = mx;
         } else {
@@ -947,7 +1145,22 @@ bool right_click_media_panel(App& app, int mx, int my) {
   if (menu.mark.empty()) {
     const std::string at = xanatoo::media_time_address("", menu.t);
     for (const AudioPlayer::Mark& m : a.marks)
-      if (xanatoo::media_time_address("", m.t) == at) menu.mark = m.address;
+      if (m.end < 0 && xanatoo::media_time_address("", m.t) == at) menu.mark = m.address;
+  }
+  // The section: a bookmarked one under the pointer, else the markers.
+  const MediaPart part = media_part_at(app, L, mx, my);
+  const AudioPlayer::Mark* sec = part == MediaPart::Seek ? section_at(a, L.seek, mx) : nullptr;
+  if (sec) {
+    menu.sec_a = sec->t;
+    menu.sec_b = sec->end;
+    menu.sec_mark = sec->address;
+  } else if (a.ab && seekable(a)) {
+    menu.sec_a = a.ab_a;
+    menu.sec_b = a.ab_b;
+    const std::string at = xanatoo::media_range_address("", a.ab_a, a.ab_b);
+    for (const AudioPlayer::Mark& m : a.marks)
+      if (m.end > m.t && xanatoo::media_range_address("", m.t, m.end) == at)
+        menu.sec_mark = m.address;
   }
   app.ui.open_media_menu(static_cast<float>(mx), static_cast<float>(my));
   return true;
@@ -956,6 +1169,7 @@ bool right_click_media_panel(App& app, int mx, int my) {
 std::string canonical_media_address(std::string_view address) {
   const xanatoo::MediaAddress m = xanatoo::split_media_address(address);
   const std::string base = canonical_address(m.base);
+  if (m.start && m.end) return xanatoo::media_range_address(base, *m.start, *m.end);
   return m.start ? xanatoo::media_time_address(base, *m.start) : base;
 }
 
@@ -988,6 +1202,31 @@ void media_action(App& app, const std::string& action) {
   } else if (action == "copy-time") {
     SDL_SetClipboardText(at.c_str());
     flash_status(app, "Copied " + at);
+  } else if (action == "set-a" || action == "set-b") {
+    if (!seekable(a)) return;
+    const double t = std::clamp(menu.t, 0.0, a.duration);
+    if (action == "set-a")
+      set_section(a, t, a.ab && a.ab_b > t + kMinSection ? a.ab_b : t + kNewSection);
+    else
+      set_section(a, a.ab && a.ab_a < t - kMinSection ? a.ab_a : std::max(0.0, t - kNewSection), t);
+    if (audio_position(app) > a.ab_b) a.last_pos = a.ab_b - 0.001;  // ends there now
+  } else if (menu.sec_b > menu.sec_a) {
+    const std::string sec = xanatoo::media_range_address(file, menu.sec_a, menu.sec_b);
+    if (action == "bookmark-section") {
+      xanatoo::Bookmark b;
+      b.address = sec;
+      b.title = a.title + " " + section_text(menu.sec_a, menu.sec_b);
+      b.created = today();
+      add_bookmark(app, std::move(b));
+    } else if (action == "unbookmark-section") {
+      remove_bookmark(app, menu.sec_mark.empty() ? sec : menu.sec_mark);
+    } else if (action == "copy-section") {
+      SDL_SetClipboardText(sec.c_str());
+      flash_status(app, "Copied " + sec);
+    } else if (action == "use-section" && seekable(a)) {
+      set_section(a, menu.sec_a, menu.sec_b);
+      audio_seek(app, a.ab_a);
+    }
   }
 }
 
@@ -1005,9 +1244,21 @@ std::string media_panel_hover(const App& app, int mx, int my) {
              : a.state == AudioState::Failed ? "Try again"
                                               : "Play";
     case MediaPart::Stop: return "Stop";
+    case MediaPart::AB:
+      return a.ab ? "A-B markers on, " + section_text(a.ab_a, a.ab_b) + " (click: off)"
+                  : std::string("A-B markers: mark a section to loop, bookmark or copy");
+    case MediaPart::Loop:
+      return std::string(a.loop ? "Loop on: " : "Loop: ") +
+             (a.ab ? "the section " + section_text(a.ab_a, a.ab_b) : std::string("the whole file")) +
+             (a.loop ? " (click: off)" : "");
+    case MediaPart::MarkA:
+      return "A at " + xanatoo::format_audio_time(a.ab_a) + " (drag to move)";
+    case MediaPart::MarkB:
+      return "B at " + xanatoo::format_audio_time(a.ab_b) + " (drag to move)";
     case MediaPart::Seek:
       if (const AudioPlayer::Mark* m = mark_near(a, L.seek, mx))
-        return "Bookmark at " + xanatoo::format_audio_time(m->t) +
+        return (m->end > m->t ? "Bookmarked section " + section_text(m->t, m->end)
+                              : "Bookmark at " + xanatoo::format_audio_time(m->t)) +
                " (right-click: bookmark menu)";
       if (have_media(a) && a.duration > 0)
         return "Go to " + xanatoo::format_audio_time(frac_in(L.seek, mx) * a.duration) +
@@ -1114,7 +1365,27 @@ void draw_media_panel(App& app) {
       const int x = std::min(seek_x(L.seek, m.t, a.duration), L.seek.x + L.seek.w - 2);
       const SDL_Rect line{x - 1, L.seek.y - 2, 2, L.seek.h + 4};
       xanatoo::sdl::fill_rect(app.sdl, &line);
+      if (m.end > m.t) {  // a section: a strip along the top of the bar
+        const int x2 = seek_x(L.seek, m.end, a.duration);
+        const SDL_Rect strip{x, L.seek.y - 2, std::max(1, x2 - x), 3};
+        xanatoo::sdl::fill_rect(app.sdl, &strip);
+      }
     }
+  }
+  // The A–B section: shaded on the bar, a line at each end.
+  if (L.mark_a.w > 0) {
+    const int xa = seek_x(L.seek, a.ab_a, a.duration), xb = seek_x(L.seek, a.ab_b, a.duration);
+    SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(app.sdl, p.accent.r, p.accent.g, p.accent.b, 80);
+    const SDL_Rect span{xa, L.seek.y, std::max(1, xb - xa), L.seek.h};
+    xanatoo::sdl::fill_rect(app.sdl, &span);
+    // A bracket under the bar from A to B, down into the tabs.
+    const int by = L.seek.y + L.seek.h + 1;
+    th::fill(app.sdl, {xa, by, std::max(1, xb - xa), 2}, p.text);
+    for (const int x : {xa, xb})
+      th::fill(app.sdl, {std::min(x, L.seek.x + L.seek.w - 2) - 1, L.seek.y - 2, 2,
+                         L.mark_a.y - L.seek.y + 2},
+               p.text);
   }
   if (have_media(a) && a.duration > 0) draw_knob(app, L.seek, frac);
   if (have_media(a)) {
@@ -1127,10 +1398,17 @@ void draw_media_panel(App& app) {
                            static_cast<float>(L.times_y), right, p.text_dim.r,
                            p.text_dim.g, p.text_dim.b);
   }
-
-  // Buttons and volume.
+  // Marker tabs over the times (B first: A stays on top when they meet).
   const MediaPart hot = media_part_at(app, L, static_cast<int>(app.mouse_x),
                                       static_cast<int>(app.mouse_y));
+  if (L.mark_a.w > 0) {
+    draw_marker_tab(app, L.mark_b, "B",
+                    hot == MediaPart::MarkB || a.drag == AudioPlayer::Drag::MarkB);
+    draw_marker_tab(app, L.mark_a, "A",
+                    hot == MediaPart::MarkA || a.drag == AudioPlayer::Drag::MarkA);
+  }
+
+  // Buttons and volume.
   const bool have = have_media(a);
   draw_button(app, L.back, MediaPart::Back, hot == MediaPart::Back, have, false);
   draw_button(app, L.toggle, MediaPart::Toggle, hot == MediaPart::Toggle,
@@ -1138,6 +1416,8 @@ void draw_media_panel(App& app) {
   draw_button(app, L.forward, MediaPart::Forward, hot == MediaPart::Forward, have, false);
   draw_button(app, L.stop, MediaPart::Stop, hot == MediaPart::Stop,
               a.state != AudioState::Idle, false);
+  draw_button(app, L.ab, MediaPart::AB, hot == MediaPart::AB, seekable(a), a.ab);
+  draw_button(app, L.loop, MediaPart::Loop, hot == MediaPart::Loop, true, a.loop);
   if (L.volume.w > 0) {
     const int ty = L.buttons_y + (L.back.h - app.ui_font.line_height()) / 2 +
                    app.ui_font.ascender();

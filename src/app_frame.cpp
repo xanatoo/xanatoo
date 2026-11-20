@@ -222,6 +222,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.searchbar = app.search.open;
   ui_state.audio = app.audio.state != AudioState::Idle;
   ui_state.audio_playing = app.audio.state == AudioState::Playing;
+  ui_state.audio_ab = app.audio.ab;
+  ui_state.audio_loop = app.audio.loop;
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
@@ -460,6 +462,17 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     mm.file_bookmarked = !app.audio.file_mark.empty();
     mm.seekable = app.audio.duration > 0 && app.audio.state != AudioState::Loading &&
                   app.audio.state != AudioState::Failed;
+    mm.ab = app.audio.ab;
+    mm.loop = app.audio.loop;
+    const MediaMenu& m = app.media_menu;
+    if (m.sec_b > m.sec_a) {
+      mm.section = xanatoo::format_audio_time(m.sec_a) + "\xE2\x80\x93" +
+                   xanatoo::format_audio_time(m.sec_b);
+      mm.section_bookmarked = !m.sec_mark.empty();
+      mm.section_selected = app.audio.ab &&
+                            xanatoo::media_range_address("", m.sec_a, m.sec_b) ==
+                                xanatoo::media_range_address("", app.audio.ab_a, app.audio.ab_b);
+    }
   }
   ui_state.download_menu = {};
   if (const auto& d = app.download_menu) {
@@ -2481,6 +2494,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::AudioSkip:
       audio_skip(app, std::atof(arg.c_str()));
+      break;
+    case C::AudioAB:
+      audio_toggle_ab(app);
+      break;
+    case C::AudioLoop:
+      audio_toggle_loop(app);
       break;
     case C::FocusSearchBar:
       show_search_bar(app);
