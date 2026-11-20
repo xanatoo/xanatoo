@@ -232,8 +232,11 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   out under the image; the loading placeholder shows it, and hovering a
   block image shows it as the tooltip (`image_alt_tooltip`, app_frame.cpp).
 - A non-floating Figure with an image child is a column as wide as its
-  image (at least 14 em for the caption, at most the 60% column), centred;
-  the image starts flush with the caption (`in_figure_column_`).
+  image (at least 14 em for the caption, at most the 60% column), centred.
+  The figure role's `align` (default `center`) places the image and the
+  caption lines in that column (`figure_centered`, `center_lines_` in
+  `layout_paragraph`); `(align start)` puts both flush left. Floating
+  figures and other captions are not affected.
 - Consecutive such sibling figures — and plain block images, which follow
   the same rules without the caption measure — share a row
   (`figure_row` / `layout_figure_row`) when their

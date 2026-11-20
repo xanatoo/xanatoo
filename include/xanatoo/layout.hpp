@@ -393,6 +393,9 @@ private:
   MarginArea margins_[2];  // [0] left, [1] right
   bool in_image_float_ = false;
   bool in_figure_column_ = false;  // children of a block figure (figure_row)
+  bool center_lines_ = false;      // layout_paragraph centres each line
+  // In a figure column: does the figure style centre its content?
+  bool figure_centered() const;
   bool in_figure_float_ = false;
   bool in_table_float_ = false;
   int in_margin_ = 0;      // > 0 while laying out a margin box

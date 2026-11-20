@@ -71,7 +71,7 @@ keeps the rest:
   `background`, `border` and `underline`.
 - *Fonts*: the whole `(fonts …)` form (families, weight, scales) and every
   role's `font`.
-- Everything else (spacing, indent, width, side, placement) always comes
+- Everything else (spacing, indent, width, side, placement, align) always comes
   from the applied sheet.
 
 The lending sheet counts as a whole look, built-in default and `inherit`s
@@ -225,6 +225,7 @@ Their properties:
 | `width` | preferred width of a side box (`aside`) or floating `table` |
 | `side` | `left`, `right` or `none`: which side of the page a side box goes to |
 | `placement` | `margin`, `float` or `flow`: where a side box goes (below) |
+| `align` | `start` or `center`: line alignment; on `figure` it places the image and the caption lines in the figure's column (default `center`) |
 
 Side boxes are `aside` (text boxes of the document: `:::aside`, HTML
 `<aside>` inside the article). Navigation and side bars of web pages are not

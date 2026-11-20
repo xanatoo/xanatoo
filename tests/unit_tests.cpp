@@ -2369,7 +2369,7 @@ void test_style_sheets_shipped() {
            a.border == b.border && a.background == b.background &&
            a.width.px(17.f) == b.width.px(17.f) &&
            a.side == b.side && a.placement == b.placement &&
-           a.has_color == b.has_color &&
+           a.align == b.align && a.has_color == b.has_color &&
            (!a.has_color || a.color == b.color));
   }
   EXPECT(def.metadata.has_color == builtin.metadata.has_color);
@@ -2419,7 +2419,7 @@ constexpr size_t aggregate_fields() {
 void test_style_choice_mix() {
   using namespace xanatoo;
   // copy_style_group names every field; a new one must join a group there.
-  static_assert(aggregate_fields<BlockStyle>() == 11,
+  static_assert(aggregate_fields<BlockStyle>() == 12,
                 "new BlockStyle field: add it to copy_style_group");
   static_assert(aggregate_fields<InlineStyle>() == 6,
                 "new InlineStyle field: add it to copy_style_group");
@@ -2612,6 +2612,16 @@ void test_layout_figure_rows() {
     const float left = bc->x, right = width - (bc->x + bc->width);
     EXPECT(std::fabs(left - right) < 40.f);    // centred (page margins aside)
     EXPECT(bc->width < width * 0.7f);
+    // The figure style centres its caption lines in the column.
+    const NodeId cap = doc.get(c).children[1];
+    float g0 = 1e9f, g1 = -1e9f;
+    for (const PositionedGlyph& g : lr.glyphs) {
+      if (g.node != cap) continue;
+      g0 = std::min(g0, g.x);
+      g1 = std::max(g1, g.x + g.advance);
+    }
+    EXPECT(g1 > g0);
+    EXPECT(std::fabs((g0 - bc->x) - (bc->x + bc->width - g1)) < 12.f);
   }
 
   // Plain block images share rows the same way; one alone does not.

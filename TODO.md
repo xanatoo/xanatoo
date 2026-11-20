@@ -47,8 +47,9 @@
 - Hovering a block image shows its alt text as the tooltip (plus the link
   of a linked image). Consecutive plain block images share rows like
   figures.
-- Known: no caption centring (no text-align style property yet; the
-  caption role also styles non-figure captions such as HN metadata).
+- Style property `align` (`start` / `center`); `(role figure (align
+  center))` by default centres a block figure's image and caption lines.
+  Only figure columns use it so far.
 - Markdown list items now take their continuation lines (indented or
   lazy), so inline markup can span the break (examples/welcome.md
   "the **Native view** button"); `test_markup_list_continuation`.

@@ -375,6 +375,11 @@ class SheetReader {
         else if (pl == "float") b.placement = Placement::Float;
         else if (pl == "flow") b.placement = Placement::Flow;
         else warn("placement is margin, float or flow");
+      } else if (prop == "align") {
+        const std::string a = sexpr_text(value(v));
+        if (a == "center") b.align = TextAlign::Center;
+        else if (a == "start") b.align = TextAlign::Start;
+        else warn("align is start or center");
       } else if (prop == "font") {
         const std::string s = sexpr_text(value(v));
         auto it = std::find_if(std::begin(kFontRoles), std::end(kFontRoles),
@@ -534,6 +539,7 @@ DocStyle builtin_style() {
   blk(BlockRole::Definition).indent = px(20);
   blk(BlockRole::Definition).space_after = px(10);
   blk(BlockRole::Figure).space_after = px(10);
+  blk(BlockRole::Figure).align = TextAlign::Center;
   blk(BlockRole::Caption).space_after = px(6);
   blk(BlockRole::Caption).font = FontRole::BodyItalic;
   blk(BlockRole::BiblioEntry).indent = px(16);
@@ -784,6 +790,7 @@ void copy_style_group(DocStyle& dst, const DocStyle& src, unsigned groups) {
       d.width = s.width;
       d.side = s.side;
       d.placement = s.placement;
+      d.align = s.align;
     }
   }
   auto inl = [groups](InlineStyle& d, const InlineStyle& s) {

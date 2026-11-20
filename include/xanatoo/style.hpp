@@ -78,6 +78,8 @@ enum class FloatSide : uint8_t { None, Left, Right };
 // (HTML compatibility), or in the flow at full width. Margin and float fall
 // back to the flow when there is no room.
 enum class Placement : uint8_t { Flow, Float, Margin };
+// Horizontal alignment of a block's lines (figure: its image and caption).
+enum class TextAlign : uint8_t { Start, Center };
 
 struct BlockStyle {
   Length space_before;
@@ -94,6 +96,8 @@ struct BlockStyle {
   Length width;
   FloatSide side = FloatSide::None;
   Placement placement = Placement::Flow;
+  // Line alignment; for `figure` the image and caption in its column.
+  TextAlign align = TextAlign::Start;
 };
 
 struct InlineStyle {

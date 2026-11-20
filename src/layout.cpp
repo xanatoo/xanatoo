@@ -626,6 +626,10 @@ std::vector<LayoutEngine::FigureSlot> LayoutEngine::figure_row(
   return fit(items);
 }
 
+bool LayoutEngine::figure_centered() const {
+  return style_ && (*style_)[BlockRole::Figure].align == TextAlign::Center;
+}
+
 bool LayoutEngine::layout_figure_row(const Document& doc, NodeId id, float x,
                                      float& y, float max_width,
                                      LayoutResult& out) {
@@ -1747,8 +1751,11 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       y += before(BlockRole::Caption);
       float start_y = y;
       const float pad = 4.f + indent(BlockRole::Caption);
+      const bool was_centered = center_lines_;
+      center_lines_ = in_figure_column_ && figure_centered();
       layout_role_text(doc, node, BlockRole::Caption, x + pad, y,
                        max_width - pad * 2.f, out);
+      center_lines_ = was_centered;
       y += after(BlockRole::Caption);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
@@ -2196,8 +2203,8 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         x += (max_width - cw) * 0.5f;
         max_width = cw;
       }
-      // In a figure the image starts flush with its caption.
-      const bool center = !in_figure_column_;
+      // In a figure: per the figure style (else flush with its caption).
+      const bool center = !in_figure_column_ || figure_centered();
       if (is_remote_image(node.src)) {
         layout_remote_image(doc, node, x, y, max_width, out, center);
         break;
@@ -3171,7 +3178,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
     float gap_extra = 0.f;
     const bool can_justify =
-        options_.justify && !last_or_hard && gaps > 0 &&
+        options_.justify && !center_lines_ && !last_or_hard && gaps > 0 &&
         base_role != FontRole::Code && base_role != FontRole::SmallCode &&
         base_role != FontRole::Heading;
     if (can_justify) {
@@ -3184,6 +3191,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     }
 
     float lx = lx0;
+    if (center_lines_ && natural < lw) lx += (lw - natural) * 0.5f;
     // A display formula alone on its line is centred.
     if (content_hi == lo + 1 && atom_of(chars[lo]) &&
         atom_of(chars[lo])->display && natural < lw)

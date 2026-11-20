@@ -39,7 +39,7 @@
                     (background (rgba 245 240 230 210)) (border "#d2c8b4"))
   (role term        (space-after 2))
   (role definition  (indent 20) (space-after 10))
-  (role figure      (space-after 10))
+  (role figure      (space-after 10) (align center))
   (role caption     (font italic) (space-after 6))
   (role bibliography-entry (indent 16) (space-after 8))
   (role footnote    (indent 24) (space-after 8) (font small) (color "#585650")
