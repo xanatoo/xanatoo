@@ -719,9 +719,17 @@ static void mouse_middle_down(App& app, SDL_Event& ev, bool imgui_mouse) {
       const float mx = static_cast<float>(mxw);
       const int pi = pane_at(app, mx, static_cast<float>(myw));
       Pane& lp = app.panes[pi];
-      if (auto href = xanatoo::hit_test_link(
-              doc_of(app, lp), lp.layout, local_x(app, mx, pi),
-              content_y(app, static_cast<float>(myw), pi), lp.scroll_y)) {
+      const float lx = local_x(app, mx, pi);
+      const float my = content_y(app, static_cast<float>(myw), pi);
+      // The footnote strip covers the page: its links, and no paste under it.
+      if (in_footnote_overlay(app, pi, lx, my)) {
+        if (auto hit = footnote_overlay_link(app, pi, lx, my);
+            hit && !hit->href.empty())
+          open_link_in_tab(app, pi, hit->href);
+        return;
+      }
+      if (auto href = xanatoo::hit_test_link(doc_of(app, lp), lp.layout, lx,
+                                             my, lp.scroll_y)) {
         open_link_in_tab(app, pi, *href);
         return;
       }
@@ -802,10 +810,15 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
       app.context_link.clear();
       app.context_link_href.clear();
       app.context_link_web = false;
-      if (auto hit = xanatoo::hit_test_link_ex(doc_of(app, p), p.layout, lx,
-                                               my, p.scroll_y);
+      // A link in the footnote strip, else on the page.
+      const bool in_strip = in_footnote_overlay(app, app.focus, lx, my);
+      if (auto hit = in_strip ? footnote_overlay_link(app, app.focus, lx, my)
+                              : xanatoo::hit_test_link_ex(doc_of(app, p),
+                                                          p.layout, lx, my,
+                                                          p.scroll_y);
           hit && !hit->href.empty() &&
-          doc_of(app, p).get(hit->node).kind != xanatoo::NodeKind::Stretch) {
+          (in_strip ||
+           doc_of(app, p).get(hit->node).kind != xanatoo::NodeKind::Stretch)) {
         const LinkTarget t = resolve_link(app, app.focus, hit->href);
         app.context_link_href = hit->href;
         if (t.kind == LinkKind::Remote || t.kind == LinkKind::External) {
@@ -825,6 +838,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
       // Nostr and any other document with semantic Message nodes.
       const float doc_y = my + p.scroll_y;
       for (const auto& card : p.layout.message_cards) {
+        if (in_strip) break;  // the page under the strip is not targeted
         const auto& box = card.box;
         if (lx < box.x || lx > box.x + box.width || doc_y < box.y ||
             doc_y > box.y + box.height) continue;
@@ -841,17 +855,21 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         }
         break;
       }
-      collect_context_quotes(app, p,
-                             xanatoo::hit_test(p.layout, lx, my, p.scroll_y));
+      collect_context_quotes(
+          app, p,
+          in_strip ? std::nullopt
+                   : xanatoo::hit_test(p.layout, lx, my, p.scroll_y));
       // A bookmark's margin icon has a menu of its own.
-      if (const AnnotationMark* note = annotation_icon_at(app, p, lx, my)) {
+      if (const AnnotationMark* note =
+              in_strip ? nullptr : annotation_icon_at(app, p, lx, my)) {
         const std::string id = note->annotation_id;
         app.selected_annotation_id = id;
         app.annotation_panel_open = true;
         select_annotation(app, app.focus, id);
         return;
       }
-      if (const BookmarkMark* bm = bookmark_icon_at(app, p, lx, my)) {
+      if (const BookmarkMark* bm =
+              in_strip ? nullptr : bookmark_icon_at(app, p, lx, my)) {
         app.bookmark_menu = bm->address;
         app.ui.open_bookmark_menu(static_cast<float>(rx),
                                   static_cast<float>(ry));
@@ -871,13 +889,16 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
           }
         }
       }
-      if (!keep_selection) {
+      if (!keep_selection && !in_strip) {
         if (auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y)) {
           p.sel.focus = *hit;
           if (!(SDL_GetModState() & KMOD_SHIFT)) p.sel.anchor = p.sel.focus;
         }
       }
-      note_collection_target(app, app.focus, lx, my);
+      if (in_strip)
+        app.collection_target = xanatoo::INVALID_NODE;
+      else
+        note_collection_target(app, app.focus, lx, my);
       app.ui.open_context_menu(static_cast<float>(rx),
                                static_cast<float>(ry));
     }
@@ -1122,6 +1143,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       app.hover.rel.clear();
       app.hover.is_cite = false;
       app.hover.preview.clear();
+      app.hover.link_in_footnotes = false;
       app.hover.link_node = xanatoo::INVALID_NODE;
       app.hover.link_span = 0;
       app.hover.link_auto = 0;
@@ -1143,11 +1165,14 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       app.hover.transclude_src.clear();
       app.hover.bookmark.clear();
       app.hover.bookmark_pane = -1;
-      app.hover.quote = quote_icon_at(app, hp, lx, my);
+      // The footnote strip covers the page: nothing of the page under it
+      // is hovered, only the strip's own links.
+      const bool in_strip = in_footnote_overlay(app, hover_pane, lx, my);
+      app.hover.quote = in_strip ? -1 : quote_icon_at(app, hp, lx, my);
       app.hover.quote_pane = app.hover.quote >= 0 ? hover_pane : -1;
       // Also treat the pointer over quoted text (or its source underline) as
       // a quote hover so the Context panel can follow without the margin arrow.
-      if (app.hover.quote < 0) {
+      if (app.hover.quote < 0 && !in_strip) {
         if (auto hit = xanatoo::hit_test(hp.layout, lx, my, hp.scroll_y)) {
           DocBuffer* qb = find_buf(app, hp.buf);
           if (qb && !hp.source_doc && hp.layout_buf == hp.buf) {
@@ -1170,18 +1195,21 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
       app.hover.annotation.clear();
       app.hover.annotation_pane = -1;
-      app.hover.chrome_notice = on_chrome_notice(hp, lx, my);
-      if (const BookmarkMark* bm = bookmark_icon_at(app, hp, lx, my)) {
+      app.hover.chrome_notice = !in_strip && on_chrome_notice(hp, lx, my);
+      if (const BookmarkMark* bm =
+              in_strip ? nullptr : bookmark_icon_at(app, hp, lx, my)) {
         app.hover.bookmark = bm->address;
         app.hover.bookmark_pane = hover_pane;
       }
-      if (const AnnotationMark* note = annotation_icon_at(app, hp, lx, my)) {
+      if (const AnnotationMark* note =
+              in_strip ? nullptr : annotation_icon_at(app, hp, lx, my)) {
         app.hover.annotation = note->annotation_id;
         app.hover.annotation_pane = hover_pane;
       }
 
       // Column gutters
       for (const auto& gap : hp.layout.column_gaps) {
+        if (in_strip) break;
         float gx = gap.x;
         float gy0 = gap.y - hp.scroll_y;
         float gy1 = gy0 + gap.height;
@@ -1193,7 +1221,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Image body / resize handle (bottom-right 12px)
-      if (!app.hover.col_gap) {
+      if (!app.hover.col_gap && !in_strip) {
         for (const auto& pi : hp.layout.images) {
           float ix0 = pi.x, iy0 = pi.y - hp.scroll_y;
           float ix1 = ix0 + pi.width, iy1 = iy0 + pi.height;
@@ -1227,7 +1255,8 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Stretch marker (collapsed line or expanded header)
-      if (!app.hover.col_gap && app.hover.image == xanatoo::INVALID_NODE) {
+      if (!app.hover.col_gap && !in_strip &&
+          app.hover.image == xanatoo::INVALID_NODE) {
         if (auto sid =
                 xanatoo::hit_test_stretch(hp.layout, lx, my, hp.scroll_y)) {
           if (hd.get(*sid).kind == xanatoo::NodeKind::Stretch) {
@@ -1238,8 +1267,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Links / cites (skip stretch-marker glyphs — those are stretch)
-      // The footnote strip covers the page: its links come first.
-      if (in_footnote_overlay(app, hover_pane, lx, my)) {
+      if (in_strip) {
         if (auto hit = footnote_overlay_link(app, hover_pane, lx, my);
             hit && !hit->href.empty()) {
           app.hover.href = hit->href;
@@ -1282,7 +1310,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Task checkbox column (left ~26px of a ListItem)
-      if (!app.hover.col_gap && app.hover.stretch == xanatoo::INVALID_NODE &&
+      if (!in_strip && !app.hover.col_gap && app.hover.stretch == xanatoo::INVALID_NODE &&
           app.hover.image == xanatoo::INVALID_NODE &&
           app.hover.link_node == xanatoo::INVALID_NODE) {
         float adj_y = my + hp.scroll_y;
@@ -1300,7 +1328,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Block drag grip (gutter left of the block text)
-      if (app.hover.bookmark.empty() && !app.hover.col_gap &&
+      if (!in_strip && app.hover.bookmark.empty() && !app.hover.col_gap &&
           app.hover.task == xanatoo::INVALID_NODE &&
           app.hover.stretch == xanatoo::INVALID_NODE &&
           app.hover.link_node == xanatoo::INVALID_NODE &&
@@ -1322,7 +1350,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       }
 
       // Transclude / include region
-      if (!app.hover.col_gap && app.hover.task == xanatoo::INVALID_NODE &&
+      if (!in_strip && !app.hover.col_gap && app.hover.task == xanatoo::INVALID_NODE &&
           app.hover.grip == xanatoo::INVALID_NODE &&
           app.hover.stretch == xanatoo::INVALID_NODE &&
           app.hover.link_node == xanatoo::INVALID_NODE &&

@@ -11,6 +11,11 @@
   underline, a press follows the link exactly as on the page (link-follow
   code factored into `follow_link_hit`); unresolved anchors fall back to
   jumping to the note.
+- Middle-click opens a strip link in a new tab, right-click gives the link
+  menu (Copy Link Address, …). The page under the strip no longer reacts
+  there (quote / task / grip / image / bookmark hovers, caret move, reply
+  card, middle-click paste). Fixed a stale `link_in_footnotes` that hid
+  page link highlights after hovering a strip link.
 
 ## Status (2026-11-20) — Hovered footnote mark highlights its note
 
