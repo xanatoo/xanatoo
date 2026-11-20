@@ -210,7 +210,9 @@ they never overlap a panel's or a pane's scrollbar. A panel docked against the
 window's right edge (`float_flush_right`) runs its scrollbar out to that edge
 (Fitts' law): native ones via `client_scrollbar_rect` (shared by
 `draw_client_scrollbar`, `press_client` and touch), ImGui bodies via
-`imgui_panel_rect`. Max overlays the client area; every
+`imgui_panel_rect`. Native panel thumbs come from `theme::vscroll_thumb`
+for both paint and drag: a press grabs the thumb where it was hit
+(`FloatWindow::scroll_grab`); off the thumb it first centres it there. Max overlays the client area; every
 frame has the close box at the title's left edge and the maximize /
 restore box at its right edge, the shade box just left of it
 (`title_close_zone` / `title_max_zone` / `title_shade_zone`). Shade

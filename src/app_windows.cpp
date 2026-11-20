@@ -222,14 +222,33 @@ void begin_drag(FloatWindow& w, int mx, int my) {
   w.press_y = my;
 }
 
-// Jump the scroll offset to the click position on the scrollbar strip.
-void begin_scroll_drag(App& app, FloatWindow& w, int my) {
-  auto [cx, cy, cw, ch] = float_client_rect(app, w);
+// Scroll offset that puts the thumb's top at `top` (screen y).
+static float scroll_for_thumb_top(App& app, const FloatWindow& w, float top) {
+  const SDL_Rect sb = client_scrollbar_rect(app, w);
   const float max_s = float_max_scroll(app, w);
-  const float view_h = static_cast<float>(std::max(1, ch));
-  float ratio = static_cast<float>(my - cy) / view_h;
-  ratio = std::max(0.f, std::min(1.f, ratio));
-  w.scroll = ratio * max_s;
+  float track = 0.f;
+  xanatoo::theme::vscroll_thumb(sb, w.scroll, max_s,
+                                static_cast<float>(sb.h), &track);
+  if (track <= 0.f) return 0.f;
+  const float t = (top - static_cast<float>(sb.y + 1)) / track;
+  return std::clamp(t, 0.f, 1.f) * max_s;
+}
+
+// Press on the scrollbar strip: the thumb is grabbed where it was hit; a
+// press off the thumb first centres it under the pointer, then grabs it.
+// Uses the thumb draw_client_scrollbar paints.
+void begin_scroll_drag(App& app, FloatWindow& w, int my) {
+  const SDL_Rect sb = client_scrollbar_rect(app, w);
+  const float max_s = float_max_scroll(app, w);
+  SDL_Rect thumb = xanatoo::theme::vscroll_thumb(sb, w.scroll, max_s,
+                                                 static_cast<float>(sb.h));
+  if (my < thumb.y || my >= thumb.y + thumb.h) {
+    w.scroll = scroll_for_thumb_top(
+        app, w, static_cast<float>(my) - static_cast<float>(thumb.h) * 0.5f);
+    thumb = xanatoo::theme::vscroll_thumb(sb, w.scroll, max_s,
+                                          static_cast<float>(sb.h));
+  }
+  w.scroll_grab = static_cast<float>(my - thumb.y);
   w.scroll_dragging = true;
 }
 
@@ -752,11 +771,8 @@ bool float_motion(App& app, int mx, int my) {
       return true;
     }
     if (w->scroll_dragging) {
-      auto [cx, cy, cw, ch] = float_client_rect(app, *w);
-      const float view_h = static_cast<float>(std::max(1, ch));
-      float ratio = (static_cast<float>(my) - static_cast<float>(cy)) / view_h;
-      ratio = std::max(0.f, std::min(1.f, ratio));
-      w->scroll = ratio * float_max_scroll(app, *w);
+      w->scroll = scroll_for_thumb_top(
+          app, *w, static_cast<float>(my) - w->scroll_grab);
       return true;
     }
     if (w->resize) {

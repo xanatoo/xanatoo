@@ -451,6 +451,7 @@ struct FloatWindow {
   int resize_start_wx = 0, resize_start_wy = 0;  // window origin then
   float scroll = 0.f;  // panel roles; a document view scrolls its Pane
   bool scroll_dragging = false;
+  float scroll_grab = 0.f;  // pointer y minus thumb top while dragging
 };
 
 // Docked to a side column or a band (not free, not maximized).

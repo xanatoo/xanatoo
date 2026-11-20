@@ -110,6 +110,11 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w);
 // Classic vertical scrollbar (trough + bevelled thumb). `value`/`range` are
 // content-space; returns thumb rect through `thumb_out` when not null.
 // `hover`: the pointer is over the bar; `pressed`: its thumb is held.
+// The thumb rect draw_vscrollbar paints, for pointer hit-tests and drags.
+// `track_out`: the distance the thumb's top travels (0 when it cannot move).
+SDL_Rect vscroll_thumb(const SDL_Rect& trough, float scroll, float max_scroll,
+                       float view_h, float* track_out = nullptr);
+
 void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
                      float max_scroll, float view_h,
                      SDL_Rect* thumb_out = nullptr, bool hover = false,

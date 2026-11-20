@@ -284,6 +284,19 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
   }
 }
 
+SDL_Rect vscroll_thumb(const SDL_Rect& trough, float scroll, float max_scroll,
+                       float view_h, float* track_out) {
+  const float th = static_cast<float>(trough.h - 2);
+  const float thumb_h = std::min(
+      th, std::max(18.f, th * (view_h / std::max(1.f, view_h + max_scroll))));
+  const float track = std::max(0.f, th - thumb_h);
+  const float ratio =
+      max_scroll > 0.f ? std::clamp(scroll / max_scroll, 0.f, 1.f) : 0.f;
+  if (track_out) *track_out = track;
+  return SDL_Rect{trough.x + 1, trough.y + 1 + static_cast<int>(ratio * track),
+                  trough.w - 2, static_cast<int>(thumb_h)};
+}
+
 void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
                      float max_scroll, float view_h, SDL_Rect* thumb_out,
                      bool hover, bool pressed) {
@@ -291,12 +304,7 @@ void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
   fill(r, trough, hover || pressed ? p.scroll_trough_hot : p.scroll_trough);
   bevel(r, trough, Bevel::Sunken);
   if (max_scroll <= 1.f) return;
-  const float th = static_cast<float>(trough.h - 2);
-  const float thumb_h = std::max(18.f, th * (view_h / (view_h + max_scroll)));
-  const float track = std::max(0.f, th - thumb_h);
-  const float ratio = std::clamp(scroll / max_scroll, 0.f, 1.f);
-  SDL_Rect thumb{trough.x + 1, trough.y + 1 + static_cast<int>(ratio * track),
-                 trough.w - 2, static_cast<int>(thumb_h)};
+  const SDL_Rect thumb = vscroll_thumb(trough, scroll, max_scroll, view_h);
   draw_scroll_thumb(r, thumb, pressed, hover);
   if (thumb_out) *thumb_out = thumb;
 }
