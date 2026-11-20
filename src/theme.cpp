@@ -160,24 +160,30 @@ void draw_button_face(SDL_Renderer* r, const SDL_Rect& rc, bool pressed,
   vline(r, x0 + 1, y0 + 2, y1 - 2, inner);
 }
 
-void draw_scroll_thumb(SDL_Renderer* r, const SDL_Rect& rc, bool pressed) {
+void draw_scroll_thumb(SDL_Renderer* r, const SDL_Rect& rc, bool pressed,
+                       bool hover) {
   if (rc.w <= 0 || rc.h <= 0) return;
   const Palette& p = palette();
+  const Rgb edge = pressed ? p.accent_dark : p.scroll_thumb_edge;
   if (rc.w < 4 || rc.h < 4) {
-    fill(r, rc, p.scroll_thumb_edge);
+    fill(r, rc, edge);
     return;
   }
   // Separate blue-grey thumb from the almost-white trough. The dark outline
   // stays visible even over section/search markers behind the movable thumb.
-  Rgb top = p.scroll_thumb_top;
-  Rgb bottom = p.scroll_thumb_bottom;
-  if (pressed) std::swap(top, bottom);
+  // Hovered it lightens; held it turns accent blue (visible under a finger).
+  Rgb top = hover ? p.scroll_thumb_hot_top : p.scroll_thumb_top;
+  Rgb bottom = hover ? p.scroll_thumb_hot_bottom : p.scroll_thumb_bottom;
+  if (pressed) {
+    top = p.accent_dark;
+    bottom = p.accent;
+  }
   vgradient(r, SDL_Rect{rc.x + 1, rc.y + 1, rc.w - 2, rc.h - 2}, top, bottom);
   const int x1 = rc.x + rc.w - 1, y1 = rc.y + rc.h - 1;
-  hline(r, rc.x, x1, rc.y, p.scroll_thumb_edge);
-  hline(r, rc.x, x1, y1, p.scroll_thumb_edge);
-  vline(r, rc.x, rc.y + 1, y1 - 1, p.scroll_thumb_edge);
-  vline(r, x1, rc.y + 1, y1 - 1, p.scroll_thumb_edge);
+  hline(r, rc.x, x1, rc.y, edge);
+  hline(r, rc.x, x1, y1, edge);
+  vline(r, rc.x, rc.y + 1, y1 - 1, edge);
+  vline(r, x1, rc.y + 1, y1 - 1, edge);
   if (rc.w > 6 && rc.h > 6) {
     hline(r, rc.x + 2, x1 - 2, rc.y + 1,
           pressed ? p.shadow : p.highlight);
@@ -279,9 +285,10 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
 }
 
 void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
-                     float max_scroll, float view_h, SDL_Rect* thumb_out) {
+                     float max_scroll, float view_h, SDL_Rect* thumb_out,
+                     bool hover, bool pressed) {
   const Palette& p = palette();
-  fill(r, trough, p.scroll_trough);
+  fill(r, trough, hover || pressed ? p.scroll_trough_hot : p.scroll_trough);
   bevel(r, trough, Bevel::Sunken);
   if (max_scroll <= 1.f) return;
   const float th = static_cast<float>(trough.h - 2);
@@ -290,8 +297,16 @@ void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
   const float ratio = std::clamp(scroll / max_scroll, 0.f, 1.f);
   SDL_Rect thumb{trough.x + 1, trough.y + 1 + static_cast<int>(ratio * track),
                  trough.w - 2, static_cast<int>(thumb_h)};
-  draw_scroll_thumb(r, thumb);
+  draw_scroll_thumb(r, thumb, pressed, hover);
   if (thumb_out) *thumb_out = thumb;
+}
+
+void draw_gutter(SDL_Renderer* r, const SDL_Rect& rc, Rgb base, Hot hot) {
+  if (rc.w <= 0 || rc.h <= 0) return;
+  const Palette& p = palette();
+  fill(r, rc, hot == Hot::Pressed ? p.gutter_pressed
+              : hot == Hot::Hover ? p.gutter_hot : base);
+  bevel(r, rc, hot == Hot::Pressed ? Bevel::Sunken : Bevel::Raised);
 }
 
 }  // namespace xanatoo::theme

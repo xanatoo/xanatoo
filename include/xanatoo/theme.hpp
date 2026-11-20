@@ -33,6 +33,13 @@ struct Palette {
   Rgb scroll_thumb_top = rgb(0xC1, 0xD0, 0xDA);  // cool raised thumb
   Rgb scroll_thumb_bottom = rgb(0x8D, 0xA6, 0xB7);
   Rgb scroll_thumb_edge = rgb(0x5B, 0x73, 0x85);
+  // Pointer feedback: a hovered trough / thumb, and a held thumb.
+  Rgb scroll_trough_hot = rgb(0xD6, 0xE3, 0xEE);
+  Rgb scroll_thumb_hot_top = rgb(0xD6, 0xE5, 0xF0);
+  Rgb scroll_thumb_hot_bottom = rgb(0x9C, 0xBA, 0xD0);
+  // Gutters (tile divider, dock gutters) under the pointer / being dragged.
+  Rgb gutter_hot = rgb(0xBC, 0xD7, 0xF0);
+  Rgb gutter_pressed = rgb(0x6F, 0xA3, 0xD4);
   Rgb paper = rgb(0xF8, 0xF6, 0xF0);       // document canvas
   // Bevel edges
   Rgb highlight = rgb(0xFF, 0xFF, 0xFF);
@@ -102,14 +109,24 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w);
 
 // Classic vertical scrollbar (trough + bevelled thumb). `value`/`range` are
 // content-space; returns thumb rect through `thumb_out` when not null.
+// `hover`: the pointer is over the bar; `pressed`: its thumb is held.
 void draw_vscrollbar(SDL_Renderer* r, const SDL_Rect& trough, float scroll,
                      float max_scroll, float view_h,
-                     SDL_Rect* thumb_out = nullptr);
+                     SDL_Rect* thumb_out = nullptr, bool hover = false,
+                     bool pressed = false);
+
+// Pointer state of a draggable strip (gutter, divider, scrollbar).
+enum class Hot { None, Hover, Pressed };
+
+// A gutter face: `base` fill and raised bevel, lit while hovered and
+// sunken in the accent colour while dragged (touch shows where it landed).
+void draw_gutter(SDL_Renderer* r, const SDL_Rect& rc, Rgb base, Hot hot);
 
 // Raised push-button face; `pressed` flips to sunken + darker face.
 void draw_button_face(SDL_Renderer* r, const SDL_Rect& rc, bool pressed = false,
                       bool hot = false);
 // High-contrast scrollbar thumb, separate from the ordinary button face.
-void draw_scroll_thumb(SDL_Renderer* r, const SDL_Rect& rc, bool pressed = false);
+void draw_scroll_thumb(SDL_Renderer* r, const SDL_Rect& rc, bool pressed = false,
+                       bool hover = false);
 
 }  // namespace xanatoo::theme

@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Gutters and scrollbars show hover and press
+
+- Tile divider (and its mode badge), dock gutters and pane / panel
+  scrollbars light up under the mouse; the divider and dock gutters turn
+  accent blue and sunken while dragged, a held scrollbar thumb turns
+  accent blue. On touch screens this shows where a press landed.
+  Checked under Xvfb (divider hover / press, scrollbar hover / press).
+
 ## Status (2026-11-20) — Sound and video play while they download
 
 - Remote MP3 / FLAC / WAV no longer download in full first: a thread

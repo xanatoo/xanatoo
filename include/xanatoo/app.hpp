@@ -2207,6 +2207,10 @@ int dock_column_w(App& app, Dock side);
 int dock_band_h(App& app, Dock side);
 // Paint the gutters around docked panels (before the panels draw).
 void draw_dock_gutters(App& app);
+// The mouse may light native canvas chrome under it: no ImGui window or
+// popup and no floating window in front (other than `owner`), pointer not
+// away. Gutters and scrollbars show hover feedback only then.
+bool canvas_hover(App& app, const FloatWindow* owner = nullptr);
 // Dock `w` at `d`; for a column or band, the pointer (`mx`, `my`) picks its
 // slot among the others.
 void dock_window(App& app, FloatWindow& w, Dock d, int mx, int my);

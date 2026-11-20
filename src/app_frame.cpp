@@ -4187,6 +4187,16 @@ static const ScrollMarks& section_marks(App& app, Pane& pane,
 }
 
 // Classic scrollbar in the strip excluded from the content clip.
+bool canvas_hover(App& app, const FloatWindow* owner) {
+  if (app.pointer_away) return false;
+  const int mx = static_cast<int>(app.mouse_x);
+  const int my = static_cast<int>(app.mouse_y);
+  const FloatWindow* front = float_at(app, mx, my);
+  if (front && front != owner) return false;
+  return !app.ui.captures_point(app.mouse_x, app.mouse_y,
+                                float_layer_at(app, mx, my));
+}
+
 static void draw_pane_scrollbar(App& app, int i) {
   [[maybe_unused]] const float lh =
       static_cast<float>(app.fonts.regular.line_height());
@@ -4209,7 +4219,18 @@ static void draw_pane_scrollbar(App& app, int i) {
     namespace th = xanatoo::theme;
     const th::Palette& pal = th::palette();
     SDL_Rect track_r{sx, top, kSbW, vh};
-    th::fill(app.sdl, track_r, pal.scroll_trough);
+    // Pointer feedback: the hovered bar and thumb light up, a held thumb
+    // turns accent blue (a touch drag shows which bar it grabbed).
+    const int mx = static_cast<int>(app.mouse_x);
+    const int my = static_cast<int>(app.mouse_y);
+    const FloatWindow* owner = nullptr;
+    for (const FloatWindow& w : app.soft_wins)
+      if (w.view == i) owner = &w;
+    const bool pressed = app.dragging_scroll && app.scroll_drag_pane == i;
+    const bool hover = !pressed && mx >= sx && mx < sx + kSbW && my >= top &&
+                       my < top + vh && canvas_hover(app, owner);
+    th::fill(app.sdl, track_r,
+             hover || pressed ? pal.scroll_trough_hot : pal.scroll_trough);
     th::bevel(app.sdl, track_r, th::Bevel::Sunken);
 
     // Metadata marks on the track (doc Y → track fraction).
@@ -4296,8 +4317,8 @@ static void draw_pane_scrollbar(App& app, int i) {
     // Thumb
     SDL_Rect thumb{sx + 1, static_cast<int>(thumb_y), kSbW - 2,
                    std::max(1, static_cast<int>(geom.thumb_height))};
-    th::draw_scroll_thumb(app.sdl, thumb,
-                          app.dragging_scroll && app.scroll_drag_pane == i);
+    th::draw_scroll_thumb(app.sdl, thumb, pressed,
+                          hover && my >= thumb.y && my < thumb.y + thumb.h);
     // Grip ridges (BeOS-style) when the thumb is tall enough.
     if (thumb.h >= 24) {
       const int gy = thumb.y + thumb.h / 2;
@@ -4502,15 +4523,31 @@ void draw_split_chrome(App& app) {
     const th::Rgb background = app.diff_mode
         ? th::rgb(0xDB, 0xBD, 0x98)
         : app.tile_mode == TileMode::Trail ? pal.accent_soft : pal.face_dark;
-    th::fill(app.sdl, div, background);
+    // Same hit-test as the drag and the resize cursor (present_frame).
+    const int mx = static_cast<int>(app.mouse_x);
+    const int my = static_cast<int>(app.mouse_y);
+    const auto within = [&](const SDL_Rect& r, int pad = 0) {
+      return mx >= r.x - pad && mx < r.x + r.w + pad &&
+             my >= r.y - pad && my < r.y + r.h + pad;
+    };
+    const bool over_badge = within(tile_mode_button_rect(app));
+    const bool hover_ok = canvas_hover(app);
+    const th::Hot hot = app.dragging_split ? th::Hot::Pressed
+        : hover_ok && !over_badge && within(div, 2) &&
+                  !(app.diff_mode && within(tile_diff_track_rect(app)))
+            ? th::Hot::Hover
+            : th::Hot::None;
+    th::fill(app.sdl, div, hot == th::Hot::Pressed ? pal.gutter_pressed
+                           : hot == th::Hot::Hover ? pal.gutter_hot
+                                                   : background);
+    const th::Rgb lead = hot == th::Hot::Pressed ? pal.shadow : pal.highlight;
+    const th::Rgb trail = hot == th::Hot::Pressed ? pal.highlight : pal.shadow;
     if (app.tile_axis == TileAxis::Columns) {
-      th::vline(app.sdl, div.x, div.y, div.y + div.h - 1, pal.highlight);
-      th::vline(app.sdl, div.x + div.w - 1, div.y,
-                div.y + div.h - 1, pal.shadow);
+      th::vline(app.sdl, div.x, div.y, div.y + div.h - 1, lead);
+      th::vline(app.sdl, div.x + div.w - 1, div.y, div.y + div.h - 1, trail);
     } else {
-      th::hline(app.sdl, div.x, div.x + div.w - 1, div.y, pal.highlight);
-      th::hline(app.sdl, div.x, div.x + div.w - 1,
-                div.y + div.h - 1, pal.shadow);
+      th::hline(app.sdl, div.x, div.x + div.w - 1, div.y, lead);
+      th::hline(app.sdl, div.x, div.x + div.w - 1, div.y + div.h - 1, trail);
     }
     if (!app.diff_mode) th::draw_grip_dots(app.sdl, div, app.ui_scale);
     if (app.diff_mode) {
@@ -4556,7 +4593,9 @@ void draw_split_chrome(App& app) {
     // The visible badge is also the mode selector (click/right-click). It
     // straddles the gutter so even a thin independent divider is usable.
     const SDL_Rect badge = tile_mode_button_rect(app);
-    th::fill(app.sdl, badge, background);
+    th::fill(app.sdl, badge,
+             hover_ok && over_badge && !app.dragging_split ? pal.gutter_hot
+                                                           : background);
     th::bevel(app.sdl, badge, th::Bevel::Raised);
     const char* label = app.diff_mode ? "DIFF" :
         app.tile_mode == TileMode::Trail ? "TRAIL" : "TILES";

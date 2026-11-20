@@ -244,3 +244,10 @@ the SDL2 backend must detect external cursor changes to restore its I-beam.
 both backends apply ImGui's cursor in their next `new_frame`, and without
 the claim they reset a canvas hand to an arrow every frame, which flickers
 while frames redraw continuously (e.g. hovering a quote).
+Gutters and scrollbars also light under the pointer (same hit-tests,
+gated by `canvas_hover`: no ImGui window, popup or other float in front,
+pointer not away) and turn accent blue while dragged — `theme::Hot`,
+`draw_gutter`, `draw_scroll_thumb(…, pressed, hover)`. The pressed look
+comes from the drag state (`dragging_split`, `dock_split_drag`, a docked
+window's `resize`, `dragging_scroll`, `scroll_dragging`), so a touch shows
+which strip it grabbed even though touches leave no hover behind.

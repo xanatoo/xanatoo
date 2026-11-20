@@ -234,8 +234,14 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
 void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll) {
   if (max_scroll <= 1.f) return;
   const SDL_Rect trough = client_scrollbar_rect(app, w);
+  const int mx = static_cast<int>(app.mouse_x);
+  const int my = static_cast<int>(app.mouse_y);
+  const bool hover = !w.scroll_dragging && mx >= trough.x &&
+                     mx < trough.x + trough.w && my >= trough.y &&
+                     my < trough.y + trough.h && canvas_hover(app, &w);
   xanatoo::theme::draw_vscrollbar(app.sdl, trough, w.scroll, max_scroll,
-                                  static_cast<float>(trough.h));
+                                  static_cast<float>(trough.h), nullptr,
+                                  hover, w.scroll_dragging);
 }
 
 // First running page navigation (status line + toolbar Stop button).

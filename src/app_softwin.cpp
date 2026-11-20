@@ -210,48 +210,6 @@ int dock_band_h(App& app, Dock side) {
   return has_column(app, side) ? band_h(app, side) + dock_gap : 0;
 }
 
-void draw_dock_gutters(App& app) {
-  namespace th = xanatoo::theme;
-  const th::Palette& pal = th::palette();
-  for (Dock side : {Dock::Left, Dock::Right, Dock::Top, Dock::Bottom}) {
-    if (!has_column(app, side)) continue;
-    // The whole dock plus its gutter; the panels draw over it afterwards.
-    auto [x, y, w, h] = dock_rect(app, side);
-    SDL_Rect r{x, y, w, h};
-    switch (side) {
-      case Dock::Left: r.w += dock_gap; break;
-      case Dock::Right: r.x -= dock_gap; r.w += dock_gap; break;
-      case Dock::Top: r.h += dock_gap; break;
-      default: r.y -= dock_gap; r.h += dock_gap; break;
-    }
-    th::fill(app.sdl, r, pal.face_dark);
-    // Grip dots: in the gutter towards the panes, and between neighbours.
-    SDL_Rect g{};
-    switch (side) {
-      case Dock::Left: g = {x + w, y, dock_gap, h}; break;
-      case Dock::Right: g = {x - dock_gap, y, dock_gap, h}; break;
-      case Dock::Top: g = {x, y + h, w, dock_gap}; break;
-      default: g = {x, y - dock_gap, w, dock_gap}; break;
-    }
-    // Raised like the tile divider: light top / left, dark bottom / right
-    // on every gutter, whichever side its panels sit on.
-    th::bevel(app.sdl, g, th::Bevel::Raised);
-    th::draw_grip_dots(app.sdl, g, app.ui_scale);
-    const auto col = dock_column(app, side);
-    for (size_t i = 0; i + 1 < col.size(); ++i) {
-      const FloatWindow& a = *col[i];
-      const FloatWindow& b = *col[i + 1];
-      const SDL_Rect between = is_band(side)
-          ? SDL_Rect{a.x + a.w, a.y, b.x - a.x - a.w, std::max(a.h, b.h)}
-          : SDL_Rect{a.x, a.y + a.h, a.w, b.y - a.y - a.h};
-      th::bevel(app.sdl, between, th::Bevel::Raised);
-      // Dots only where a drag works (find_dock_split skips shaded pairs).
-      if (!float_shaded(a) && !float_shaded(b))
-        th::draw_grip_dots(app.sdl, between, app.ui_scale);
-    }
-  }
-}
-
 void dock_window(App& app, FloatWindow& w, Dock d, int mx, int my) {
   if (d == Dock::None) {
     undock_window(app, w);
@@ -429,6 +387,70 @@ DockSplitHit find_dock_split(App& app, int mx, int my) {
 }
 
 }  // namespace
+
+void draw_dock_gutters(App& app) {
+  namespace th = xanatoo::theme;
+  const th::Palette& pal = th::palette();
+  // Hover / drag feedback, from the same hit-tests as the drags themselves
+  // (float_resize_at for the pane-side gutter, find_dock_split between).
+  const int mx = static_cast<int>(app.mouse_x);
+  const int my = static_cast<int>(app.mouse_y);
+  const bool hover_ok = canvas_hover(app);
+  const int edge_hover = hover_ok ? float_resize_at(app, mx, my) : 0;
+  const DockSplitHit split_hover =
+      hover_ok ? find_dock_split(app, mx, my) : DockSplitHit{};
+  for (Dock side : {Dock::Left, Dock::Right, Dock::Top, Dock::Bottom}) {
+    if (!has_column(app, side)) continue;
+    // The whole dock plus its gutter; the panels draw over it afterwards.
+    auto [x, y, w, h] = dock_rect(app, side);
+    SDL_Rect r{x, y, w, h};
+    switch (side) {
+      case Dock::Left: r.w += dock_gap; break;
+      case Dock::Right: r.x -= dock_gap; r.w += dock_gap; break;
+      case Dock::Top: r.h += dock_gap; break;
+      default: r.y -= dock_gap; r.h += dock_gap; break;
+    }
+    th::fill(app.sdl, r, pal.face_dark);
+    // Grip dots: in the gutter towards the panes, and between neighbours.
+    SDL_Rect g{};
+    int towards_panes = 0;  // the resize edge bit this gutter drags
+    switch (side) {
+      case Dock::Left: g = {x + w, y, dock_gap, h}; towards_panes = 1; break;
+      case Dock::Right: g = {x - dock_gap, y, dock_gap, h}; towards_panes = 4; break;
+      case Dock::Top: g = {x, y + h, w, dock_gap}; towards_panes = 2; break;
+      default: g = {x, y - dock_gap, w, dock_gap}; towards_panes = 8; break;
+    }
+    const auto col = dock_column(app, side);
+    bool gutter_held = false;
+    for (const FloatWindow* f : col)
+      if (f->resize & towards_panes) gutter_held = true;
+    const bool gutter_hover = (edge_hover & towards_panes) &&
+        mx >= g.x - 2 && mx < g.x + g.w + 2 && my >= g.y && my < g.y + g.h;
+    // Raised like the tile divider: light top / left, dark bottom / right
+    // on every gutter, whichever side its panels sit on.
+    th::draw_gutter(app.sdl, g, pal.face_dark,
+                    gutter_held ? th::Hot::Pressed
+                    : gutter_hover ? th::Hot::Hover : th::Hot::None);
+    th::draw_grip_dots(app.sdl, g, app.ui_scale);
+    for (size_t i = 0; i + 1 < col.size(); ++i) {
+      const FloatWindow& a = *col[i];
+      const FloatWindow& b = *col[i + 1];
+      const SDL_Rect between = is_band(side)
+          ? SDL_Rect{a.x + a.w, a.y, b.x - a.x - a.w, std::max(a.h, b.h)}
+          : SDL_Rect{a.x, a.y + a.h, a.w, b.y - a.y - a.h};
+      const bool held = app.dock_split_drag.side == side &&
+                        app.dock_split_drag.first == i;
+      const bool lit = app.dock_split_drag.side == Dock::None &&
+                       split_hover.side == side && split_hover.first == i;
+      th::draw_gutter(app.sdl, between, pal.face_dark,
+                      held ? th::Hot::Pressed
+                      : lit ? th::Hot::Hover : th::Hot::None);
+      // Dots only where a drag works (find_dock_split skips shaded pairs).
+      if (!float_shaded(a) && !float_shaded(b))
+        th::draw_grip_dots(app.sdl, between, app.ui_scale);
+    }
+  }
+}
 
 DockSplitAxis dock_split_at(App& app, int mx, int my) {
   const Dock side = find_dock_split(app, mx, my).side;
