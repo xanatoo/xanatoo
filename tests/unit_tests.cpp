@@ -7643,6 +7643,46 @@ static void test_font_face_index() {
 
 // Thread titles are a leading Header: `subject=` is read as one, saved as
 // `:::heading`, and the outline nests the messages' headings below it.
+static void test_long_ordered_list_markers() {
+  using namespace xanatoo;
+  // Markers past "99." must not overlap the item text, and every item of
+  // the list keeps the same text column.
+  std::string md;
+  for (int i = 1; i <= 120; ++i)
+    md += std::to_string(i) + ". item\n";
+  Document doc = parse_document(md, "t.md");
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_long_ordered_list_markers (no font)\n");
+    return;
+  }
+  LayoutEngine engine(fonts);
+  LayoutResult result = engine.layout(doc, 800.f);
+  int checked = 0;
+  float text_col = -1.f;
+  for (const Node& n : doc.nodes) {
+    if (n.kind != NodeKind::ListItem || n.level <= 0) continue;
+    const size_t marker_len = std::to_string(n.level).size() + 1;
+    size_t seen = 0;
+    float marker_end = 0.f, text_x = -1.f;
+    for (const PositionedGlyph& g : result.glyphs) {
+      if (g.node != n.id) continue;
+      if (seen++ < marker_len) {
+        marker_end = std::max(marker_end, g.x + g.advance);
+      } else {
+        text_x = g.x;
+        break;
+      }
+    }
+    EXPECT(text_x > marker_end);
+    if (text_col < 0.f) text_col = text_x;
+    EXPECT(std::abs(text_x - text_col) < 2.f);
+    ++checked;
+  }
+  EXPECT_EQ(checked, 120);
+}
+
 static void test_thread_titles() {
   using namespace xanatoo;
   Document d = parse_markup(
@@ -7796,6 +7836,7 @@ int main() {
   test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();
+  test_long_ordered_list_markers();
   test_thread_titles();
   test_page_links();
   test_opensearch();

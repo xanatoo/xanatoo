@@ -151,6 +151,9 @@ static uint32_t superscript_digit(uint32_t cp) {
 
 // Message in-reply-to label → node id (rebuilt each layout).
 thread_local std::unordered_map<std::string, NodeId> g_msg_label_map;
+// List → widest ordered marker number among its items (rebuilt each layout),
+// so a list past "99." widens its marker slot for every item alike.
+thread_local std::unordered_map<NodeId, int> g_list_max_number;
 
 bool LayoutEngine::try_skip_block(NodeId id, float x, float& y, float max_width,
                                   LayoutResult& out) {
@@ -843,6 +846,7 @@ LayoutResult LayoutEngine::layout(
   result.glyphs.reserve(glyph_budget);
   result.boxes.reserve(doc.nodes.size());
   g_msg_label_map.clear();
+  g_list_max_number.clear();
   for (const auto& n : doc.nodes) {
     if (n.kind == NodeKind::Message && !n.label.empty())
       g_msg_label_map.emplace(n.label, n.id);
@@ -2139,8 +2143,33 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         out.glyphs.push_back(pg);
         mx += static_cast<float>(g.advance >> 6);
       }
-      float text_x = x + bullet_slot;
-      float text_w = max_width - bullet_slot;
+      // Long ordered lists: grow the slot so "100." etc. never run into
+      // the text; sized by the list's widest number so items stay aligned.
+      float slot = bullet_slot;
+      if (node.level > 0) {
+        int widest = node.level;
+        if (node.parent != INVALID_NODE) {
+          auto it = g_list_max_number.find(node.parent);
+          if (it == g_list_max_number.end()) {
+            int w = 0;
+            for (NodeId sib : doc.get(node.parent).children) {
+              const Node& sn = doc.get(sib);
+              if (sn.kind == NodeKind::ListItem) w = std::max(w, sn.level);
+            }
+            it = g_list_max_number.emplace(node.parent, w).first;
+          }
+          widest = std::max(widest, it->second);
+        }
+        float wide = 0.f;
+        // Measure with '0's: the widest digit in most faces.
+        for (char c : std::to_string(widest) + ".")
+          wide += static_cast<float>(
+              marker_font.glyph(c == '.' ? '.' : '0').advance >> 6);
+        const float gap = static_cast<float>(marker_font.glyph(' ').advance >> 6);
+        slot = std::max(slot, wide + gap);
+      }
+      float text_x = x + slot;
+      float text_w = max_width - slot;
       if (text_w < 40.f) {
         text_x = x + 16.f;
         text_w = max_width - 16.f;
@@ -2149,8 +2178,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       // Nested lists under this item
       for (NodeId child : node.children) {
         if (doc.get(child).kind == NodeKind::List) {
-          layout_node(doc, child, x + bullet_slot, y,
-                      max_width - bullet_slot, out);
+          layout_node(doc, child, x + slot, y, max_width - slot, out);
         }
       }
       y += after(BlockRole::ListItem);  // tighter spacing between list items
