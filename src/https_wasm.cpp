@@ -181,7 +181,8 @@ std::optional<HttpResult> https_get_follow_pooled(std::string_view url,
 bool https_get_follow_stream(std::string_view url, std::string_view agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
-                             std::string* err, std::string* final_url) {
+                             std::string* err, std::string* final_url,
+                             std::string_view) {
   auto r = https_get(url, agent, err);
   if (!r) return false;
   if (final_url) *final_url = std::string(url);

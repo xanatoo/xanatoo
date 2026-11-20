@@ -510,7 +510,7 @@ struct ChunkDecoder {
 bool stream_raw(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err) {
+                 std::string* err, std::string_view extra_headers) {
   const auto parsed = parse_http_url(url);
   if (!parsed) {
     if (err) *err = "invalid http(s) URL";
@@ -521,7 +521,7 @@ bool stream_raw(const std::string& url, std::string_view agent,
   const std::string req = "GET " + parsed->target + " HTTP/1.1\r\nHost: " + parsed->authority +
       "\r\nUser-Agent: " + std::string(agent) +
       "\r\nAccept: */*\r\nAccept-Language: " + accept_language() +
-      "\r\nAccept-Encoding: identity\r\n"
+      "\r\nAccept-Encoding: identity\r\n" + std::string(extra_headers) +
       "Connection: close\r\n\r\n";
   if (!conn.write_all(req.data(), req.size())) {
     if (err) *err = "HTTP write failed";
@@ -584,6 +584,7 @@ bool stream_raw(const std::string& url, std::string_view agent,
       result.content_encoding = header_value(headers, "content-encoding");
       result.etag = header_value(headers, "etag");
       result.last_modified = header_value(headers, "last-modified");
+      result.content_range = header_value(headers, "content-range");
       const std::string length = header_value(headers, "content-length");
       if (!length.empty()) {
         auto [p, ec] = std::from_chars(length.data(),
@@ -642,7 +643,7 @@ bool stream_raw(const std::string& url, std::string_view agent,
 bool stream_once(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err) {
+                 std::string* err, std::string_view extra_headers) {
   constexpr size_t kMaxDecoded = 256u << 20;
   bool encoded = false;
   std::string packed;
@@ -664,7 +665,7 @@ bool stream_once(const std::string& url, std::string_view agent,
         }
         packed.append(bytes);
         return true;
-      }, result, err);
+      }, result, err, extra_headers);
   if (!ok || !encoded) return ok;
   result.content_length = -1;
   if (auto decoded = decode_content_encoding(result.content_encoding, packed,
@@ -678,7 +679,8 @@ bool stream_once(const std::string& url, std::string_view agent,
 bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
-                             std::string* err, std::string* final_url) {
+                             std::string* err, std::string* final_url,
+                             std::string_view extra_headers) {
   std::string current(url);
   bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
@@ -693,7 +695,7 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
           if (headers.status >= 300 && headers.status < 400 &&
               !headers.location.empty()) return true;
           return on_body(bytes);
-        }, headers, err);
+        }, headers, err, extra_headers);
     if (!ok) {
       if (upgraded && err)
         *err = "HTTPS redirect to plaintext HTTP; HTTPS upgrade failed: " + *err;

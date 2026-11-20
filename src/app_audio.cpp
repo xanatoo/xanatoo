@@ -31,6 +31,7 @@
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+#include "xanatoo/http_url.hpp"
 #include "xanatoo/https.hpp"
 #endif
 
@@ -170,23 +171,43 @@ std::vector<uint8_t> download(const std::string& url, AudioLoad& load) {
 }
 
 // The download behind a streamed file, on its own thread: into `feed`
-// until done, failed or given up (feed->cancel).
+// until done, failed or given up (feed->cancel). Asks for byte ranges, so a
+// seek far ahead does not wait for the bytes before it (feed_download).
 void download_feed(const std::string& url, const std::shared_ptr<xanatoo::ByteFeed>& feed) {
-  std::string error = fetch_chunks(
-      url, feed->cancel,
-      [&](int64_t total) {
-        feed->total.store(total);
-        if (total > 0) {
-          std::lock_guard lock(feed->m);
-          feed->bytes.reserve(static_cast<size_t>(total));
-        }
-      },
-      [&](std::string_view chunk) {
-        xanatoo::feed_append(*feed, chunk);
-        return true;
-      });
-  if (error.empty() && feed->cancel.load()) error = "stopped";
-  xanatoo::feed_end(*feed, std::move(error));
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+  xanatoo::feed_download(*feed, [&](int64_t from, const auto& head, const auto& body) {
+    std::string err;
+    int status = 0;
+    bool too_large = false, stopped = false;
+    const bool ok = xanatoo::https_get_follow_stream(
+        url, xanatoo::user_agent("audio"),
+        [&](const xanatoo::HttpStreamHeaders& h) {
+          status = h.status;
+          if (h.status < 200 || h.status >= 300) return false;
+          int64_t start = 0, total = h.content_length;
+          bool ranged = false;
+          if (h.status == 206) {
+            const auto r = xanatoo::parse_content_range(h.content_range);
+            if (!r || r->first != from) return false;
+            start = r->first;
+            total = r->total;
+            ranged = true;
+          }
+          if (total > kMaxAudioBytes) return !(too_large = true);
+          return head(start, total, ranged) || !(stopped = true);
+        },
+        [&](std::string_view bytes) { return body(bytes) || !(stopped = true); }, &err,
+        nullptr, "Range: bytes=" + std::to_string(from) + "-\r\n");
+    if (ok || stopped || feed->cancel.load()) return std::string();
+    if (too_large) return std::string("file too large to play");
+    if (status != 0 && (status < 200 || status >= 300)) return "HTTP " + std::to_string(status);
+    if (status == 206) return std::string("bad Content-Range");
+    return err.empty() ? std::string("download failed") : err;
+  });
+#else
+  (void)url;
+  xanatoo::feed_end(*feed, "this build has no HTTP client");
+#endif
 }
 
 void run_load(const std::string& url, AudioLoad& load) {

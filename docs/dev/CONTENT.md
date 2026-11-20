@@ -486,14 +486,29 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   re-opens the feed in memory (seek table, exact length; the pipe's
   `info.duration` follows) and seeks it to the same frame. Waiting reads
   give up on the pipe's cancel or a newer seek (`MediaOptions::seeks`,
-  counted in `media_seek`; `audio_rearm` / `audio_interrupted`). Ogg
+  counted in `media_seek`; `audio_rearm` / `audio_interrupted`).
+- Ranges: `feed_download` (audio.cpp, offline-testable over a `FeedFetch`;
+  `download_feed` sends `Range: bytes=N-` and reads `Content-Range` via
+  `parse_content_range`) asks for ranges from the first request. A 206
+  answer makes the feed `sparse` (`bytes` as long as the file, `have` the
+  arrived extents, `feed_reach`). A read waiting for a byte behind `at` or
+  more than 256 KiB ahead of it stores it in `want`; the download breaks
+  off and fetches from there, and when a request ends (or runs into bytes
+  already there) goes on with the gap behind the reader (`reading`), then
+  the first one; a broken connection resumes where it broke (3 tries
+  without progress). A 200 answer stays one plain download. FLAC / WAV
+  seek through their callbacks; a streaming MP3 jumps by the average frame
+  size (`mp3_jump`: dr_mp3 restarted at the byte, `streamStartOffset`
+  moved for the moment), so the place is exact only for constant bitrate.
+  The jump is noticed on the download's next piece: a stalled connection
+  delays it. Ogg
   (Vorbis / Opus) cannot stream built-in: with a backend the address goes
   to it instead, else the open waits for the whole file.
 - The panel: "Downloading N%" while opening, "Buffering… N% loaded" while
   the pipe has nothing to play (`media_buffering`), the part read ahead
   shaded on the seek bar (`draw_bar` `loaded` from `MediaSource::buffered`,
   copied to `MediaPlayback::buffered` by the worker; the feed source gives
-  the arrived share of its length). Sound alone decodes 5 s ahead
+  how far the bytes from the reader's position reach). Sound alone decodes 5 s ahead
   (`kMediaAudioAheadSoundOnly`). Local files and single-threaded WASM keep
   the load-then-play path (`AudioLoad`).
 - By Content-Type: a Navigate / Tab response that `is_playable_type`

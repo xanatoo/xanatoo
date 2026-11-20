@@ -89,5 +89,19 @@ int main() {
         "unsupported scheme has no target");
   check(!resolve_http_redirect("http://a.example", "ftp://other/a"),
         "reject unsupported redirect scheme");
+
+  auto range = [](const char* v) {
+    auto r = xanatoo::parse_content_range(v);
+    return r ? std::to_string(r->first) + "-" + std::to_string(r->last) + "/" +
+                   std::to_string(r->total)
+             : std::string("none");
+  };
+  check(range("bytes 100-199/1000") == "100-199/1000", "Content-Range");
+  check(range(" Bytes 0-0/1 ") == "0-0/1", "Content-Range case and spaces");
+  check(range("bytes 5-9/*") == "5-9/-1", "Content-Range of unknown length");
+  check(range("bytes */1000") == "none", "unsatisfied range is no range");
+  check(range("bytes 9-5/100") == "none", "reversed range");
+  check(range("bytes 0-99/50") == "none", "range beyond the length");
+  check(range("items 0-1/2") == "none", "other units");
   return failures ? 1 : 0;
 }

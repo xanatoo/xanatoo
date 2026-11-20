@@ -29,9 +29,15 @@
   0:08 / 0:14 / 0:19 at 5 s steps), the seek bar shades the read-ahead,
   seeks to 2:06 and back to 0:12 work. Fixtures also run through the
   reader in `test_media`.
-- Not yet: range requests for the built-in path (seeking far ahead waits
-  for the download); a seek back in an FFmpeg stream fetches again (no
-  cache of what was read); the title of an
+- Then: the built-in path asks for byte ranges (`feed_download`): a seek
+  into what has not arrived fetches from there, gaps fill after, broken
+  connections resume. Checked at 100 KB/s: 14 MB MP3 seek to 7:30 plays
+  within 1.5 s (was ~100 s), back to 1:03 jumps again; FLAC without a seek
+  table 4 requests (binary search); WAV one.
+- Not yet: a streaming VBR MP3 seeks by average frame size (approximate
+  place; the in-memory takeover then corrects it); a jump waits for the
+  download's next piece (no abort of a stalled read); a seek back in an
+  FFmpeg stream fetches again (no cache of what was read); the title of an
   extensionless address is its last path part ("x"); a startup address that
   turns out to be media leaves the "Loading…" page.
 

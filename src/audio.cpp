@@ -38,6 +38,10 @@ struct AudioDecoder {
   int rate = 0;
   uint64_t frames = 0;
   bool frames_estimated = false;  // streaming MP3: from the bitrate
+  // Streaming MP3 with a known size: seeks jump to a byte position from the
+  // average frame size (mp3_jump) instead of decoding up to there.
+  uint64_t mp3_start = 0;  // first byte behind the tags
+  double mp3_bytes_per_frame = 0;
   uint64_t pos = 0;  // next frame audio_read returns (WAV / Vorbis)
   std::string title;
   drmp3 mp3{};
@@ -360,10 +364,32 @@ size_t audio_read(AudioDecoder& d, float* out, size_t frames) {
   }
 }
 
+namespace {
+
+// A streaming MP3 goes on at the byte where `frame` should be by the average
+// frame size (exact for constant bitrate): the decoder restarts there and
+// finds the next frame itself. dr_mp3 would decode all the way instead.
+bool mp3_jump(AudioDecoder& d, uint64_t frame) {
+  const int64_t total = d.feed->total.load();
+  auto at = static_cast<int64_t>(double(d.mp3_start) + double(frame) * d.mp3_bytes_per_frame);
+  at = std::clamp<int64_t>(at, int64_t(d.mp3_start), std::max<int64_t>(total - 1, 0));
+  // Its "start of the stream" moved there for a moment.
+  const drmp3_uint64 start = d.mp3.streamStartOffset;
+  d.mp3.streamStartOffset = static_cast<drmp3_uint64>(at);
+  const bool ok = drmp3_seek_to_pcm_frame(&d.mp3, 0) != 0;
+  d.mp3.streamStartOffset = start;
+  d.mp3.currentPCMFrame = frame + d.mp3.delayInPCMFrames;  // no lead-in skipped here
+  return ok;
+}
+
+}  // namespace
+
 bool audio_seek(AudioDecoder& d, uint64_t frame) {
   if (d.frames > 0 && !d.frames_estimated) frame = std::min(frame, d.frames);
   switch (d.format) {
-    case AudioFormat::Mp3: return drmp3_seek_to_pcm_frame(&d.mp3, frame) != 0;
+    case AudioFormat::Mp3:
+      if (d.streaming && d.mp3_bytes_per_frame > 0 && frame > 0) return mp3_jump(d, frame);
+      return drmp3_seek_to_pcm_frame(&d.mp3, frame) != 0;
     case AudioFormat::Flac: return drflac_seek_to_pcm_frame(d.flac, frame) != 0;
     case AudioFormat::Wav: return drwav_seek_to_pcm_frame(&d.wav, frame) != 0;
     case AudioFormat::Vorbis:
@@ -382,14 +408,178 @@ std::string audio_describe(const AudioDecoder& d) {
 
 // ---- streaming --------------------------------------------------------------
 
+namespace {
+
+// Where the bytes that arrived from `pos` on end. Under f.m.
+int64_t reach_locked(const ByteFeed& f, int64_t pos) {
+  if (!f.sparse) return std::max(pos, static_cast<int64_t>(f.bytes.size()));
+  for (const auto& [from, to] : f.have)
+    if (from <= pos && pos < to) return to;
+  return pos;
+}
+
+// The bytes from the start on that arrived. Under f.m.
+size_t head_locked(const ByteFeed& f) { return static_cast<size_t>(reach_locked(f, 0)); }
+
+// The first missing byte at or after `pos`, -1 when none is. Under f.m.
+int64_t gap_locked(const ByteFeed& f, int64_t pos) {
+  const int64_t g = reach_locked(f, std::max<int64_t>(pos, 0));
+  return g < static_cast<int64_t>(f.bytes.size()) ? g : -1;
+}
+
+// A read waits for a byte at most this far behind where the download
+// writes; farther, the download jumps there.
+constexpr int64_t kFeedJump = 256 * 1024;
+
+}  // namespace
+
 void feed_append(ByteFeed& f, std::string_view chunk) {
+  int64_t end;
   {
     std::lock_guard lock(f.m);
-    if (f.done) return;
-    f.bytes.insert(f.bytes.end(), chunk.begin(), chunk.end());
-    f.got.store(static_cast<int64_t>(f.bytes.size()), std::memory_order_relaxed);
+    end = f.sparse ? f.at.load() : static_cast<int64_t>(f.bytes.size());
+  }
+  feed_write(f, end, chunk);
+}
+
+void feed_begin_sparse(ByteFeed& f, int64_t total) {
+  {
+    std::lock_guard lock(f.m);
+    if (f.done || f.sparse || total <= 0) return;
+    const int64_t head = static_cast<int64_t>(f.bytes.size());
+    if (head > total) return;
+    f.bytes.resize(static_cast<size_t>(total));
+    f.sparse = true;
+    f.have.clear();
+    if (head > 0) f.have.emplace_back(0, head);
+    f.total.store(total);
   }
   f.cv.notify_all();
+}
+
+void feed_write(ByteFeed& f, int64_t offset, std::string_view chunk) {
+  {
+    std::lock_guard lock(f.m);
+    const int64_t size = static_cast<int64_t>(f.bytes.size());
+    if (f.done || offset < 0 || (!f.sparse && offset > size)) return;
+    int64_t n = static_cast<int64_t>(chunk.size());
+    if (f.sparse) {
+      if (offset >= size) return;
+      n = std::min(n, size - offset);
+      std::memcpy(f.bytes.data() + offset, chunk.data(), static_cast<size_t>(n));
+      // Merge [offset, offset + n) into the sorted, separate extents.
+      int64_t from = offset, to = offset + n, sum = 0;
+      std::vector<std::pair<int64_t, int64_t>> have;
+      have.reserve(f.have.size() + 1);
+      bool placed = false;
+      for (const auto& e : f.have) {
+        if (e.second < from) {
+          have.push_back(e);
+        } else if (e.first > to) {
+          if (!placed) have.emplace_back(from, to), placed = true;
+          have.push_back(e);
+        } else {
+          from = std::min(from, e.first);
+          to = std::max(to, e.second);
+        }
+      }
+      if (!placed) have.emplace_back(from, to);
+      f.have = std::move(have);
+      for (const auto& e : f.have) sum += e.second - e.first;
+      f.got.store(sum, std::memory_order_relaxed);
+    } else {
+      const int64_t over = std::min(n, size - offset);  // a restarted download
+      std::memcpy(f.bytes.data() + offset, chunk.data(), static_cast<size_t>(over));
+      f.bytes.insert(f.bytes.end(), chunk.begin() + over, chunk.end());
+      f.got.store(static_cast<int64_t>(f.bytes.size()), std::memory_order_relaxed);
+    }
+    f.at.store(offset + n);
+  }
+  f.cv.notify_all();
+}
+
+int64_t feed_reach(ByteFeed& f, int64_t pos) {
+  std::lock_guard lock(f.m);
+  return reach_locked(f, pos);
+}
+
+void feed_download(ByteFeed& f, const FeedFetch& fetch) {
+  constexpr int kRetries = 3;  // broken connections in a row without a byte
+  int64_t from = 0;
+  int failures = 0;
+  std::string error;
+  auto wanted = [&] {  // a missing byte a reader waits for, or -1
+    const int64_t w = f.want.exchange(-1);
+    return w >= 0 && feed_reach(f, w) == w ? w : -1;
+  };
+  while (!f.cancel.load()) {
+    bool sparse;
+    {
+      std::lock_guard lock(f.m);
+      sparse = f.sparse;
+    }
+    const int64_t before = f.got.load();
+    int64_t off = from, jump = -1;
+    bool ranged = false;
+    std::string err = fetch(
+        from,
+        [&](int64_t start, int64_t total, bool is_ranged) {
+          if (is_ranged && total > 0 && !sparse) {
+            feed_begin_sparse(f, total);
+            std::lock_guard lock(f.m);
+            sparse = f.sparse;
+          } else if (!sparse) {
+            f.total.store(total);
+          }
+          ranged = is_ranged && sparse;
+          off = ranged ? start : 0;  // a whole answer starts over
+          f.at.store(off);
+          return true;
+        },
+        [&](std::string_view chunk) {
+          if (f.cancel.load(std::memory_order_relaxed)) return false;
+          feed_write(f, off, chunk);
+          off += static_cast<int64_t>(chunk.size());
+          if (!ranged) return true;
+          if (const int64_t w = wanted(); w >= 0) {
+            if (w < off || w > off + kFeedJump) {
+              jump = w;
+              return false;
+            }
+            f.want.store(w);  // near: comes anyway (asked again if not)
+          }
+          return feed_reach(f, off) == off;  // ran into what is there: next gap
+        });
+    if (f.cancel.load()) break;
+    if (jump >= 0) {
+      from = jump;
+      continue;
+    }
+    if (!err.empty()) {
+      if (!sparse) {
+        error = std::move(err);
+        break;
+      }
+      failures = f.got.load() > before ? 0 : failures + 1;
+      if (failures > kRetries) {
+        error = std::move(err);
+        break;
+      }
+    } else if (!sparse) {
+      break;  // all of it
+    }
+    // On with a gap: the one a reader waits for, the next behind the reader,
+    // the first.
+    from = wanted();
+    if (from < 0) {
+      std::lock_guard lock(f.m);
+      from = gap_locked(f, f.reading.load());
+      if (from < 0) from = gap_locked(f, 0);
+    }
+    if (from < 0) break;  // complete
+  }
+  if (error.empty() && f.cancel.load()) error = "stopped";
+  feed_end(f, std::move(error));
 }
 
 void feed_end(ByteFeed& f, std::string error) {
@@ -418,16 +608,31 @@ bool given_up(const FeedWait& w, uint64_t seeks_seen) {
          (w.seeks && w.seeks->load(std::memory_order_relaxed) != seeks_seen);
 }
 
-// Waits until `f` holds `want` bytes, is done, or the wait is given up
-// (false). Under `lock`.
-bool wait_bytes(ByteFeed& f, std::unique_lock<std::mutex>& lock, size_t want,
+// Waits until `f` holds the bytes [from, to), is done, or the wait is given
+// up (false). A missing byte far from where the download writes is `want`ed.
+// Under `lock`.
+bool wait_range(ByteFeed& f, std::unique_lock<std::mutex>& lock, int64_t from, int64_t to,
                 const FeedWait& w, uint64_t seeks_seen) {
-  while (f.bytes.size() < want && !f.done) {
+  for (;;) {
+    if (f.done) return true;
+    const int64_t total = f.total.load();
+    const int64_t end = total >= 0 ? std::min(to, total) : to;
+    const int64_t gap = reach_locked(f, from);
+    if (gap >= end) return true;
     if (given_up(w, seeks_seen)) return false;
+    if (f.sparse) {
+      const int64_t at = f.at.load();
+      if (gap < at || gap > at + kFeedJump) f.want.store(gap);
+    }
     // Timed: the give-up flags belong to others and do not signal us.
     f.cv.wait_for(lock, std::chrono::milliseconds(50));
   }
-  return true;
+}
+
+// The first `want` bytes (all of them for INT64_MAX).
+bool wait_bytes(ByteFeed& f, std::unique_lock<std::mutex>& lock, int64_t want,
+                const FeedWait& w, uint64_t seeks_seen) {
+  return wait_range(f, lock, 0, want, w, seeks_seen);
 }
 
 // The decoders' I/O callbacks over a streaming decoder's feed.
@@ -435,11 +640,13 @@ size_t feed_read(void* user, void* out, size_t n) {
   auto* d = static_cast<AudioDecoder*>(user);
   ByteFeed& f = *d->feed;
   std::unique_lock lock(f.m);
-  if (d->cursor > SIZE_MAX - n) return 0;
-  if (!wait_bytes(f, lock, static_cast<size_t>(d->cursor) + n, d->wait, d->seeks_seen))
+  if (d->cursor > uint64_t(INT64_MAX) - n) return 0;
+  const auto from = static_cast<int64_t>(d->cursor);
+  f.reading.store(from, std::memory_order_relaxed);
+  if (!wait_range(f, lock, from, from + static_cast<int64_t>(n), d->wait, d->seeks_seen))
     d->interrupted = true;
-  const size_t size = f.bytes.size();
-  const size_t got = d->cursor < size ? std::min(n, size - static_cast<size_t>(d->cursor)) : 0;
+  const auto there = static_cast<size_t>(reach_locked(f, from) - from);
+  const size_t got = std::min(n, there);
   if (got) std::memcpy(out, f.bytes.data() + d->cursor, got);
   d->cursor += got;
   return got;
@@ -511,7 +718,7 @@ uint64_t mp3_estimate_frames(ByteFeed& f, int rate) {
   if (total <= 0) return 0;
   std::lock_guard lock(f.m);
   const uint8_t* p = f.bytes.data();
-  const size_t n = f.bytes.size();
+  const size_t n = head_locked(f);
   size_t at = id3v2_size(p, n);
   for (; at + 4 <= n; ++at)
     if (mp3_frame_sync(p + at, n - at)) break;
@@ -556,8 +763,12 @@ AudioDecoderPtr open_streaming(std::shared_ptr<ByteFeed> feed, AudioFormat forma
         d->frames = mp3_estimate_frames(*d->feed, d->rate);
         d->frames_estimated = d->frames > 0;
       }
+      d->mp3_start = d->mp3.streamStartOffset;
+      const int64_t total = d->feed->total.load();
+      if (d->frames > 0 && total > int64_t(d->mp3_start))
+        d->mp3_bytes_per_frame = double(total - int64_t(d->mp3_start)) / double(d->frames);
       std::lock_guard lock(d->feed->m);
-      d->title = id3v2_title(d->feed->bytes.data(), d->feed->bytes.size());
+      d->title = id3v2_title(d->feed->bytes.data(), head_locked(*d->feed));
       break;
     }
     case AudioFormat::Flac:
@@ -569,7 +780,7 @@ AudioDecoderPtr open_streaming(std::shared_ptr<ByteFeed> feed, AudioFormat forma
       d->frames = d->flac->totalPCMFrameCount;
       if (d->title.empty()) {
         std::lock_guard lock(d->feed->m);
-        d->title = id3v2_title(d->feed->bytes.data(), d->feed->bytes.size());
+        d->title = id3v2_title(d->feed->bytes.data(), head_locked(*d->feed));
       }
       break;
     case AudioFormat::Wav:
@@ -598,12 +809,12 @@ AudioFormat feed_sniff(ByteFeed& f, const FeedWait& wait) {
   if (!wait_bytes(f, lock, 64, wait, seen)) return AudioFormat::Unknown;
   const uint8_t* p = f.bytes.data();
   size_t more = 0;
-  if (std::memcmp(p, "OggS", 4) == 0 && f.bytes.size() >= 27)
+  if (std::memcmp(p, "OggS", 4) == 0 && head_locked(f) >= 27)
     more = 27 + p[26] + 8;
-  else if (const size_t tag = id3v2_size(p, f.bytes.size()))
+  else if (const size_t tag = id3v2_size(p, head_locked(f)))
     more = tag + 4;
-  if (more && !wait_bytes(f, lock, more, wait, seen)) return AudioFormat::Unknown;
-  return sniff_audio(f.bytes.data(), f.bytes.size());
+  if (more && !wait_bytes(f, lock, int64_t(more), wait, seen)) return AudioFormat::Unknown;
+  return sniff_audio(f.bytes.data(), head_locked(f));
 }
 
 AudioDecoderPtr open_audio_feed(std::shared_ptr<ByteFeed> feed, const FeedWait& wait,
@@ -616,7 +827,7 @@ AudioDecoderPtr open_audio_feed(std::shared_ptr<ByteFeed> feed, const FeedWait& 
   }
   // The rest of it first.
   const uint64_t seen = wait.seeks ? wait.seeks->load() : 0;
-  if (!wait_bytes(*feed, lock, SIZE_MAX, wait, seen)) {
+  if (!wait_bytes(*feed, lock, INT64_MAX, wait, seen)) {
     if (error) *error = "stopped";
     return nullptr;
   }

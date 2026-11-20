@@ -16,6 +16,8 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -125,6 +127,50 @@ std::thread trickle(std::shared_ptr<xanatoo::ByteFeed> feed, std::vector<uint8_t
       if ((at / 97) % 8 == 0) sleep_ms(1);
     }
     xanatoo::feed_end(*feed);
+  });
+}
+
+// A pretend server for feed_download: `whole` from the asked byte on (all of
+// it without `ranges`), 4 KiB every millisecond; the request starting at
+// `break_at` breaks off after 50000 bytes. Notes where each request started.
+struct FakeServer {
+  std::vector<uint8_t> whole;
+  bool ranges = true;
+  int64_t break_at = -1;
+  std::mutex m;
+  std::vector<int64_t> asked;
+
+  std::string get(int64_t from, const std::function<bool(int64_t, int64_t, bool)>& head,
+                  const std::function<bool(std::string_view)>& body) {
+    {
+      std::lock_guard lock(m);
+      asked.push_back(from);
+    }
+    if (!ranges) from = 0;
+    if (!head(from, int64_t(whole.size()), ranges)) return {};
+    const bool breaks = from == break_at;
+    if (breaks) break_at = -1;
+    for (int64_t at = from; at < int64_t(whole.size()); at += 4096) {
+      if (breaks && at - from >= 50000) return "connection reset";
+      const size_t n = std::min<size_t>(4096, whole.size() - size_t(at));
+      if (!body({reinterpret_cast<const char*>(whole.data() + at), n})) return {};
+      sleep_ms(1);
+    }
+    return {};
+  }
+  bool asked_near(int64_t pos) {
+    std::lock_guard lock(m);
+    for (int64_t a : asked)
+      if (a <= pos && pos - a < 300000) return true;
+    return false;
+  }
+};
+
+std::thread serve(std::shared_ptr<xanatoo::ByteFeed> feed, FakeServer& server) {
+  return std::thread([feed, &server] {
+    xanatoo::feed_download(*feed, [&](int64_t from, const auto& head, const auto& body) {
+      return server.get(from, head, body);
+    });
   });
 }
 
@@ -329,6 +375,93 @@ void test_audio(int& passed, int& failed) {
     // A download that fails: what came plays, then the end.
     feed_end(*feed, "HTTP 500");
     EXPECT(!feed_complete(*feed));
+  }
+
+  // A sparse feed keeps what arrived in order, however it came.
+  {
+    ByteFeed f;
+    feed_begin_sparse(f, 100);
+    const std::string ten(10, 'x');
+    feed_write(f, 10, ten);
+    feed_write(f, 30, ten);
+    EXPECT_EQ(feed_reach(f, 0), 0);
+    EXPECT_EQ(feed_reach(f, 12), 20);
+    EXPECT_EQ(feed_reach(f, 25), 25);
+    EXPECT_EQ(f.got.load(), 20);
+    feed_write(f, 20, ten);
+    EXPECT_EQ(feed_reach(f, 10), 40);
+    feed_write(f, 95, ten);  // cut at the end
+    EXPECT_EQ(feed_reach(f, 95), 100);
+    EXPECT_EQ(f.got.load(), 35);
+  }
+
+  // A ranged download: a seek far ahead jumps there and plays at once, the
+  // gaps fill after, and the file comes out whole.
+  {
+    FakeServer server;
+    server.whole = make_wav(220500);  // 10 s, 882 KB
+    const auto ref = open_audio(server.whole, nullptr);
+    std::vector<float> want(1024 * 2);
+    EXPECT(ref && audio_seek(*ref, 22050 * 8) && audio_read(*ref, want.data(), 1024) == 1024);
+    auto feed = std::make_shared<ByteFeed>();
+    std::thread download = serve(feed, server);
+    AudioDecoderPtr d = open_audio_feed(feed, FeedWait{}, nullptr);
+    EXPECT(d != nullptr && audio_streaming(*d));
+    if (d) {
+      EXPECT(audio_seek(*d, 22050 * 8));
+      std::vector<float> got(1024 * 2);
+      EXPECT_EQ(audio_read(*d, got.data(), 1024), size_t(1024));
+      EXPECT(max_diff(got, want) < 1e-6f);
+      EXPECT(feed->got.load() < int64_t(server.whole.size()));  // came before the rest
+      EXPECT(server.asked_near(44 + 22050 * 8 * 4));
+    }
+    download.join();
+    EXPECT(feed_complete(*feed));
+    EXPECT(feed->bytes == server.whole);
+  }
+
+  // A server without ranges: one download from the start.
+  {
+    FakeServer server;
+    server.whole = make_wav(22050);
+    server.ranges = false;
+    auto feed = std::make_shared<ByteFeed>();
+    std::thread download = serve(feed, server);
+    download.join();
+    EXPECT(feed_complete(*feed) && !feed->sparse);
+    EXPECT(feed->bytes == server.whole);
+    EXPECT_EQ(server.asked.size(), size_t(1));
+  }
+
+  // A broken connection goes on where it broke.
+  {
+    FakeServer server;
+    server.whole = make_wav(44100);
+    server.break_at = 0;
+    auto feed = std::make_shared<ByteFeed>();
+    std::thread download = serve(feed, server);
+    download.join();
+    EXPECT(feed_complete(*feed));
+    EXPECT(feed->bytes == server.whole);
+    EXPECT(server.asked.size() == 2 && server.asked[1] >= 50000);
+  }
+
+  // A streaming MP3 seeks by byte position: it plays on from there to the end.
+  {
+    const std::vector<uint8_t> whole = fixture("tone.mp3");
+    const auto ref = open_audio(whole, nullptr);
+    auto feed = feed_of(whole, 1000);
+    std::thread more = trickle(feed, whole, 1000);
+    AudioDecoderPtr d = open_audio_feed(feed, FeedWait{}, nullptr);
+    EXPECT(d != nullptr && ref != nullptr);
+    if (d && ref) {
+      const uint64_t half = audio_frames(*ref) / 2;
+      EXPECT(audio_seek(*d, half));
+      const size_t rest = decode_all(*d).size() / size_t(audio_channels(*d));
+      EXPECT(rest + 2 * 1152 >= audio_frames(*ref) - half &&
+             rest <= audio_frames(*ref) - half + 2 * 1152);
+    }
+    more.join();
   }
 
   passed += g_passed;

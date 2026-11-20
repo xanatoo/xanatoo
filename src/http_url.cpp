@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/http_url.hpp"
+#include "xanatoo/util.hpp"
 
 #include <charconv>
 #include <vector>
@@ -170,6 +171,29 @@ std::optional<std::string> secure_redirect_target(std::string_view from,
   if (!parse_http_url(out)) return std::nullopt;
   if (upgraded) *upgraded = true;
   return out;
+}
+
+std::optional<ContentRange> parse_content_range(std::string_view v) {
+  trim_ascii(v);
+  if (!starts_with_ci(v, "bytes ")) return std::nullopt;
+  v.remove_prefix(6);
+  trim_ascii(v);
+  const size_t dash = v.find('-'), slash = v.find('/');
+  if (dash == std::string_view::npos || slash == std::string_view::npos || dash > slash)
+    return std::nullopt;
+  auto num = [](std::string_view s, int64_t& out) {
+    trim_ascii(s);
+    auto [p, ec] = std::from_chars(s.data(), s.data() + s.size(), out);
+    return !s.empty() && ec == std::errc{} && p == s.data() + s.size() && out >= 0;
+  };
+  ContentRange r;
+  if (!num(v.substr(0, dash), r.first) || !num(v.substr(dash + 1, slash - dash - 1), r.last) ||
+      r.last < r.first)
+    return std::nullopt;
+  std::string_view total = v.substr(slash + 1);
+  trim_ascii(total);
+  if (total != "*" && (!num(total, r.total) || r.total <= r.last)) return std::nullopt;
+  return r;
 }
 
 }  // namespace xanatoo

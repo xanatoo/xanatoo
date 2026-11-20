@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -38,5 +39,12 @@ bool http_redirect_keeps_security(std::string_view from,
 std::optional<std::string> secure_redirect_target(std::string_view from,
                                                   std::string_view to,
                                                   bool* upgraded = nullptr);
+
+// "bytes 100-199/1000" (Content-Range) → {100, 199, 1000}, total -1 for
+// "/*"; nullopt when it is not a byte range.
+struct ContentRange {
+  int64_t first = 0, last = 0, total = -1;
+};
+std::optional<ContentRange> parse_content_range(std::string_view value);
 
 }  // namespace xanatoo

@@ -57,15 +57,19 @@ struct HttpStreamHeaders {
   std::string content_encoding; // as sent; the body arrives already decoded
   std::string etag;            // ETag: / Last-Modified: as sent (history
   std::string last_modified;   // observations, docs/HISTORY.md "D")
+  std::string content_range;   // Content-Range: of a 206 answer ("bytes 0-9/100")
 };
 using HttpHeaderCallback = std::function<bool(const HttpStreamHeaders&)>;
 using HttpBodyCallback = std::function<bool(std::string_view)>;
 
+// `extra_headers`: full header lines ending with "\r\n" ("Range: bytes=10-\r\n");
+// the browser build (https_wasm.cpp) ignores them.
 bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
                              std::string* err = nullptr,
-                             std::string* final_url = nullptr);
+                             std::string* final_url = nullptr,
+                             std::string_view extra_headers = {});
 
 // HTTP/1.1 request over TCP or TLS. `extra_headers` are full header lines ending
 // with "\r\n" (e.g. "Authorization: Bearer …\r\n"). `body` is optional

@@ -72,7 +72,10 @@ public:
   double buffered() const override {
     const int64_t total = feed_->total.load();
     if (total <= 0 || info_.duration <= 0) return -1;
-    return info_.duration * std::min(1.0, double(feed_->got.load()) / double(total));
+    // How far the bytes from where the decoder reads reach (a ranged
+    // download has gaps).
+    const int64_t reach = feed_reach(*feed_, feed_->reading.load());
+    return info_.duration * std::min(1.0, double(reach) / double(total));
   }
 
 private:
