@@ -805,6 +805,18 @@ struct AudioPlayer {
   bool marks_valid = false;
 };
 
+// The Media panel's video filling the screen (toggle_media_fullscreen): the
+// window goes fullscreen and the panel's controls lie over the bottom of the
+// picture while the pointer moves, the video is paused or the pointer is on
+// them. Kept apart from AudioPlayer, which audio_stop resets.
+struct MediaFullscreen {
+  bool on = false;
+  bool window_was_fullscreen = false;  // left as it was on leaving
+  double moved_at = 0;                 // last pointer motion (steady seconds)
+  bool cursor_hidden = false;
+  uint32_t last_video_click = 0;       // a press on the picture (double click)
+};
+
 // The Media panel's right-click menu (UiCommand::MediaAction).
 struct MediaMenu {
   bool open = false;
@@ -1462,6 +1474,7 @@ struct App {
   // The row of the open Downloads right-click menu.
   std::shared_ptr<xanatoo::DownloadProgress> download_menu;
   MediaMenu media_menu;
+  MediaFullscreen media_full;
   uint64_t next_fetch_id = 1;
   std::shared_ptr<ImageFetchShared> image_fetch =
       std::make_shared<ImageFetchShared>();
@@ -2392,6 +2405,14 @@ std::string media_panel_hover(const App& app, int mx, int my);
 // under the pointer (elsewhere: the current position). True when the
 // press was inside the client area (taken, menu or not).
 bool right_click_media_panel(App& app, int mx, int my);
+// The playing video fills the screen / back into the panel
+// (UiCommand::AudioFullscreen, the panel's button, a double click on it).
+void toggle_media_fullscreen(App& app);
+inline bool media_fullscreen(const App& app) { return app.media_full.on; }
+// While fullscreen: takes the pointer, wheel and keys (true = taken).
+bool media_fullscreen_event(App& app, const SDL_Event& ev);
+// While fullscreen: the picture and its controls over the whole window.
+void draw_media_fullscreen(App& app);
 // UiCommand::MediaAction on App::media_menu: bookmark-time / unbookmark-time
 // / bookmark-file / unbookmark-file / seek / copy-time / set-a / set-b /
 // bookmark-section / unbookmark-section / copy-section / use-section.

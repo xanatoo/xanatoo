@@ -3046,6 +3046,21 @@ void handle_event(App& app, SDL_Event& ev) {
       xanatoo::sdl::keycode(ev) == SDLK_AC_BACK) {
     xanatoo::sdl::set_keycode(ev, SDLK_ESCAPE);
   }
+  // Fullscreen video: its controls take the pointer and keys; an open menu
+  // (its right-click one) gets them as usual. ImGui follows the pointer so
+  // the menu opens under it.
+  if (media_fullscreen(app)) {
+    const auto k = xanatoo::sdl::event_kind(ev);
+    if (app.ui.popup_open()) {
+      app.ui.process_event(ev);
+      if (k != xanatoo::sdl::EventKind::Quit && k != xanatoo::sdl::EventKind::WindowResized &&
+          k != xanatoo::sdl::EventKind::RenderReset)
+        return;
+    } else {
+      if (k == xanatoo::sdl::EventKind::MouseMotion) app.ui.process_event(ev);
+      if (media_fullscreen_event(app, ev)) return;
+    }
+  }
   // An obscured ImGui form can otherwise receive the down/wheel before the
   // next frame's native panel order is synchronized. Do still forward button
   // releases so an ImGui drag cannot be left held when a panel crosses it.

@@ -804,6 +804,17 @@ inline void set_fullscreen(SDL_Window* window, bool enabled) {
 #endif
 }
 
+inline void show_cursor(bool shown) {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  if (shown)
+    SDL_ShowCursor();
+  else
+    SDL_HideCursor();
+#else
+  SDL_ShowCursor(shown ? SDL_ENABLE : SDL_DISABLE);
+#endif
+}
+
 inline void start_text_input(SDL_Window* window) {
 #if defined(XANATOO_SDL3) && XANATOO_SDL3
   SDL_StartTextInput(window);

@@ -224,6 +224,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.audio_playing = app.audio.state == AudioState::Playing;
   ui_state.audio_ab = app.audio.ab;
   ui_state.audio_loop = app.audio.loop;
+  ui_state.audio_video = app.audio.video_w > 0;
+  ui_state.audio_fullscreen = media_fullscreen(app);
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
@@ -261,7 +263,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.style_pin_candidates = xanatoo::style_pin_keys(path_of(app, focused_pane(app)));
   ui_state.browse = browsing(app);
   ui_state.can_edit = !focused_read_only(app);
-  ui_state.chrome_hidden = app.chrome_hidden;
+  ui_state.chrome_hidden = app.chrome_hidden || media_fullscreen(app);
   ui_state.virtual_keyboard = app.virtual_keyboard;
   ui_state.help = app.help_mode;
   ui_state.hover_help = app.hover_help.open;
@@ -464,6 +466,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
                   app.audio.state != AudioState::Failed;
     mm.ab = app.audio.ab;
     mm.loop = app.audio.loop;
+    mm.video = app.audio.video_w > 0;
+    mm.fullscreen = media_fullscreen(app);
     const MediaMenu& m = app.media_menu;
     if (m.sec_b > m.sec_a) {
       mm.section = xanatoo::format_audio_time(m.sec_a) + "\xE2\x80\x93" +
@@ -2500,6 +2504,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::AudioLoop:
       audio_toggle_loop(app);
+      break;
+    case C::AudioFullscreen:
+      toggle_media_fullscreen(app);
       break;
     case C::FocusSearchBar:
       show_search_bar(app);
@@ -5410,9 +5417,11 @@ void run_frame(App& app) {
   publish_primary_selection(app);  // after menu / toolbar commands
   poll_images(app);
   pump_page_tiles(app);
-  draw_panes(app);
-  draw_dock_gutters(app);
-  draw_split_chrome(app);
+  if (!media_fullscreen(app)) {  // all under the picture
+    draw_panes(app);
+    draw_dock_gutters(app);
+    draw_split_chrome(app);
+  }
   // Freeze ImGui's draw lists before painting native frames. Rich panel forms
   // now composite inside float_stack rather than across everything at the end.
   app.ui.prepare_render();
@@ -5422,6 +5431,7 @@ void run_frame(App& app) {
   draw_status_bar(app);
   draw_dock_preview(app);
   draw_hover_tooltip(app);
+  draw_media_fullscreen(app);  // over everything but ImGui's menus
   present_frame(app);
 }
 

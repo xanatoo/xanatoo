@@ -22,6 +22,7 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <tuple>
 #include <utility>
 
 #include "xanatoo/app.hpp"
@@ -391,8 +392,12 @@ void start_playing(App& app) {
 // The panel's parts, placed in its client rect (shared by draw, click and
 // hover: the same hit-test as the action).
 enum class MediaPart : uint8_t {
-  None, Video, Back, Toggle, Forward, Stop, AB, Loop, Seek, Volume, FileMark, MarkA, MarkB
+  None, Video, Back, Toggle, Forward, Stop, AB, Loop, Seek, Volume, FileMark, MarkA, MarkB,
+  Fullscreen
 };
+
+// Fullscreen: the controls hide this long after the pointer last moved.
+constexpr double kControlsLinger = 2.5;
 
 // The shortest A–B section (seconds).
 constexpr double kMinSection = 0.2;
@@ -405,7 +410,11 @@ struct MediaLayout {
   int controls_h = 0;
   int pad = 0;
   int title_y = 0, info_y = 0, times_y = 0;  // text baselines
+  // Fullscreen: the strip of controls over the picture's bottom (w = 0: the
+  // panel, where they are under it).
+  SDL_Rect controls{};
   SDL_Rect seek{}, back{}, toggle{}, forward{}, stop{}, ab{}, loop{}, volume{};
+  SDL_Rect full{};  // the fullscreen button, right end of the row (w = 0: no video)
   SDL_Rect file_mark{};  // ribbon right of the title while bookmarked (w = 0: none)
   // Tabs under the seek bar to drag the A / B markers by (w = 0: none).
   SDL_Rect mark_a{}, mark_b{};
@@ -414,8 +423,9 @@ struct MediaLayout {
 
 MediaLayout media_layout(const App& app) {
   MediaLayout L;
-  const FloatWindow& w = app.media_win;
-  auto [cx, cy, cw, ch] = float_client_rect(const_cast<App&>(app), w);
+  const bool fs = app.media_full.on;
+  int cx = 0, cy = 0, cw = std::max(1, app.win_w), ch = std::max(1, app.win_h);
+  if (!fs) std::tie(cx, cy, cw, ch) = float_client_rect(const_cast<App&>(app), app.media_win);
   L.client = {cx, cy, cw, ch};
   const xanatoo::Font& f = app.ui_font;
   const int lh = f.line_height();
@@ -450,7 +460,12 @@ MediaLayout media_layout(const App& app) {
   const int vx = L.loop.x + L.loop.w + 2 * L.pad;
   L.volume_label_x = vx;
   const int label_w = lh * 2;
-  const int vw = std::min(160, cx + cw - L.pad - (vx + label_w));
+  int row_end = cx + cw - L.pad;
+  if (app.audio.video_w > 0) {
+    L.full = {row_end - b, y, b, b};
+    row_end = L.full.x - L.pad;
+  }
+  const int vw = std::min(160, row_end - (vx + label_w));
   L.volume = {vx + label_w, y + (b - bar_h) / 2, std::max(0, vw), bar_h};
   L.controls_h = y + b + L.pad - cy;
   if (tabs) {
@@ -466,13 +481,15 @@ MediaLayout media_layout(const App& app) {
     const int rw = std::max(8, lh / 2), rh = std::max(12, lh * 4 / 5);
     L.file_mark = {cx + cw - L.pad - rw, L.title_y - f.ascender() + (lh - rh) / 2, rw, rh};
   }
-  // A video takes the room above the controls, which move down.
-  if (app.audio.video_w > 0) {
+  // A video takes the room above the controls, which move down; fullscreen
+  // it takes the whole window and the controls lie over its bottom.
+  if (app.audio.video_w > 0 || fs) {
     const int vh = std::max(0, ch - L.controls_h);
-    L.video = {cx, cy, cw, vh};
+    L.video = {cx, cy, cw, fs ? ch : vh};
+    if (fs) L.controls = {cx, cy + vh, cw, ch - vh};
     for (SDL_Rect* r :
          {&L.seek, &L.back, &L.toggle, &L.forward, &L.stop, &L.ab, &L.loop, &L.volume,
-          &L.file_mark, &L.mark_a, &L.mark_b})
+          &L.full, &L.file_mark, &L.mark_a, &L.mark_b})
       r->y += vh;
     L.title_y += vh;
     L.info_y += vh;
@@ -486,12 +503,25 @@ bool inside(const SDL_Rect& r, int x, int y) {
   return r.w > 0 && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 }
 
+// Fullscreen: whether the controls are showing (pointer moved lately, not
+// playing, a drag, or the pointer on them).
+bool controls_shown(const App& app, const MediaLayout& L) {
+  if (!app.media_full.on) return true;
+  const AudioPlayer& a = app.audio;
+  return a.state != AudioState::Playing || a.drag != AudioPlayer::Drag::None ||
+         now_s() - app.media_full.moved_at < kControlsLinger ||
+         inside(L.controls, static_cast<int>(app.mouse_x), static_cast<int>(app.mouse_y));
+}
+
 MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
-  if (!app.media_panel_open || float_shaded(app.media_win) || !inside(L.client, x, y))
+  const bool fs = app.media_full.on;
+  if (!inside(L.client, x, y) ||
+      (!fs && (!app.media_panel_open || float_shaded(app.media_win))))
     return MediaPart::None;
+  if (fs && !controls_shown(app, L)) return MediaPart::Video;
   // Bars take a few pixels more height: they are thin.
   auto grow = [](SDL_Rect r) { return SDL_Rect{r.x - 2, r.y - 6, r.w + 4, r.h + 12}; };
-  if (inside(L.video, x, y)) return MediaPart::Video;
+  if (inside(L.full, x, y)) return MediaPart::Fullscreen;
   if (inside(L.back, x, y)) return MediaPart::Back;
   if (inside(L.toggle, x, y)) return MediaPart::Toggle;
   if (inside(L.forward, x, y)) return MediaPart::Forward;
@@ -513,6 +543,7 @@ MediaPart media_part_at(const App& app, const MediaLayout& L, int x, int y) {
   }
   if (inside(grow(L.seek), x, y)) return MediaPart::Seek;
   if (L.volume.w > 0 && inside(grow(L.volume), x, y)) return MediaPart::Volume;
+  if (inside(L.video, x, y) && !inside(L.controls, x, y)) return MediaPart::Video;
   return MediaPart::None;
 }
 
@@ -622,7 +653,8 @@ void triangle(App& app, int x0, int y0, int s, int dir, xanatoo::theme::Rgb ink)
   }
 }
 
-// `playing`: the toggle shows pause; A–B and Loop are pressed in (on).
+// `playing`: the toggle shows pause; A–B and Loop are pressed in (on); the
+// fullscreen button shows corners pointing in (back to the panel).
 void draw_button(App& app, const SDL_Rect& r, MediaPart part, bool hot, bool enabled,
                  bool playing) {
   namespace th = xanatoo::theme;
@@ -673,6 +705,29 @@ void draw_button(App& app, const SDL_Rect& r, MediaPart part, bool hot, bool ena
       th::fill(app.sdl, {x0, y1, t, lh}, ink);
       const int ah = std::max(7, s * 2 / 3);
       triangle(app, gap, y1 + t / 2 - ah / 2, ah, 1, ink);
+      break;
+    }
+    case MediaPart::Fullscreen: {
+      // Four corners of a frame, pointing out (enter) or in (leave).
+      // Pointing in, the arms are shorter: the corners keep apart.
+      const int fw = s * 3 / 2, fh = s, t = std::max(2, s / 6);
+      const int arm = playing ? std::max(3, fh * 3 / 8) : std::max(3, s / 2);
+      const int x0 = cx - fw / 2, x1 = x0 + fw;
+      for (int corner = 0; corner < 4; ++corner) {
+        const bool right = corner & 1, bottom = corner & 2;
+        // Out: the corner at the frame's corner, arms along its edges. In:
+        // the corner pulled to the middle, arms reaching back outwards.
+        int px = right ? x1 - t : x0, py = bottom ? y0 + fh - t : y0;
+        int hx = right ? x1 - arm : x0, vy = bottom ? y0 + fh - arm : y0;
+        if (playing) {
+          px = right ? x1 - arm : x0 + arm - t;
+          py = bottom ? y0 + fh - arm : y0 + arm - t;
+          hx = right ? px : x0;
+          vy = bottom ? py : y0;
+        }
+        th::fill(app.sdl, {hx, py, arm, t}, ink);
+        th::fill(app.sdl, {px, vy, t, arm}, ink);
+      }
       break;
     }
     default: break;
@@ -980,10 +1035,16 @@ void follow_section(App& app) {
 
 void update_audio(App& app) {
   AudioPlayer& a = app.audio;
+  // Fullscreen ends with the video: stopped, the panel closed, or a file
+  // without pictures in the player (a new one may still be opening).
+  if (app.media_full.on &&
+      (!app.media_panel_open || a.state == AudioState::Idle ||
+       (a.video_w <= 0 && a.state != AudioState::Loading)))
+    toggle_media_fullscreen(app);
   update_media_marks(app);
   // A drag in the panel follows the pointer until the button comes up.
   if (a.drag != AudioPlayer::Drag::None) {
-    if (!xanatoo::sdl::left_button_down() || !app.media_panel_open) {
+    if (!xanatoo::sdl::left_button_down() || (!app.media_panel_open && !app.media_full.on)) {
       a.drag = AudioPlayer::Drag::None;
     } else if (const int x = static_cast<int>(app.mouse_x); x != a.drag_x) {
       apply_drag(app, x);
@@ -1045,7 +1106,10 @@ void update_audio(App& app) {
   if (a.play) follow_section(app);
 }
 
-void shutdown_audio(App& app) { audio_stop(app); }
+void shutdown_audio(App& app) {
+  if (app.media_full.on) toggle_media_fullscreen(app);
+  audio_stop(app);
+}
 
 void toggle_media_panel(App& app) {
   if (app.media_panel_open) {
@@ -1065,7 +1129,7 @@ namespace {
 void fit_panel_to_video(App& app) {
   FloatWindow& w = app.media_win;
   const AudioPlayer& a = app.audio;
-  if (w.dock != Dock::None || a.video_w <= 0 || a.video_h <= 0) return;
+  if (w.dock != Dock::None || a.video_w <= 0 || a.video_h <= 0 || app.media_full.on) return;
   const MediaLayout L = media_layout(app);
   const int extra_w = w.w - L.client.w, extra_h = w.h - L.client.h;
   // Up to 800 pixels wide, and no lower than the window minus room for the
@@ -1089,8 +1153,22 @@ void click_media_panel(App& app, int mx, int my) {
     case MediaPart::None: break;
     case MediaPart::Back: audio_skip(app, -10); break;
     case MediaPart::Forward: audio_skip(app, 30); break;
-    case MediaPart::Video:
+    case MediaPart::Video: {
+      // A double click goes fullscreen / back (and undoes the first
+      // click's play / pause).
+      const Uint32 now = xanatoo::sdl::ticks();
+      Uint32& last = app.media_full.last_video_click;
+      audio_toggle(app);
+      if (last != 0 && now - last < 400) {
+        last = 0;
+        toggle_media_fullscreen(app);
+      } else {
+        last = now;
+      }
+      break;
+    }
     case MediaPart::Toggle: audio_toggle(app); break;
+    case MediaPart::Fullscreen: toggle_media_fullscreen(app); break;
     case MediaPart::Stop: audio_stop(app); break;
     case MediaPart::AB: audio_toggle_ab(app); break;
     case MediaPart::Loop: audio_toggle_loop(app); break;
@@ -1123,7 +1201,8 @@ void click_media_panel(App& app, int mx, int my) {
 }
 
 bool right_click_media_panel(App& app, int mx, int my) {
-  if (!app.media_panel_open || float_shaded(app.media_win)) return false;
+  if (!app.media_full.on && (!app.media_panel_open || float_shaded(app.media_win)))
+    return false;
   const MediaLayout L = media_layout(app);
   if (!inside(L.client, mx, my)) return false;
   AudioPlayer& a = app.audio;
@@ -1238,7 +1317,11 @@ std::string media_panel_hover(const App& app, int mx, int my) {
     case MediaPart::Back: return "Back 10 seconds";
     case MediaPart::Forward: return "Forward 30 seconds";
     case MediaPart::Video:
-      return a.state == AudioState::Playing ? "Click to pause" : "Click to play";
+      return std::string(a.state == AudioState::Playing ? "Click to pause" : "Click to play") +
+             (app.media_full.on ? ", double-click to leave fullscreen"
+                                : ", double-click for fullscreen");
+    case MediaPart::Fullscreen:
+      return app.media_full.on ? "Leave fullscreen (Esc)" : "Fullscreen (F)";
     case MediaPart::Toggle:
       return a.state == AudioState::Playing ? "Pause"
              : a.state == AudioState::Failed ? "Try again"
@@ -1271,30 +1354,30 @@ std::string media_panel_hover(const App& app, int mx, int my) {
   return {};
 }
 
-void draw_media_panel(App& app) {
+namespace {
+
+// The picture, letterboxed in black at its display aspect.
+void draw_media_video(App& app, const MediaLayout& L) {
   namespace th = xanatoo::theme;
-  if (!app.media_panel_open) return;
-  FloatWindow& w = app.media_win;
-  w.scroll = 0;
-  if (!draw_floating_frame(app, w, "Media", float_active(app, w))) return;
+  const AudioPlayer& a = app.audio;
+  if (L.video.w <= 0 || L.video.h <= 0) return;
+  th::fill(app.sdl, L.video, th::rgb(0, 0, 0));
+  if (a.video_tex && a.video_w > 0 && a.video_h > 0) {
+    const double s = std::min(double(L.video.w) / a.video_w, double(L.video.h) / a.video_h);
+    const int w = std::max(1, int(a.video_w * s)), h = std::max(1, int(a.video_h * s));
+    const SDL_Rect dst{L.video.x + (L.video.w - w) / 2, L.video.y + (L.video.h - h) / 2, w, h};
+    xanatoo::sdl::copy(app.sdl, a.video_tex, nullptr, &dst);
+  }
+}
+
+// Title, info line, seek bar, times, buttons and volume.
+void draw_media_controls(App& app, const MediaLayout& L) {
+  namespace th = xanatoo::theme;
   const th::Palette& p = th::palette();
   const AudioPlayer& a = app.audio;
-  const MediaLayout L = media_layout(app);
   const SDL_Rect& c = L.client;
-  xanatoo::sdl::set_clip_rect(app.sdl, &c);
   const int text_w = std::max(0, c.w - 2 * L.pad);
   const float tx = static_cast<float>(c.x + L.pad);
-
-  // The picture, letterboxed in black at its display aspect.
-  if (L.video.w > 0 && L.video.h > 0) {
-    th::fill(app.sdl, L.video, th::rgb(0, 0, 0));
-    if (a.video_tex && a.video_w > 0 && a.video_h > 0) {
-      const double s = std::min(double(L.video.w) / a.video_w, double(L.video.h) / a.video_h);
-      const int w = std::max(1, int(a.video_w * s)), h = std::max(1, int(a.video_h * s));
-      const SDL_Rect dst{L.video.x + (L.video.w - w) / 2, L.video.y + (L.video.h - h) / 2, w, h};
-      xanatoo::sdl::copy(app.sdl, a.video_tex, nullptr, &dst);
-    }
-  }
 
   // Title and what it is (or why not).
   std::string title = a.title, info;
@@ -1331,6 +1414,15 @@ void draw_media_panel(App& app) {
         }
       }
       break;
+  }
+  // Fullscreen has no status line: what the pointer is on shows here.
+  if (app.media_full.on) {
+    std::string over = media_panel_hover(app, static_cast<int>(app.mouse_x),
+                                         static_cast<int>(app.mouse_y));
+    if (!over.empty() && a.state != AudioState::Failed) {
+      info = std::move(over);
+      info_ink = p.text_dim;
+    }
   }
   const int title_w = L.file_mark.w > 0 ? std::max(0, L.file_mark.x - 6 - (c.x + L.pad)) : text_w;
   app.renderer.draw_text(app.ui_font_bold, tx, static_cast<float>(L.title_y),
@@ -1418,6 +1510,9 @@ void draw_media_panel(App& app) {
               a.state != AudioState::Idle, false);
   draw_button(app, L.ab, MediaPart::AB, hot == MediaPart::AB, seekable(a), a.ab);
   draw_button(app, L.loop, MediaPart::Loop, hot == MediaPart::Loop, true, a.loop);
+  if (L.full.w > 0)
+    draw_button(app, L.full, MediaPart::Fullscreen, hot == MediaPart::Fullscreen, true,
+                app.media_full.on);
   if (L.volume.w > 0) {
     const int ty = L.buttons_y + (L.back.h - app.ui_font.line_height()) / 2 +
                    app.ui_font.ascender();
@@ -1426,7 +1521,166 @@ void draw_media_panel(App& app) {
                            p.text_dim.b);
     draw_bar(app, L.volume, a.volume, p.accent_soft, true);
   }
+}
+
+}  // namespace
+
+void draw_media_panel(App& app) {
+  if (!app.media_panel_open) return;
+  FloatWindow& w = app.media_win;
+  w.scroll = 0;
+  if (!draw_floating_frame(app, w, "Media", float_active(app, w))) return;
+  if (app.media_full.on) return;  // the picture is on the whole window
+  const MediaLayout L = media_layout(app);
+  xanatoo::sdl::set_clip_rect(app.sdl, &L.client);
+  draw_media_video(app, L);
+  draw_media_controls(app, L);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+}
+
+void draw_media_fullscreen(App& app) {
+  namespace th = xanatoo::theme;
+  if (!app.media_full.on) return;
+  const MediaLayout L = media_layout(app);
+  xanatoo::sdl::set_clip_rect(app.sdl, &L.client);
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
+  th::fill(app.sdl, L.client, th::rgb(0, 0, 0));
+  draw_media_video(app, L);
+  const bool shown = controls_shown(app, L);
+  if (shown) {
+    // The panel's face, a little see-through, under the controls.
+    const th::Rgb face = th::palette().face;
+    SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(app.sdl, face.r, face.g, face.b, 225);
+    xanatoo::sdl::fill_rect(app.sdl, &L.controls);
+    draw_media_controls(app, L);
+  }
+  xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+  // The pointer hides with the controls (shown again on leaving).
+  if (app.media_full.cursor_hidden == shown) {
+    app.media_full.cursor_hidden = !shown;
+    xanatoo::sdl::show_cursor(shown);
+  }
+}
+
+void toggle_media_fullscreen(App& app) {
+  MediaFullscreen& f = app.media_full;
+  if (f.on) {
+    f.on = false;
+    if (!f.window_was_fullscreen) xanatoo::sdl::set_fullscreen(app.window, false);
+    if (f.cursor_hidden) xanatoo::sdl::show_cursor(true);
+    f.cursor_hidden = false;
+    app.audio.drag = AudioPlayer::Drag::None;
+    return;
+  }
+  if (app.audio.video_w <= 0) {
+    flash_status(app, "No video playing");
+    return;
+  }
+  f.on = true;
+  f.window_was_fullscreen = xanatoo::sdl::fullscreen(app.window);
+  if (!f.window_was_fullscreen) xanatoo::sdl::set_fullscreen(app.window, true);
+  f.moved_at = now_s();
+  f.last_video_click = 0;
+  app.audio.drag = AudioPlayer::Drag::None;
+  app.media_panel_open = true;
+}
+
+namespace {
+
+// Fullscreen keys: Esc / F leave, Space / K play-pause, Left / Right 10 s
+// (Shift: 60 s), Home / End, Up / Down and M the volume; all other plain
+// keys are taken too. With Ctrl / Alt (Ctrl+Q, …) they go on as usual.
+bool fullscreen_key(App& app, const SDL_Event& ev) {
+  const SDL_Keycode key = xanatoo::sdl::keycode(ev);
+  const SDL_Keymod mod = xanatoo::sdl::keymod(ev);
+  if (mod & (KMOD_CTRL | KMOD_ALT)) return false;
+  const double step = (mod & KMOD_SHIFT) ? 60 : 10;
+  AudioPlayer& a = app.audio;
+  switch (key) {
+    case SDLK_ESCAPE:
+    case SDLK_f:
+    case SDLK_F11:
+      toggle_media_fullscreen(app);
+      break;
+    case SDLK_SPACE:
+    case SDLK_k:
+    case SDLK_p:
+      audio_toggle(app);
+      break;
+    case SDLK_LEFT:
+    case SDLK_j:
+      audio_skip(app, -step);
+      break;
+    case SDLK_RIGHT:
+    case SDLK_l:
+      audio_skip(app, step);
+      break;
+    case SDLK_HOME:
+      if (have_media(a)) audio_seek(app, 0);
+      break;
+    case SDLK_END:
+      if (have_media(a) && a.duration > 0) audio_seek(app, std::max(0.0, a.duration - 1));
+      break;
+    case SDLK_UP:
+      audio_set_volume(app, a.volume + 0.1f);
+      break;
+    case SDLK_DOWN:
+      audio_set_volume(app, a.volume - 0.1f);
+      break;
+    case SDLK_m:
+      audio_set_volume(app, a.volume > 0 ? 0.f : 1.f);
+      break;
+    default:
+      break;  // taken anyway: the hidden page gets no keys
+  }
+  app.media_full.moved_at = now_s();  // show where it went
+  return true;
+}
+
+}  // namespace
+
+bool media_fullscreen_event(App& app, const SDL_Event& ev) {
+  if (!app.media_full.on) return false;
+  MediaFullscreen& f = app.media_full;
+  using K = xanatoo::sdl::EventKind;
+  switch (xanatoo::sdl::event_kind(ev)) {
+    case K::MouseMotion:
+      app.mouse_x = static_cast<float>(ev.motion.x);
+      app.mouse_y = static_cast<float>(ev.motion.y);
+      f.moved_at = now_s();
+      return true;
+    case K::MouseButtonDown: {
+      const int x = static_cast<int>(ev.button.x), y = static_cast<int>(ev.button.y);
+      app.mouse_x = static_cast<float>(x);
+      app.mouse_y = static_cast<float>(y);
+      // A press while the controls are hidden only shows them.
+      const MediaLayout L = media_layout(app);
+      const bool shown = controls_shown(app, L) || !inside(L.controls, x, y);
+      f.moved_at = now_s();
+      if (ev.button.button == SDL_BUTTON_LEFT && shown)
+        click_media_panel(app, x, y);
+      else if (ev.button.button == SDL_BUTTON_RIGHT)
+        right_click_media_panel(app, x, y);
+      return true;
+    }
+    case K::MouseWheel:
+      if (ev.wheel.y != 0)
+        audio_set_volume(app, app.audio.volume + (ev.wheel.y > 0 ? 0.05f : -0.05f));
+      f.moved_at = now_s();
+      return true;
+    case K::KeyDown:
+      return fullscreen_key(app, ev);
+    case K::MouseButtonUp:
+    case K::KeyUp:
+    case K::TextInput:
+    case K::FingerDown:
+    case K::FingerMotion:
+    case K::FingerUp:
+      return true;
+    default:
+      return false;
+  }
 }
 
 }  // namespace xanatoo::app

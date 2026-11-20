@@ -686,7 +686,28 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   streaming texture (`AudioPlayer::video_tex`, recreated on size change,
   destroyed in `close_player`). The panel letterboxes it above the controls
   (`MediaLayout::video`, `MediaPart::Video`: click = play / pause).
+- Fullscreen (`toggle_media_fullscreen`, `App::media_full` — a
+  `MediaFullscreen` record outside `AudioPlayer`, which `audio_stop`
+  resets): the panel's button (`MediaPart::Fullscreen`, right end of the
+  button row while there is a picture), a double click on the picture,
+  Go → Sound → Fullscreen Video, the right-click menu
+  (`UiCommand::AudioFullscreen`). The window goes fullscreen unless it was
+  already (`window_was_fullscreen`, restored on leaving). `media_layout`
+  then places the picture over the whole window and the controls in a strip
+  over its bottom (`MediaLayout::controls`), so draw, click, hover and drag
+  share one hit-test as in the panel. `draw_media_fullscreen` paints last in
+  `run_frame` (panes, gutters and split chrome are skipped; ImGui menus stay
+  on top, the menu bar is hidden through `UiState::chrome_hidden`); the
+  strip shows while paused, while dragging, with the pointer on it, or for
+  `kControlsLinger` after the pointer moved, and the pointer hides with it.
+  Input is modal (`media_fullscreen_event`, first in `handle_event`): the
+  pointer and wheel (volume) go to the controls, plain keys to
+  `fullscreen_key` — Esc / F / F11 leave, Space / K play-pause, Left /
+  Right 10 s (Shift 60 s), Home / End, Up / Down / M volume; keys with Ctrl /
+  Alt go on as usual. While an ImGui popup is open (the right-click menu)
+  events go to ImGui only. `update_audio` leaves fullscreen when the player
+  stops, the panel closes or a file without pictures plays.
 - `examples/video.md` (synthesised H.264 + AAC MP4 and VP9 + Opus WebM);
   fixtures `tests/data/video` (0.5 s, 64×48, red / blue).
-- Next: fullscreen, keyboard keys, playing the stream URLs of YouTube /
+- Next: keyboard keys in the panel, playing the stream URLs of YouTube /
   PeerTube pages here instead of mpv, `<video>` in web pages, subtitles.

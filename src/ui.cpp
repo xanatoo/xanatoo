@@ -1132,6 +1132,11 @@ bool Ui::pointer_obscured(float x, float y,
   return hovered && ui_panel_obscured(ui_panel_layer(hovered->Name), native_top);
 }
 
+bool Ui::popup_open() const {
+  return ready_ && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId |
+                                              ImGuiPopupFlags_AnyPopupLevel);
+}
+
 bool Ui::captures_point(float x, float y,
                          std::optional<UiPanelLayer> native_top) const {
   if (!ready_) return false;
@@ -3283,6 +3288,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         if (ImGui::MenuItem("A-B Markers", nullptr, state.audio_ab)) cmd = UiCommand::AudioAB;
         if (ImGui::MenuItem(state.audio_ab ? "Loop Section" : "Loop", nullptr, state.audio_loop))
           cmd = UiCommand::AudioLoop;
+        if (ImGui::MenuItem("Fullscreen Video", nullptr, state.audio_fullscreen,
+                            state.audio_video))
+          cmd = UiCommand::AudioFullscreen;
         ImGui::Separator();
         if (ImGui::MenuItem("Stop")) cmd = UiCommand::AudioStop;
         ImGui::EndMenu();
@@ -3610,6 +3618,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("A-B Markers", nullptr, mm.ab, mm.seekable)) cmd = UiCommand::AudioAB;
       if (ImGui::MenuItem(mm.ab ? "Loop Section" : "Loop File", nullptr, mm.loop))
         cmd = UiCommand::AudioLoop;
+      if (mm.video &&
+          ImGui::MenuItem(mm.fullscreen ? "Leave Fullscreen" : "Fullscreen", "F", mm.fullscreen))
+        cmd = UiCommand::AudioFullscreen;
       ImGui::Separator();
       if (mm.file_bookmarked)
         item("Remove File Bookmark", "unbookmark-file");

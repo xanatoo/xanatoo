@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Media panel: fullscreen video
+
+- Fullscreen button at the right end of the panel's buttons (while a video
+  plays), double click on the picture, Go → Sound → Fullscreen Video, or the
+  right-click menu: the window goes fullscreen with the picture filling it;
+  the panel's controls lie over its bottom and hide (with the pointer)
+  2.5 s after the pointer stops while playing. Keys: Esc / F leave, Space /
+  K pause, Left / Right 10 s (Shift 60 s), Home / End, Up / Down / M volume,
+  wheel volume. Leaves by itself when the player stops or plays sound only.
+- Checked under Xvfb (WebM): button, double click, Esc, keys, right-click
+  menu over the picture, auto-hiding controls. Not checked: Android (SDL
+  fullscreen there), touch-only use, multi-monitor.
+
 ## Status (2026-11-20) — Style sheets: visible selection, distinct colours
 
 - Selection was hidden under opaque role fills (comment cards, asides,

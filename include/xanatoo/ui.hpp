@@ -230,6 +230,7 @@ enum class UiCommand {
   AudioSkip,          // sound player: arg = seconds forward (negative: back)
   AudioAB,            // sound player: A–B markers on / off
   AudioLoop,          // sound player: loop on / off (the A–B section or the file)
+  AudioFullscreen,    // sound player: the video fills the screen / back
   ToggleSearchBar,    // show / hide the search bar (Ctrl+K focuses it)
   FocusSearchBar,     // show the search bar and focus its field
   Search,             // search bar committed (arg = what was typed)
@@ -479,6 +480,8 @@ struct UiState {
   bool audio_playing = false;  // … and playing (not paused / ended)
   bool audio_ab = false;       // … with its A–B markers on
   bool audio_loop = false;     // … looping
+  bool audio_video = false;       // … showing pictures
+  bool audio_fullscreen = false;  // … fullscreen
   std::vector<UiSearchEngine> search_engines;
   std::string search_engine;  // id of the engine in use
   std::string site_search;  // engine that searches the focused page's service
@@ -591,6 +594,7 @@ struct UiState {
     bool file_bookmarked = false;
     bool seekable = false;
     bool ab = false, loop = false;  // markers on, looping
+    bool video = false, fullscreen = false;  // pictures; filling the screen
     std::string section;            // "0:10–0:20" ("" = no section)
     bool section_bookmarked = false;
     bool section_selected = false;  // it is the A–B markers' section
@@ -704,6 +708,8 @@ public:
 
   bool want_capture_keyboard() const;
   bool want_capture_mouse() const;
+  // An ImGui popup (menu) is open.
+  bool popup_open() const;
   // True when ImGui chrome (any window from the last frame, or an open popup)
   // owns window point (x, y). Unlike want_capture_mouse() this does not
   // depend on where the mouse was last frame, so touches can be routed.
