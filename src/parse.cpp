@@ -808,6 +808,18 @@ Document parse_markup(std::string_view source) {
       ++i;
       continue;
     }
+    // :::chrome role="related" — page chrome of a web page (reader mode
+    // hides it); role = what it is ("navigation", "related", …).
+    if (trimmed == ":::chrome" || starts_with(trimmed, ":::chrome ")) {
+      NodeId n = doc.create(NodeKind::Chrome, current_parent());
+      read_fence_style(doc, n, trimmed);
+      std::string id = fence_attr(trimmed, "id");
+      if (!id.empty()) doc.get(n).label = id;
+      doc.get(n).summary = fence_attr(trimmed, "role");
+      push_fence(n);
+      ++i;
+      continue;
+    }
     // :::aside [side=left|right] — a text box beside the flow
     if (starts_with(trimmed, ":::aside")) {
       NodeId n = doc.create(NodeKind::Aside, current_parent());
@@ -1821,11 +1833,23 @@ void serialize_node(const Document& doc, NodeId id, std::string& out,
 
   switch (node.kind) {
     case NodeKind::Document:
-    case NodeKind::Chrome:  // page chrome of a web page: saved as content
       for (NodeId c : node.children) {
         serialize_node(doc, c, out, indent);
       }
       break;
+
+    case NodeKind::Chrome: {  // page chrome of a web page
+      out += pad;
+      out += ":::chrome";
+      out += style_attr;
+      if (!node.label.empty()) out += " id=\"" + node.label + "\"";
+      if (!node.summary.empty()) out += " role=\"" + node.summary + "\"";
+      out += "\n";
+      for (NodeId c : node.children) serialize_node(doc, c, out, indent);
+      out += pad;
+      out += ":::\n\n";
+      break;
+    }
 
     case NodeKind::Heading: {
       out += pad;
@@ -2826,6 +2850,21 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
     return;
   }
 
+  if (tag == "chrome") {
+    NodeId n = doc.create(NodeKind::Chrome, parent);
+    size_t i = 1;
+    while (i + 1 < e.kids.size() && e.kids[i].kind == SExpr::Kind::Atom &&
+           !e.kids[i].text.empty() && e.kids[i].text[0] == ':') {
+      const std::string& k = e.kids[i].text;
+      const std::string v = sexpr_text(e.kids[i + 1]);
+      if (k == ":role") doc.get(n).summary = v;
+      else if (k == ":label" || k == ":anchor") doc.get(n).label = v;
+      i += 2;
+    }
+    parse_sexpr_children(doc, n, e.kids, i);
+    return;
+  }
+
   if (tag == "aside") {
     bool blocks = false;
     for (size_t k = 1; k < e.kids.size(); ++k) {
@@ -3489,12 +3528,19 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
       out += ")\n";
       break;
 
-    case NodeKind::Chrome:  // page chrome of a web page: saved as content
-      for (size_t i = 0; i < node.children.size(); ++i) {
-        if (i > 0) out.push_back('\n');
-        serialize_sexpr_node(doc, node.children[i], out, indent);
+    case NodeKind::Chrome: {  // page chrome of a web page
+      out += pad;
+      out += "(chrome";
+      emit_node_id(node, out);
+      emit_label(node, out);
+      if (!node.summary.empty()) {
+        out += " :role ";
+        escape_sexpr_string(node.summary, out);
       }
+      serialize_sexpr_children(doc, node, out, indent + 2);
+      out += ")";
       break;
+    }
 
     case NodeKind::Heading: {
       // Legacy ranked heading, distinct from the unranked title form.

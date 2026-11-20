@@ -59,6 +59,7 @@ author: …
 | `(p …)` | Paragraph |
 | `(quote …)` | Quotation (attributed speech / excerpt) |
 | `(note …)` | Authorial aside / callout (semantic, not a sidebar region) |
+| `(chrome :role "related" …)` | Page chrome of a web page (`navigation`, `sidebar`, `related`, …); reader mode hides it. Markdown: `:::chrome role="related"` … `:::` |
 | `(thread …)` | Discussion container (mailing list / forum thread) |
 | `(message …)` | One post or comment; may reply to another message |
 | `(code :lang "cpp" "…")` | Preformatted code; `:lang` is a language tag |

@@ -6653,6 +6653,106 @@ void test_html_link_footnotes() {
   EXPECT(serialize_markup(plain).find("[^") == std::string::npos);
 }
 
+// Related content: "Related Links" / "You May Also Like" boxes are Chrome
+// with the role "related"; Chrome is a native block in every format.
+void test_related_chrome() {
+  using namespace xanatoo;
+  auto related = [](const std::string& h) {
+    const size_t gt = h.find('>');
+    const size_t sp = h.find_first_of(" >");
+    return is_related_block(h, gt + 1, h.substr(1, sp - 1),
+                            std::string_view(h).substr(sp, gt - sp));
+  };
+  const std::string links =
+      "<ul><li><a href=/a>Some other story</a><li><a href=/b>And one more"
+      " story</a></ul>";
+  EXPECT(related("<div class=\"jp-relatedposts\">" + links + "</div>"));
+  EXPECT(related("<section id=more-stories>" + links + "</section>"));
+  EXPECT(related("<section><h2>You May Also Like</h2>" + links + "</section>"));
+  EXPECT(related("<div>\n<div class=hd><h3>Related:</h3></div>" + links +
+                 "</div>"));
+  EXPECT(related("<aside><!-- x --><h4>More from Example</h4>" + links +
+                 "</aside>"));
+  // Not related: a post tagged "related", prose, other headings, text first.
+  EXPECT(!related("<div class=\"post tag-related\">" + links + "</div>"));
+  EXPECT(!related("<section><h2>Related</h2><p>A long paragraph of prose"
+                  " that cites <a href=/x>one paper</a> among much text.</p>"
+                  "</section>"));
+  EXPECT(!related("<section><h2>Related work</h2>" + links + "</section>"));
+  EXPECT(!related("<section><h2>Relatedness</h2>" + links + "</section>"));
+  EXPECT(!related("<section><h2>Comments</h2>" + links + "</section>"));
+  EXPECT(!related("<div>Intro <h2>Related</h2>" + links + "</div>"));
+  EXPECT(!related("<p class=related>" + links + "</p>"));
+  EXPECT(html_link_share("<a>ab</a>cd<script>'xxxxxx'</script>") == 0.5);
+  EXPECT(html_link_share("") == 0.0);
+
+  // In a page: the box is Chrome "related", reader mode hides it, the Page
+  // panel shows it.
+  Document d = parse_html_page(
+      "<body><article><h1>T</h1><p>Story text</p>"
+      "<section><h2>You might also like</h2>" + links + "</section>"
+      "</article></body>",
+      "", true);
+  NodeId box = INVALID_NODE;
+  for (const Node& n : d.nodes)
+    if (n.kind == NodeKind::Chrome && n.parent != INVALID_NODE) box = n.id;
+  EXPECT(box != INVALID_NODE);
+  if (box != INVALID_NODE) {
+    EXPECT_EQ(d.get(box).summary, "related");
+    EXPECT(margin_chrome(d, d.get(box)));
+    EXPECT_EQ(chrome_regions(d).size(), 1u);
+  }
+
+  // Markdown: :::chrome role="…"; written back the same.
+  {
+    const std::string md =
+        "Text\n\n"
+        ":::chrome role=\"related\"\n"
+        "- [Other](https://example.org/other)\n"
+        ":::\n\n"
+        ":::chrome id=\"top\" role=\"page header\"\n"
+        "Site\n"
+        ":::\n";
+    Document m = parse_markup(md);
+    auto k = kids_of(m, m.root);
+    EXPECT_EQ(k.size(), 3u);
+    if (k.size() == 3u) {
+      EXPECT(m.get(k[1]).kind == NodeKind::Chrome);
+      EXPECT_EQ(m.get(k[1]).summary, "related");
+      EXPECT_EQ(kids_of(m, k[1]).size(), 1u);
+      EXPECT_EQ(m.get(k[2]).summary, "page header");
+      EXPECT_EQ(m.get(k[2]).label, "top");
+    }
+    const std::string out = serialize_markup(m);
+    EXPECT(out.find(":::chrome role=\"related\"\n") != std::string::npos);
+    EXPECT(out.find(":::chrome id=\"top\" role=\"page header\"\n") !=
+           std::string::npos);
+    EXPECT_EQ(serialize_markup(parse_markup(out)), out);
+  }
+  // S-expression: (chrome :role "…" blocks…).
+  {
+    Document sx = parse_sexpr(
+        "(doc (p \"a\") (chrome :role \"related\" (p \"b\") (p \"c\")))");
+    auto k = kids_of(sx, sx.root);
+    EXPECT_EQ(k.size(), 2u);
+    if (k.size() == 2u) {
+      EXPECT(sx.get(k[1]).kind == NodeKind::Chrome);
+      EXPECT_EQ(sx.get(k[1]).summary, "related");
+      EXPECT_EQ(kids_of(sx, k[1]).size(), 2u);
+    }
+    const std::string so = serialize_sexpr(sx);
+    EXPECT(so.find("(chrome") != std::string::npos);
+    EXPECT_EQ(serialize_sexpr(parse_sexpr(so)), so);
+  }
+  // A whole web page dumps to Markdown and reads back with its chrome.
+  {
+    const std::string out = serialize_markup(d);
+    Document back = parse_markup(out);
+    EXPECT_EQ(chrome_regions(back).size(), 1u);
+    EXPECT_EQ(serialize_markup(back), out);
+  }
+}
+
 // Site hints (site_hints.hpp, docs/SITEHINTS.md).
 void test_site_hints() {
   using namespace xanatoo;
@@ -8494,6 +8594,7 @@ int main() {
   test_html_chrome_regions();
   test_html_page();
   test_site_hints();
+  test_related_chrome();
   test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();

@@ -348,8 +348,16 @@ The page is parsed **once**, with the chrome kept and marked:
   `text:` stay the same. A jump (`expand_ancestors_for_node`) or a find hit
   inside hidden chrome leaves reader mode first (`reveal_chrome`), as a jump
   into a folded section unfolds it.
-- Saving a web page as Markdown / Org / gemtext / `.sexp` writes the chrome as
-  ordinary content; the regions are not kept.
+- Saving a web page as Markdown, `.sexp` or XML keeps the regions as native
+  blocks (`:::chrome role="navigation"` … `:::`, `(chrome :role "…" …)`,
+  `<chrome summary="…">`), so a dump of what is in memory reads back the
+  same and reader mode works on the saved file. Org and gemtext have no
+  such block and write the chrome as ordinary content.
+- "related" is the role of boxes of links to other pages ("Related Links",
+  "You May Also Like", Outbrain / Taboola widgets): found by class / id
+  parts or by the box's first heading, and only when at least half of its
+  text is links (`is_related_block`). Like navigation and sidebars it goes
+  to the Page panel when that is open.
 
 Later: a marker where each region was hidden ("▸ navigation") to open just
 that one, as for a folded section; a default per host.

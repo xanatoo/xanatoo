@@ -16,6 +16,16 @@
   and the comments as a Thread of Messages (author, date, score, reply
   tree). Checked under Xvfb on the Mailchimp story (20 of 21 comments; the
   21st is an empty placeholder the site fills by script).
+- Related content: boxes of links to other pages ("Related Links", "You
+  May Also Like", Outbrain / Taboola) are Chrome with the role "related"
+  (class / id parts or first heading, plus at least half the text in
+  links): hidden in reader mode, listed in the Page panel. Checked on
+  Slashdot (via its sheet), Ars, BBC, WordPress, Wikipedia: no false
+  positives ("See also" stays content); BBC's unlabelled
+  `[data-component=links-block]` would need a sheet.
+- Chrome is now a native block: `:::chrome role="…"` in Markdown,
+  `(chrome :role "…")` in `.sexp` (XML had `<chrome>`), so a saved web
+  page keeps its regions and reads back the same.
 - Next: more sheets (sites that need them), maybe `(title …)` /
   `(byline …)` rules, a menu entry to open the user sites folder, and
   `>` child selectors if a sheet needs them.

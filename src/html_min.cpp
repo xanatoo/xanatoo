@@ -1159,6 +1159,163 @@ std::string_view chrome_role(std::string_view tag, std::string_view attrs) {
 
 size_t find_ci(std::string_view hay, std::string_view needle, size_t from);
 
+// ---- Related content ("Related Links", "You May Also Like") -------------
+
+// Class / id parts of related-content boxes and the widgets that fill them.
+constexpr std::array<std::string_view, 9> kRelatedParts = {
+    "related",      "recommended", "also-like", "alsolike", "read-next",
+    "more-stories", "morestories", "outbrain",  "taboola"};
+
+// How such a box is titled (lower case; a heading starting with one).
+constexpr std::array<std::string_view, 18> kRelatedHeadings = {
+    "related",
+    "you may also like",
+    "you might also like",
+    "you may also enjoy",
+    "you might also enjoy",
+    "you may be interested",
+    "you might be interested",
+    "more from",
+    "more stories",
+    "more like this",
+    "more on this",
+    "read next",
+    "what to read next",
+    "read more",
+    "up next",
+    "recommended",
+    "recommendations",
+    "suggested"};
+
+// Tags a related-content box comes in.
+constexpr std::array<std::string_view, 6> kRelatedTags = {
+    "div", "section", "aside", "nav", "ul", "ol"};
+
+}  // namespace
+
+// Share of the visible text of `html` that is inside links (0..1, 0 for no
+// text); scripts, styles and comments do not count.
+double html_link_share(std::string_view html) {
+  size_t total = 0, linked = 0;
+  int in_a = 0;
+  size_t i = 0;
+  while (i < html.size()) {
+    const char c = html[i];
+    if (c != '<') {
+      if (!std::isspace(static_cast<unsigned char>(c))) {
+        ++total;
+        if (in_a > 0) ++linked;
+      }
+      ++i;
+      continue;
+    }
+    if (html.compare(i, 4, "<!--") == 0) {
+      const size_t e = html.find("-->", i + 4);
+      i = e == std::string_view::npos ? html.size() : e + 3;
+      continue;
+    }
+    size_t n = i + 1;
+    const bool close = n < html.size() && html[n] == '/';
+    if (close) ++n;
+    size_t ne = n;
+    while (ne < html.size() &&
+           std::isalnum(static_cast<unsigned char>(html[ne])))
+      ++ne;
+    const std::string name = ascii_lower(html.substr(n, ne - n));
+    if (name.empty()) {  // a lone '<' is text
+      ++total;
+      if (in_a > 0) ++linked;
+      ++i;
+      continue;
+    }
+    const size_t gt = tag_end(html, i);
+    if (gt == std::string_view::npos) break;
+    i = gt + 1;
+    if (name == "a") in_a = close ? std::max(0, in_a - 1) : in_a + 1;
+    if (!close && (name == "script" || name == "style")) {
+      const size_t e = find_ci(html, "</" + name, i);
+      i = e == std::string_view::npos ? html.size() : e;
+    }
+  }
+  return total == 0 ? 0.0 : static_cast<double>(linked) / total;
+}
+
+namespace {
+
+// The text of a heading (h1–h6) the element starting at `from` opens with
+// (only tags and blanks before it), else empty.
+std::string leading_heading(std::string_view html, size_t from) {
+  const size_t limit = std::min(html.size(), from + 1500);
+  size_t i = from;
+  while (i < limit) {
+    const char c = html[i];
+    if (std::isspace(static_cast<unsigned char>(c))) {
+      ++i;
+      continue;
+    }
+    if (c != '<') return {};
+    if (html.compare(i, 4, "<!--") == 0) {
+      const size_t e = html.find("-->", i + 4);
+      if (e == std::string_view::npos) return {};
+      i = e + 3;
+      continue;
+    }
+    const size_t gt = tag_end(html, i);
+    if (gt == std::string_view::npos) return {};
+    if (i + 2 < html.size() && (html[i + 1] == 'h' || html[i + 1] == 'H') &&
+        html[i + 2] >= '1' && html[i + 2] <= '6' &&
+        (i + 3 >= html.size() || !std::isalnum(static_cast<unsigned char>(
+                                     html[i + 3])))) {
+      const std::string name = "h" + std::string(1, html[i + 2]);
+      const size_t end = html_element_end(html, gt + 1, name);
+      size_t close = html.rfind('<', end - 1);
+      if (close == std::string_view::npos || close < gt + 1) close = end;
+      return html_to_plain(html.substr(gt + 1, close - gt - 1));
+    }
+    i = gt + 1;
+  }
+  return {};
+}
+
+bool related_heading(std::string heading) {
+  heading = ascii_lower(heading);
+  std::string_view h = heading;
+  trim_ascii(h);
+  if (starts_with(h, "related work")) return false;  // a paper's section
+  for (std::string_view p : kRelatedHeadings)
+    if (starts_with(h, p) &&
+        (h.size() == p.size() ||
+         !std::isalnum(static_cast<unsigned char>(h[p.size()]))))
+      return true;
+  return false;
+}
+
+}  // namespace
+
+// Whether the element `tag` (attributes `attrs`, content from `open`) is a
+// box of links to other pages: its classes / id or its heading say so, and
+// most of its text is links.
+bool is_related_block(std::string_view html, size_t open,
+                      std::string_view tag, std::string_view attrs) {
+  if (!one_of(tag, kRelatedTags)) return false;
+  bool named = false;
+  auto check = [&](std::string_view tok) {
+    // WordPress marks posts by their tags: "tag-related" is not a box.
+    if (starts_with(tok, "tag-") || starts_with(tok, "category-"))
+      return false;
+    for (std::string_view p : kRelatedParts)
+      if (tok.find(p) != std::string_view::npos) named = true;
+    return named;
+  };
+  for_each_class(attrs, check);
+  if (!named) check(ascii_lower(html_attr(attrs, "id")));
+  if (!named && !related_heading(leading_heading(html, open))) return false;
+  const size_t end = html_element_end(html, open, tag);
+  return html_link_share(html.substr(open, end - open)) >= 0.5;
+}
+
+namespace {
+
 // role=presentation, or a table that holds another table (old-school page
 // grids), or a lone big cell.
 bool is_layout_table(std::string_view html, size_t after_open,
@@ -1630,6 +1787,11 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
         if (ascii_lower(html_attr(attrs, "role")) == "complementary")
           role = {};
       }
+      // "Related Links", "You May Also Like": links to other pages.
+      if ((role.empty() || role == "navigation" || role == "sidebar") &&
+          !hinted_content && !is_hidden(attrs) &&
+          is_related_block(html, e + 1, name, attrs))
+        role = "related";
       // ASP.NET-style pages wrap all of <body> in one <form>.
       if (role == "form") {
         std::string_view in = html.substr(

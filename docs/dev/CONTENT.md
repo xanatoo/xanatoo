@@ -157,6 +157,15 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   rebuilds a comment tree as Thread / flat Message nodes (`alt` = parent
   label; empty messages are skipped, their replies move up). Hints are a
   page-structure layer, not styling: they never touch `.xss` sheets.
+- Related content: `is_related_block` (html_min.hpp) gives a div / section
+  / aside / nav / list the chrome role "related" when its class / id
+  (`kRelatedParts`, not WordPress `tag-*` / `category-*`) or its first
+  heading (`kRelatedHeadings`, "You may also like", "More from …") say so
+  and `html_link_share` of its text is at least 0.5; it also overrides
+  "navigation" / "sidebar". `margin_chrome` takes it, so the Page panel
+  lists it as "Related". Chrome is a native block in Markdown
+  (`:::chrome role="…"`), `.sexp` (`(chrome :role "…")`) and XML; Org and
+  gemtext flatten it.
 - Reference marks → footnotes (`html_footnotes.hpp`, last step of
   `parse_html_page`): a link whose text is `[mark]` and whose `#id` names a
   ListItem of a List becomes `FootnoteRef` (key = mark, blanks → `-`); every

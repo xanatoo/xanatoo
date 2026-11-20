@@ -369,7 +369,8 @@ std::vector<NodeId> chrome_regions(const Document& doc) {
 
 bool margin_chrome(const Document& doc, const Node& chrome) {
   if (chrome.kind != NodeKind::Chrome) return false;
-  if (chrome.summary != "navigation" && chrome.summary != "sidebar")
+  if (chrome.summary != "navigation" && chrome.summary != "sidebar" &&
+      chrome.summary != "related")
     return false;
   std::vector<NodeId> stack(chrome.children.begin(), chrome.children.end());
   while (!stack.empty()) {

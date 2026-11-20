@@ -8,6 +8,8 @@
   ;; The story, then the comments; everything else on the page is chrome.
   (main "article.fhitem-story" "#commentlisting")
   (chrome sidebar "#slashboxes")
+  ;; Previous / next story and "Related Links" under the story.
+  (chrome related "#newa2footerv2")
   (thread "#commentlisting"
     (heading "Comments")
     (message "li.comment")

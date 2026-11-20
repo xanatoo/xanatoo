@@ -57,7 +57,7 @@ in the sheet that matches it wins.
 | Rule | Meaning |
 |------|---------|
 | `(main SEL…)` | The content. Several matches are kept in page order; everything else on the page is chrome. Without `main` the usual guess (`<main>`, a lone `<article>`, `<body>`) applies. |
-| `(chrome ROLE SEL…)` | Page chrome with a role (`navigation`, `sidebar`, …); reader mode hides it. The role is a bare word and optional. |
+| `(chrome ROLE SEL…)` | Page chrome with a role (`navigation`, `sidebar`, `related`, …); reader mode hides it, and the Page panel lists navigation, sidebars and related links. The role is a bare word and optional. |
 | `(content SEL…)` | Not chrome, even when the built-in heuristics (`<nav>`, share bars, …) would say so. |
 | `(drop SEL…)` | Left out entirely. |
 | `(thread SEL… fields…)` | A discussion, turned into a Thread of Messages (below). |

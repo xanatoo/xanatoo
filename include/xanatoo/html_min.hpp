@@ -99,6 +99,16 @@ size_t html_tag_end(std::string_view html, size_t lt);
 size_t html_element_end(std::string_view html, size_t after_open,
                         std::string_view tag);
 
+// Share of the visible text that is inside links (0..1; 0 without text).
+double html_link_share(std::string_view html);
+
+// Whether the element `tag` (attributes `attrs`, content from `open`) is a
+// box of links to other pages ("Related Links", "You May Also Like"): its
+// class / id or its first heading say so and at least half its text is
+// links. Page mode makes such boxes Chrome with the role "related".
+bool is_related_block(std::string_view html, size_t open,
+                      std::string_view tag, std::string_view attrs);
+
 // Resolve `href` against `base` (absolute, //host, /path, ?q, #f, relative).
 std::string resolve_url(std::string_view base, std::string_view href);
 
