@@ -175,6 +175,7 @@ struct FootnoteOverlay {
   std::vector<std::string> keys;
   std::vector<xanatoo::NodeId> notes;  // source Footnote per laid-out note
   std::vector<float> note_y;           // top of each note in `layout`
+  std::vector<float> note_bottom;      // bottom of each note's last line
   // Notes are laid out once at one column's width and shown in columns side
   // by side, each a run of whole notes (as many as the text width allows).
   struct Column {
@@ -1272,6 +1273,8 @@ struct App {
   xanatoo::LayoutResult context_layout;
   bool context_needs_layout = true;
   xanatoo::NodeId context_scroll_to = xanatoo::INVALID_NODE;
+  // Footnote whose mark is hovered: washed in the Context panel.
+  xanatoo::NodeId context_footnote = xanatoo::INVALID_NODE;
   std::string status_notice;
   Uint32 status_notice_until = 0;
   bool discard_armed = false;  // only without a revision store (no SQLite)
@@ -2077,6 +2080,9 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip);
 bool in_footnote_overlay(const App& app, int pi, float lx, float my);
 // Press on the strip: jump to the note under it. True = press consumed.
 bool click_footnote_overlay(App& app, int pi, float lx, float my);
+// Footnote node whose reference mark is under the pointer in pane `pi`
+// (INVALID_NODE = none); highlighted in the strip and the Context panel.
+xanatoo::NodeId hovered_footnote(App& app, int pi);
 
 // ---- collections (app_collection.cpp) ----
 // Collection under the caret (or the last right-click target), else INVALID.

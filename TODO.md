@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Hovered footnote mark highlights its note
+
+- Hovering a footnote mark washes its note in the style's `mark` colour, in
+  the footnote overlay strip and in the Context panel (which already scrolls
+  to it); the wash goes when the pointer leaves the mark
+  (`hovered_footnote`, `App::context_footnote`).
+- Checked under Xvfb (overlay with two columns, Context panel open).
+
 ## Status (2026-11-20) — Footnote strip in columns
 
 - The footnote overlay lays its notes out once at one column's width and

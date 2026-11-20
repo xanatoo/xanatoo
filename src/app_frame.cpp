@@ -4922,6 +4922,42 @@ void draw_context_window(App& app) {
                              static_cast<float>(cx));
   app.renderer.draw(app.context_layout, draw_scroll, static_cast<float>(cx));
 
+  // The footnote whose mark is hovered: wash its block (boxes of the note
+  // and everything inside it) in the style's `mark` colour.
+  if (app.context_footnote != xanatoo::INVALID_NODE) {
+    const xanatoo::Document& d = app.context_doc;
+    auto inside = [&](xanatoo::NodeId id) {
+      for (int guard = 0; id != xanatoo::INVALID_NODE && guard < 256; ++guard) {
+        if (id == app.context_footnote) return true;
+        const xanatoo::Node& n = d.get(id);
+        if (n.id != id) return false;
+        id = n.parent;
+      }
+      return false;
+    };
+    float x0 = 0.f, y0 = 0.f, x1 = 0.f, y1 = 0.f;
+    bool any = false;
+    for (const auto& b : app.context_layout.boxes) {
+      if (!inside(b.node)) continue;
+      if (!any) {
+        x0 = b.x; y0 = b.y; x1 = b.x + b.width; y1 = b.y + b.height;
+        any = true;
+      } else {
+        x0 = std::min(x0, b.x); y0 = std::min(y0, b.y);
+        x1 = std::max(x1, b.x + b.width); y1 = std::max(y1, b.y + b.height);
+      }
+    }
+    if (any) {
+      const xanatoo::Rgba m = app.style.mark;
+      const SDL_Rect hr{static_cast<int>(x0) + cx,
+                        static_cast<int>(y0 - draw_scroll),
+                        static_cast<int>(x1 - x0), static_cast<int>(y1 - y0)};
+      SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(app.sdl, m.r, m.g, m.b, m.a);
+      xanatoo::sdl::fill_rect(app.sdl, &hr);
+    }
+  }
+
   // Highlight the source span of the quote currently shown in Context.
   std::vector<xanatoo::SelRect> source_rects;
   if (app.context_jump_pane >= 0 && app.context_jump_pane < kMaxViews &&

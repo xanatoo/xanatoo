@@ -5,7 +5,8 @@
 // a strip along the pane's bottom edge, laid out with the document style like
 // the foot of a printed page. A wide text column holds several columns of
 // notes side by side, balanced by height. Notes whose own block is on screen
-// are left out; a press on a note jumps to it.
+// are left out; a press on a note jumps to it. The note of the mark under
+// the pointer is washed in the style's `mark` colour.
 
 #include <algorithm>
 #include <utility>
@@ -30,6 +31,7 @@ void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
   FootnoteOverlay& fo = pane.footnotes;
   fo.notes.clear();
   fo.note_y.clear();
+  fo.note_bottom.clear();
   fo.columns.clear();
   xanatoo::Document notes =
       xanatoo::extract_footnotes(doc_of(app, pane), keys, &fo.notes);
@@ -91,6 +93,7 @@ void build_overlay(App& app, Pane& pane, std::vector<std::string> keys,
     fo.content_h = std::max(fo.content_h, col.h);
     fo.columns.push_back(col);
   }
+  fo.note_bottom = bottom;
   fo.column_w = col_w;
   fo.gap = gap;
   fo.pad = o.margin_y;
@@ -162,6 +165,8 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
                        strip.y);
   }
 
+  const auto hot =
+      std::find(fo.notes.begin(), fo.notes.end(), hovered_footnote(app, pi));
   for (size_t c = 0; c < fo.columns.size(); ++c) {
     // Each column shows its run of notes; the clip keeps the next column's
     // notes (further down the same layout) out of it.
@@ -171,8 +176,26 @@ void draw_footnote_overlay(App& app, int pi, const SDL_Rect& clip) {
     const SDL_Rect cr{x0, strip.y, x1 - x0, ch};
     if (cr.w <= 0 || cr.h <= 0) continue;
     xanatoo::sdl::set_clip_rect(app.sdl, &cr);
-    app.renderer.draw(fo.layout, col.y0 - fo.pad - static_cast<float>(strip.y),
-                      static_cast<float>(pane.x) + col.x);
+    const float scroll = col.y0 - fo.pad - static_cast<float>(strip.y);
+    app.renderer.draw(fo.layout, scroll, static_cast<float>(pane.x) + col.x);
+    // The note of the hovered mark, when it is in this column.
+    const size_t end =
+        c + 1 < fo.columns.size() ? fo.columns[c + 1].first : fo.notes.size();
+    if (hot != fo.notes.end()) {
+      const size_t k = static_cast<size_t>(hot - fo.notes.begin());
+      if (k >= col.first && k < end && k < fo.note_bottom.size()) {
+        const float pad = 0.25f * kPadPx * app.ui_scale;
+        const int y0 = static_cast<int>(fo.note_y[k] - scroll - pad);
+        const int y1 = static_cast<int>(fo.note_bottom[k] - scroll + pad);
+        const SDL_Rect hr{
+            static_cast<int>(static_cast<float>(pane.x) + col.x - pad),
+            y0, static_cast<int>(fo.column_w + 2.f * pad), y1 - y0};
+        SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(app.sdl, st.mark.r, st.mark.g, st.mark.b,
+                               st.mark.a);
+        xanatoo::sdl::fill_rect(app.sdl, &hr);
+      }
+    }
     if (col.h > static_cast<float>(h)) {
       // More notes than fit: fade the cut edge into the paper.
       SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
@@ -226,6 +249,15 @@ bool click_footnote_overlay(App& app, int pi, float lx, float my) {
     flash_status(app, "Footnote " + key);
   }
   return true;
+}
+
+xanatoo::NodeId hovered_footnote(App& app, int pi) {
+  constexpr std::string_view kPrefix = "#fn:";
+  if (app.hover.link_pane != pi || pi < 0 || pi >= kMaxViews ||
+      !xanatoo::starts_with(app.hover.href, kPrefix))
+    return xanatoo::INVALID_NODE;
+  return xanatoo::find_footnote(doc_of(app, app.panes[pi]),
+                                app.hover.href.substr(kPrefix.size()));
 }
 
 }  // namespace xanatoo::app

@@ -332,6 +332,7 @@ void refresh_context_panel(App& app) {
   // Live update from hover. When the pointer is not over a quote / link /
   // transclusion, keep whatever page is already loaded so Context can be
   // used as a stable preview surface.
+  app.context_footnote = xanatoo::INVALID_NODE;  // set below while hovered
 
   auto set_doc = [&](const xanatoo::Document& src, const std::string& key,
                      xanatoo::NodeId scroll_to = xanatoo::INVALID_NODE) {
@@ -493,6 +494,7 @@ void refresh_context_panel(App& app) {
                         app.hover.href;
       set_doc(d, key, dest_node);
       app.context_body = xanatoo::plain_text(d, dest_node);
+      app.context_footnote = hovered_footnote(app, pi);
       return;
     }
 
