@@ -414,7 +414,7 @@ is skipped when `content.md` is newer than the EPUB. Requires `pandoc` on
 Goal: on YouTube, see the YouTube bookmarks / subscriptions at a glance,
 without hiding the rest and without digging through submenus.
 
-1. **Folders (first).** `Bookmark::folder`, a `/`-separated path
+1. **Folders (first; done 2026-11-20, docs/UI.md "Bookmarks").** `Bookmark::folder`, a `/`-separated path
    (`Video/YouTube`), stored as one more `folder=` field of the bookmark
    line (old lines stay valid). Bookmarks menu: folders as submenus above
    the loose items; Bookmarks panel: a tree, "Move to folder…" in the

@@ -131,11 +131,44 @@ struct Bookmark {
   std::string title;    // section or page it was made in
   std::string quote;    // the passage text then (display, re-anchoring)
   std::string created;  // YYYY-MM-DD
+  std::string folder;   // "/"-separated folder path, "" = top level
 };
 
 // File line: the address, then optional tab-separated key=value fields
-// (title, quote, at), so plain one-URL-per-line files stay valid. Empty for
-// blank lines and # comments.
+// (title, quote, at, folder), so plain one-URL-per-line files stay valid.
+// Bookmark folders: paths like "Video/YouTube". Every folder the user made
+// is listed explicitly (empty ones too); a bookmark's folder and its
+// ancestors are always in that list (bookmark_folder_list).
+//
+// Trims each part, drops empty parts and control characters: " a // b/" →
+// "a/b".
+std::string normalize_bookmark_folder(std::string_view path);
+// "a/b/c" → "a/b"; "a" → "".
+std::string bookmark_folder_parent(std::string_view path);
+// "a/b/c" → "c".
+std::string_view bookmark_folder_leaf(std::string_view path);
+// `path` is `folder` or lies inside it ("" contains everything).
+bool bookmark_folder_within(std::string_view path, std::string_view folder);
+// Orders folder paths part by part, case-insensitively: "a", "a/b", "B".
+bool bookmark_folder_less(std::string_view a, std::string_view b);
+// `folders` plus the folders of `marks`, with all ancestors, normalized,
+// without "", sorted (bookmark_folder_less) and unique.
+std::vector<std::string> bookmark_folder_list(
+    const std::vector<Bookmark>& marks, const std::vector<std::string>& folders);
+// Moves folder `from` with everything in it to `to` (rename and re-parent
+// alike). False (nothing changed) when `from` is empty or `to` lies inside
+// `from`. Changed bookmarks' indices go to `changed`.
+bool bookmark_folder_move(std::vector<Bookmark>& marks,
+                          std::vector<std::string>& folders,
+                          std::string_view from, std::string_view to,
+                          std::vector<size_t>* changed = nullptr);
+// Removes folder `path`; its bookmarks and subfolders move up one level.
+void bookmark_folder_remove(std::vector<Bookmark>& marks,
+                            std::vector<std::string>& folders,
+                            std::string_view path,
+                            std::vector<size_t>* changed = nullptr);
+
+// Empty for blank lines and # comments.
 std::optional<Bookmark> parse_bookmark_line(std::string_view line);
 std::string format_bookmark_line(const Bookmark& b);
 // "Section — “quote”" for a passage, else the title or the address.

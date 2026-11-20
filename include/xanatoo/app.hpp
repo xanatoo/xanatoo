@@ -1198,6 +1198,8 @@ struct App {
   std::vector<std::string> visited;
   HistoryPanel history;
   std::vector<xanatoo::Bookmark> bookmarks;
+  // Every bookmark folder, empty ones too (xanatoo::bookmark_folder_list).
+  std::vector<std::string> bookmark_folders;
   std::vector<xanatoo::Subscription> subscriptions;
   bool subscriptions_panel_open = false;
   int64_t next_subscription_auto_at = 0;
@@ -1886,6 +1888,15 @@ bool nav_rewind_to_visit(App& app, const std::vector<int64_t>& visits);
 bool is_bookmarked(App& app, const std::string& url);
 void add_bookmark(App& app, xanatoo::Bookmark b);
 void remove_bookmark(App& app, const std::string& url);
+// Folder systems (docs/UI.md "Bookmarks"). Folder paths are "/"-separated;
+// each call stores the change and bumps `bookmarks_gen`.
+void move_bookmark(App& app, const std::string& address, const std::string& folder);
+void retitle_bookmark(App& app, const std::string& address, const std::string& title);
+void create_bookmark_folder(App& app, const std::string& path);
+// Moves (renames or re-parents) a folder with its contents.
+void move_bookmark_folder(App& app, const std::string& from, const std::string& to);
+// Removes a folder; its bookmarks and subfolders move up one level.
+void remove_bookmark_folder(App& app, const std::string& path);
 // Picks up bookmarks / input histories another xanatoo process changed in
 // the shared state database (statedb.hpp); checks about once a second.
 void poll_shared_state(App& app);

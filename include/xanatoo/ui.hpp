@@ -101,6 +101,11 @@ enum class UiCommand {
   RemoveAnnotation,     // arg = annotation id in local layer
   RestoreAnnotationLayerVersion, // arg = layer id + newline + revision id
   SelectBookmark,  // arg = address: select its passage in the focused view
+  MoveBookmark,          // arg = address + "\n" + folder ("" = top level)
+  RetitleBookmark,       // arg = address + "\n" + new title
+  NewBookmarkFolder,     // arg = folder path
+  MoveBookmarkFolder,    // arg = from + "\n" + to (rename / re-parent)
+  RemoveBookmarkFolder,  // arg = folder path; contents move up one level
   CopyText,        // arg = text for the clipboard (an address)
   OpenLinkInTab,   // arg = href of a link in the focused view: new tab
   OpenLinkInTrail, // arg = href of a link in the focused view: Trail tiles
@@ -615,9 +620,11 @@ struct UiState {
   // The bookmark a margin-icon menu is for (empty address: none).
   struct BookmarkMenu {
     std::string address, label, cut;  // cut: the passage as a cut address
+    std::string folder;
   } bookmark_menu;
   // Persistent bookmarks for the Bookmarks menu / panel.
   std::vector<Bookmark> bookmarks;
+  std::vector<std::string> bookmark_folders;  // all, sorted
   bool subscriptions_open = false;
   int subscriptions_x = 0, subscriptions_y = 0;
   int subscriptions_w = 0, subscriptions_h = 0;
@@ -840,6 +847,15 @@ private:
   void languages_field(const UiState& state, UiCommand& cmd, std::string& arg,
                        const char* id);
   char subscription_input_[1024] = {};
+  // Bookmarks panel: filter, the row being named inline ("b:" address,
+  // "f:" folder, "n:" parent of a new folder; empty = none) and the folder
+  // its Bookmark / New Folder buttons work in.
+  char bm_filter_[256] = {};
+  char bm_edit_[512] = {};
+  std::string bm_edit_key_;
+  bool bm_edit_focus_ = false;
+  std::string bm_target_folder_;
+  void bookmarks_panel(const UiState& state, UiCommand& cmd, std::string& arg);
   std::string subscription_remove_confirm_;
   char nostr_local_search_[512] = {};
   char nostr_group_relay_[512] = {};

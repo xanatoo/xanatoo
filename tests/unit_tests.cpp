@@ -4455,6 +4455,62 @@ void test_bookmark_lines() {
          b->quote == "a quote" && b->created == in.created);
   b = xanatoo::parse_bookmark_line("a.md\tunknown=1\tquote=q");
   EXPECT(b && b->quote == "q");
+  in.folder = "Video/YouTube";
+  b = xanatoo::parse_bookmark_line(xanatoo::format_bookmark_line(in));
+  EXPECT(b && b->folder == "Video/YouTube");
+  b = xanatoo::parse_bookmark_line("a.md\tfolder= x // y /");
+  EXPECT(b && b->folder == "x/y");
+}
+
+void test_bookmark_folders() {
+  using namespace xanatoo;
+  EXPECT_EQ(normalize_bookmark_folder(" a // b/ "), "a/b");
+  EXPECT_EQ(normalize_bookmark_folder("/"), "");
+  EXPECT_EQ(bookmark_folder_parent("a/b/c"), "a/b");
+  EXPECT_EQ(bookmark_folder_parent("a"), "");
+  EXPECT(bookmark_folder_leaf("a/b/c") == "c");
+  EXPECT(bookmark_folder_within("a/b", "a"));
+  EXPECT(bookmark_folder_within("a", "a"));
+  EXPECT(!bookmark_folder_within("ab", "a"));
+  EXPECT(bookmark_folder_within("x", ""));
+  // Parent right before its children, part by part, ignoring case.
+  EXPECT(bookmark_folder_less("a", "a/b"));
+  EXPECT(bookmark_folder_less("a/b", "B"));
+  EXPECT(bookmark_folder_less("a/z", "a-b"));  // "a" < "a-b", whatever '/' is
+
+  std::vector<Bookmark> marks(3);
+  marks[0].address = "1"; marks[0].folder = "Video/YouTube";
+  marks[1].address = "2"; marks[1].folder = "Video";
+  marks[2].address = "3";
+  std::vector<std::string> folders = {"Empty", "video/x"};
+  folders = bookmark_folder_list(marks, folders);
+  EXPECT(folders == (std::vector<std::string>{"Empty", "Video", "Video/YouTube",
+                                              "video", "video/x"}));
+
+  // Rename moves the whole subtree; changed lists the touched bookmarks.
+  std::vector<size_t> changed;
+  EXPECT(bookmark_folder_move(marks, folders, "Video", "Media/Video", &changed));
+  EXPECT(changed == (std::vector<size_t>{0, 1}));
+  EXPECT_EQ(marks[0].folder, "Media/Video/YouTube");
+  EXPECT_EQ(marks[1].folder, "Media/Video");
+  EXPECT(folders == (std::vector<std::string>{"Empty", "Media", "Media/Video",
+                                              "Media/Video/YouTube", "video",
+                                              "video/x"}));
+  // Never into itself.
+  EXPECT(!bookmark_folder_move(marks, folders, "Media", "Media/Video/m"));
+  // To the top level.
+  EXPECT(bookmark_folder_move(marks, folders, "Media/Video/YouTube", "YouTube"));
+  EXPECT_EQ(marks[0].folder, "YouTube");
+
+  // Removing a folder moves its contents up one level.
+  changed.clear();
+  bookmark_folder_remove(marks, folders, "Media", &changed);
+  EXPECT(changed == (std::vector<size_t>{1}));
+  EXPECT_EQ(marks[1].folder, "Video");
+  EXPECT(folders == (std::vector<std::string>{"Empty", "Video", "video", "video/x",
+                                              "YouTube"}));
+  bookmark_folder_remove(marks, folders, "video");
+  EXPECT(folders == (std::vector<std::string>{"Empty", "Video", "x", "YouTube"}));
 }
 
 void test_footnotes() {
@@ -8287,6 +8343,7 @@ int main() {
   test_image_address();
   test_text_selectors();
   test_bookmark_lines();
+  test_bookmark_folders();
   test_math();
   test_select_word_at();
   test_forums(g_passed, g_failed);

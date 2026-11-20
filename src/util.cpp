@@ -4,6 +4,7 @@
 #include "xanatoo/util.hpp"
 #include "xanatoo/paths.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -210,6 +211,7 @@ std::optional<Bookmark> parse_bookmark_line(std::string_view line) {
     if (key == "title") b.title = value;
     else if (key == "quote") b.quote = value;
     else if (key == "at") b.created = value;
+    else if (key == "folder") b.folder = normalize_bookmark_folder(value);
   }
   return b;
 }
@@ -227,7 +229,126 @@ std::string format_bookmark_line(const Bookmark& b) {
     return value.empty() ? std::string() : out;
   };
   return b.address + field("title", b.title) + field("quote", b.quote) +
-         field("at", b.created);
+         field("at", b.created) + field("folder", b.folder);
+}
+
+std::string normalize_bookmark_folder(std::string_view path) {
+  std::string out;
+  size_t at = 0;
+  while (at <= path.size()) {
+    size_t slash = path.find('/', at);
+    if (slash == std::string_view::npos) slash = path.size();
+    std::string part;
+    for (char c : path.substr(at, slash - at))
+      part.push_back(static_cast<unsigned char>(c) < 0x20 ? ' ' : c);
+    std::string_view t = part;
+    trim_ascii(t);
+    if (!t.empty()) {
+      if (!out.empty()) out += '/';
+      out += t;
+    }
+    at = slash + 1;
+  }
+  return out;
+}
+
+std::string bookmark_folder_parent(std::string_view path) {
+  const size_t slash = path.rfind('/');
+  return slash == std::string_view::npos ? std::string()
+                                         : std::string(path.substr(0, slash));
+}
+
+std::string_view bookmark_folder_leaf(std::string_view path) {
+  const size_t slash = path.rfind('/');
+  return slash == std::string_view::npos ? path : path.substr(slash + 1);
+}
+
+bool bookmark_folder_within(std::string_view path, std::string_view folder) {
+  if (folder.empty()) return true;
+  return path == folder ||
+         (path.size() > folder.size() && starts_with(path, folder) &&
+          path[folder.size()] == '/');
+}
+
+bool bookmark_folder_less(std::string_view a, std::string_view b) {
+  for (;;) {
+    const size_t sa = a.find('/'), sb = b.find('/');
+    const std::string_view ra = a.substr(0, sa), rb = b.substr(0, sb);
+    const std::string pa = ascii_lower(ra), pb = ascii_lower(rb);
+    if (pa != pb) return pa < pb;
+    if (ra != rb) return ra < rb;  // case-only difference
+    if (sa == std::string_view::npos || sb == std::string_view::npos)
+      return sa == std::string_view::npos && sb != std::string_view::npos;  // parent first
+    a.remove_prefix(sa + 1);
+    b.remove_prefix(sb + 1);
+  }
+}
+
+std::vector<std::string> bookmark_folder_list(
+    const std::vector<Bookmark>& marks, const std::vector<std::string>& folders) {
+  std::vector<std::string> out;
+  auto add = [&](std::string_view p) {
+    for (std::string f = normalize_bookmark_folder(p); !f.empty();
+         f = bookmark_folder_parent(f))
+      out.push_back(f);
+  };
+  for (const std::string& f : folders) add(f);
+  for (const Bookmark& b : marks) add(b.folder);
+  std::sort(out.begin(), out.end(), [](const std::string& a, const std::string& b) {
+    return bookmark_folder_less(a, b);
+  });
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
+}
+
+namespace {
+// `path` inside `from`, re-rooted at `to`.
+std::string refolder(std::string_view path, std::string_view from,
+                     std::string_view to) {
+  std::string rest(path.substr(from.size()));  // "" or "/..."
+  if (to.empty() && !rest.empty()) rest.erase(0, 1);
+  return std::string(to) + rest;
+}
+}  // namespace
+
+bool bookmark_folder_move(std::vector<Bookmark>& marks,
+                          std::vector<std::string>& folders,
+                          std::string_view from_in, std::string_view to_in,
+                          std::vector<size_t>* changed) {
+  const std::string from = normalize_bookmark_folder(from_in);
+  const std::string to = normalize_bookmark_folder(to_in);
+  if (from.empty() || bookmark_folder_within(to, from)) return false;
+  for (std::string& f : folders)
+    if (bookmark_folder_within(f, from)) f = refolder(f, from, to);
+  folders.push_back(to);
+  for (size_t i = 0; i < marks.size(); ++i) {
+    if (!bookmark_folder_within(marks[i].folder, from)) continue;
+    marks[i].folder = refolder(marks[i].folder, from, to);
+    if (changed) changed->push_back(i);
+  }
+  folders = bookmark_folder_list(marks, folders);
+  return true;
+}
+
+void bookmark_folder_remove(std::vector<Bookmark>& marks,
+                            std::vector<std::string>& folders,
+                            std::string_view path_in,
+                            std::vector<size_t>* changed) {
+  const std::string path = normalize_bookmark_folder(path_in);
+  if (path.empty()) return;
+  const std::string parent = bookmark_folder_parent(path);
+  std::vector<std::string> kept;
+  for (const std::string& f : folders) {
+    if (f == path) continue;
+    kept.push_back(bookmark_folder_within(f, path) ? refolder(f, path, parent) : f);
+  }
+  folders = std::move(kept);
+  for (size_t i = 0; i < marks.size(); ++i) {
+    if (!bookmark_folder_within(marks[i].folder, path)) continue;
+    marks[i].folder = refolder(marks[i].folder, path, parent);
+    if (changed) changed->push_back(i);
+  }
+  folders = bookmark_folder_list(marks, folders);
 }
 
 void utf8_pop_back(std::string& s) {

@@ -522,6 +522,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.context_jump_to_source = app.context_jump_to_source;
   }
   ui_state.bookmarks = app.bookmarks;
+  ui_state.bookmark_folders = app.bookmark_folders;
   ui_state.subscriptions_open = app.subscriptions_panel_open;
   if (app.subscriptions_panel_open) {
     auto [x, y, w, h] = imgui_panel_rect(app, app.subscriptions_win);
@@ -734,6 +735,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
       ui_state.bookmark_menu.address = b->address;
       ui_state.bookmark_menu.label = xanatoo::bookmark_label(*b);
       ui_state.bookmark_menu.cut = cut_address(b->address);
+      ui_state.bookmark_menu.folder = b->folder;
     }
   }
   ui_state.tab_labels.clear();
@@ -1618,8 +1620,28 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       flash_status(app, "Restored annotation layer as a new revision");
       break;
     }
-    case C::AddBookmark:
-      add_bookmark(app, bookmark_for_view(app, p, false));
+    case C::AddBookmark: {
+      xanatoo::Bookmark bm = bookmark_for_view(app, p, false);
+      bm.folder = xanatoo::normalize_bookmark_folder(arg);  // panel: its folder
+      add_bookmark(app, std::move(bm));
+      break;
+    }
+    case C::MoveBookmark:
+    case C::RetitleBookmark:
+    case C::MoveBookmarkFolder: {
+      const size_t nl = arg.find('\n');
+      if (nl == std::string::npos) break;
+      const std::string a = arg.substr(0, nl), b = arg.substr(nl + 1);
+      if (cmd == C::MoveBookmark) move_bookmark(app, a, b);
+      else if (cmd == C::RetitleBookmark) retitle_bookmark(app, a, b);
+      else move_bookmark_folder(app, a, b);
+      break;
+    }
+    case C::NewBookmarkFolder:
+      create_bookmark_folder(app, arg);
+      break;
+    case C::RemoveBookmarkFolder:
+      remove_bookmark_folder(app, arg);
       break;
     case C::BookmarkPage: {
       // URL chrome refers to the page, never the document text selection.

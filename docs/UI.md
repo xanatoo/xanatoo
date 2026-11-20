@@ -98,6 +98,37 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
 - SDL3 supplies exact coordinates for the drop. SDL2's drop event lacks them,
   so the compatibility path uses the mouse position at the time of dropping.
 
+## Bookmarks
+
+- Bookmarks live in folders: `Bookmark::folder` is a `/`-separated path
+  ("Video/YouTube", "" = top level). Folders are listed explicitly too, so
+  empty ones survive (`bookmark_folders` table, `#folder<TAB>path` lines
+  in the exported text file); a bookmark's folder and its ancestors are
+  always in that list (`bookmark_folder_list`, util.hpp). Folders sort
+  part by part, case-insensitively.
+- Bookmarks menu: folders as submenus, then the loose bookmarks (newest
+  40 per level).
+- Bookmarks panel: Bookmark Page / New Folder / filter on top, then a
+  folder tree with counts. A click on a bookmark opens it (middle-click:
+  new tab); a click on a folder makes it the target of Bookmark Page and
+  New Folder (click again, or the empty space below the rows, for the top
+  level). Drag bookmarks and folders onto a folder (or the empty space)
+  to move them. Right-click: Open in New Tab, Rename… (inline field; a
+  folder name with `/` nests), Move To ▸, Copy Address, Remove; on
+  folders Bookmark Page Here, New Subfolder…, Remove Folder (its contents
+  move up one level, nothing is deleted). The filter lists matches flat,
+  each with its folder. No rows appear or vanish while dragging, so the
+  list never jumps under the pointer.
+- The margin-icon menu of a passage bookmark has Move To ▸ as well.
+- Commands: `MoveBookmark`, `RetitleBookmark`, `NewBookmarkFolder`,
+  `MoveBookmarkFolder`, `RemoveBookmarkFolder` (two-part args joined by
+  `\n`); systems `move_bookmark`, `retitle_bookmark`,
+  `create_bookmark_folder`, `move_bookmark_folder`, `remove_bookmark_folder`
+  (app_nav.cpp), stored in one transaction by `store_bookmark_changes`.
+- Next (docs/BRAINSTORM.md): a site button in the URL bar with that
+  site's bookmarks and subscriptions, and an "On this site" group in the
+  menus.
+
 ## Native panels and ImGui
 
 - A panel that can be docked, detached, resized, or maximized is a `FloatWindow`.

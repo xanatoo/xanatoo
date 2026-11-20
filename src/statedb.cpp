@@ -36,28 +36,48 @@ std::string ring_file(std::string_view name) {
                      : dir + "/minibuf-" + std::string(name) + ".history";
 }
 
-std::vector<Bookmark> read_bookmarks_file() {
+// Folder lines: "#folder<TAB>path" (comments to older readers).
+constexpr std::string_view kFolderLine = "#folder\t";
+
+std::vector<Bookmark> read_bookmarks_file(std::vector<std::string>* folders = nullptr) {
   std::vector<Bookmark> out;
   const std::string path = bookmarks_file();
   if (path.empty()) return out;
   std::ifstream in(path);
   std::string line;
-  while (std::getline(in, line))
-    if (auto b = parse_bookmark_line(line)) out.push_back(std::move(*b));
+  while (std::getline(in, line)) {
+    if (starts_with(line, kFolderLine)) {
+      if (folders) folders->push_back(line.substr(kFolderLine.size()));
+    } else if (auto b = parse_bookmark_line(line)) {
+      out.push_back(std::move(*b));
+    }
+  }
+  if (folders) *folders = bookmark_folder_list(out, *folders);
   return out;
 }
 
-bool write_bookmarks_file(const std::vector<Bookmark>& entries) {
+bool write_bookmarks_file(const std::vector<Bookmark>& entries,
+                          const std::vector<std::string>& folders) {
   if (no_save()) return true;
   const std::string path = bookmarks_file();
   if (path.empty() || !ensure_dir(text_dir())) return false;
   std::string text =
       "# xanatoo bookmarks — one address per line, then optional\n"
-      "# tab-separated title= / quote= / at= fields\n"
+      "# tab-separated title= / quote= / at= / folder= fields;\n"
+      "# #folder<TAB>path lines list the folders\n"
       "# (an export: xanatoo keeps them in xanatoo.sqlite)\n";
+  for (const std::string& f : bookmark_folder_list(entries, folders))
+    text += std::string(kFolderLine) + f + '\n';
   for (const auto& e : entries)
     if (!e.address.empty()) text += format_bookmark_line(e) + '\n';
   return write_file_atomic(path, text);
+}
+
+// The folder list of the text file (the store when there is no database).
+std::vector<std::string> read_folders_or_empty() {
+  std::vector<std::string> folders;
+  read_bookmarks_file(&folders);
+  return folders;
 }
 
 std::vector<std::string> read_ring_file(std::string_view name) {
@@ -132,6 +152,10 @@ const sqlite::Migrations kSteps = {
     "CREATE INDEX visits_page ON visits(page);"
     "CREATE INDEX visits_source ON visits(source);"
     "CREATE INDEX visits_address ON visits(address, time);",
+    // Bookmark folders: a bookmark's folder path, and the folder list (empty
+    // folders exist too).
+    "ALTER TABLE bookmarks ADD COLUMN folder TEXT NOT NULL DEFAULT '';"
+    "CREATE TABLE bookmark_folders (path TEXT PRIMARY KEY);",
 };
 
 bool imported(sqlite3* d, const std::string& what) {
@@ -152,12 +176,18 @@ void import_text_files(sqlite3* d) {
   if (!tx.ok()) return;
   if (!imported(d, "bookmarks")) {
     const int64_t t = now_ms();
-    for (const Bookmark& b : read_bookmarks_file()) {
+    std::vector<std::string> folders;
+    for (const Bookmark& b : read_bookmarks_file(&folders)) {
       sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmarks"
-                        "(address, title, quote, created, time) "
-                        "VALUES(?,?,?,?,?);");
+                        "(address, title, quote, created, time, folder) "
+                        "VALUES(?,?,?,?,?,?);");
       s.bind(1, b.address).bind(2, b.title).bind(3, b.quote)
-          .bind(4, b.created).bind(5, t).run();
+          .bind(4, b.created).bind(5, t).bind(6, b.folder).run();
+    }
+    for (const std::string& f : folders) {
+      sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmark_folders(path) VALUES(?);",
+                     {f});
+      s.run();
     }
     mark_imported(d, "bookmarks");
   }
@@ -233,14 +263,15 @@ std::vector<Bookmark> stored_bookmarks() {
 #if XANATOO_SQLITE
   if (sqlite3* d = db()) {
     std::vector<Bookmark> out;
-    sqlite::Stmt s(d, "SELECT address, title, quote, created FROM bookmarks "
-                      "ORDER BY id;");
+    sqlite::Stmt s(d, "SELECT address, title, quote, created, folder "
+                      "FROM bookmarks ORDER BY id;");
     while (s.row()) {
       Bookmark b;
       b.address = s.text(0);
       b.title = s.text(1);
       b.quote = s.text(2);
       b.created = s.text(3);
+      b.folder = s.text(4);
       out.push_back(std::move(b));
     }
     return out;
@@ -253,18 +284,26 @@ bool store_bookmark_add(const Bookmark& b, const std::vector<Bookmark>& all) {
   if (no_save()) return true;
 #if XANATOO_SQLITE
   if (sqlite3* d = db()) {
+    sqlite::Tx tx(d);
+    if (!tx.ok()) return false;
     sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmarks"
-                      "(address, title, quote, created, time) "
-                      "VALUES(?,?,?,?,?);");
+                      "(address, title, quote, created, time, folder) "
+                      "VALUES(?,?,?,?,?,?);");
     if (!s.bind(1, b.address).bind(2, b.title).bind(3, b.quote)
-             .bind(4, b.created).bind(5, now_ms()).run())
+             .bind(4, b.created).bind(5, now_ms()).bind(6, b.folder).run())
       return false;
-    write_bookmarks_file(stored_bookmarks());  // export; failure is harmless
+    for (std::string f = b.folder; !f.empty(); f = bookmark_folder_parent(f)) {
+      sqlite::Stmt fst(d, "INSERT OR IGNORE INTO bookmark_folders(path) VALUES(?);",
+                      {f});
+      if (!fst.run()) return false;
+    }
+    if (!tx.commit()) return false;
+    write_bookmarks_file(stored_bookmarks(), stored_bookmark_folders());  // export
     return true;
   }
 #endif
   (void)b;
-  return write_bookmarks_file(all);
+  return write_bookmarks_file(all, bookmark_folder_list(all, read_folders_or_empty()));
 }
 
 bool store_bookmark_remove(std::string_view address,
@@ -274,12 +313,56 @@ bool store_bookmark_remove(std::string_view address,
   if (sqlite3* d = db()) {
     sqlite::Stmt s(d, "DELETE FROM bookmarks WHERE address = ?;", {address});
     if (!s.run()) return false;
-    write_bookmarks_file(stored_bookmarks());
+    write_bookmarks_file(stored_bookmarks(), stored_bookmark_folders());
     return true;
   }
 #endif
   (void)address;
-  return write_bookmarks_file(all);
+  return write_bookmarks_file(all, read_folders_or_empty());
+}
+
+std::vector<std::string> stored_bookmark_folders() {
+#if XANATOO_SQLITE
+  if (sqlite3* d = db()) {
+    std::vector<std::string> out;
+    sqlite::Stmt s(d, "SELECT path FROM bookmark_folders;");
+    while (s.row()) out.push_back(s.text(0));
+    return bookmark_folder_list(stored_bookmarks(), out);
+  }
+#endif
+  return read_folders_or_empty();
+}
+
+bool store_bookmark_changes(const std::vector<Bookmark>& changed,
+                            const std::vector<std::string>& folders,
+                            const std::vector<Bookmark>& all) {
+  if (no_save()) return true;
+#if XANATOO_SQLITE
+  if (sqlite3* d = db()) {
+    sqlite::Tx tx(d);
+    if (!tx.ok()) return false;
+    for (const Bookmark& b : changed) {
+      sqlite::Stmt s(d, "UPDATE bookmarks SET title = ?, folder = ? "
+                        "WHERE address = ?;");
+      if (!s.bind(1, b.title).bind(2, b.folder).bind(3, b.address).run())
+        return false;
+    }
+    {
+      sqlite::Stmt s(d, "DELETE FROM bookmark_folders;");
+      if (!s.run()) return false;
+    }
+    for (const std::string& f : bookmark_folder_list(all, folders)) {
+      sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmark_folders(path) VALUES(?);",
+                     {f});
+      if (!s.run()) return false;
+    }
+    if (!tx.commit()) return false;
+    write_bookmarks_file(stored_bookmarks(), stored_bookmark_folders());
+    return true;
+  }
+#endif
+  (void)changed;
+  return write_bookmarks_file(all, folders);
 }
 
 std::vector<std::string> stored_input_history(std::string_view name,

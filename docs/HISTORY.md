@@ -97,7 +97,9 @@ bookmarks file is rewritten from the database after each change as a
 readable export. `poll_shared_state` (once a second, not while a prompt
 is open) reloads bookmarks and rings when `data_version` says another
 process committed. `--no-save` opens the database read-only. Without
-SQLite the text files remain the store.
+SQLite the text files remain the store. Schema step 3 adds
+`bookmarks.folder` and the `bookmark_folders` table (docs/UI.md
+"Bookmarks").
 
 Originally planned as first users: `minibuf_hist_url` and bookmarks
 move into tables, which fixes the multi-process clobbering immediately.

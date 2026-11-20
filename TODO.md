@@ -2,6 +2,23 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Bookmark folders
+
+- Bookmarks have a folder path (`Bookmark::folder`, "Video/YouTube");
+  folders are stored explicitly too (empty ones survive): schema step 3,
+  `#folder` lines and `folder=` fields in the exported text file.
+- Bookmarks menu: folders as submenus. The Subscribe items left that menu
+  (the Subscriptions menu has them).
+- Bookmarks panel redesigned: toolbar (Bookmark Page into the picked
+  folder, New Folder, filter), folder tree with counts, single click
+  opens, drag onto folders moves, inline rename, Move To ▸ menus (also
+  on the margin-icon menu), Remove Folder moves contents up. Details:
+  docs/UI.md "Bookmarks".
+- Checked under Xvfb (import of a foldered file, nested menu, drag move,
+  rename to a nested path, bookmark into a picked folder, filter).
+- Next: site button in the URL bar / "On this site" menu group
+  (docs/BRAINSTORM.md "Site-specific bookmarks and subscriptions").
+
 ## Status (2026-11-20) — Heading ticks on the scrollbar can be turned off
 
 - View → Headings on the scrollbar (and Preferences → Reading) toggles the

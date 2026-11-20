@@ -421,7 +421,7 @@ const std::vector<UiHelpTopic> kTopics = {
     {"bookmark reading position", "Bookmark reading position",
      "Bookmarks the place of the caret, to continue reading there."},
     {"show bookmarks", "Bookmarks panel",
-     "The bookmark manager: search, open, remove bookmarks."},
+     "The bookmark manager: folders, filter, open, rename, move, remove."},
     {"remove bookmark|remove page bookmark", "Remove bookmark",
      "Deletes this bookmark."},
     {"go to bookmark", "Go to bookmark", "Opens the bookmarked page or passage."},
@@ -539,7 +539,8 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@panel:style-manager", "Style sheet manager",
      "Create, edit and pin style sheets. Changes apply as you type."},
     {"@panel:bookmarks", "Bookmarks panel",
-     "All bookmarks: filter, open, remove. Right-click a bookmark for more."},
+     "All bookmarks in folders. Click opens, drag onto a folder moves; click "
+     "a folder to bookmark into it. Right-click a row for rename, move, remove."},
     {"@panel:context", "Context panel",
      "Shows what the pointer is over in a page: quoted message, include "
      "source, link target or a picture. Select its text and copy it; a "

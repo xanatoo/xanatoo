@@ -30,6 +30,8 @@
 #include <cctype>
 #include <cfloat>
 #include <cstdio>
+#include <functional>
+#include <unordered_map>
 #include <ctime>
 #include <cstring>
 #include <filesystem>
@@ -484,6 +486,84 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::ZoomOut: return "zoomout";
     case UiCommand::OpenFormatDoc: return "format";
     default: return nullptr;
+  }
+}
+
+// ---- Bookmark folders (menu, margin-icon menu, Bookmarks panel) ----
+
+// "Move To" items: the top level and every folder, indented by depth, the
+// current one checked. Moves the bookmark `address`, or with an empty
+// address the folder `folder` (never into itself).
+void bookmark_move_items(const UiState& state, const std::string& address,
+                         const std::string& folder, UiCommand& cmd,
+                         std::string& arg) {
+  const std::string current =
+      address.empty() ? bookmark_folder_parent(folder) : folder;
+  auto pick = [&](const std::string& dest) {
+    if (!address.empty()) {
+      cmd = UiCommand::MoveBookmark;
+      arg = address + "\n" + dest;
+    } else {
+      const std::string leaf(bookmark_folder_leaf(folder));
+      cmd = UiCommand::MoveBookmarkFolder;
+      arg = folder + "\n" + (dest.empty() ? leaf : dest + "/" + leaf);
+    }
+  };
+  if (ImGui::MenuItem("Top Level", nullptr, current.empty()) && !current.empty())
+    pick({});
+  for (const std::string& f : state.bookmark_folders) {
+    if (address.empty() && bookmark_folder_within(f, folder)) continue;
+    const auto depth = std::count(f.begin(), f.end(), '/');
+    const std::string label =
+        std::string(static_cast<size_t>(depth) * 3, ' ') +
+        std::string(bookmark_folder_leaf(f));
+    ImGui::PushID(f.c_str());
+    if (ImGui::MenuItem(label.c_str(), nullptr, f == current) && f != current)
+      pick(f);
+    ImGui::PopID();
+  }
+}
+
+// One level of the Bookmarks menu: subfolders as submenus, then the
+// folder's bookmarks (newest last, at most kMenuBookmarks).
+void bookmark_menu_level(const UiState& state, const std::string& folder,
+                         UiCommand& cmd, std::string& arg) {
+  constexpr size_t kMenuBookmarks = 40;
+  bool any_folder = false;
+  for (const std::string& f : state.bookmark_folders) {
+    if (bookmark_folder_parent(f) != folder) continue;
+    any_folder = true;
+    ImGui::PushID(f.c_str());
+    if (ImGui::BeginMenu(std::string(bookmark_folder_leaf(f)).c_str())) {
+      bookmark_menu_level(state, f, cmd, arg);
+      ImGui::EndMenu();
+    }
+    ImGui::PopID();
+  }
+  std::vector<size_t> marks;
+  for (size_t i = 0; i < state.bookmarks.size(); ++i)
+    if (state.bookmarks[i].folder == folder) marks.push_back(i);
+  if (any_folder && !marks.empty()) ImGui::Separator();
+  if (!any_folder && marks.empty()) ImGui::TextDisabled("(empty)");
+  const size_t start = marks.size() > kMenuBookmarks ? marks.size() - kMenuBookmarks : 0;
+  if (start) ImGui::TextDisabled("%zu older in the Bookmarks panel", start);
+  for (size_t k = start; k < marks.size(); ++k) {
+    const size_t i = marks[k];
+    const Bookmark& b = state.bookmarks[i];
+    std::string label = bookmark_label(b);
+    if (label.size() > 64) label = elide_middle(label, 28);
+    ImGui::PushID(static_cast<int>(i));
+    if (i < state.bookmark_icons.size() && state.bookmark_icons[i]) {
+      ImGui::Image(reinterpret_cast<ImTextureID>(state.bookmark_icons[i]),
+                   icon_size(state.bookmark_icons[i], ImGui::GetTextLineHeight()));
+      ImGui::SameLine();
+    }
+    if (ImGui::MenuItem(label.c_str())) {
+      cmd = UiCommand::NavigateUrl;
+      arg = b.address;
+    }
+    middle_open(cmd, arg, b.address);
+    ImGui::PopID();
   }
 }
 
@@ -1307,6 +1387,278 @@ static bool ui_can_draw(const std::string& s) {
 
 // Preferred languages as a comma list; Enter or Set issues SetLanguages.
 // Follows the saved list while not being edited.
+// Bookmarks panel: a folder tree (click a folder to work in it, drag rows
+// onto folders to move them), inline renaming, and a filter that lists
+// matches flat. docs/UI.md "Bookmarks".
+void Ui::bookmarks_panel(const UiState& state, UiCommand& cmd, std::string& arg) {
+  static constexpr const char* kDragMark = "XT_BOOKMARK";
+  static constexpr const char* kDragFolder = "XT_BM_FOLDER";
+  const auto& folders = state.bookmark_folders;
+  if (!bm_target_folder_.empty() &&
+      std::find(folders.begin(), folders.end(), bm_target_folder_) == folders.end())
+    bm_target_folder_.clear();
+
+  auto start_edit = [&](std::string key, const std::string& text) {
+    bm_edit_key_ = std::move(key);
+    std::snprintf(bm_edit_, sizeof bm_edit_, "%s", text.c_str());
+    bm_edit_focus_ = true;
+  };
+  // 0: `key` is not being edited; 1: its field is drawn; 2: committed
+  // (the text is in bm_edit_).
+  auto edit_field = [&](const std::string& key, const char* hint) -> int {
+    if (bm_edit_key_ != key) return 0;
+    if (bm_edit_focus_) {
+      ImGui::SetKeyboardFocusHere();
+      bm_edit_focus_ = false;
+    }
+    ImGui::SetNextItemWidth(-1.f);
+    if (ImGui::InputTextWithHint("##bm_edit", hint, bm_edit_, sizeof bm_edit_,
+                                 ImGuiInputTextFlags_EnterReturnsTrue |
+                                 ImGuiInputTextFlags_AutoSelectAll)) {
+      bm_edit_key_.clear();
+      return 2;
+    }
+    // Esc or a click elsewhere: cancel.
+    if (ImGui::IsItemDeactivated()) bm_edit_key_.clear();
+    return 1;
+  };
+  auto drag_source = [&](const char* type, const std::string& value,
+                         const std::string& label) {
+    if (!ImGui::BeginDragDropSource()) return;
+    ImGui::SetDragDropPayload(type, value.data(), value.size());
+    ImGui::TextUnformatted(label.c_str());
+    ImGui::EndDragDropSource();
+  };
+  // Dropping a bookmark or folder on the item just drawn moves it into
+  // `folder`.
+  auto drop_target = [&](const std::string& folder) {
+    if (!ImGui::BeginDragDropTarget()) return;
+    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kDragMark)) {
+      cmd = UiCommand::MoveBookmark;
+      arg = std::string(static_cast<const char*>(p->Data),
+                        static_cast<size_t>(p->DataSize)) + "\n" + folder;
+    }
+    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload(kDragFolder)) {
+      const std::string from(static_cast<const char*>(p->Data),
+                             static_cast<size_t>(p->DataSize));
+      const std::string leaf(bookmark_folder_leaf(from));
+      if (!bookmark_folder_within(folder, from) &&
+          bookmark_folder_parent(from) != folder) {
+        cmd = UiCommand::MoveBookmarkFolder;
+        arg = from + "\n" + (folder.empty() ? leaf : folder + "/" + leaf);
+      }
+    }
+    ImGui::EndDragDropTarget();
+  };
+
+  // ---- Toolbar ----
+  const char* add_label = state.current_bookmarked ? "Remove Bookmark"
+                          : state.selection        ? "Bookmark Selection"
+                                                   : "Bookmark Page";
+  ImGui::BeginDisabled(!state.has_path);
+  if (classic_button(add_label)) {
+    cmd = state.current_bookmarked ? UiCommand::RemoveBookmark
+                                   : UiCommand::AddBookmark;
+    arg = state.current_bookmarked ? std::string() : bm_target_folder_;
+  }
+  ImGui::EndDisabled();
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
+      !state.current_bookmarked)
+    ImGui::SetTooltip("Into %s", bm_target_folder_.empty()
+                                     ? "the top level (click a folder to pick one)"
+                                     : bm_target_folder_.c_str());
+  ImGui::SameLine();
+  if (classic_button("New Folder")) start_edit("n:" + bm_target_folder_, "");
+  if (ImGui::IsItemHovered())
+    ImGui::SetTooltip("New folder in %s (\"a/b\" makes nested folders)",
+                      bm_target_folder_.empty() ? "the top level"
+                                                : bm_target_folder_.c_str());
+  ImGui::SameLine();
+  ImGui::SetNextItemWidth(-1.f);
+  ImGui::InputTextWithHint("##bm_filter", "Filter…", bm_filter_, sizeof bm_filter_);
+  if (starts_with(bm_edit_key_, "n:")) {
+    const std::string parent = bm_edit_key_.substr(2);
+    if (edit_field(bm_edit_key_, parent.empty() ? "New folder name"
+                                                : ("New folder in " + parent).c_str()) == 2) {
+      const std::string name = normalize_bookmark_folder(bm_edit_);
+      if (!name.empty()) {
+        cmd = UiCommand::NewBookmarkFolder;
+        arg = parent.empty() ? name : parent + "/" + name;
+      }
+    }
+  }
+  ImGui::Separator();
+
+  const float footer = ImGui::GetFrameHeightWithSpacing();
+  if (ImGui::BeginChild("##bookmarks_list", ImVec2(0.f, -footer), false)) {
+    std::unordered_map<std::string, int> counts;
+    for (const Bookmark& b : state.bookmarks)
+      for (std::string f = b.folder; !f.empty(); f = bookmark_folder_parent(f))
+        ++counts[f];
+
+    auto bookmark_row = [&](size_t i, bool show_folder) {
+      const Bookmark& b = state.bookmarks[i];
+      ImGui::PushID(static_cast<int>(i));
+      if (const int e = edit_field("b:" + b.address, "Title")) {
+        if (e == 2) {
+          cmd = UiCommand::RetitleBookmark;
+          arg = b.address + "\n" + bm_edit_;
+        }
+        ImGui::PopID();
+        return;
+      }
+      // The quote gets a wrapped line of its own below.
+      const std::string label =
+          b.quote.empty() || b.title.empty() ? bookmark_label(b) : b.title;
+      if (i < state.bookmark_icons.size() && state.bookmark_icons[i]) {
+        ImGui::Image(reinterpret_cast<ImTextureID>(state.bookmark_icons[i]),
+                     icon_size(state.bookmark_icons[i], ImGui::GetTextLineHeight()));
+        ImGui::SameLine();
+      }
+      if (ImGui::Selectable(label.c_str())) {
+        cmd = UiCommand::NavigateUrl;
+        arg = b.address;
+      }
+      middle_open(cmd, arg, b.address);
+      drag_source(kDragMark, b.address, label);
+      drop_target(b.folder);
+      if (ImGui::IsItemHovered() && label != b.address)
+        ImGui::SetTooltip("%s", b.address.c_str());
+      if (ImGui::BeginPopupContextItem("##bm_ctx")) {
+        if (ImGui::MenuItem("Open")) {
+          cmd = UiCommand::NavigateUrl;
+          arg = b.address;
+        }
+        if (ImGui::MenuItem("Open in New Tab")) {
+          cmd = UiCommand::OpenLinkInTab;
+          arg = b.address;
+        }
+        if (ImGui::MenuItem("Rename…"))
+          start_edit("b:" + b.address, b.title.empty() ? label : b.title);
+        if (ImGui::BeginMenu("Move To")) {
+          bookmark_move_items(state, b.address, b.folder, cmd, arg);
+          ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Copy Address")) {
+          cmd = UiCommand::CopyText;
+          arg = b.address;
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Remove")) {
+          cmd = UiCommand::RemoveBookmark;
+          arg = b.address;
+        }
+        ImGui::EndPopup();
+      }
+      std::string note = b.quote.empty() || b.title.empty() ? std::string() : b.quote;
+      if (show_folder && !b.folder.empty())
+        note = note.empty() ? b.folder : b.folder + " · " + note;
+      if (!note.empty()) {
+        ImGui::Indent();
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%s", note.c_str());
+        ImGui::PopStyleColor();
+        ImGui::Unindent();
+      }
+      ImGui::PopID();
+    };
+
+    std::function<void(const std::string&)> folder_level =
+        [&](const std::string& parent) {
+      for (const std::string& f : folders) {
+        if (bookmark_folder_parent(f) != parent) continue;
+        ImGui::PushID(f.c_str());
+        const std::string leaf(bookmark_folder_leaf(f));
+        bool open = false;
+        if (const int e = edit_field("f:" + f, "Folder name")) {
+          const std::string name = normalize_bookmark_folder(bm_edit_);
+          if (e == 2 && !name.empty()) {
+            cmd = UiCommand::MoveBookmarkFolder;
+            arg = f + "\n" + (parent.empty() ? name : parent + "/" + name);
+          }
+        } else {
+          const auto it = counts.find(f);
+          const int n = it == counts.end() ? 0 : it->second;
+          const ImGuiTreeNodeFlags flags =
+              ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
+              ImGuiTreeNodeFlags_SpanAvailWidth |
+              (f == bm_target_folder_ ? ImGuiTreeNodeFlags_Selected : 0);
+          open = ImGui::TreeNodeEx("##folder", flags, "%s  (%d)", leaf.c_str(), n);
+          if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            bm_target_folder_ = f == bm_target_folder_ ? std::string() : f;
+          drag_source(kDragFolder, f, leaf);
+          drop_target(f);
+          if (ImGui::IsItemHovered() && !ImGui::GetDragDropPayload())
+            ImGui::SetTooltip("%s\nClick: bookmark into this folder", f.c_str());
+          if (ImGui::BeginPopupContextItem("##folder_ctx")) {
+            if (ImGui::MenuItem("Bookmark Page Here", nullptr, false,
+                                state.has_path && !state.current_bookmarked)) {
+              cmd = UiCommand::AddBookmark;
+              arg = f;
+            }
+            if (ImGui::MenuItem("New Subfolder…")) start_edit("n:" + f, "");
+            if (ImGui::MenuItem("Rename…")) start_edit("f:" + f, leaf);
+            if (ImGui::BeginMenu("Move To")) {
+              bookmark_move_items(state, {}, f, cmd, arg);
+              ImGui::EndMenu();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Remove Folder")) {
+              cmd = UiCommand::RemoveBookmarkFolder;
+              arg = f;
+            }
+            if (ImGui::IsItemHovered())
+              ImGui::SetTooltip("Its bookmarks and subfolders move up one level");
+            ImGui::EndPopup();
+          }
+        }
+        if (open) {
+          folder_level(f);
+          for (size_t i = 0; i < state.bookmarks.size(); ++i)
+            if (state.bookmarks[i].folder == f) bookmark_row(i, false);
+          ImGui::TreePop();
+        }
+        ImGui::PopID();
+      }
+    };
+
+    const std::string filter = ascii_lower(std::string(bm_filter_));
+    if (state.bookmarks.empty() && folders.empty()) {
+      ImGui::TextWrapped("No bookmarks yet. Bookmark Page adds the current page, "
+                         "New Folder makes a folder to sort them into.");
+    } else if (!filter.empty()) {
+      int shown = 0;
+      for (size_t i = 0; i < state.bookmarks.size(); ++i) {
+        const Bookmark& b = state.bookmarks[i];
+        auto has = [&](const std::string& s) {
+          return ascii_lower(s).find(filter) != std::string::npos;
+        };
+        if (!has(b.address) && !has(b.title) && !has(b.quote) && !has(b.folder))
+          continue;
+        bookmark_row(i, true);
+        ++shown;
+      }
+      if (!shown) ImGui::TextDisabled("No bookmark matches.");
+    } else {
+      folder_level({});
+      for (size_t i = 0; i < state.bookmarks.size(); ++i)
+        if (state.bookmarks[i].folder.empty()) bookmark_row(i, false);
+      // The free space below the rows: drop here for the top level, click
+      // here to bookmark into the top level again.
+      const float rest = std::max(ImGui::GetTextLineHeight(),
+                                  ImGui::GetContentRegionAvail().y);
+      ImGui::InvisibleButton("##bm_top", ImVec2(-FLT_MIN, rest));
+      if (ImGui::IsItemClicked()) bm_target_folder_.clear();
+      drop_target({});
+    }
+  }
+  ImGui::EndChild();
+  ImGui::TextDisabled(bm_target_folder_.empty()
+                          ? "Click: open · middle: new tab · drag onto a folder: move"
+                          : "Click a folder again or empty space: back to the top level");
+}
+
 void Ui::languages_field(const UiState& state, UiCommand& cmd, std::string& arg,
                          const char* id) {
   if (!languages_editing_ && languages_synced_ != state.languages) {
@@ -2947,29 +3299,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::BookmarkPosition;
       if (ImGui::MenuItem("Show Bookmarks…", nullptr, state.bookmarks_open))
         cmd = UiCommand::ToggleBookmarks;
-      if (!state.bookmarks.empty()) {
+      if (!state.bookmarks.empty() || !state.bookmark_folders.empty()) {
         ImGui::Separator();
-        // Newest bookmarks last; show up to 30 in the menu.
-        const int n = static_cast<int>(state.bookmarks.size());
-        const int start = n > 30 ? n - 30 : 0;
-        for (int i = start; i < n; ++i) {
-          const Bookmark& b = state.bookmarks[static_cast<size_t>(i)];
-          // Truncate long labels for the menu.
-          std::string label = bookmark_label(b);
-          if (label.size() > 64) label = elide_middle(label, 28);
-          ImGui::PushID(i);
-          if (static_cast<size_t>(i) < state.bookmark_icons.size() && state.bookmark_icons[i]) {
-            ImGui::Image(reinterpret_cast<ImTextureID>(state.bookmark_icons[i]),
-                         icon_size(state.bookmark_icons[i], ImGui::GetTextLineHeight()));
-            ImGui::SameLine();
-          }
-          if (ImGui::MenuItem(label.c_str())) {
-            cmd = UiCommand::NavigateUrl;
-            result.arg = b.address;
-          }
-          middle_open(cmd, result.arg, b.address);
-          ImGui::PopID();
-        }
+        bookmark_menu_level(state, {}, cmd, result.arg);
       }
       ImGui::EndMenu();
     }
@@ -3147,6 +3479,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       item("Go to Bookmark", UiCommand::NavigateUrl, bm.address);
       item("Show Only This", UiCommand::NavigateUrl, bm.cut);
       item("Copy Address", UiCommand::CopyText, bm.address);
+      if (ImGui::BeginMenu("Move To")) {
+        bookmark_move_items(state, bm.address, bm.folder, cmd, result.arg);
+        ImGui::EndMenu();
+      }
       ImGui::Separator();
       item("Remove Bookmark", UiCommand::RemoveBookmark, bm.address);
       if (ImGui::MenuItem("Show Bookmarks…", nullptr, state.bookmarks_open))
@@ -4290,67 +4626,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##bookmarks_panel_body", nullptr, bookmarks_flags)) {
-      ImGui::TextDisabled("Persistent bookmarks (state dir: bookmarks)");
-      ImGui::Separator();
-      if (classic_button(state.current_bookmarked ? "Remove current page"
-                        : state.selection        ? "Bookmark selection"
-                                                 : "Bookmark current page")) {
-        cmd = state.current_bookmarked ? UiCommand::RemoveBookmark
-                                       : UiCommand::AddBookmark;
-      }
-      ImGui::Separator();
-      if (state.bookmarks.empty()) {
-        ImGui::TextWrapped("No bookmarks yet.");
-      } else {
-        for (int i = 0; i < static_cast<int>(state.bookmarks.size()); ++i) {
-          const Bookmark& b = state.bookmarks[static_cast<size_t>(i)];
-          ImGui::PushID(i);
-          // The quote gets a wrapped line of its own below.
-          const std::string label =
-              b.quote.empty() || b.title.empty() ? bookmark_label(b) : b.title;
-          if (static_cast<size_t>(i) < state.bookmark_icons.size() && state.bookmark_icons[i]) {
-            ImGui::Image(reinterpret_cast<ImTextureID>(state.bookmark_icons[i]),
-                         icon_size(state.bookmark_icons[i], ImGui::GetTextLineHeight()));
-            ImGui::SameLine();
-          }
-          if (ImGui::Selectable(label.c_str(), false,
-                                ImGuiSelectableFlags_AllowDoubleClick)) {
-            if (ImGui::IsMouseDoubleClicked(0)) {
-              cmd = UiCommand::NavigateUrl;
-              result.arg = b.address;
-            }
-          }
-          middle_open(cmd, result.arg, b.address);
-          if (ImGui::IsItemHovered() && label != b.address)
-            ImGui::SetTooltip("%s", b.address.c_str());
-          if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(1)) {
-            ImGui::OpenPopup("##bm_ctx");
-          }
-          if (ImGui::BeginPopup("##bm_ctx")) {
-            if (ImGui::MenuItem("Open")) {
-              cmd = UiCommand::NavigateUrl;
-              result.arg = b.address;
-            }
-            if (ImGui::MenuItem("Remove")) {
-              cmd = UiCommand::RemoveBookmark;
-              result.arg = b.address;
-            }
-            ImGui::EndPopup();
-          }
-          if (!b.quote.empty() && !b.title.empty()) {
-            ImGui::Indent();
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                                  ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-            ImGui::TextWrapped("%s", b.quote.c_str());
-            ImGui::PopStyleColor();
-            ImGui::Unindent();
-          }
-          ImGui::PopID();
-        }
-        ImGui::TextDisabled("Double-click to open · right-click for menu");
-      }
-    }
+    if (ImGui::Begin("##bookmarks_panel_body", nullptr, bookmarks_flags))
+      bookmarks_panel(state, cmd, result.arg);
     ImGui::End();
   }
 

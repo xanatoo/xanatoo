@@ -500,6 +500,80 @@ void remove_bookmark(App& app, const std::string& url) {
     flash_status(app, "Bookmark removed (could not persist to disk)");
 }
 
+namespace {
+void store_folder_changes(App& app, const std::vector<size_t>& changed,
+                          const std::string& done) {
+  std::vector<xanatoo::Bookmark> rows;
+  for (size_t i : changed) rows.push_back(app.bookmarks[i]);
+  ++app.bookmarks_gen;
+  if (xanatoo::store_bookmark_changes(rows, app.bookmark_folders, app.bookmarks))
+    flash_status(app, done);
+  else
+    flash_status(app, done + " (could not persist to disk)");
+}
+}  // namespace
+
+void move_bookmark(App& app, const std::string& address, const std::string& folder) {
+  auto it = bookmark_it(app, address);
+  if (it == app.bookmarks.end()) return;
+  const std::string to = xanatoo::normalize_bookmark_folder(folder);
+  if (it->folder == to) return;
+  it->folder = to;
+  app.bookmark_folders = xanatoo::bookmark_folder_list(app.bookmarks, app.bookmark_folders);
+  store_folder_changes(app, {static_cast<size_t>(it - app.bookmarks.begin())},
+                       to.empty() ? "Moved bookmark to the top level"
+                                  : "Moved bookmark to " + to);
+}
+
+void retitle_bookmark(App& app, const std::string& address, const std::string& title) {
+  auto it = bookmark_it(app, address);
+  if (it == app.bookmarks.end()) return;
+  std::string t;
+  for (char c : title) t.push_back(static_cast<unsigned char>(c) < 0x20 ? ' ' : c);
+  std::string_view tv = t;
+  xanatoo::trim_ascii(tv);
+  if (it->title == tv) return;
+  it->title = std::string(tv);
+  store_folder_changes(app, {static_cast<size_t>(it - app.bookmarks.begin())},
+                       "Renamed bookmark");
+}
+
+void create_bookmark_folder(App& app, const std::string& path) {
+  const std::string f = xanatoo::normalize_bookmark_folder(path);
+  if (f.empty()) return;
+  if (std::find(app.bookmark_folders.begin(), app.bookmark_folders.end(), f) !=
+      app.bookmark_folders.end()) {
+    flash_status(app, "Folder " + f + " exists");
+    return;
+  }
+  app.bookmark_folders.push_back(f);
+  app.bookmark_folders = xanatoo::bookmark_folder_list(app.bookmarks, app.bookmark_folders);
+  store_folder_changes(app, {}, "New folder " + f);
+}
+
+void move_bookmark_folder(App& app, const std::string& from, const std::string& to) {
+  const std::string a = xanatoo::normalize_bookmark_folder(from);
+  const std::string b = xanatoo::normalize_bookmark_folder(to);
+  if (a == b) return;
+  std::vector<size_t> changed;
+  if (!xanatoo::bookmark_folder_move(app.bookmarks, app.bookmark_folders, a, b,
+                                     &changed)) {
+    flash_status(app, "Cannot move a folder into itself");
+    return;
+  }
+  store_folder_changes(app, changed,
+                       xanatoo::bookmark_folder_parent(a) == xanatoo::bookmark_folder_parent(b)
+                           ? "Renamed folder to " + std::string(xanatoo::bookmark_folder_leaf(b))
+                           : "Moved folder to " + (b.empty() ? "top level" : b));
+}
+
+void remove_bookmark_folder(App& app, const std::string& path) {
+  std::vector<size_t> changed;
+  xanatoo::bookmark_folder_remove(app.bookmarks, app.bookmark_folders, path, &changed);
+  store_folder_changes(app, changed, "Removed folder " + path +
+                       (changed.empty() ? "" : " (its bookmarks moved up)"));
+}
+
 void poll_shared_state(App& app) {
   // An open prompt may be stepping through a ring: wait until it closes.
   const uint64_t now = xanatoo::sdl::ticks();
@@ -510,11 +584,14 @@ void poll_shared_state(App& app) {
   std::vector<xanatoo::Bookmark> marks = xanatoo::stored_bookmarks();
   auto same = [](const xanatoo::Bookmark& a, const xanatoo::Bookmark& b) {
     return a.address == b.address && a.title == b.title &&
-           a.quote == b.quote && a.created == b.created;
+           a.quote == b.quote && a.created == b.created && a.folder == b.folder;
   };
+  std::vector<std::string> folders = xanatoo::stored_bookmark_folders();
   if (!std::equal(marks.begin(), marks.end(), app.bookmarks.begin(),
-                  app.bookmarks.end(), same)) {
+                  app.bookmarks.end(), same) ||
+      folders != app.bookmark_folders) {
     app.bookmarks = std::move(marks);
+    app.bookmark_folders = std::move(folders);
     ++app.bookmarks_gen;
   }
   app.minibuf_hist_url = xanatoo::stored_input_history("url");

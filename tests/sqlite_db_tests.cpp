@@ -268,6 +268,34 @@ void test_statedb() {
   EXPECT(exported.find("https://c.example/\ttitle=C") != std::string::npos);
   EXPECT(exported.find("a.example") == std::string::npos);
 
+  // Folders: a bookmark's folder, empty folders, one-transaction changes.
+  marks = xanatoo::stored_bookmarks();
+  Bookmark e{"https://e.example/", "E", "", "", "News/Tech"};
+  marks.push_back(e);
+  EXPECT(xanatoo::store_bookmark_add(e, marks));
+  EXPECT(xanatoo::stored_bookmark_folders() ==
+         (std::vector<std::string>{"News", "News/Tech"}));
+  std::vector<std::string> folders = {"News", "News/Tech", "Empty"};
+  marks = xanatoo::stored_bookmarks();
+  marks[0].folder = "Empty";
+  marks[0].title = "B renamed";
+  EXPECT(xanatoo::store_bookmark_changes({marks[0]}, folders, marks));
+  marks = xanatoo::stored_bookmarks();
+  EXPECT_EQ(marks[0].folder, "Empty");
+  EXPECT_EQ(marks[0].title, "B renamed");
+  EXPECT(xanatoo::stored_bookmark_folders() ==
+         (std::vector<std::string>{"Empty", "News", "News/Tech"}));
+  const std::string with_folders = slurp(dir / "bookmarks");
+  EXPECT(with_folders.find("#folder\tEmpty\n") != std::string::npos);
+  EXPECT(with_folders.find("\tfolder=News/Tech") != std::string::npos);
+  EXPECT(xanatoo::store_bookmark_remove("https://e.example/", marks));
+  // The folders stay when their bookmarks go.
+  EXPECT(xanatoo::stored_bookmark_folders() ==
+         (std::vector<std::string>{"Empty", "News", "News/Tech"}));
+  // Only the folders of bookmarks remain without explicit ones.
+  EXPECT(xanatoo::store_bookmark_changes({}, {}, xanatoo::stored_bookmarks()));
+  EXPECT(xanatoo::stored_bookmark_folders() == (std::vector<std::string>{"Empty"}));
+
   // Ring: re-recording moves to the end; capped.
   std::vector<std::string> hist = url;
   xanatoo::record_input_history("url", hist, "https://one/", 3);

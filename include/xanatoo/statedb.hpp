@@ -47,6 +47,14 @@ std::vector<Bookmark> stored_bookmarks();
 bool store_bookmark_add(const Bookmark& b, const std::vector<Bookmark>& all);
 bool store_bookmark_remove(std::string_view address,
                            const std::vector<Bookmark>& all);
+// Every bookmark folder (bookmark_folder_list order), empty ones included.
+std::vector<std::string> stored_bookmark_folders();
+// Writes title and folder of the bookmarks in `changed` (matched by
+// address) and replaces the folder list with `folders`, in one transaction.
+// `all` as above.
+bool store_bookmark_changes(const std::vector<Bookmark>& changed,
+                            const std::vector<std::string>& folders,
+                            const std::vector<Bookmark>& all);
 
 // Input history ring `name` ("url", "path"), oldest first, at most
 // `max_entries`.

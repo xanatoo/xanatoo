@@ -179,6 +179,7 @@ bool app_init(App& app) {
   app.minibuf_hist_path = xanatoo::stored_input_history("path");
   app.minibuf_hist_url = xanatoo::stored_input_history("url");
   app.bookmarks = xanatoo::stored_bookmarks();
+  app.bookmark_folders = xanatoo::stored_bookmark_folders();
   app.subscriptions = load_subscriptions();
   app.annotation_layers = xanatoo::list_annotation_layers();
   xanatoo::load_hidden_annotation_layers(app.hidden_annotation_layers);
