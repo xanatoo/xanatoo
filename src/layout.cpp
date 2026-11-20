@@ -3078,6 +3078,19 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       }
       continue;
     }
+    // Adjacent footnote marks ("[^1][^2]") get a raised comma between them
+    // so they do not read as one number. Display only: it shares the next
+    // mark's first char index, like the caret slot before that mark.
+    if (kind == InlineKind::FootnoteRef && si > 0 && !cps.empty() &&
+        node.spans[si - 1].kind == InlineKind::FootnoteRef && ch0 == 0) {
+      CharInfo c{',', si32, 0, kind, r};
+      // Sits on the superscript digits' baseline, or on the raised digits'.
+      Font& f = fonts_.pick(r);
+      const uint32_t sup = superscript_digit(cps[0]);
+      c.rise = static_cast<float>(f.ascender()) *
+               (sup && f.has_glyph(sup) ? 0.25f : 0.4f);
+      chars.push_back(c);
+    }
     for (size_t ci = 0; ci < cps.size(); ++ci) {
       CharInfo c{cps[ci], si32, static_cast<uint32_t>(ch0 + ci), kind, r};
       if (kind == InlineKind::FootnoteRef) {
