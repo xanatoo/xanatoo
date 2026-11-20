@@ -203,6 +203,39 @@ SDL_Rect outline_focus_rect(App& app, const FloatWindow& w) {
   return title_button_rect(app, w, "Focus");
 }
 
+// Title colour per panel family: navigation blue, links teal, sites green,
+// time amber, feeds orange, social plum, styling violet, help mint.
+static xanatoo::theme::Tint window_tint(WindowRole role) {
+  using xanatoo::theme::Tint;
+  switch (role) {
+    case WindowRole::Document: return Tint::Yellow;
+    case WindowRole::Outline:
+    case WindowRole::Page: return Tint::Blue;
+    case WindowRole::Backlinks:
+    case WindowRole::Context: return Tint::Teal;
+    case WindowRole::Sitemap:
+    case WindowRole::RelatedSites: return Tint::Green;
+    case WindowRole::Annotations: return Tint::Lime;
+    case WindowRole::Subscriptions:
+    case WindowRole::Downloads: return Tint::Orange;
+    case WindowRole::History:
+    case WindowRole::Revisions: return Tint::Amber;
+    case WindowRole::Media: return Tint::Red;
+    case WindowRole::Bookmarks: return Tint::Rose;
+    case WindowRole::Reply:
+    case WindowRole::NostrExplorer:
+    case WindowRole::NostrAccounts:
+    case WindowRole::LemmyExplorer:
+    case WindowRole::MatrixExplorer: return Tint::Plum;
+    case WindowRole::Styles:
+    case WindowRole::StyleManager: return Tint::Violet;
+    case WindowRole::Help:
+    case WindowRole::HoverHelp: return Tint::Mint;
+    case WindowRole::Certificates: return Tint::Steel;
+  }
+  return Tint::Yellow;
+}
+
 bool draw_floating_frame(App& app, const FloatWindow& win,
                          const std::string& title, bool active,
                          int title_reserve) {
@@ -216,6 +249,7 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   w.slot = float_control_w(win);
   w.flush = win.dock != Dock::None;
   w.active = active;
+  w.tint = window_tint(win.role);
   w.resizable = win.dock == Dock::None;
   w.maximized = win.dock == Dock::Max;
   w.shade_enabled = float_docked(win);
@@ -241,7 +275,7 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
     th::fill(app.sdl, well, p.paper);
     th::bevel(app.sdl, well, th::Bevel::Sunken);
   }
-  const th::Rgb ink = active ? p.tab_text : p.text_dim;
+  const th::Rgb ink = active ? th::title_tint(w.tint).text : p.text_dim;
   xanatoo::Font& font = title_font(app, win, true);
   const int title_x = close_zone.x + close_zone.w + 4;
   const int title_w = shade_zone.x - title_reserve - 8 - title_x;

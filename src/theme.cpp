@@ -4,6 +4,7 @@
 #include "xanatoo/theme.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace xanatoo::theme {
@@ -29,6 +30,43 @@ Rgb lerp(Rgb a, Rgb b, float t) {
 }
 
 }  // namespace
+
+const TitleTint& title_tint(Tint t) {
+  struct Hue {
+    Rgb top, bottom, text;
+  };
+  // Active gradients sit at roughly the lightness of the BeOS yellow so the
+  // dark title ink reads on every one of them.
+  static constexpr Hue kHues[] = {
+      {rgb(0xFF, 0xE0, 0x5A), rgb(0xF2, 0xBE, 0x1A), rgb(0x2A, 0x24, 0x08)},  // Yellow
+      {rgb(0xB4, 0xD8, 0xFF), rgb(0x6E, 0xAE, 0xF0), rgb(0x0C, 0x24, 0x42)},  // Blue
+      {rgb(0x9E, 0xEA, 0xE4), rgb(0x3E, 0xC0, 0xB6), rgb(0x06, 0x2E, 0x2C)},  // Teal
+      {rgb(0xB8, 0xEC, 0xA0), rgb(0x6C, 0xC8, 0x4C), rgb(0x12, 0x30, 0x08)},  // Green
+      {rgb(0xE4, 0xF4, 0x7A), rgb(0xB8, 0xD8, 0x2A), rgb(0x26, 0x2E, 0x04)},  // Lime
+      {rgb(0xFF, 0xC8, 0x8A), rgb(0xF6, 0x92, 0x34), rgb(0x3A, 0x1C, 0x02)},  // Orange
+      {rgb(0xF2, 0xD8, 0xA8), rgb(0xD4, 0xA8, 0x60), rgb(0x34, 0x24, 0x0A)},  // Amber
+      {rgb(0xFF, 0xAE, 0xA4), rgb(0xEC, 0x6A, 0x5C), rgb(0x40, 0x0C, 0x06)},  // Red
+      {rgb(0xFF, 0xC4, 0xDA), rgb(0xF0, 0x86, 0xAE), rgb(0x42, 0x0E, 0x22)},  // Rose
+      {rgb(0xEC, 0xBE, 0xF0), rgb(0xC8, 0x7C, 0xD2), rgb(0x34, 0x0C, 0x3A)},  // Plum
+      {rgb(0xD0, 0xC8, 0xFF), rgb(0x9C, 0x8C, 0xF0), rgb(0x1E, 0x12, 0x48)},  // Violet
+      {rgb(0xC0, 0xF4, 0xD4), rgb(0x72, 0xD8, 0x9E), rgb(0x08, 0x32, 0x1C)},  // Mint
+      {rgb(0xD4, 0xDE, 0xE8), rgb(0x9A, 0xAE, 0xC2), rgb(0x16, 0x22, 0x30)},  // Steel
+  };
+  constexpr int n = static_cast<int>(sizeof kHues / sizeof kHues[0]);
+  static const auto table = [] {
+    const Palette& p = palette();
+    std::array<TitleTint, n> out{};
+    for (int i = 0; i < n; ++i) {
+      const Hue& h = kHues[i];
+      out[i] = TitleTint{h.top, h.bottom, lerp(h.bottom, rgb(0, 0, 0), 0.38f),
+                         h.text, lerp(p.tab_idle_top, h.top, 0.22f),
+                         lerp(p.tab_idle_bottom, h.bottom, 0.20f)};
+    }
+    return out;
+  }();
+  const int i = static_cast<int>(t);
+  return table[i >= 0 && i < n ? i : 0];
+}
 
 void fill(SDL_Renderer* r, const SDL_Rect& rc, Rgb c, uint8_t a) {
   SDL_BlendMode old;
@@ -200,14 +238,15 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
   fill(r, o, p.face);
   // Title strip
   SDL_Rect title{o.x + 1, o.y + 1, o.w - 2, w.title_h - 1};
+  const TitleTint& tt = title_tint(w.tint);
   if (w.active)
-    vgradient(r, title, p.tab_top, p.tab_bottom);
+    vgradient(r, title, tt.top, tt.bottom);
   else
-    vgradient(r, title, p.tab_idle_top, p.tab_idle_bottom);
+    vgradient(r, title, tt.idle_top, tt.idle_bottom);
   // Light edge under the top line, dark line below the strip
   hline(r, title.x, title.x + title.w - 1, title.y, p.highlight);
   hline(r, o.x + 1, o.x + o.w - 2, o.y + w.title_h,
-        w.active ? Rgb{0x9A, 0x74, 0x08} : p.shadow);
+        w.active ? tt.line : p.shadow);
   // Outer frame
   SDL_SetRenderDrawColor(r, p.frame.r, p.frame.g, p.frame.b, 255);
   xanatoo::sdl::draw_rect(r, &o);

@@ -66,6 +66,23 @@ struct Palette {
 
 const Palette& palette();
 
+// Title strip hue of a window. Each panel family gets its own colour: a
+// saturated gradient while the window is active, a faint hint of it on the
+// grey idle strip. Yellow (the BeOS tab) stays with documents.
+enum class Tint : uint8_t {
+  Yellow, Blue, Teal, Green, Lime, Orange, Amber, Red, Rose, Plum, Violet,
+  Mint, Steel
+};
+
+struct TitleTint {
+  Rgb top, bottom;            // active gradient
+  Rgb line;                   // rule under the active strip
+  Rgb text;                   // active title ink
+  Rgb idle_top, idle_bottom;  // muted gradient out of focus
+};
+
+const TitleTint& title_tint(Tint t);
+
 enum class Bevel { Raised, Sunken, Etched };
 
 void fill(SDL_Renderer* r, const SDL_Rect& rc, Rgb c, uint8_t a = 255);
@@ -89,7 +106,8 @@ struct WindowChrome {
   int title_h = 28;       // height of the title strip
   int slot = 0;           // control hit-zone width (0: 28px · scale)
   bool flush = false;     // controls fill their zone + the strip (docked)
-  bool active = true;     // yellow tab vs. grey
+  bool active = true;     // tinted tab vs. muted
+  Tint tint = Tint::Yellow;  // panel family colour (`title_tint`)
   bool close_box = true;  // left-aligned close widget (hit zone: first 28px)
   bool resizable = true;  // SE grip
   bool max_box = true;    // right-aligned maximize / restore (last 28px)

@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Panel title strips tinted per family
+
+- Each panel family has its own title hue (`theme::Tint`, `title_tint`,
+  role → hue in `window_tint`): documents yellow, Outline / Page blue,
+  Backlinks / Context teal, Site map / Related Sites green, Annotations
+  lime, Subscriptions / Downloads orange, History / Revisions amber, Media
+  red, Bookmarks rose, Reply / Nostr / Lemmy / Matrix plum, style sheets
+  violet, Help mint, Certificates steel. Active: saturated gradient with a
+  darkened rule and hue-dark ink; idle: grey strip with ~20% of the hue.
+- Checked under Xvfb (Outline idle, Site map active, Help idle and active).
+
 ## Status (2026-11-20) — Footnote strip leaves out notes of covered marks
 
 - The strip no longer lists notes whose marks it covers. Marks are sorted
