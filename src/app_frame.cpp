@@ -837,7 +837,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     const C c = cmd;
     const bool allowed =
         c == C::Quit || c == C::OpenDocument || c == C::OpenUrlBar ||
-        c == C::NavigateUrl || c == C::NavBack || c == C::NavForward ||
+        c == C::NavigateUrl || c == C::NavigateHistoryUrl || c == C::NavBack || c == C::NavForward ||
         c == C::NavJump ||
         c == C::GoHome || c == C::GoUp || c == C::OpenPageFeed ||
         c == C::ToggleHistory || c == C::ToggleDownloads || c == C::ToggleMedia || c == C::ToggleBookmarks ||
@@ -1075,6 +1075,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         app.visit_hint = find_bookmark(app, arg) ? xanatoo::VisitKind::Bookmark
                                                  : xanatoo::VisitKind::Address;
         navigate_to_url(app, complete_location(app, arg));
+        app.visit_hint.reset();
+      }
+      break;
+    case C::NavigateHistoryUrl:  // History menu: an address visited before
+      if (!arg.empty()) {
+        app.visit_hint = xanatoo::VisitKind::History;
+        navigate_to_url(app, arg);
         app.visit_hint.reset();
       }
       break;

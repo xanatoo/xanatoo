@@ -31,6 +31,7 @@ enum class UiCommand {
   OpenDocument,
   OpenUrlBar,  // Ctrl+L — focus URL bar / status fallback
   NavigateUrl,  // toolbar/menu URL field committed (arg = URL or path)
+  NavigateHistoryUrl,  // History menu recent address (arg = URL); a `history` visit
   NavBack,     // Alt+Left session history
   NavForward,  // Alt+Right
   NavJump,     // arg = signed number of history steps (Back/Forward context menus)

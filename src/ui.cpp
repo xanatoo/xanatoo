@@ -2987,7 +2987,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           std::string label = url.size() > 64 ? elide_middle(url, 28) : url;
           ImGui::PushID(i++);
           if (ImGui::MenuItem(label.c_str())) {
-            cmd = UiCommand::NavigateUrl;
+            cmd = UiCommand::NavigateHistoryUrl;
             result.arg = url;
           }
           middle_open(cmd, result.arg, url);
