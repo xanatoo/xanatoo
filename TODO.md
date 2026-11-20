@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Odysee: newer videos play as HLS
+
+- Newer (transcoded) Odysee uploads failed with "401 Unauthorized": the
+  CDN serves them only as HLS. The video page now probes
+  `…/v6/streams/{claim_id}/{sd_hash}/master.m3u8` (`od_hls_url`) and links
+  "▶ Play (HLS)" when it exists; older uploads keep the `.mp4`.
+- Checked under Xvfb: @Odysee channel-roundup-may-2026 plays (1080p HLS),
+  @Odysee missinfo (2022) still gets the `.mp4` "▶ Play".
+
 ## Status (2026-11-20) — Media panel for PeerTube, Odysee and more
 
 - PeerTube and Odysee video pages get "▶ Play (720p)" / "♪ Sound only"

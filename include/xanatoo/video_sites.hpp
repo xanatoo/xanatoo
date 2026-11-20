@@ -111,6 +111,10 @@ const Json* od_first_claim(const Json& reply, std::string_view lbry_url);
 void od_parse_channel_header(const Json& claim, VsListing& l);
 // The stream address of a `get` reply (`result.streaming_url`), or "".
 std::string od_parse_streaming_url(const Json& reply);
+// The CDN's HLS playlist of a video claim
+// (".../v6/streams/<claim_id>/<sd_hash>/master.m3u8"), or "" (audio, no
+// source). Transcoded uploads exist only as HLS: their .mp4 answers 401.
+std::string od_hls_url(const Json& claim);
 // "@chan:8/slug:e" (possibly percent-encoded) → "lbry://@chan#8/slug#e".
 std::string od_lbry_url(std::string_view id);
 

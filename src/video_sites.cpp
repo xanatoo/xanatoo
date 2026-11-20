@@ -778,6 +778,16 @@ VsVideoInfo od_parse_claim(const Json& c) {
   return o;
 }
 
+std::string od_hls_url(const Json& c) {
+  if (!starts_with(json_string(json_path(c, "value/source/media_type")), "video/")) return {};
+  const std::string claim_id = json_string(json_get(c, "claim_id"));
+  const std::string sd = json_string(json_path(c, "value/source/sd_hash"));
+  if (!id_ok(claim_id) || !id_ok(sd) || sd.find('/') != std::string::npos ||
+      claim_id.find('/') != std::string::npos)
+    return {};
+  return "https://player.odycdn.com/v6/streams/" + claim_id + "/" + sd + "/master.m3u8";
+}
+
 std::string od_parse_streaming_url(const Json& reply) {
   std::string url = json_string(json_path(reply, "result/streaming_url"));
   return starts_with(url, "https://") ? url : std::string();
@@ -1258,7 +1268,20 @@ std::optional<Document> od_fetch_video(const VsRef& ref, std::string* err) {
   }
   VsVideoInfo info = od_parse_claim(*claim);
   const std::string claim_id = json_string(json_get(*claim, "claim_id"));
+  // Transcoded uploads play only as HLS (the .mp4 answers 401); older ones
+  // have no playlist (404) and keep the .mp4.
+  bool hls = false;
   if (ref.page == 1 && ref.thread.empty() && !info.stream_url.empty())
+    if (std::string m = od_hls_url(*claim); !m.empty()) {
+      static const std::string ua = user_agent("read-only video client");
+      auto resp = https_get_follow(m, ua, nullptr);
+      if (resp && resp->status == 200 && starts_with(resp->body, "#EXTM3U")) {
+        info.stream_url = std::move(m);
+        info.stream_label = "HLS";
+        hls = true;
+      }
+    }
+  if (ref.page == 1 && ref.thread.empty() && !info.stream_url.empty() && !hls)
     if (auto got = od_rpc("get", R"({"uri":)" + json_quote(url) + R"(,"save_file":false})", nullptr))
       if (std::string s = od_parse_streaming_url(*got); !s.empty()) info.stream_url = std::move(s);
   std::string params = R"({"claim_id":)" + json_quote(claim_id) + R"(,"page":)" + std::to_string(ref.page) +

@@ -209,9 +209,11 @@ static void test_odysee() {
     Json sc = parse(R"({"claim_id":"6eb3","name":"n","canonical_url":"lbry://@a#f/n#6",
       "value":{"title":"T","source":{"media_type":"video/mp4","sd_hash":"f79c8fc63f82"}}})");
     VsVideoInfo s = od_parse_claim(sc);
+    assert(od_hls_url(sc) == "https://player.odycdn.com/v6/streams/6eb3/f79c8fc63f82/master.m3u8");
     assert(s.stream_url == "https://player.odycdn.com/v6/streams/6eb3/f79c8f.mp4" && s.audio_url.empty());
     Json ac = parse(R"({"claim_id":"ab","name":"n","value":{"source":{"media_type":"audio/mpeg","sd_hash":"123456789"}}})");
     VsVideoInfo a = od_parse_claim(ac);
+    assert(od_hls_url(ac).empty() && od_hls_url(*first).empty());
     assert(a.stream_url.empty() && a.audio_url == "https://player.odycdn.com/v6/streams/ab/123456.mp4");
     assert(od_parse_streaming_url(parse(R"({"result":{"streaming_url":"https://player.odycdn.com/v6/streams/x/y.mp4"}})")) ==
            "https://player.odycdn.com/v6/streams/x/y.mp4");

@@ -35,6 +35,12 @@ panel), "♪ Sound only" when the site has a separate audio file, "Watch on X"
 - Odysee: `player.odycdn.com/v6/streams/{claim_id}/{sd_hash[:6]}.mp4` from the
   claim, replaced by the `get` RPC's `streaming_url` on the video page
   (`od_parse_streaming_url`). Audio claims get "▶ Play" on the sound.
+  Transcoded (newer) uploads exist only as HLS: their `.mp4` answers
+  401 "This content cannot be accessed at the moment" (with a Referer the
+  CDN redirects to the playlist). The video page therefore first fetches
+  `.../v6/streams/{claim_id}/{sd_hash}/master.m3u8` (`od_hls_url`, no
+  Referer needed for it or its segments); when that answers `#EXTM3U` the
+  link is "▶ Play (HLS)", else (404, older uploads) the `.mp4` stays.
 - Dailymotion: no Play link (the metadata m3u8 answers 403,
   protected delivery). A PeerTube video's ref uses the host it really
 lives on (search results can span instances).
