@@ -318,7 +318,8 @@ void LayoutEngine::layout_children_sequential(
     // A figure beside others in a row is laid out with the row's first
     // figure; only that one stands for the row's height.
     const bool row_follower =
-        kind == NodeKind::Figure && !floating && figure_in_row(doc, child) &&
+        (kind == NodeKind::Figure || kind == NodeKind::Image) && !floating &&
+        figure_in_row(doc, child) &&
         [&] {
           auto row = figure_row(doc, child, max_width);
           return !row.empty() && row.front().node != child;
@@ -496,7 +497,9 @@ bool LayoutEngine::figure_image_size(const Document& doc, const Node& fig,
                                      float limit, float& w, float& h) {
   const float dp = options_.px_scale;
   w = h = 0.f;
-  for (NodeId child : fig.children) {
+  std::vector<NodeId> cands = fig.children;
+  if (fig.kind == NodeKind::Image) cands.assign(1, fig.id);
+  for (NodeId child : cands) {
     const Node& image = doc.get(child);
     if (image.kind != NodeKind::Image || image.src.empty()) continue;
     if (!images_) return true;
@@ -528,8 +531,9 @@ bool LayoutEngine::figure_image_size(const Document& doc, const Node& fig,
 
 bool LayoutEngine::figure_in_row(const Document& doc, NodeId id) {
   const Node& n = doc.get(id);
-  if (n.kind != NodeKind::Figure) return false;
   if (n.float_side == "left" || n.float_side == "right") return false;
+  if (n.kind == NodeKind::Image) return !n.src.empty();
+  if (n.kind != NodeKind::Figure) return false;
   for (NodeId c : n.children)
     if (doc.get(c).kind == NodeKind::Image && !doc.get(c).src.empty()) return true;
   return false;
@@ -551,7 +555,9 @@ std::vector<LayoutEngine::FigureSlot> LayoutEngine::figure_row(
   };
   // Column of a figure on its own: its image, a caption measure at least
   // (just that when the image is missing or failed).
-  auto column = [&](const Natural& n) {
+  auto column = [&](NodeId f, const Natural& n) {
+    if (doc.get(f).kind == NodeKind::Image)  // no caption to keep readable
+      return n.w > 0.f ? std::min(n.w, limit) : min_col;
     return std::clamp(n.w, min_col, limit);
   };
   // The run of consecutive row figures around `id`.
@@ -606,7 +612,7 @@ std::vector<LayoutEngine::FigureSlot> LayoutEngine::figure_row(
   float sum = 0.f;
   for (NodeId f : run) {
     const Natural n = natural(f);
-    const float w = column(n);
+    const float w = column(f, n);
     if (!items.empty() &&
         (sum + w) * kMinShare + gap * static_cast<float>(items.size()) > max_width) {
       for (const Item& it : items)
@@ -618,6 +624,49 @@ std::vector<LayoutEngine::FigureSlot> LayoutEngine::figure_row(
     items.push_back({f, n, w});
   }
   return fit(items);
+}
+
+bool LayoutEngine::layout_figure_row(const Document& doc, NodeId id, float x,
+                                     float& y, float max_width,
+                                     LayoutResult& out) {
+  const std::vector<FigureSlot> row = figure_row(doc, id, max_width);
+  // A plain image alone keeps the usual block image layout.
+  if (row.size() == 1 && doc.get(id).kind == NodeKind::Image) return false;
+  // Laid out with the row's first member.
+  if (row.empty() || row.front().node != id) return true;
+  const float em = static_cast<float>(fonts_.regular.pixel_size());
+  const float dp = options_.px_scale;
+  const BlockStyle& fs = (*style_)[BlockRole::Figure];
+  const float gap = 1.5f * em;
+  float total = gap * static_cast<float>(row.size() - 1);
+  for (const FigureSlot& f : row) total += f.width;
+  y += fs.space_before.px(em, dp);
+  const float top = y;
+  float bottom = top;
+  float cx = x + std::max(0.f, (max_width - total) * 0.5f);
+  std::vector<size_t> own_box;
+  in_image_float_ = true;
+  in_figure_column_ = true;
+  for (const FigureSlot& f : row) {
+    float fy = top;
+    if (doc.get(f.node).kind == NodeKind::Image) {
+      layout_node(doc, f.node, cx, fy, f.width, out);
+    } else {
+      for (NodeId c : doc.get(f.node).children)
+        layout_node(doc, c, cx, fy, f.width, out);
+    }
+    bottom = std::max(bottom, fy);
+    own_box.push_back(out.boxes.size());
+    out.boxes.push_back({f.node, cx, top, f.width, 0.f});
+    cx += f.width + gap;
+  }
+  in_image_float_ = false;
+  in_figure_column_ = false;
+  y = bottom + fs.space_after.px(em, dp);
+  // Every member's box spans the row; height hints only use the first
+  // one (the others are never skipped on their own).
+  for (size_t b : own_box) out.boxes[b].height = y - top;
+  return true;
 }
 
 void LayoutEngine::layout_collection(const Document& doc, NodeId id, float x,
@@ -1680,41 +1729,9 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         y = clear_floats(x, max_width, y);
       }
       const bool was_in_image_float = in_image_float_;
-      if (!was_in_image_float && !in_margin_ && figure_in_row(doc, id)) {
-        // Centred column(s) sized to the image(s); see figure_row.
-        const std::vector<FigureSlot> row = figure_row(doc, id, max_width);
-        if (row.empty() || row.front().node != id) {
-          // Laid out with the row's first figure.
-          break;
-        }
-        const float em = static_cast<float>(fonts_.regular.pixel_size());
-        const float gap = 1.5f * em;
-        float total = gap * static_cast<float>(row.size() - 1);
-        for (const FigureSlot& f : row) total += f.width;
-        y += before(BlockRole::Figure);
-        const float top = y;
-        float bottom = top;
-        float cx = x + std::max(0.f, (max_width - total) * 0.5f);
-        std::vector<size_t> own_box;
-        in_image_float_ = true;
-        in_figure_column_ = true;
-        for (const FigureSlot& f : row) {
-          float fy = top;
-          for (NodeId c : doc.get(f.node).children)
-            layout_node(doc, c, cx, fy, f.width, out);
-          bottom = std::max(bottom, fy);
-          own_box.push_back(out.boxes.size());
-          out.boxes.push_back({f.node, cx, top, f.width, 0.f});
-          cx += f.width + gap;
-        }
-        in_image_float_ = false;
-        in_figure_column_ = false;
-        y = bottom + after(BlockRole::Figure);
-        // Every figure's box spans the row; height hints only use the
-        // first one (the others are never skipped on their own).
-        for (size_t b : own_box) out.boxes[b].height = y - top;
+      if (!was_in_image_float && !in_margin_ && figure_in_row(doc, id) &&
+          layout_figure_row(doc, id, x, y, max_width, out))
         break;
-      }
       y += before(BlockRole::Figure);
       float start_y = y;
       in_image_float_ = true;
@@ -2168,6 +2185,10 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       }
       if (!in_image_float_ && !node.float_side.empty())
         y = clear_floats(x, max_width, y);
+      // Consecutive block images share rows like figures.
+      if (!in_image_float_ && !in_margin_ && figure_in_row(doc, id) &&
+          layout_figure_row(doc, id, x, y, max_width, out))
+        break;
       // A block image outside a figure gets the same centred ~60% column.
       const bool block_image = !in_image_float_ && !in_margin_;
       if (block_image) {

@@ -2572,6 +2572,29 @@ void test_layout_figure_rows() {
     EXPECT(std::fabs(left - right) < 40.f);    // centred (page margins aside)
     EXPECT(bc->width < width * 0.7f);
   }
+
+  // Plain block images share rows the same way; one alone does not.
+  Document idoc;
+  const NodeId iroot = idoc.create(NodeKind::Document);
+  auto image = [&] {
+    const NodeId im = idoc.create(NodeKind::Image, iroot);
+    idoc.get(im).src = "missing.png";
+    return im;
+  };
+  const NodeId i1 = image();
+  const NodeId i2 = image();
+  idoc.append_text(idoc.create(NodeKind::Paragraph, iroot), "Between.");
+  const NodeId i3 = image();
+  lr = engine.layout(idoc, width);
+  const LayoutBox* b1 = box(i1);
+  const LayoutBox* b2 = box(i2);
+  const LayoutBox* b3 = box(i3);
+  EXPECT(b1 && b2 && b3);
+  if (b1 && b2 && b3) {
+    EXPECT(b1->y == b2->y);
+    EXPECT(b2->x >= b1->x + b1->width);
+    EXPECT(b3->y >= b1->y + b1->height);
+  }
 }
 
 // The hostname must share the title's line without inheriting its heading

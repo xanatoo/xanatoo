@@ -44,9 +44,14 @@
 - Checked under Xvfb: local Markdown figures (row of two, single small
   figure), an HTML page with remote images (Wikimedia rejects non-standard
   thumb widths with 400; failed images leave a caption-width column).
-- Known: no caption centring (no text-align style property yet); alt text
-  is not yet a tooltip; plain consecutive images (not figures) do not share
-  rows.
+- Hovering a block image shows its alt text as the tooltip (plus the link
+  of a linked image). Consecutive plain block images share rows like
+  figures.
+- Known: no caption centring (no text-align style property yet; the
+  caption role also styles non-figure captions such as HN metadata).
+- Seen while testing (not fixed): Markdown list items do not join lazy
+  continuation lines (examples/welcome.md "the **Native / view**" splits
+  into a second paragraph, bold lost).
 
 ## Status (2026-11-19) — LessWrong client (`lesswrong:`)
 

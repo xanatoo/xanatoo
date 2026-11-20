@@ -453,7 +453,8 @@ private:
   void layout_remote_image(const Document& doc, const Node& node, float x,
                            float& y, float max_width, LayoutResult& out,
                            bool center = true);
-  // Block figures: a figure with an image is a column as wide as its image
+  // Block figures (and plain block images, which share rows the same way):
+  // a figure with an image is a column as wide as its image
   // (at least a caption's measure, at most ~60% of the page), centred.
   // Consecutive such sibling figures share a row when their columns fit
   // side by side. The row's first figure lays out the whole row; the others
@@ -470,6 +471,10 @@ private:
   // The row of figures `id` belongs to (one slot when it stands alone).
   std::vector<FigureSlot> figure_row(const Document& doc, NodeId id,
                                      float max_width);
+  // Lay out `id`'s row when `id` starts it; true when handled (also for a
+  // later member: it emits nothing), false for a plain image alone.
+  bool layout_figure_row(const Document& doc, NodeId id, float x, float& y,
+                         float max_width, LayoutResult& out);
   // Reader mode: "Reader mode: N parts of the page hidden · Show all".
   void layout_chrome_notice(const Document& doc, float x, float& y,
                             float max_width, LayoutResult& out);

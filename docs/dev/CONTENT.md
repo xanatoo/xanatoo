@@ -229,11 +229,14 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - A block Image outside a figure sits centred in a column of ~60% of the
   page (at least 16 em). Images are never scaled up: a small one keeps its
   own size (and its interactive `display_scale`). The alt text is not laid
-  out under the image; only the loading placeholder shows it.
+  out under the image; the loading placeholder shows it, and hovering a
+  block image shows it as the tooltip (`image_alt_tooltip`, app_frame.cpp).
 - A non-floating Figure with an image child is a column as wide as its
   image (at least 14 em for the caption, at most the 60% column), centred;
   the image starts flush with the caption (`in_figure_column_`).
-- Consecutive such sibling figures share a row (`figure_row`) when their
+- Consecutive such sibling figures — and plain block images, which follow
+  the same rules without the caption measure — share a row
+  (`figure_row` / `layout_figure_row`) when their
   columns fit at ≥ 75% of their own width; a shared row gives all images
   one height (never above any image's own). Stateless: the row's first
   figure lays out the whole row, the others emit nothing, and
