@@ -3,17 +3,22 @@
 //
 // Offline tests for media.hpp: address tests, the playback pipe with a fake
 // source (read-ahead, audio clock, frame picking, seek trimming, the wall
-// clock without sound, the end) and, in FFmpeg builds, the fixtures in
+// clock without sound, the end), the built-in decoders streaming from a
+// feed through the pipe, Content-Type tests and, in FFmpeg builds, the fixtures in
 // tests/data/video (0.5 s, 64×48 at 10 fps: red H.264 + AAC 8 kHz mono in
 // MP4, blue VP9 + Opus in WebM; made with ffmpeg). Part of xanatoo_tests.
 
 #include "xanatoo/media.hpp"
 
+#include "xanatoo/audio.hpp"
+
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 int g_passed = 0;
@@ -105,6 +110,41 @@ private:
   int ia_ = 0, iv_ = 0;
 };
 
+// A 16-bit stereo PCM WAV of `frames` frames at 8000 Hz (silence).
+std::vector<uint8_t> silent_wav(uint32_t frames) {
+  std::vector<uint8_t> v;
+  auto put = [&](uint32_t x, int bytes) {
+    for (int i = 0; i < bytes; ++i) v.push_back(uint8_t(x >> (8 * i)));
+  };
+  const uint32_t data = frames * 4;
+  v.insert(v.end(), {'R', 'I', 'F', 'F'});
+  put(36 + data, 4);
+  v.insert(v.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+  put(16, 4);
+  put(1, 2);
+  put(2, 2);
+  put(8000, 4);
+  put(8000 * 4, 4);
+  put(4, 2);
+  put(16, 2);
+  v.insert(v.end(), {'d', 'a', 't', 'a'});
+  put(data, 4);
+  v.resize(v.size() + data);
+  return v;
+}
+
+// A pipe playing `feed` through open_audio_stream.
+std::shared_ptr<xanatoo::MediaPlayback> stream_pipe(std::shared_ptr<xanatoo::ByteFeed> feed,
+                                                    std::thread& worker) {
+  auto pb = std::make_shared<xanatoo::MediaPlayback>();
+  xanatoo::MediaOptions o;
+  o.open = [feed](const xanatoo::MediaOptions& opts, std::string* err) {
+    return xanatoo::open_audio_stream(feed, opts, err);
+  };
+  worker = std::thread(xanatoo::media_worker, pb, std::string(), o, nullptr);
+  return pb;
+}
+
 size_t queued(xanatoo::MediaPlayback& pb) {
   std::lock_guard lock(pb.m);
   return pb.audio.size();
@@ -163,6 +203,97 @@ void test_media(int& passed, int& failed) {
   EXPECT_EQ(media_time_address("a.mp4", 12.34), "a.mp4#t=12.3");
   EXPECT_EQ(media_time_address("a.mp4", 59.96), "a.mp4#t=60");
   EXPECT_EQ(media_time_address("a.mp4", -1), "a.mp4#t=0");
+
+  // Content types.
+  EXPECT(is_playable_type("audio/mpeg"));
+  EXPECT(is_playable_type("Audio/MPEG; charset=binary"));
+  EXPECT(is_playable_type("audio/ogg"));
+  EXPECT(!is_playable_type("text/html"));
+  EXPECT(!is_playable_type(""));
+  EXPECT(type_needs_media_backend("video/mp4"));
+  EXPECT(type_needs_media_backend("audio/mp4"));
+  EXPECT(!type_needs_media_backend("audio/flac"));
+  EXPECT(!type_needs_media_backend("application/octet-stream"));
+  EXPECT_EQ(is_playable_type("video/webm"), media_backend_available());
+
+  // A built-in format streams through the pipe while its feed arrives: it
+  // opens on the first bytes, plays all of it, and the end comes after.
+  {
+    const std::vector<uint8_t> wav = silent_wav(16000);  // 2 s
+    auto feed = std::make_shared<ByteFeed>();
+    feed->total.store(int64_t(wav.size()));
+    feed_append(*feed, {reinterpret_cast<const char*>(wav.data()), 8044});  // 2000 frames
+    std::thread worker;
+    auto pb = stream_pipe(feed, worker);
+    EXPECT(wait_for([&] { return pb->opened.load(); }));
+    EXPECT(pb->info.has_audio && !pb->info.has_video && !pb->failed);
+    EXPECT_EQ(pb->info.rate, 8000);
+    EXPECT_NEAR(pb->info.duration, 2.0, 1e-9);
+    // What has arrived plays in whole pieces (1024 frames); then the pipe
+    // waits for more.
+    EXPECT(wait_for([&] { return queued(*pb) >= 1024 * 2; }));
+    std::vector<float> out(16000 * 2);
+    EXPECT_EQ(media_pull_audio(*pb, out.data(), 16000), 1024u);
+    EXPECT(media_buffering(*pb));
+    EXPECT(!media_finished(*pb));
+    feed_append(*feed, {reinterpret_cast<const char*>(wav.data()) + 8044, wav.size() - 8044});
+    feed_end(*feed);
+    size_t total = 1024;
+    EXPECT(wait_for([&] {
+      total += media_pull_audio(*pb, out.data(), 16000);
+      return media_finished(*pb);
+    }));
+    EXPECT_EQ(total, 16000u);
+    EXPECT(!pb->failed);
+    // Seek back once complete (the in-memory decoder now).
+    media_seek(*pb, 1.5, 0);
+    EXPECT(wait_for([&] { return queued(*pb) >= 4000 * 2; }));
+    EXPECT_EQ(media_pull_audio(*pb, out.data(), 16000), 4000u);
+    media_stop(*pb);
+    worker.join();
+  }
+
+  // A seek far ahead of the download waits there, and a newer seek back
+  // does not wait for it.
+  {
+    const std::vector<uint8_t> wav = silent_wav(80000);  // 10 s
+    auto feed = std::make_shared<ByteFeed>();
+    feed->total.store(int64_t(wav.size()));
+    feed_append(*feed, {reinterpret_cast<const char*>(wav.data()), 8044});  // 0.25 s
+    std::thread worker;
+    auto pb = stream_pipe(feed, worker);
+    EXPECT(wait_for([&] { return pb->opened.load(); }));
+    media_seek(*pb, 8.0, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    EXPECT(media_buffering(*pb));
+    EXPECT_EQ(queued(*pb), 0u);
+    media_seek(*pb, 0.1, 0);
+    EXPECT(wait_for([&] { return queued(*pb) >= 1024 * 2; }));  // from 0.1 s
+    media_stop(*pb);
+    worker.join();
+    feed_end(*feed, "stopped");
+  }
+
+  // The download fails: what came plays, then the error.
+  {
+    const std::vector<uint8_t> wav = silent_wav(16000);
+    auto feed = std::make_shared<ByteFeed>();
+    feed->total.store(int64_t(wav.size()));
+    feed_append(*feed, {reinterpret_cast<const char*>(wav.data()), 4044});
+    feed_end(*feed, "HTTP 500");
+    std::thread worker;
+    auto pb = stream_pipe(feed, worker);
+    std::vector<float> out(16000 * 2);
+    size_t total = 0;
+    EXPECT(wait_for([&] {
+      total += media_pull_audio(*pb, out.data(), 16000);
+      return media_finished(*pb);
+    }));
+    EXPECT(pb->failed);
+    EXPECT_EQ(pb->error, "HTTP 500");
+    media_stop(*pb);
+    worker.join();
+  }
 
   // The pipe with sound and pictures.
   {

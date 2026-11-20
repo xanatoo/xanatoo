@@ -2,6 +2,33 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Sound and video play while they download
+
+- Remote MP3 / FLAC / WAV no longer download in full first: a thread
+  fills a `ByteFeed` (audio.hpp) and the media pipe plays it through
+  `open_audio_stream` (`src/audio_stream.cpp`; dr_libs callback APIs, reads
+  wait on the worker). On completion the in-memory decoder (MP3 seek table,
+  exact length) takes over at the same frame. Ogg goes to FFmpeg when there
+  is one, else waits for all of it (stb_vorbis reads memory only).
+- Responses typed `audio/*` / `video/*` (addresses without an extension)
+  play instead of offering a download (`DownloadProgress::playable`,
+  `play_audio(app, url, mime)`).
+- Panel: "Buffering… N% loaded", arrived part shaded on the seek bar;
+  sound alone decodes 5 s ahead. A newer seek interrupts a read waiting
+  for bytes (`MediaPlayback::seeks`).
+- Video by `.mp4` URL already streamed through FFmpeg (checked: a moov-at-end
+  MP4 at 1 MB/s starts at once, one range request for the index).
+- Checked under Xvfb against a throttled local server: 14 MB MP3 at
+  100 KB/s plays after ~1 s; at 400 KB/s a seek to 7:39 shows Buffering,
+  after completion a seek back is instant; extensionless MP3 and MP4,
+  FLAC, WAV, Ogg (→ FFmpeg). Unit tests: feed decoding = whole-file
+  decoding, cancel, seek interrupt, pipe with a trickling feed, failure.
+- Not yet: range requests for the built-in path (seeking far ahead waits
+  for the download); FFmpeg video has only ~1 s decoded ahead (no compressed
+  read-ahead buffer, a stalling server stutters); the title of an
+  extensionless address is its last path part ("x"); a startup address that
+  turns out to be media leaves the "Loading…" page.
+
 ## Status (2026-11-19) — LessWrong client (`lesswrong:`)
 
 - New forum site in `forums.hpp` / `forum_lesswrong.cpp`: frontpage, new,

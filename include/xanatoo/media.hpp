@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -25,6 +26,8 @@
 #include <vector>
 
 namespace xanatoo {
+
+struct ByteFeed;
 
 // Named like a video file (.mp4 .m4v .webm .mkv .mov .ogv .avi .3gp), by its
 // path; local paths, file: and http(s) as for is_audio_url.
@@ -35,6 +38,13 @@ bool needs_media_backend(std::string_view url);
 // A link the player takes in this build: built-in audio, or with a backend
 // video and the other audio formats.
 bool is_playable_url(std::string_view url);
+
+// The same by a response's Content-Type ("video/mp4; codecs=…"): sound or
+// video the player takes in this build (the built-in audio types: MP3, FLAC,
+// Ogg, WAV; with a backend every audio/* and video/*).
+bool is_playable_type(std::string_view content_type);
+// A type only a backend decodes (video/*, audio/mp4, audio/aac, …).
+bool type_needs_media_backend(std::string_view content_type);
 
 // Media Fragments URI, temporal dimension (W3C): `#t=10`, `#t=1:02.5`,
 // `#t=npt:10,20` (only the start is used), also as one `&` part of the
@@ -85,11 +95,18 @@ struct MediaInfo {
   std::string format;          // "H264 640×360 · AAC 44100 Hz stereo"
 };
 
+class MediaSource;
+
 struct MediaOptions {
   std::string user_agent;  // for http(s) sources (version.hpp user_agent())
   // Set by the owner to abandon a slow open / read (checked by the backend
   // where it can interrupt; Android's extractor cannot).
   const std::atomic<bool>* cancel = nullptr;
+  // Counts seek requests (MediaPlayback::seeks): a source waiting for bytes
+  // may give up its read when a newer seek comes. Set by media_worker.
+  const std::atomic<uint64_t>* seeks = nullptr;
+  // How media_worker opens the source; unset: open_media(url).
+  std::function<std::unique_ptr<MediaSource>(const MediaOptions&, std::string* error)> open;
 };
 
 // A demuxer with its decoders. Not thread-safe: one worker uses it.
@@ -118,6 +135,13 @@ protected:
 std::unique_ptr<MediaSource> open_media(const std::string& url, const MediaOptions& options,
                                         std::string* error);
 
+// The built-in decoders (audio.hpp) as a source, reading `feed` while it
+// arrives (open_audio_feed): sound that plays during its download. When the
+// download completes, the exact in-memory decoder takes over at the same
+// position (MP3: seek table, exact length; info().duration changes).
+std::unique_ptr<MediaSource> open_audio_stream(std::shared_ptr<ByteFeed> feed,
+                                               const MediaOptions& options, std::string* error);
+
 // ---- playback pipe ----------------------------------------------------------
 // Shared between a worker (opens the source, decodes ahead), the sound
 // callback (media_pull_audio) and the main thread (clock, frames, seek).
@@ -128,7 +152,8 @@ struct MediaPlayback {
   std::condition_variable cv;
   std::atomic<bool> cancel{false};  // stop: the worker leaves
   std::atomic<bool> opened{false};  // info / error below are set
-  MediaInfo info;
+  std::atomic<uint64_t> seeks{0};   // media_seek calls (MediaOptions::seeks)
+  MediaInfo info;  // duration may change while playing (open_audio_stream)
   std::string error;  // open or decode failure
 
   // Under m:
@@ -154,6 +179,8 @@ struct MediaPlayback {
 // sound runs dry (then the oldest pictures are dropped: the clock is the
 // sound's).
 constexpr double kMediaAudioAhead = 1.0;
+// Sound alone reads further ahead (cheap; rides out a stalling stream).
+constexpr double kMediaAudioAheadSoundOnly = 5.0;
 constexpr size_t kMediaFramesAhead = 4;
 constexpr size_t kMediaFramesMax = 24;
 
@@ -179,6 +206,9 @@ bool media_take_frame(MediaPlayback& pb, double clock, VideoFrame& out);
 void media_seek(MediaPlayback& pb, double seconds, double now);
 // Everything played (or failed).
 bool media_finished(MediaPlayback& pb);
+// Waiting for the source: nothing to play next although the end has not
+// come (a slow stream, a seek in progress).
+bool media_buffering(MediaPlayback& pb);
 
 // "H264 640×360 · AAC 44100 Hz stereo" from codec names and sizes (either
 // part left out when its codec name is empty).

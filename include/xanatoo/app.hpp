@@ -720,7 +720,10 @@ struct AudioPlayer {
   enum class Drag : uint8_t { None, Seek, Volume } drag = Drag::None;
   int drag_x = -1;      // pointer x last applied
   std::shared_ptr<AudioShared> play;  // the sound device, while open
-  std::shared_ptr<AudioLoad> load;    // built-in formats while loading
+  std::shared_ptr<AudioLoad> load;    // built-in formats while loading (local)
+  // A remote file of a built-in format: its download, which `media` plays
+  // from while it arrives (open_audio_stream).
+  std::shared_ptr<xanatoo::ByteFeed> feed;
   // Video and the formats only a backend decodes (media.hpp): the decoding
   // pipe, and with pictures their texture (I420, renderer-owned).
   std::shared_ptr<xanatoo::MediaPlayback> media;
@@ -2251,8 +2254,11 @@ bool page_key(App& app, SDL_Keycode sym);
 // Start playing `url` (local path, file: URL or http(s) address) in place
 // of what plays now. A Media Fragments time (`#t=30`) is where it starts;
 // for the file already in the player it only goes there. True = started
-// loading (or went there).
-bool play_audio(App& app, const std::string& url);
+// loading (or went there). `mime`: the Content-Type the address answered
+// with, when known (an address without a file name extension); it picks the
+// decoder as the extension does otherwise. Remote files play while they
+// download.
+bool play_audio(App& app, const std::string& url, std::string_view mime = {});
 void audio_toggle(App& app);        // play / pause (replay once ended)
 void audio_stop(App& app);          // stop and hide the player
 void audio_seek(App& app, double seconds);  // to this position

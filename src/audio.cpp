@@ -17,17 +17,27 @@
 #include "stb_vorbis.c"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 
 namespace xanatoo {
 
 struct AudioDecoder {
-  std::vector<uint8_t> bytes;  // what the decoders read from
+  std::vector<uint8_t> bytes;  // what the decoders read from (open_audio)
+  // Or a feed: complete (decoded from its bytes in memory) or still
+  // arriving (`streaming`: the decoders read through feed_read at `cursor`).
+  std::shared_ptr<ByteFeed> feed;
+  bool streaming = false;
+  uint64_t cursor = 0;
+  FeedWait wait;
+  uint64_t seeks_seen = 0;   // audio_rearm
+  bool interrupted = false;  // the last read gave up early
   AudioFormat format = AudioFormat::Unknown;
   int channels = 0;
   int rate = 0;
   uint64_t frames = 0;
+  bool frames_estimated = false;  // streaming MP3: from the bitrate
   uint64_t pos = 0;  // next frame audio_read returns (WAV / Vorbis)
   std::string title;
   drmp3 mp3{};
@@ -239,15 +249,14 @@ bool is_audio_url(std::string_view url) {
   return url_has_extension(url, {".mp3", ".ogg", ".oga", ".flac", ".wav", ".opus"});
 }
 
-AudioDecoderPtr open_audio(std::vector<uint8_t> bytes, std::string* error) {
+namespace {
+
+// Decoders over `p` / `n` (bytes `d` keeps alive).
+AudioDecoderPtr open_memory(AudioDecoderPtr d, const uint8_t* p, size_t n, std::string* error) {
   auto fail = [&](std::string why) {
     if (error) *error = std::move(why);
     return AudioDecoderPtr{};
   };
-  AudioDecoderPtr d(new AudioDecoder);
-  d->bytes = std::move(bytes);
-  const uint8_t* p = d->bytes.data();
-  const size_t n = d->bytes.size();
   d->format = sniff_audio(p, n);
   switch (d->format) {
     case AudioFormat::Mp3: {
@@ -309,6 +318,16 @@ AudioDecoderPtr open_audio(std::vector<uint8_t> bytes, std::string* error) {
   return d;
 }
 
+}  // namespace
+
+AudioDecoderPtr open_audio(std::vector<uint8_t> bytes, std::string* error) {
+  AudioDecoderPtr d(new AudioDecoder);
+  d->bytes = std::move(bytes);
+  const uint8_t* p = d->bytes.data();
+  const size_t n = d->bytes.size();
+  return open_memory(std::move(d), p, n, error);
+}
+
 AudioFormat audio_format(const AudioDecoder& d) { return d.format; }
 int audio_channels(const AudioDecoder& d) { return d.channels; }
 int audio_rate(const AudioDecoder& d) { return d.rate; }
@@ -342,7 +361,7 @@ size_t audio_read(AudioDecoder& d, float* out, size_t frames) {
 }
 
 bool audio_seek(AudioDecoder& d, uint64_t frame) {
-  if (d.frames > 0) frame = std::min(frame, d.frames);
+  if (d.frames > 0 && !d.frames_estimated) frame = std::min(frame, d.frames);
   switch (d.format) {
     case AudioFormat::Mp3: return drmp3_seek_to_pcm_frame(&d.mp3, frame) != 0;
     case AudioFormat::Flac: return drflac_seek_to_pcm_frame(d.flac, frame) != 0;
@@ -352,6 +371,276 @@ bool audio_seek(AudioDecoder& d, uint64_t frame) {
     default: return false;
   }
 }
+
+std::string audio_describe(const AudioDecoder& d) {
+  return std::string(audio_format_name(d.format)) + " \xC2\xB7 " + std::to_string(d.rate) +
+         " Hz \xC2\xB7 " +
+         (d.channels == 1   ? std::string("mono")
+          : d.channels == 2 ? std::string("stereo")
+                            : std::to_string(d.channels) + " channels");
+}
+
+// ---- streaming --------------------------------------------------------------
+
+void feed_append(ByteFeed& f, std::string_view chunk) {
+  {
+    std::lock_guard lock(f.m);
+    if (f.done) return;
+    f.bytes.insert(f.bytes.end(), chunk.begin(), chunk.end());
+    f.got.store(static_cast<int64_t>(f.bytes.size()), std::memory_order_relaxed);
+  }
+  f.cv.notify_all();
+}
+
+void feed_end(ByteFeed& f, std::string error) {
+  {
+    std::lock_guard lock(f.m);
+    if (f.done) return;
+    f.done = true;
+    f.error = std::move(error);
+  }
+  f.cv.notify_all();
+}
+
+bool feed_complete(ByteFeed& f) {
+  std::lock_guard lock(f.m);
+  return f.done && f.error.empty();
+}
+
+bool audio_streamable(AudioFormat f) {
+  return f == AudioFormat::Mp3 || f == AudioFormat::Flac || f == AudioFormat::Wav;
+}
+
+namespace {
+
+bool given_up(const FeedWait& w, uint64_t seeks_seen) {
+  return (w.cancel && w.cancel->load(std::memory_order_relaxed)) ||
+         (w.seeks && w.seeks->load(std::memory_order_relaxed) != seeks_seen);
+}
+
+// Waits until `f` holds `want` bytes, is done, or the wait is given up
+// (false). Under `lock`.
+bool wait_bytes(ByteFeed& f, std::unique_lock<std::mutex>& lock, size_t want,
+                const FeedWait& w, uint64_t seeks_seen) {
+  while (f.bytes.size() < want && !f.done) {
+    if (given_up(w, seeks_seen)) return false;
+    // Timed: the give-up flags belong to others and do not signal us.
+    f.cv.wait_for(lock, std::chrono::milliseconds(50));
+  }
+  return true;
+}
+
+// The decoders' I/O callbacks over a streaming decoder's feed.
+size_t feed_read(void* user, void* out, size_t n) {
+  auto* d = static_cast<AudioDecoder*>(user);
+  ByteFeed& f = *d->feed;
+  std::unique_lock lock(f.m);
+  if (d->cursor > SIZE_MAX - n) return 0;
+  if (!wait_bytes(f, lock, static_cast<size_t>(d->cursor) + n, d->wait, d->seeks_seen))
+    d->interrupted = true;
+  const size_t size = f.bytes.size();
+  const size_t got = d->cursor < size ? std::min(n, size - static_cast<size_t>(d->cursor)) : 0;
+  if (got) std::memcpy(out, f.bytes.data() + d->cursor, got);
+  d->cursor += got;
+  return got;
+}
+
+// origin: 0 = from the start, 1 = from here, 2 = from the end (the
+// dr_libs' SEEK_SET / SEEK_CUR / SEEK_END). Only moves the cursor; reads
+// wait for the bytes.
+bool feed_seek_to(AudioDecoder& d, int offset, int origin) {
+  int64_t base = 0;
+  if (origin == 1) {
+    base = static_cast<int64_t>(d.cursor);
+  } else if (origin == 2) {
+    base = d.feed->total.load();
+    if (base < 0) {
+      std::lock_guard lock(d.feed->m);
+      if (!d.feed->done) return false;  // the end is not known yet
+      base = static_cast<int64_t>(d.feed->bytes.size());
+    }
+  }
+  const int64_t to = base + offset;
+  const int64_t total = d.feed->total.load();
+  if (to < 0 || (total >= 0 && to > total)) return false;
+  d.cursor = static_cast<uint64_t>(to);
+  return true;
+}
+
+drmp3_bool32 mp3_seek(void* user, int offset, drmp3_seek_origin origin) {
+  return feed_seek_to(*static_cast<AudioDecoder*>(user), offset,
+                      origin == DRMP3_SEEK_SET ? 0 : origin == DRMP3_SEEK_CUR ? 1 : 2);
+}
+drflac_bool32 flac_seek(void* user, int offset, drflac_seek_origin origin) {
+  return feed_seek_to(*static_cast<AudioDecoder*>(user), offset,
+                      origin == DRFLAC_SEEK_SET ? 0 : origin == DRFLAC_SEEK_CUR ? 1 : 2);
+}
+drflac_bool32 flac_tell(void* user, drflac_int64* at) {
+  *at = static_cast<drflac_int64>(static_cast<AudioDecoder*>(user)->cursor);
+  return DRFLAC_TRUE;
+}
+drwav_bool32 wav_seek(void* user, int offset, drwav_seek_origin origin) {
+  return feed_seek_to(*static_cast<AudioDecoder*>(user), offset,
+                      origin == DRWAV_SEEK_SET ? 0 : origin == DRWAV_SEEK_CUR ? 1 : 2);
+}
+drwav_bool32 wav_tell(void* user, drwav_int64* at) {
+  *at = static_cast<drwav_int64>(static_cast<AudioDecoder*>(user)->cursor);
+  return DRWAV_TRUE;
+}
+
+// Bitrate (kbit/s) of the MP3 frame header at `h`; 0 when free / bad.
+int mp3_kbps(const uint8_t* h) {
+  static const short kV1[3][16] = {
+      {0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0},  // I
+      {0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0},     // II
+      {0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0}};     // III
+  static const short kV2[2][16] = {
+      {0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256, 0},  // I
+      {0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0}};      // II, III
+  const int version = (h[1] >> 3) & 3;  // 3 = MPEG 1
+  const int layer = 4 - ((h[1] >> 1) & 3);
+  const int index = h[2] >> 4;
+  if (layer < 1 || layer > 3) return 0;
+  return version == 3 ? kV1[layer - 1][index] : kV2[layer == 1 ? 0 : 1][index];
+}
+
+// A streaming MP3's length from its first frame's bitrate and the file size
+// (exact for constant bitrate); 0 when either is unknown.
+uint64_t mp3_estimate_frames(ByteFeed& f, int rate) {
+  const int64_t total = f.total.load();
+  if (total <= 0) return 0;
+  std::lock_guard lock(f.m);
+  const uint8_t* p = f.bytes.data();
+  const size_t n = f.bytes.size();
+  size_t at = id3v2_size(p, n);
+  for (; at + 4 <= n; ++at)
+    if (mp3_frame_sync(p + at, n - at)) break;
+  if (at + 4 > n) return 0;
+  const int kbps = mp3_kbps(p + at);
+  if (kbps <= 0 || static_cast<int64_t>(at) >= total) return 0;
+  return static_cast<uint64_t>(double(total - int64_t(at)) * 8.0 / (kbps * 1000.0) * rate);
+}
+
+// A decoder over a feed that is still arriving.
+AudioDecoderPtr open_streaming(std::shared_ptr<ByteFeed> feed, AudioFormat format,
+                               const FeedWait& wait, std::string* error) {
+  auto fail = [&](std::string why) {
+    if (error) *error = std::move(why);
+    return AudioDecoderPtr{};
+  };
+  AudioDecoderPtr d(new AudioDecoder);
+  d->feed = std::move(feed);
+  d->streaming = true;
+  d->wait = wait;
+  d->seeks_seen = wait.seeks ? wait.seeks->load() : 0;
+  d->format = format;
+  // Why a failed open failed: the feed (download error, give-up) or the file.
+  auto why = [&](const char* file_error) {
+    std::lock_guard lock(d->feed->m);
+    if (d->interrupted) return std::string("stopped");
+    if (d->feed->done && !d->feed->error.empty()) return d->feed->error;
+    return std::string(file_error);
+  };
+  switch (format) {
+    case AudioFormat::Mp3: {
+      // No tell callback: dr_mp3 would read the tags at the end of the file
+      // first (and wait for the whole download).
+      if (!drmp3_init(&d->mp3, feed_read, mp3_seek, nullptr, nullptr, d.get(), nullptr))
+        return fail(why("not a readable MP3 file"));
+      d->mp3_open = true;
+      d->channels = static_cast<int>(d->mp3.channels);
+      d->rate = static_cast<int>(d->mp3.sampleRate);
+      if (d->mp3.totalPCMFrameCount != DRMP3_UINT64_MAX) {  // a Xing / Info header
+        d->frames = drmp3_get_pcm_frame_count(&d->mp3);
+      } else {
+        d->frames = mp3_estimate_frames(*d->feed, d->rate);
+        d->frames_estimated = d->frames > 0;
+      }
+      std::lock_guard lock(d->feed->m);
+      d->title = id3v2_title(d->feed->bytes.data(), d->feed->bytes.size());
+      break;
+    }
+    case AudioFormat::Flac:
+      d->flac = drflac_open_with_metadata(feed_read, flac_seek, flac_tell, flac_meta, d.get(),
+                                          nullptr);
+      if (!d->flac) return fail(why("not a readable FLAC file"));
+      d->channels = d->flac->channels;
+      d->rate = static_cast<int>(d->flac->sampleRate);
+      d->frames = d->flac->totalPCMFrameCount;
+      if (d->title.empty()) {
+        std::lock_guard lock(d->feed->m);
+        d->title = id3v2_title(d->feed->bytes.data(), d->feed->bytes.size());
+      }
+      break;
+    case AudioFormat::Wav:
+      if (!drwav_init(&d->wav, feed_read, wav_seek, wav_tell, d.get(), nullptr))
+        return fail(why("not a readable WAV file"));
+      d->wav_open = true;
+      d->channels = d->wav.channels;
+      d->rate = static_cast<int>(d->wav.sampleRate);
+      d->frames = d->wav.totalPCMFrameCount;
+      break;
+    default:
+      return fail("cannot stream this format");
+  }
+  if (d->channels < 1 || d->channels > 8 || d->rate < 1000 || d->rate > 384000)
+    return fail("unsupported channel count or sample rate");
+  return d;
+}
+
+}  // namespace
+
+AudioFormat feed_sniff(ByteFeed& f, const FeedWait& wait) {
+  const uint64_t seen = wait.seeks ? wait.seeks->load() : 0;
+  std::unique_lock lock(f.m);
+  // Enough for the magic numbers and an ID3v2 header; then what they need
+  // behind them: the first Ogg packet, the bytes after a tag.
+  if (!wait_bytes(f, lock, 64, wait, seen)) return AudioFormat::Unknown;
+  const uint8_t* p = f.bytes.data();
+  size_t more = 0;
+  if (std::memcmp(p, "OggS", 4) == 0 && f.bytes.size() >= 27)
+    more = 27 + p[26] + 8;
+  else if (const size_t tag = id3v2_size(p, f.bytes.size()))
+    more = tag + 4;
+  if (more && !wait_bytes(f, lock, more, wait, seen)) return AudioFormat::Unknown;
+  return sniff_audio(f.bytes.data(), f.bytes.size());
+}
+
+AudioDecoderPtr open_audio_feed(std::shared_ptr<ByteFeed> feed, const FeedWait& wait,
+                                std::string* error) {
+  const AudioFormat format = feed_sniff(*feed, wait);
+  std::unique_lock lock(feed->m);
+  if (!feed->done && audio_streamable(format)) {
+    lock.unlock();
+    return open_streaming(std::move(feed), format, wait, error);
+  }
+  // The rest of it first.
+  const uint64_t seen = wait.seeks ? wait.seeks->load() : 0;
+  if (!wait_bytes(*feed, lock, SIZE_MAX, wait, seen)) {
+    if (error) *error = "stopped";
+    return nullptr;
+  }
+  if (!feed->error.empty()) {
+    if (error) *error = feed->error;
+    return nullptr;
+  }
+  // Done: the bytes stay put, the decoder reads them where they are.
+  const uint8_t* p = feed->bytes.data();
+  const size_t n = feed->bytes.size();
+  lock.unlock();
+  AudioDecoderPtr d(new AudioDecoder);
+  d->feed = std::move(feed);
+  return open_memory(std::move(d), p, n, error);
+}
+
+bool audio_streaming(const AudioDecoder& d) { return d.streaming; }
+
+void audio_rearm(AudioDecoder& d) {
+  d.interrupted = false;
+  if (d.wait.seeks) d.seeks_seen = d.wait.seeks->load();
+}
+
+bool audio_interrupted(const AudioDecoder& d) { return d.interrupted; }
 
 std::string audio_decoder_versions() {
   // stb_vorbis has no version call; keep this in step with external/.

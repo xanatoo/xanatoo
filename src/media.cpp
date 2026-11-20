@@ -14,6 +14,7 @@
 
 #include "xanatoo/audio.hpp"
 #include "xanatoo/text_escape.hpp"
+#include "xanatoo/util.hpp"
 
 namespace xanatoo {
 
@@ -29,6 +30,34 @@ bool needs_media_backend(std::string_view url) {
 
 bool is_playable_url(std::string_view url) {
   return is_audio_url(url) || (needs_media_backend(url) && media_backend_available());
+}
+
+namespace {
+// "audio/mpeg" from "Audio/MPEG; charset=…".
+std::string mime_base(std::string_view content_type) {
+  std::string_view t = content_type.substr(0, content_type.find(';'));
+  trim_ascii(t);
+  return ascii_lower(t);
+}
+
+bool builtin_audio_type(const std::string& t) {
+  for (const char* k : {"audio/mpeg", "audio/mp3", "audio/mpeg3", "audio/x-mpeg", "audio/x-mp3",
+                        "audio/flac", "audio/x-flac", "audio/wav", "audio/x-wav", "audio/wave",
+                        "audio/vnd.wave", "audio/ogg", "audio/vorbis", "application/ogg"})
+    if (t == k) return true;
+  return false;
+}
+}  // namespace
+
+bool type_needs_media_backend(std::string_view content_type) {
+  const std::string t = mime_base(content_type);
+  return !builtin_audio_type(t) && (starts_with(t, "audio/") || starts_with(t, "video/"));
+}
+
+bool is_playable_type(std::string_view content_type) {
+  const std::string t = mime_base(content_type);
+  return builtin_audio_type(t) ||
+         (type_needs_media_backend(content_type) && media_backend_available());
 }
 
 namespace {
@@ -136,7 +165,8 @@ bool need_more(const MediaPlayback& pb) {
   const size_t queued = pb.audio.size();
   if (i.has_video && pb.frames.size() >= kMediaFramesMax)
     return i.has_audio && queued < per_s / 4;
-  if (i.has_audio && queued < size_t(kMediaAudioAhead * per_s)) return true;
+  const double ahead = i.has_video ? kMediaAudioAhead : kMediaAudioAheadSoundOnly;
+  if (i.has_audio && queued < size_t(ahead * per_s)) return true;
   if (i.has_video && pb.frames.size() < kMediaFramesAhead)
     return !i.has_audio || queued < 8 * per_s;
   return false;
@@ -149,7 +179,8 @@ void media_worker(std::shared_ptr<MediaPlayback> pb, std::string url, MediaOptio
   if (!src) {
     std::string err;
     options.cancel = &pb->cancel;
-    src = open_media(url, options, &err);
+    options.seeks = &pb->seeks;
+    src = options.open ? options.open(options, &err) : open_media(url, options, &err);
     if (!src) {
       {
         std::lock_guard lock(pb->m);
@@ -196,6 +227,7 @@ void media_worker(std::shared_ptr<MediaPlayback> pb, std::string url, MediaOptio
     double pts = 0;
     const MediaSource::Got got = src->next(chunk, pts, frame);
     std::lock_guard lock(pb->m);
+    pb->info.duration = src->info().duration;  // may become exact
     if (pb->seek_pending || pb->cancel.load()) continue;  // stale piece
     switch (got) {
       case MediaSource::Got::Audio: {
@@ -302,6 +334,7 @@ void media_seek(MediaPlayback& pb, double seconds, double now) {
   std::lock_guard lock(pb.m);
   if (pb.info.duration > 0) seconds = std::min(seconds, pb.info.duration);
   pb.seek_pending = true;
+  pb.seeks.fetch_add(1);
   pb.seek_to = std::max(0.0, seconds);
   pb.audio.clear();
   pb.frames.clear();
@@ -317,6 +350,13 @@ void media_seek(MediaPlayback& pb, double seconds, double now) {
 bool media_finished(MediaPlayback& pb) {
   std::lock_guard lock(pb.m);
   return pb.failed || (pb.source_end && !pb.seek_pending && pb.audio.empty() && pb.frames.empty());
+}
+
+bool media_buffering(MediaPlayback& pb) {
+  std::lock_guard lock(pb.m);
+  if (pb.failed || pb.source_end) return false;
+  if (pb.seek_pending) return true;
+  return pb.info.has_audio && !pb.sound_done ? pb.audio.empty() : pb.frames.empty();
 }
 
 }  // namespace xanatoo

@@ -7,6 +7,7 @@
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/html_footnotes.hpp"
 #include "xanatoo/html_min.hpp"
+#include "xanatoo/media.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/util.hpp"
@@ -411,6 +412,14 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
             copy.begin(url, h.content_type, h.content_disposition, err))
           return true;
         if (copy.failed) return false;
+        // Sound / video: the player streams it from the address itself.
+        if (h.status == 200 && download && !force_download &&
+            !ascii_lower(h.content_disposition).starts_with("attachment") &&
+            is_playable_type(h.content_type)) {
+          download->mime = h.content_type;
+          download->playable.store(true, std::memory_order_release);
+          return false;
+        }
         if (h.status == 200 && !download &&
             download_response(url, h.content_type, h.content_disposition)) {
           if (err) *err = "preview unavailable for " + h.content_type;

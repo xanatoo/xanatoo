@@ -290,6 +290,7 @@ add_executable(xanatoo
   src/audio_codecs.cpp
   src/app_audio.cpp
   src/media.cpp
+  src/audio_stream.cpp
   src/media_ffmpeg.cpp
   # Vendored Dear ImGui (MIT) — menu bar / toolbar shell
   external/imgui/imgui.cpp
@@ -831,6 +832,7 @@ add_executable(xanatoo_tests
   src/audio.cpp
   src/audio_codecs.cpp
   src/media.cpp
+  src/audio_stream.cpp
   src/media_ffmpeg.cpp
 )
 if(XANATOO_FFMPEG)

@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -114,45 +115,78 @@ bool remote(const std::string& url) {
          xanatoo::starts_with_ci(url, "https://");
 }
 
-// An http(s) file into memory, with progress in `load`; errors in load.error.
-std::vector<uint8_t> download(const std::string& url, AudioLoad& load) {
-  std::vector<uint8_t> bytes;
+// An http(s) file in chunks to `chunk` (false: stop), its announced size to
+// `size` (-1 unknown) first. "" when all of it came, else why not ("" too
+// when `cancel` stopped it).
+std::string fetch_chunks(const std::string& url, const std::atomic<bool>& cancel,
+                         const std::function<void(int64_t)>& size,
+                         const std::function<bool(std::string_view)>& chunk) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
   std::string err;
   int status = 0;
   bool too_large = false;
+  int64_t got = 0;
   const bool ok = xanatoo::https_get_follow_stream(
       url, xanatoo::user_agent("audio"),
       [&](const xanatoo::HttpStreamHeaders& h) {
         status = h.status;
         if (h.status < 200 || h.status >= 300) return false;
         if (h.content_length > kMaxAudioBytes) return !(too_large = true);
-        load.total.store(h.content_length);
-        if (h.content_length > 0) bytes.reserve(static_cast<size_t>(h.content_length));
+        size(h.content_length);
         return true;
       },
-      [&](std::string_view chunk) {
-        if (load.cancel.load(std::memory_order_relaxed)) return false;
-        if (static_cast<int64_t>(bytes.size() + chunk.size()) > kMaxAudioBytes)
+      [&](std::string_view bytes) {
+        if (cancel.load(std::memory_order_relaxed)) return false;
+        if ((got += static_cast<int64_t>(bytes.size())) > kMaxAudioBytes)
           return !(too_large = true);
+        return chunk(bytes);
+      },
+      &err);
+  if (ok || cancel.load()) return {};
+  if (too_large) return "file too large to play";
+  if (status != 0 && (status < 200 || status >= 300)) return "HTTP " + std::to_string(status);
+  return err.empty() ? std::string("download failed") : err;
+#else
+  (void)url, (void)cancel, (void)size, (void)chunk;
+  return "this build has no HTTP client";
+#endif
+}
+
+// An http(s) file into memory, with progress in `load`; errors in load.error.
+std::vector<uint8_t> download(const std::string& url, AudioLoad& load) {
+  std::vector<uint8_t> bytes;
+  load.error = fetch_chunks(
+      url, load.cancel,
+      [&](int64_t total) {
+        load.total.store(total);
+        if (total > 0) bytes.reserve(static_cast<size_t>(total));
+      },
+      [&](std::string_view chunk) {
         bytes.insert(bytes.end(), chunk.begin(), chunk.end());
         load.got.store(static_cast<int64_t>(bytes.size()), std::memory_order_relaxed);
         return true;
-      },
-      &err);
-  if (!ok && !load.cancel.load()) {
-    if (too_large)
-      load.error = "file too large to play";
-    else if (status != 0 && (status < 200 || status >= 300))
-      load.error = "HTTP " + std::to_string(status);
-    else
-      load.error = err.empty() ? std::string("download failed") : err;
-  }
-#else
-  (void)url;
-  load.error = "this build has no HTTP client";
-#endif
+      });
   return bytes;
+}
+
+// The download behind a streamed file, on its own thread: into `feed`
+// until done, failed or given up (feed->cancel).
+void download_feed(const std::string& url, const std::shared_ptr<xanatoo::ByteFeed>& feed) {
+  std::string error = fetch_chunks(
+      url, feed->cancel,
+      [&](int64_t total) {
+        feed->total.store(total);
+        if (total > 0) {
+          std::lock_guard lock(feed->m);
+          feed->bytes.reserve(static_cast<size_t>(total));
+        }
+      },
+      [&](std::string_view chunk) {
+        xanatoo::feed_append(*feed, chunk);
+        return true;
+      });
+  if (error.empty() && feed->cancel.load()) error = "stopped";
+  xanatoo::feed_end(*feed, std::move(error));
 }
 
 void run_load(const std::string& url, AudioLoad& load) {
@@ -173,12 +207,25 @@ void close_player(AudioPlayer& a) {
   a.visit = 0;
   if (a.load) a.load->cancel.store(true);
   a.load.reset();
+  if (a.feed) a.feed->cancel.store(true);  // its download stops
+  a.feed.reset();
   a.play.reset();  // closes the device (the callback has stopped) first
   if (a.media) xanatoo::media_stop(*a.media);  // its worker leaves on its own
   a.media.reset();
   if (a.video_tex) SDL_DestroyTexture(a.video_tex);
   a.video_tex = nullptr;
   a.tex_w = a.tex_h = 0;
+}
+
+// The download a streamed built-in file plays from (null when there is
+// none, or the backend took the address over).
+xanatoo::ByteFeed* live_feed(const AudioPlayer& a) {
+  return a.feed && !a.feed->cancel.load(std::memory_order_relaxed) ? a.feed.get() : nullptr;
+}
+
+// How much of a download is here (0..1); -1 unknown.
+double loaded_fraction(int64_t got, int64_t total) {
+  return total > 0 ? std::clamp(static_cast<double>(got) / total, 0.0, 1.0) : -1;
 }
 
 // Something is open: sound, pictures or both.
@@ -198,6 +245,7 @@ void start_media(App& app) {
   {
     std::lock_guard lock(m.m);
     if (m.failed) {
+      if (a.feed) a.feed->cancel.store(true);  // no use downloading on
       a.state = AudioState::Failed;
       a.error = m.error;
       flash_status(app, "Cannot play " + a.title + ": " + a.error);
@@ -233,7 +281,8 @@ void start_media(App& app) {
   if (a.start_at > 0) audio_seek(app, a.start_at);
   a.start_at = -1;
   std::cerr << "media: " << a.url << " (" << info.format << ", "
-            << xanatoo::format_audio_time(a.duration) << ", " << xanatoo::media_backend_name()
+            << xanatoo::format_audio_time(a.duration) << ", "
+            << (live_feed(a) ? std::string("built-in, streaming") : xanatoo::media_backend_name())
             << ")\n";
 }
 
@@ -269,11 +318,7 @@ void start_playing(App& app) {
   const std::string t = xanatoo::audio_title(*s->dec);
   if (!t.empty()) a.title = t;
   a.duration = s->rate > 0 ? static_cast<double>(s->frames) / s->rate : 0.0;
-  a.format = std::string(xanatoo::audio_format_name(xanatoo::audio_format(*s->dec))) +
-             " \xC2\xB7 " + std::to_string(s->rate) + " Hz \xC2\xB7 " +
-             (s->channels == 1   ? std::string("mono")
-              : s->channels == 2 ? std::string("stereo")
-                                 : std::to_string(s->channels) + " channels");
+  a.format = xanatoo::audio_describe(*s->dec);
   s->gain.store(gain_of(a.volume));
   if (!xanatoo::sdl::open_audio_out(s->out, s->rate, s->channels, fill, s.get())) {
     a.state = AudioState::Failed;
@@ -505,10 +550,14 @@ void draw_knob(App& app, const SDL_Rect& r, double frac) {
 }
 
 // A sunken trough filled to `frac`, with a knob at the end when `knob`.
-void draw_bar(App& app, const SDL_Rect& r, double frac, xanatoo::theme::Rgb fillc, bool knob) {
+// `loaded` (0..1): how much of the file is here, shaded behind the fill.
+void draw_bar(App& app, const SDL_Rect& r, double frac, xanatoo::theme::Rgb fillc, bool knob,
+              double loaded = 0) {
   namespace th = xanatoo::theme;
   const th::Palette& p = th::palette();
   th::fill(app.sdl, r, p.field);
+  if (const int lw = static_cast<int>(std::lround(r.w * std::clamp(loaded, 0.0, 1.0))); lw > 0)
+    th::fill(app.sdl, {r.x, r.y, lw, r.h}, p.face_dark);
   const int w = static_cast<int>(std::lround(r.w * std::clamp(frac, 0.0, 1.0)));
   if (w > 0) th::fill(app.sdl, {r.x, r.y, w, r.h}, fillc);
   th::bevel(app.sdl, r, th::Bevel::Sunken);
@@ -527,7 +576,7 @@ void apply_drag(App& app, int x) {
 
 }  // namespace
 
-bool play_audio(App& app, const std::string& address) {
+bool play_audio(App& app, const std::string& address, std::string_view mime) {
   // `#t=30` (Media Fragments): where to start; the rest is the file.
   const xanatoo::MediaAddress split = xanatoo::split_media_address(address);
   const std::string& url_in = split.base;
@@ -562,7 +611,9 @@ bool play_audio(App& app, const std::string& address) {
   if (split.start) a.start_at = *split.start;
   a.title = xanatoo::audio_name_of(url);
   a.state = AudioState::Loading;
-  if (xanatoo::needs_media_backend(url) && xanatoo::media_backend_available()) {
+  const bool backend = xanatoo::media_backend_available();
+  if (backend && (mime.empty() ? xanatoo::needs_media_backend(url)
+                               : xanatoo::type_needs_media_backend(mime))) {
     xanatoo::MediaOptions options;
     options.user_agent = xanatoo::user_agent("video");
     a.media = xanatoo::media_start(url, std::move(options));
@@ -570,6 +621,33 @@ bool play_audio(App& app, const std::string& address) {
     flash_status(app, "Opening " + a.title);
     return true;
   }
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+  // A remote file of a built-in format plays while it downloads: the
+  // download fills a feed, the pipe's worker decodes from it.
+  if (remote(url)) {
+    auto feed = std::make_shared<xanatoo::ByteFeed>();
+    std::thread([url, feed] { download_feed(url, feed); }).detach();
+    xanatoo::MediaOptions options;
+    options.user_agent = xanatoo::user_agent("audio");
+    options.open = [url, feed, backend](const xanatoo::MediaOptions& o, std::string* error) {
+      // What only a backend streams (Ogg Vorbis / Opus, or the type said
+      // MP3 and it is not) goes there, from the address itself.
+      xanatoo::FeedWait wait;
+      wait.cancel = o.cancel;
+      const xanatoo::AudioFormat f = xanatoo::feed_sniff(*feed, wait);
+      if (backend && !xanatoo::audio_streamable(f) && !o.cancel->load()) {
+        feed->cancel.store(true);
+        return xanatoo::open_media(url, o, error);
+      }
+      return xanatoo::open_audio_stream(feed, o, error);
+    };
+    a.feed = feed;
+    a.media = xanatoo::media_start(url, std::move(options));
+    app.media_panel_open = true;
+    flash_status(app, "Opening " + a.title);
+    return true;
+  }
+#endif
   a.load = std::make_shared<AudioLoad>();
 #if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
   run_load(url, *a.load);  // no threads in this build
@@ -692,12 +770,17 @@ void update_audio(App& app) {
     if (a.state == AudioState::Loading && a.media->opened.load(std::memory_order_acquire))
       start_media(app);
     if (have_media(a)) {
+      {
+        std::lock_guard lock(a.media->m);  // exact once a stream has all of it
+        if (a.media->info.duration > 0) a.duration = a.media->info.duration;
+      }
       if (a.video_w > 0) show_frame(app);
       if (a.state == AudioState::Playing && xanatoo::media_finished(*a.media)) {
         if (a.play) xanatoo::sdl::pause_audio_out(a.play->out, true);
         xanatoo::media_set_paused(*a.media, true, now_s());
         std::lock_guard lock(a.media->m);
         if (a.media->failed) {
+          if (a.feed) a.feed->cancel.store(true);
           a.state = AudioState::Failed;
           a.error = a.media->error;
         } else {
@@ -913,8 +996,9 @@ void draw_media_panel(App& app) {
                  : "Open a link to an MP3, FLAC, Ogg Vorbis or WAV file.";
       break;
     case AudioState::Loading: {
-      const int64_t got = a.load ? a.load->got.load() : 0;
-      const int64_t total = a.load ? a.load->total.load() : -1;
+      const xanatoo::ByteFeed* feed = live_feed(a);
+      const int64_t got = a.load ? a.load->got.load() : feed ? feed->got.load() : 0;
+      const int64_t total = a.load ? a.load->total.load() : feed ? feed->total.load() : -1;
       info = total > 0 ? "Downloading " + std::to_string(got * 100 / total) + "%"
              : got > 0 ? "Downloading " + std::to_string(got >> 10) + " KiB"
              : a.media ? std::string("Opening\xE2\x80\xA6")
@@ -927,6 +1011,14 @@ void draw_media_panel(App& app) {
       break;
     default:
       info = a.format;
+      // Playing, but the stream has not kept up (or a seek waits for it).
+      if (a.state == AudioState::Playing && a.media && xanatoo::media_buffering(*a.media)) {
+        info = "Buffering\xE2\x80\xA6";
+        if (const xanatoo::ByteFeed* feed = live_feed(a)) {
+          const double f = loaded_fraction(feed->got.load(), feed->total.load());
+          if (f >= 0) info += " " + std::to_string(static_cast<int>(f * 100)) + "% loaded";
+        }
+      }
       break;
   }
   const int title_w = L.file_mark.w > 0 ? std::max(0, L.file_mark.x - 6 - (c.x + L.pad)) : text_w;
@@ -947,7 +1039,10 @@ void draw_media_panel(App& app) {
   } else if (have_media(a) && a.duration > 0) {
     frac = pos / a.duration;
   }
-  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, false);
+  double loaded = 0;  // a streamed file: how much has arrived
+  if (const xanatoo::ByteFeed* feed = live_feed(a); feed && have_media(a))
+    loaded = loaded_fraction(feed->got.load(), feed->total.load());
+  draw_bar(app, L.seek, frac, a.load ? p.face_dark : p.accent, false, loaded);
   // Bookmarked positions: a short green line across the bar each.
   if (seekable(a)) {
     const xanatoo::Rgba& bc = app.style.bookmark;

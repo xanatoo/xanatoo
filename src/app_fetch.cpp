@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/fixed_layout.hpp"
@@ -757,6 +758,11 @@ void finish_tab(App& app, const FetchJob& job) {
     flash_status(app, "Not loaded (unsaved edits in that tab): " + job.url);
     return;
   }
+  if (r.download && r.download->playable.load(std::memory_order_acquire)) {
+    if (b->placeholder) remove_buffer(app, job.buf);
+    play_audio(app, !r.final_url.empty() ? r.final_url : job.url, r.download->mime);
+    return;
+  }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
     if (b->placeholder) remove_buffer(app, job.buf);
     const std::string url =
@@ -803,6 +809,17 @@ void finish_tab(App& app, const FetchJob& job) {
 void finish_navigate(App& app, const FetchJob& job) {
   FetchShared& r = *job.shared;
   const std::string service = r.service;
+  if (r.download && r.download->playable.load(std::memory_order_acquire)) {
+    // The page stays; the player opens the address itself (streaming).
+    NavHistory& h = app.panes[job.pane].nav;
+    const NavLink via = std::exchange(h.pending_link, {});
+    const auto hint = std::exchange(h.pending_kind, std::nullopt);
+    h.restoring = -1;
+    const std::string url = !r.final_url.empty() ? r.final_url : job.url;
+    if (play_audio(app, url, r.download->mime))
+      record_media_visit(app, job.pane, url, hint, 0, via);
+    return;
+  }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
     app.panes[job.pane].nav.pending_link = {};
     app.panes[job.pane].nav.pending_kind.reset();

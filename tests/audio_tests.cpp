@@ -3,17 +3,21 @@
 //
 // Offline tests for audio decoding (audio.hpp): sniffing, the four
 // decoders on tiny fixtures in tests/data/audio (0.5 s, 440 Hz, 8 kHz mono,
-// title "Test_Tone", made with ffmpeg), seeking, names and times. Part of
+// title "Test_Tone", made with ffmpeg), seeking, names and times, and
+// decoding from a ByteFeed while it arrives (streaming). Part of
 // xanatoo_tests (test_audio is called from unit_tests.cpp).
 
 #include "xanatoo/audio.hpp"
 
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -88,6 +92,47 @@ Scan scan(xanatoo::AudioDecoder& d) {
     if (n < 512) break;
   }
   return s;
+}
+
+// Every sample the decoder gives.
+std::vector<float> decode_all(xanatoo::AudioDecoder& d) {
+  const int ch = xanatoo::audio_channels(d);
+  std::vector<float> out, buf(256 * ch);
+  for (;;) {
+    const size_t n = xanatoo::audio_read(d, buf.data(), 256);
+    out.insert(out.end(), buf.begin(), buf.begin() + n * ch);
+    if (n < 256) return out;
+  }
+}
+
+float max_diff(const std::vector<float>& a, const std::vector<float>& b) {
+  if (a.size() != b.size()) return 1e9f;
+  float m = 0;
+  for (size_t i = 0; i < a.size(); ++i) m = std::max(m, std::fabs(a[i] - b[i]));
+  return m;
+}
+
+void sleep_ms(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+
+// The rest of `whole` from `from` into `feed`, in small pieces, after a pause.
+std::thread trickle(std::shared_ptr<xanatoo::ByteFeed> feed, std::vector<uint8_t> whole,
+                    size_t from) {
+  return std::thread([feed, whole = std::move(whole), from] {
+    sleep_ms(30);
+    for (size_t at = from; at < whole.size(); at += 97) {
+      const size_t n = std::min<size_t>(97, whole.size() - at);
+      xanatoo::feed_append(*feed, {reinterpret_cast<const char*>(whole.data() + at), n});
+      if ((at / 97) % 8 == 0) sleep_ms(1);
+    }
+    xanatoo::feed_end(*feed);
+  });
+}
+
+std::shared_ptr<xanatoo::ByteFeed> feed_of(const std::vector<uint8_t>& whole, size_t first) {
+  auto feed = std::make_shared<xanatoo::ByteFeed>();
+  feed->total.store(static_cast<int64_t>(whole.size()));
+  xanatoo::feed_append(*feed, {reinterpret_cast<const char*>(whole.data()), first});
+  return feed;
 }
 }  // namespace
 
@@ -192,6 +237,98 @@ void test_audio(int& passed, int& failed) {
     EXPECT(open_audio(fixture("tone.opus"), &err) == nullptr);
     EXPECT(err.find("Opus") != std::string::npos);
     EXPECT(open_audio({}, &err) == nullptr);
+  }
+
+  // Streaming: a feed that arrives in pieces decodes exactly like the whole
+  // file; once complete the feed opens as the in-memory decoder.
+  for (const char* name : {"tone.mp3", "tone.flac", "ramp.wav"}) {
+    const std::vector<uint8_t> whole =
+        std::string(name) == "ramp.wav" ? make_wav(22050) : fixture(name);
+    const auto ref_dec = open_audio(whole, nullptr);
+    EXPECT(ref_dec != nullptr);
+    if (!ref_dec) continue;
+    const std::vector<float> ref = decode_all(*ref_dec);
+    auto feed = feed_of(whole, std::min<size_t>(whole.size() / 2, 1000));
+    std::atomic<bool> cancel{false};
+    FeedWait w;
+    w.cancel = &cancel;
+    std::thread more = trickle(feed, whole, std::min<size_t>(whole.size() / 2, 1000));
+    std::string err;
+    AudioDecoderPtr d = open_audio_feed(feed, w, &err);
+    EXPECT(d != nullptr);
+    if (d) {
+      EXPECT(audio_streaming(*d));
+      EXPECT(audio_format(*d) == audio_format(*ref_dec));
+      EXPECT_EQ(audio_rate(*d), audio_rate(*ref_dec));
+      EXPECT_EQ(audio_title(*d), audio_title(*ref_dec));
+      EXPECT_EQ(audio_frames(*d), audio_frames(*ref_dec));
+      const std::vector<float> got = decode_all(*d);
+      EXPECT_EQ(got.size(), ref.size());
+      EXPECT(max_diff(got, ref) < 1e-6f);
+      EXPECT(!audio_interrupted(*d));
+    }
+    more.join();
+    AudioDecoderPtr m = open_audio_feed(feed, w, &err);
+    EXPECT(m != nullptr && !audio_streaming(*m));
+    if (m) EXPECT(max_diff(decode_all(*m), ref) < 1e-6f);
+  }
+
+  // Ogg Vorbis cannot stream: the open waits for all of it.
+  {
+    const std::vector<uint8_t> whole = fixture("tone.ogg");
+    auto feed = feed_of(whole, whole.size() / 2);
+    std::thread more = trickle(feed, whole, whole.size() / 2);
+    std::string err;
+    AudioDecoderPtr d = open_audio_feed(feed, FeedWait{}, &err);
+    more.join();
+    EXPECT(d != nullptr && !audio_streaming(*d));
+    EXPECT(feed_sniff(*feed, FeedWait{}) == AudioFormat::Vorbis);
+    EXPECT(!audio_streamable(AudioFormat::Vorbis) && audio_streamable(AudioFormat::Mp3));
+  }
+
+  // A waiting open gives up when cancelled.
+  {
+    const std::vector<uint8_t> whole = fixture("tone.mp3");
+    auto feed = feed_of(whole, 10);
+    std::atomic<bool> cancel{false};
+    FeedWait w;
+    w.cancel = &cancel;
+    std::thread stop([&] {
+      sleep_ms(30);
+      cancel.store(true);
+    });
+    std::string err;
+    EXPECT(open_audio_feed(feed, w, &err) == nullptr);
+    EXPECT_EQ(err, "stopped");
+    stop.join();
+  }
+
+  // A read waiting for bytes gives up for a newer seek (and only then).
+  {
+    const std::vector<uint8_t> whole = make_wav(22050);
+    auto feed = feed_of(whole, 1000);
+    std::atomic<uint64_t> seeks{0};
+    FeedWait w;
+    w.seeks = &seeks;
+    AudioDecoderPtr d = open_audio_feed(feed, w, nullptr);
+    EXPECT(d != nullptr && audio_streaming(*d));
+    if (d) {
+      std::thread seek([&] {
+        sleep_ms(30);
+        seeks.fetch_add(1);
+      });
+      audio_rearm(*d);
+      std::vector<float> buf(22050 * 2);
+      const size_t n = audio_read(*d, buf.data(), 22050);
+      seek.join();
+      EXPECT_EQ(n, size_t((1000 - 44) / 4));  // the frames that had arrived
+      EXPECT(audio_interrupted(*d));
+      audio_rearm(*d);
+      EXPECT(!audio_interrupted(*d));
+    }
+    // A download that fails: what came plays, then the end.
+    feed_end(*feed, "HTTP 500");
+    EXPECT(!feed_complete(*feed));
   }
 
   passed += g_passed;

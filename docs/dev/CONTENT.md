@@ -448,8 +448,37 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   once open (`start_playing` / `start_media`). For the file already in the
   player it only seeks (and plays). Visits store `canonical_media_address`
   (the locator form would percent-encode `t=`).
-- Not yet: built-in Opus (without a backend), streaming the built-in
-  formats before the download ends.
+- Streaming (remote files of the built-in formats, threaded builds): a
+  detached thread downloads into a `ByteFeed` (audio.hpp: growing bytes,
+  `got` / `total`, `done` + error, `cancel`; 512 MiB cap) while the media
+  pipe plays it through `open_audio_stream` (`audio_stream.cpp`, a
+  `MediaSource` over the built-in decoders). `open_audio_feed` sniffs the
+  first bytes (`feed_sniff`, past an ID3v2 tag), then opens MP3 / FLAC / WAV
+  on the dr_libs callback APIs (`feed_read` waits for bytes on the worker,
+  never in the sound callback; seeks only move the cursor; dr_mp3 gets no
+  tell callback, else it reads the end-of-file tags first). A streaming MP3
+  has no seek table and, without a Xing / Info header, a length estimated
+  from the first frame's bitrate. When the download completes the source
+  re-opens the feed in memory (seek table, exact length; the pipe's
+  `info.duration` follows) and seeks it to the same frame. Waiting reads
+  give up on the pipe's cancel or a newer seek (`MediaOptions::seeks`,
+  counted in `media_seek`; `audio_rearm` / `audio_interrupted`). Ogg
+  (Vorbis / Opus) cannot stream built-in: with a backend the address goes
+  to it instead, else the open waits for the whole file.
+- The panel: "Downloading N%" while opening, "Buffering… N% loaded" while
+  the pipe has nothing to play (`media_buffering`), the arrived part shaded
+  on the seek bar (`draw_bar` `loaded`). Sound alone decodes 5 s ahead
+  (`kMediaAudioAheadSoundOnly`). Local files and single-threaded WASM keep
+  the load-then-play path (`AudioLoad`).
+- By Content-Type: a Navigate / Tab response that `is_playable_type`
+  (built-in audio types; with a backend every `audio/*` / `video/*`), not
+  an attachment, sets `DownloadProgress::playable` in `web_fetch` instead of
+  the download offer; `finish_navigate` / `finish_tab` hand the address and
+  type to `play_audio(app, url, mime)` (the type picks backend or built-in
+  as the extension does) and record a media visit. Such addresses have no
+  playing-link wash or bookmark marks yet (those test `is_playable_url`).
+- Not yet: built-in Opus (without a backend); range requests (a seek far
+  ahead of a built-in download waits for it).
 
 ## Video
 
@@ -478,7 +507,7 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
     the rate) is known.
   - Neither (Windows, WASM): `open_media` fails, nothing routes there.
 - Pipe (`MediaPlayback`, unit-tested with fake sources): a detached worker
-  opens the source and decodes ahead into `audio` (deque of floats) and
+  opens the source (`open_media`, or `MediaOptions::open`) and decodes ahead into `audio` (deque of floats) and
   `frames` (≤ `kMediaFramesMax`); it waits on a condition variable that
   the sound callback (`media_pull_audio`) and the main thread
   (`media_take_frame`) signal. A full picture queue stops decoding — files
