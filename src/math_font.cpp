@@ -262,7 +262,8 @@ const MathRaster& MathFont::raster(uint32_t gid, int px) {
   MathRaster out;
   if (face_ && px > 0) {
     FT_Set_Pixel_Sizes(face_, 0, static_cast<FT_UInt>(px));
-    if (FT_Load_Glyph(face_, gid, FT_LOAD_RENDER | FT_LOAD_NO_BITMAP) == 0) {
+    if (FT_Load_Glyph(face_, gid, FT_LOAD_RENDER | FT_LOAD_NO_BITMAP |
+                                       FT_LOAD_TARGET_LIGHT) == 0) {
       FT_GlyphSlot slot = face_->glyph;
       out.w = static_cast<int>(slot->bitmap.width);
       out.h = static_cast<int>(slot->bitmap.rows);

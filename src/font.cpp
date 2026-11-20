@@ -121,7 +121,11 @@ Glyph Font::load_glyph(uint32_t codepoint) {
   if (codepoint >= 0x20 && FT_Get_Char_Index(face_, codepoint) == 0) {
     if (FT_Face fb = fallback_face(codepoint)) face = fb;
   }
-  if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER)) {
+  // Light hinting snaps only vertical metrics and keeps stroke weights
+  // fractional, as browsers / fontconfig "hintslight" do. Full native
+  // hinting rounds strokes to whole pixels, so text visibly jumps in
+  // weight between sizes (DejaVu Sans: 1 px bars at 16 px, 2 px at 17 px).
+  if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT)) {
     return g;
   }
   FT_GlyphSlot slot = face->glyph;
