@@ -922,7 +922,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         c == C::ViewMeasure ||
         c == C::ToggleSectionFocus || c == C::ToggleJustify ||
         c == C::ToggleHoverPreview || c == C::ToggleHistoryRewinds ||
-        c == C::ToggleAutoLinks ||
+        c == C::ToggleAutoLinks || c == C::ToggleFootnoteOverlay ||
+        c == C::ToggleBookmarkMarks ||
         c == C::ToggleAutoImages || c == C::ToggleAutoUpdates || c == C::TogglePreferences ||
         c == C::ToggleCredentials || c == C::SaveCatalogCredentials ||
         c == C::ClearCatalogCredentials ||
