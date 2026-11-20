@@ -4,7 +4,7 @@
   (name "Editorial")
   (description "Crisp typography, airy threads, restrained indigo accents")
   (define ink "#273344")
-  (define muted "#637386")
+  (define muted "#5b6a7c")
   (define accent "#375f9c")
   (define line "#d7dfe7")
   (page (background "#f9fafb") (color ink)

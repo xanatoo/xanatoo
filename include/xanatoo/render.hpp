@@ -12,6 +12,13 @@
 
 namespace xanatoo {
 
+// A selection painted by Renderer::draw over the block fills (cards, asides,
+// tables, code) and under the glyphs, so opaque fills cannot hide it.
+struct SelectionWash {
+  std::vector<SelRect> rects;
+  Rgba color;
+};
+
 class Renderer {
 public:
   Renderer(SDL_Renderer* sdl, FontSet& fonts, ImageCache* images = nullptr);
@@ -27,8 +34,11 @@ public:
   void draw_backdrop(const LayoutResult& layout, const SDL_Rect& area,
                      float scroll_y, float origin_x);
   // origin_x shifts all content horizontally (for multi-pane views).
+  // `sel`: the selection, drawn between the fills and the text.
   void draw(const LayoutResult& layout, float scroll_y = 0.f,
-            float origin_x = 0.f);
+            float origin_x = 0.f, const SelectionWash* sel = nullptr);
+  // The style's selection colour.
+  Rgba selection_color() const;
   void draw_selection(const std::vector<SelRect>& rects, float origin_x = 0.f);
   // Custom-colour selection (e.g. leap-search match highlight).
   void draw_selection(const std::vector<SelRect>& rects, float origin_x,

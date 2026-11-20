@@ -574,12 +574,12 @@ DocStyle builtin_style() {
   {
     BlockStyle& b = blk(BlockRole::MessageOp);
     b.has_color = true;
-    b.color = {190, 80, 20, 255};
+    b.color = {176, 74, 18, 255};
   }
   {
     BlockStyle& b = blk(BlockRole::MessageMeta);
     b.has_color = true;
-    b.color = {120, 118, 112, 255};
+    b.color = {106, 104, 98, 255};
   }
   {
     BlockStyle& b = blk(BlockRole::Table);
@@ -634,7 +634,7 @@ DocStyle builtin_style() {
   s.metadata.has_font = true;
   s.metadata.font = FontRole::Small;
   s.metadata.has_color = true;
-  s.metadata.color = {120, 118, 112, 255};
+  s.metadata.color = {106, 104, 98, 255};
   inl(InlineKind::Cite) = {true, {90, 50, 140, 255}, {0, 0, 0, 0}, true};
   inl(InlineKind::FootnoteRef) = {true, {30, 90, 180, 255}, {0, 0, 0, 0}, false};
   inl(InlineKind::Code) = {true, {130, 55, 30, 255}, {245, 235, 220, 200}, false};

@@ -9,8 +9,8 @@
   (description "old.reddit: white page, blue authors, zebra comment nesting")
 
   (define blue   "#336699")
-  (define link-blue "#0079d3")
-  (define grey   "#888888")
+  (define link-blue "#0071c5")
+  (define grey   "#686868")
   (define line   "#e5e5e5")
 
   (page (background "#ffffff") (color "#222222")
@@ -29,7 +29,7 @@
                     (space-before 0.4em) (space-after 0.6em))
   (role message     (font small) (space-before 0.3em) (space-after 0.85em) (border line)
                     (background "#ffffff"))
-  (role message-alt (background "#f7f7f8"))
+  (role message-alt (background "#f1f1f3"))
   (role message-author (color blue))
   (role message-op  (color "#0055df"))
   (role message-meta (color grey))
@@ -43,4 +43,4 @@
   (role link   (color link-blue) (underline #f))
   (role cite   (color blue))
   (role footnote-ref (color link-blue))
-  (role code   (color "#222222") (background "#fcfcfb")))
+  (role code   (color "#222222") (background "#f1f1ee")))

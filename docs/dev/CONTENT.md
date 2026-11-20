@@ -5,6 +5,18 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 
 ## Style sheets (details)
 
+- Paint order: `draw_backdrop` (paper), then `Renderer::draw` with the
+  pane's `SelectionWash`: role fills (cards, asides, tables, code), bars and
+  rules, inline-code runs, *then the selection*, then glyphs. Sheets may use
+  opaque fills; the selection is never passed to `draw_selection` before
+  `draw`. Marks / bookmarks / quote washes are overlays after the text.
+- Shipped sheets keep text ≥ 4.5:1 on its background (metadata, meta,
+  footnotes included — dark sheets must override the default's dark
+  footnote / strike colours), a selection that differs from `mark`, every
+  fill and the thread bar, and distinct author / thread-starter / meta,
+  link / cite colours (sheets that underline links or show code only by
+  its font are the deliberate exceptions: Hacker News, Typewriter).
+
 - Sheets may name faces with poor coverage (Verdana has no arrows):
   `Font::glyph` draws codepoints the face lacks from fallback faces
   (`fallback_font_faces`: FontConfig coverage sort, fixed list on Android);

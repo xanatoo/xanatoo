@@ -100,7 +100,8 @@ void Renderer::draw_backdrop(const LayoutResult& layout, const SDL_Rect& area,
   }
 }
 
-void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) {
+void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
+                    const SelectionWash* sel) {
   const DocStyle& st = style_ ? *style_ : fallback_style();
   // Cull against the active SDL clip rect (pane / soft-window client area).
   SDL_Rect clip{};
@@ -373,6 +374,12 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x) 
     SDL_SetRenderDrawBlendMode(sdl_, SDL_BLENDMODE_NONE);
   }
 
+  // Selection over every fill (opaque cards would hide it), under the text.
+  if (sel && !sel->rects.empty()) {
+    const Rgba& c = sel->color;
+    draw_selection(sel->rects, origin_x, c.r, c.g, c.b, c.a);
+  }
+
   const auto& glyphs = layout.glyphs;
   for (uint32_t i : near) {
     const PositionedGlyph& pg = glyphs[i];
@@ -461,8 +468,12 @@ GlyphExtents Renderer::glyph_extents() const {
   return ext;
 }
 
+Rgba Renderer::selection_color() const {
+  return (style_ ? *style_ : fallback_style()).selection;
+}
+
 void Renderer::draw_selection(const std::vector<SelRect>& rects, float origin_x) {
-  const Rgba& c = (style_ ? *style_ : fallback_style()).selection;
+  const Rgba c = selection_color();
   draw_selection(rects, origin_x, c.r, c.g, c.b, c.a);
 }
 

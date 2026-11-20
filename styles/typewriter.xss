@@ -24,8 +24,8 @@
   (role message    (font small) (background none))
   (role message-alt (background none))
   (role message-author (color "#222222"))
-  (role message-op (color "#222222"))
+  (role message-op (color "#a3261c"))   ; red ribbon
   (role message-meta (color "#666666"))
   (role link       (color "#222222") (underline #t))
   (role cite       (color "#222222") (underline #t))
-  (role code       (color "#222222") (background none)))
+  (role code       (color "#222222") (background "#ecece4")))

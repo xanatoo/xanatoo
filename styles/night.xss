@@ -10,9 +10,10 @@
 
   (define paper   "#1e2228")
   (define ink     "#d4d7dc")
-  (define dim     "#8b929c")
+  (define dim     "#969da7")
   (define accent  "#7fb4ff")
   (define accent2 "#c59cff")
+  (define starter "#f0a060")   ; thread starter, apart from accent
   (define panel   (rgba 255 255 255 18))
   (define line    "#3b424c")
 
@@ -27,14 +28,17 @@
   (role message     (font small) (border "#4fb3a9") (background (rgba 255 255 255 14)))
   (role message-alt (background (rgba 0 0 0 60)))
   (role message-author (color accent))
-  (role message-op  (color "#f0a060"))
+  (role message-op  (color starter))
   (role message-meta (color dim))
   (role table       (border line) (background panel))
   (role rule        (border line))
   (role transclusion (border dim))
+  (role footnote    (color dim) (border line))
+  (role metadata    (color dim))
   (role aside       (color "#b9bec6") (background panel) (border line))
 
   (role link   (color accent) (underline #t))
   (role cite   (color accent2) (underline #t))
+  (role footnote-ref (color accent))
   (role code   (color "#f0b27a") (background panel))
   (role strike (color dim)))

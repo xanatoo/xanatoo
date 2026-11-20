@@ -4366,16 +4366,16 @@ static void draw_pane_layer(App& app, int i, const SDL_Rect& area, float ox,
   xanatoo::sdl::set_clip_rect(app.sdl, &area);
   SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
   app.renderer.draw_backdrop(pane.layout, area, scroll, ox);
+  xanatoo::SelectionWash wash;
   if (!pane.sel.empty()) {
-    auto rects = xanatoo::selection_rects(pane.layout, pane.sel, scroll,
+    wash.rects = xanatoo::selection_rects(pane.layout, pane.sel, scroll,
                                           app.renderer.glyph_extents());
     // Leap-search match uses amber so it is distinct from a user selection.
-    if (prompt_is_search(app) && i == app.focus)
-      app.renderer.draw_selection(rects, ox, 230, 190, 70, 150);
-    else
-      app.renderer.draw_selection(rects, ox);
+    wash.color = prompt_is_search(app) && i == app.focus
+                     ? xanatoo::Rgba{230, 190, 70, 150}
+                     : app.renderer.selection_color();
   }
-  app.renderer.draw(pane.layout, scroll, ox);
+  app.renderer.draw(pane.layout, scroll, ox, &wash);
 }
 
 void release_raster(PaneRaster& r) {
@@ -4919,12 +4919,15 @@ void draw_context_window(App& app) {
       app.context_win.scroll - static_cast<float>(cy);
   app.renderer.draw_backdrop(app.context_layout, clip, draw_scroll,
                              static_cast<float>(cx));
-  if (!app.context_sel.empty())
-    app.renderer.draw_selection(
-        xanatoo::selection_rects(app.context_layout, app.context_sel,
-                                 draw_scroll, app.renderer.glyph_extents()),
-        static_cast<float>(cx));
-  app.renderer.draw(app.context_layout, draw_scroll, static_cast<float>(cx));
+  xanatoo::SelectionWash wash;
+  if (!app.context_sel.empty()) {
+    wash.rects = xanatoo::selection_rects(app.context_layout, app.context_sel,
+                                          draw_scroll,
+                                          app.renderer.glyph_extents());
+    wash.color = app.renderer.selection_color();
+  }
+  app.renderer.draw(app.context_layout, draw_scroll, static_cast<float>(cx),
+                    &wash);
 
   // The footnote whose mark is hovered: wash its block (boxes of the note
   // and everything inside it) in the style's `mark` colour.

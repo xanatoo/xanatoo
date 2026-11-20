@@ -35,4 +35,7 @@
   (role rule (border line))
   (role link (color accent) (underline #t))
   (role cite (color "#cbb5f4"))
+  (role footnote (color muted) (border line))
+  (role footnote-ref (color accent))
+  (role strike (color muted))
   (role code (color "#eec09c") (background "#273748")))

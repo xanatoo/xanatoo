@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Style sheets: visible selection, distinct colours
+
+- Selection was hidden under opaque role fills (comment cards, asides,
+  tables, code, inline code) in Editorial, Blue Hour, Forum, High Contrast,
+  Linen, Reddit, Wikipedia…: `Renderer::draw` now paints a `SelectionWash`
+  after the fills and before the glyphs (pane layer and Context panel).
+- Colour audit of all shipped sheets (contrast ≥ 4.5:1, ΔE between roles
+  that must differ): dark sheets got footnote / footnote-ref / strike
+  colours; Night Amber's thread starter is teal (new `starter` token in
+  Night) instead of a second amber; HN selection is blue, not the title-bar
+  orange, links underlined, author darker than meta; Linen / Sepia
+  selection cool (was the mark's amber, lost on Sepia's code / tables);
+  Wikipedia cite purple, visible zebra and quote bars; Reddit zebra and
+  code background; Typewriter red-ribbon thread starter and code tint;
+  metadata / meta greys darkened (also the built-in default).
+
 ## Status (2026-11-20) — Media panel: A–B section, loop
 
 - A-B button: two markers on the seek bar (10 s from the position),

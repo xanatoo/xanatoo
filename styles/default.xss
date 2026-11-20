@@ -49,8 +49,8 @@
                     (background (rgba 255 255 255 150)))   ; comment card
   (role message-alt (background (rgba 120 110 90 22)))     ; odd reply depth
   (role message-author (color "#1e5ab4"))
-  (role message-op  (color "#be5014"))                      ; thread starter
-  (role message-meta (color "#787670"))                     ; date · score · reply
+  (role message-op  (color "#b04a12"))                      ; thread starter
+  (role message-meta (color "#6a6862"))                     ; date · score · reply
   (role table       (space-after 10) (width 20em) (border "#a0a5af")
                     (background (rgba 230 235 245 220)))
   (role rule        (space-before 10) (space-after 10) (border "#aaa8a0"))
@@ -70,7 +70,7 @@
   (role gallery     (background "#000000") (color "#dcdcdc"))
 
   ;; Inline roles.
-  (role metadata (font small) (color "#787670"))  ; hostnames, points, discussion
+  (role metadata (font small) (color "#6a6862"))  ; hostnames, points, discussion
   (role link   (color "#1e5ab4") (underline #t))
   (role cite   (color "#5a328c") (underline #t))
   (role footnote-ref (color "#1e5ab4"))

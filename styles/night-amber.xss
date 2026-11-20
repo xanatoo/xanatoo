@@ -11,4 +11,5 @@
 
   (define paper  "#221d18")
   (define ink    "#e6d9c3")
-  (define accent "#ffb454"))
+  (define accent "#ffb454")
+  (define starter "#7fcbb8"))   ; thread starter: teal, apart from amber

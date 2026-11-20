@@ -13,7 +13,7 @@
   (define muted  "#b39a73")
   (define gap    0.9em)
 
-  (page (background paper) (color ink) (selection (rgba 214 180 120 110)))
+  (page (background paper) (color ink) (selection (rgba 120 145 185 105)))
 
   (fonts (body "Charter" "Bitstream Charter" "Gentium Book Plus" "Libertinus Serif"
                "Bookerly" "Georgia" "DejaVu Serif" "serif")
@@ -37,7 +37,8 @@
   (role message-alt (background (rgba 120 90 40 20)))
   (role message-author (color accent))
   (role message-op  (color "#6d3f6f"))
-  (role message-meta (color "#7d6a52"))
+  (role message-meta (color "#6f5d47"))
+  (role metadata    (color "#6f5d47"))
 
   (role link   (color accent) (underline #t))
   (role cite   (color "#6d3f6f"))
