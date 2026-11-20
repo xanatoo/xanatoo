@@ -509,8 +509,9 @@ const std::vector<UiHelpTopic> kTopics = {
      "The help document: shortcuts and concepts. Click links to jump; "
      "**F1** or **Esc** closes it."},
     {"@panel:outline", "Outline panel",
-     "Headings of the page by depth. Click a heading to jump there, click "
-     "a triangle to fold the section; ↑/↓ and Enter while focused."},
+     "Headings of the page by depth; articles are bold, sections regular. "
+     "Click a heading to jump there, click a triangle to fold the section; "
+     "↑/↓ and Enter while focused."},
     {"@panel:backlinks", "Backlinks panel",
      "Passages of open documents that link to this one. Click one to go "
      "there."},

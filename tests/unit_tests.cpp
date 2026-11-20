@@ -2941,6 +2941,24 @@ void test_layout_reader_mode() {
   collect_outline(d2, all);
   collect_outline(d2, rd, nullptr, {}, true);
   EXPECT_EQ(all.size(), rd.size() + 1);
+  // Article rows are flagged (the panel draws them bold), sections not.
+  Document d3;
+  d3.root = d3.create(NodeKind::Document);
+  const NodeId art = d3.create(NodeKind::Article, d3.root);
+  d3.get(d3.create(NodeKind::Header, art)).spans.push_back(
+      InlineSpan{.text = "A"});
+  const NodeId sec = d3.create(NodeKind::Section, art);
+  d3.get(d3.create(NodeKind::Header, sec)).spans.push_back(
+      InlineSpan{.text = "S"});
+  std::vector<OutlineEntry> ar;
+  collect_outline(d3, ar);
+  bool saw_article = false, saw_section = false;
+  for (const OutlineEntry& e : ar) {
+    if (e.text == "A") saw_article = e.article;
+    if (e.text == "S") saw_section = !e.article;
+  }
+  EXPECT(saw_article);
+  EXPECT(saw_section);
 }
 
 // Articles are separate sheets on a margin: gaps between them, the page

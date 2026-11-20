@@ -615,11 +615,7 @@ void draw_sitemap_panel(App& app) {
     const bool lit = sel && keys;
     const int ry = static_cast<int>(row_y);
     const int rh = static_cast<int>(step);
-    // No number column: indent from the left edge.
-    OutlineRowGeom g = outline_row_geom(app, n.depth + 1);
-    const int shift = g.num_right;
-    g.twist_x -= shift;
-    g.text_x -= shift;
+    const OutlineRowGeom g = outline_row_geom(app, n.depth + 1);
     if (sel)
       th::fill(app.sdl, SDL_Rect{cx + 1, ry, text_right - 1, rh},
                keys ? pal.accent : pal.face_dark);

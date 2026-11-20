@@ -1081,7 +1081,7 @@ struct App {
   KeyFocus key_focus = KeyFocus::Document;
   // The panel meant by KeyFocus::Panel (ignored for any other key_focus).
   WindowRole panel_focus = WindowRole::Document;
-  // A panel consumed a printable key (outline 1–9): drop the TEXTINPUT
+  // A panel consumed a printable key (e.g. history '/'): drop the TEXTINPUT
   // SDL sends right after it so the digit is not typed into the document.
   bool eat_text_input = false;
   // The window got shorter (on-screen keyboard opened): bring the caret back
@@ -1698,11 +1698,9 @@ std::tuple<int, int, int, int> outline_client_rect(App& app);
 float outline_row_step(App& app);
 // Backlinks rows: same height as outline rows (paint + click).
 inline float backlinks_row_step(App& app) { return outline_row_step(app); }
-// Horizontal layout of one outline row, relative to the client x: shortcut
-// number right edge, disclosure triangle box (twist_w wide), text. Scales
-// with the ui scale.
+// Horizontal layout of one outline row, relative to the client x:
+// disclosure triangle box (twist_w wide), text. Scales with the ui scale.
 struct OutlineRowGeom {
-  int num_right = 0;
   int twist_x = 0;
   int twist_w = 14;
   int text_x = 0;

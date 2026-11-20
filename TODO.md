@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Outline panel: articles bold, no 1–9 column
+
+- Outline rows of an `Article` (and the preamble title row) are bold;
+  sections are regular, whatever their depth (`OutlineEntry::article`).
+- The 1–9 shortcut column and the panel's 1–9 jump keys are gone (few
+  pages fit in nine rows); rows indent from the left edge.
+- Checked under Xvfb (examples/tour.md).
+
 ## Status (2026-11-20) — Thread titles are real headings
 
 - A Thread's title is a `Header` as its first child (`thread_title` /

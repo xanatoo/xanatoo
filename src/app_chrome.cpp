@@ -409,7 +409,7 @@ StatusLine compute_status(App& app) {
         "Ctrl+Alt+F off";
     tone = StatusTone::Info;
   } else if (panel_has_keys(app, KeyFocus::Outline)) {
-    label = "Outline — ↑/↓ · ←/→ fold · Enter / 1–9 jump · Esc close · "
+    label = "Outline — ↑/↓ · ←/→ fold · Enter jump · Esc close · "
             "typing returns to the text";
     tone = StatusTone::Info;
   } else if (app.hover.col_gap) {

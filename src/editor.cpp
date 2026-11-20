@@ -3118,6 +3118,7 @@ void collect_outline(const Document& doc, std::vector<OutlineEntry>& out,
       const int depth = std::max(1, std::min(8, fr.depth + 1));
       OutlineEntry e;
       e.section = fr.id;
+      e.article = n.kind == NodeKind::Article;
       e.node = titled_thread ? thread_title(doc, fr.id) : first_header_child(n);
       if (e.node == INVALID_NODE) e.node = fr.id;
       e.level = depth;

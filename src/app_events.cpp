@@ -1319,7 +1319,7 @@ static void on_mousemotion(App& app, SDL_Event& ev, bool imgui_mouse,
 
 static void on_textinput(App& app, SDL_Event& ev, bool imgui_mouse,
                          bool imgui_keys) {
-  if (app.eat_text_input) {  // the keydown went to a panel (outline 1–9)
+  if (app.eat_text_input) {  // the keydown went to a panel (e.g. history '/')
     app.eat_text_input = false;
     return;
   }
@@ -1679,7 +1679,7 @@ static bool handle_style_manager_key(App& app, const SDL_Event& ev, bool ctrl,
 }
 
 // Outline panel (when it has keyboard focus): Esc/toggle close; arrows,
-// 1-9, Enter navigate; Enter / 1-9 jump and hand focus to the document.
+// Enter navigate; Enter jumps and hands focus to the document.
 // Other plain keys hand focus back and fall through. True = consumed.
 static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
                        bool alt) {
@@ -1738,17 +1738,6 @@ static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool sh
         outline_consumed = true;
         break;
       default:
-        if (!ctrl && !alt && xanatoo::sdl::keycode(ev) >= SDLK_1 &&
-            xanatoo::sdl::keycode(ev) <= SDLK_9) {
-          int idx = static_cast<int>(xanatoo::sdl::keycode(ev) - SDLK_1);
-          if (idx < static_cast<int>(app.outline.size())) {
-            app.outline_sel = idx;
-            jump_outline_sel(app);
-            app.key_focus = KeyFocus::Document;
-            app.eat_text_input = true;
-            outline_consumed = true;
-          }
-        }
         break;
     }
     if (outline_consumed) return true;

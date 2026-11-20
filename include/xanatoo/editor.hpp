@@ -372,6 +372,7 @@ struct OutlineEntry {
   bool has_children = false;  // nested outline rows when expanded
   bool folded = false;        // view-local: body (and outline children) hidden
   bool preamble = false;      // top row: title + content before 1st heading
+  bool article = false;       // the row is an Article (drawn bold), not a Section
 };
 // Whether the document tree has a Header / Heading the outline can list.
 bool document_has_headings(const Document& doc);

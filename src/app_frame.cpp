@@ -4711,17 +4711,11 @@ void draw_outline_panel(App& app) {
       const th::Rgb ink = lit ? pal.highlight : pal.text;
       const th::Rgb dim = lit ? pal.accent_soft : pal.text_dim;
 
-      xanatoo::Font& f = e.level <= 1 ? bold : font;
+      // Articles (self-contained pieces: posts, feed items) are bold;
+      // sections inside them and plain section headings are regular.
+      xanatoo::Font& f = e.article || e.preamble ? bold : font;
       const float baseline = static_cast<float>(
           ry + (rh - f.line_height()) / 2 + f.ascender());
-      // Alt+1…9 / 1…9 shortcut column.
-      if (i < 9) {
-        const std::string num(1, static_cast<char>('1' + i));
-        app.renderer.draw_text(font,
-                               static_cast<float>(cx + g.num_right -
-                                                  font.measure(num)),
-                               baseline, num, dim.r, dim.g, dim.b);
-      }
       // Disclosure triangle (drawn, so it never depends on font coverage).
       if (e.has_children) {
         const int tcx = cx + g.twist_x + g.twist_w / 2;
