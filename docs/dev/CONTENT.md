@@ -145,6 +145,18 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   (`set_hide_chrome`) and draws the "… hidden · Show all" notice
   (`LayoutResult::chrome_notice`). Never put reader mode into the address or
   parse a page twice for it (docs/PASSAGES.md "Reader mode").
+- Site hints (`site_hints.hpp`, `sites/*.xsite`, docs/SITEHINTS.md): for
+  remote pages `parse_html_page` looks up `site_hints_for_host(host)`
+  (data_dir() sheets, then user_data_dir(); reread on mtime change). With
+  hints, `bind_site_hints` builds a tolerant element tree (`html_elements`,
+  implied `</li>` / `</p>`) and matches the selectors once; `(main …)`
+  elements become the content parts (page order, everything between them
+  Chrome "page"), and `attach_page_hints` sets `HtmlOptions::hint` /
+  `hint_replace`, which `html_append_blocks` asks at each start tag (Drop,
+  Chrome with role, Content = no chrome heuristics, Replace). `(thread …)`
+  rebuilds a comment tree as Thread / flat Message nodes (`alt` = parent
+  label; empty messages are skipped, their replies move up). Hints are a
+  page-structure layer, not styling: they never touch `.xss` sheets.
 - Reference marks → footnotes (`html_footnotes.hpp`, last step of
   `parse_html_page`): a link whose text is `[mark]` and whose `#id` names a
   ListItem of a List becomes `FootnoteRef` (key = mark, blanks → `-`); every

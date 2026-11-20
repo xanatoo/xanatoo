@@ -9,10 +9,27 @@
 
 #include "xanatoo/types.hpp"
 
+#include <functional>
 #include <string>
 #include <string_view>
 
 namespace xanatoo {
+
+// What a per-tag hook (site hints, site_hints.hpp) says about one element.
+// Pointers point into the page source the hook was built for.
+struct HtmlHint {
+  enum class Kind {
+    None,     // usual handling
+    Drop,     // left out with its contents
+    Chrome,   // a Chrome region with `role`
+    Content,  // usual handling, but never chrome by tag / class / role
+    Replace,  // HtmlOptions::hint_replace builds its nodes
+  } kind = Kind::None;
+  std::string role;
+  const char* inner = nullptr;      // just past the start tag
+  const char* inner_end = nullptr;  // the end tag
+  const char* end = nullptr;        // just past the element
+};
 
 struct HtmlOptions {
   std::string base_url;    // relative href / src resolve against this
@@ -35,6 +52,12 @@ struct HtmlOptions {
   // <aside> → Aside box (content beside the flow) rather than page chrome;
   // asides with chrome classes (sidebar, share, …) stay chrome.
   bool asides = false;
+  // Site hints: called for every start tag (`lt` = its '<' in the page
+  // source) when set; `hint_replace` builds a Replace element's nodes
+  // under `parent`.
+  std::function<HtmlHint(const char* lt)> hint;
+  std::function<void(Document& doc, NodeId parent, const char* lt)>
+      hint_replace;
 };
 
 // Append the blocks of `html` as children of `parent`:

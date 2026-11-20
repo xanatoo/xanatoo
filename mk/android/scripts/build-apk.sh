@@ -95,7 +95,7 @@ chmod -R u+rwX src
 # Data files → assets/xanatoo/ + MANIFEST (stamp line, then one path per
 # line; SDL can read assets but not list them).
 A=assets/xanatoo
-mkdir -p "$A/examples" "$A/styles" "$A/icons" "$A/fonts" "$A/certs"
+mkdir -p "$A/examples" "$A/styles" "$A/sites" "$A/icons" "$A/fonts" "$A/certs"
 for f in DejaVuSans DejaVuSans-Bold DejaVuSans-Oblique DejaVuSans-BoldOblique \
          DejaVuSerif DejaVuSerif-Bold DejaVuSerif-Italic DejaVuSerif-BoldItalic \
          DejaVuSansMono DejaVuSansMono-Bold DejaVuSansMono-Oblique \
@@ -107,6 +107,7 @@ cp "$APP_SRC_DIR"/data/fonts/latinmodern-math.otf \
    "$APP_SRC_DIR"/data/fonts/LICENSE-LatinModernMath.txt "$A/fonts/"
 cp -r "$APP_SRC_DIR"/examples/. "$A/examples/"
 cp "$APP_SRC_DIR"/styles/*.xss "$A/styles/"
+cp "$APP_SRC_DIR"/sites/*.xsite "$A/sites/"
 cp "$APP_SRC_DIR"/FORMAT.md "$A/"
 cp "$CA_BUNDLE" "$A/certs/ca-bundle.crt"
 python3 "$APP_SRC_DIR"/scripts/rasterize_icons.py "$APP_SRC_DIR"/icons/svg "$A/icons" 64

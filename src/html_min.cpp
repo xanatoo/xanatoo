@@ -170,6 +170,15 @@ class Builder {
     close_para();
     html_append_chrome(doc_, container(), std::move(role), inner, opt);
   }
+  // A site hint builds this element's nodes (a Thread, …) at block level;
+  // false (nothing built) inside running text, list items or cells.
+  bool replace_region(const char* lt) {
+    if (owner() != INVALID_NODE || in_container() || !opt_.hint_replace)
+      return false;
+    close_para();
+    opt_.hint_replace(doc_, container(), lt);
+    return true;
+  }
   void finish() {
     close_para();
     while (!frames_.empty()) pop();
@@ -1525,6 +1534,44 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
     }
     std::string_view attrs = inside.substr(name.size());
     const bool self_close = ends_self_closed(attrs);
+    // Site hints (site_hints.hpp) come before every heuristic.
+    bool hinted_content = false;
+    if (opt.hint && !self_close) {
+      HtmlHint h = opt.hint(html.data() + i);
+      const auto past = [&](const char* p) {
+        return static_cast<size_t>(p - html.data());
+      };
+      // Bounds from the page's own tree; clipped to this fragment.
+      const size_t end = h.end && h.end >= html.data() + e + 1
+                             ? std::min(past(h.end), html.size())
+                             : html.size();
+      switch (h.kind) {
+        case HtmlHint::Kind::None:
+          break;
+        case HtmlHint::Kind::Content:
+          hinted_content = true;
+          break;
+        case HtmlHint::Kind::Drop:
+          i = text_start = end;
+          continue;
+        case HtmlHint::Kind::Chrome: {
+          const size_t in = e + 1;
+          const size_t in_end =
+              h.inner_end ? std::clamp(past(h.inner_end), in, end) : end;
+          if (opt.chrome_nodes)
+            b.chrome_region(h.role.empty() ? "page part" : h.role,
+                            html.substr(in, in_end - in), opt);
+          i = text_start = end;
+          continue;
+        }
+        case HtmlHint::Kind::Replace:
+          if (b.replace_region(html.data() + i)) {
+            i = text_start = end;
+            continue;
+          }
+          break;
+      }
+    }
     if (!self_close) {
       // Math: <math> (MathML), MathJax's <script type="math/tex">, KaTeX and
       // Wikipedia's wrappers, which all carry the TeX source along.
@@ -1573,8 +1620,9 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
       continue;
     }
     if (opt.drop_chrome && !self_close && !one_of(name, kVoidTags)) {
-      std::string_view role =
-          is_hidden(attrs) ? std::string_view{} : chrome_role(name, attrs);
+      std::string_view role = is_hidden(attrs) || hinted_content
+                                  ? std::string_view{}
+                                  : chrome_role(name, attrs);
       // An aside in the content is chrome only by its classes or role
       // (role=complementary is what every aside is).
       if (name == "aside" && opt.asides && !is_hidden(attrs)) {

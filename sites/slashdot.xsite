@@ -1,0 +1,18 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Site hints for slashdot.org (docs/SITEHINTS.md).
+;
+; A story page has two <article>s (the story and the login pop-up) and
+; no <main>; the comments are nested <ul>/<li> lists.
+
+(site "slashdot.org"
+  ;; The story, then the comments; everything else on the page is chrome.
+  (main "article.fhitem-story" "#commentlisting")
+  (chrome sidebar "#slashboxes")
+  (thread "#commentlisting"
+    (heading "Comments")
+    (message "li.comment")
+    (title ".title a")
+    (author ".by a")
+    (date ".otherdetails" "on (.*@\\S+)")
+    (score ".score" "Score:\\s*([^)]*)")
+    (body ".commentBody")))

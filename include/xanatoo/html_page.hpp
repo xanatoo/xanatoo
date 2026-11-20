@@ -40,8 +40,13 @@ std::string html_page_title(std::string_view html);
 // Page chrome (navigation, sidebars, footers, what lies around <main>) is
 // kept as Chrome nodes, for reader mode to hide; `keep_chrome = false`
 // drops it instead (EPUB chapters).
+// Remote pages use the site hints for their host (site_hints.hpp).
 Document parse_html_page(std::string_view html, std::string_view page_url = {},
                          bool keep_chrome = true);
+// … with these hints (null = none), whatever the host.
+struct SiteHints;
+Document parse_html_page(std::string_view html, std::string_view page_url,
+                         bool keep_chrome, const SiteHints* hints);
 
 // text/plain body: blank-line separated chunks as code blocks.
 Document plain_text_document(std::string_view text);

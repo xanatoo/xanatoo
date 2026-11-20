@@ -2,16 +2,23 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
-## Status (2026-11-20) — Slashdot: story no longer inside the navigation
+## Status (2026-11-20) — Slashdot: story out of the navigation, site hints
 
 - Slashdot stories were empty in reader mode: the whole page after the
   login bar became one "navigation" Chrome node. Cause: `html_element_end`
   read `<!-- //…/index2.pl" -->` as a tag, its stray quote made `tag_end`
   run on to the next quote past `</nav>`. It now skips comments,
   `<script>` / `<style>` bodies and `<` that starts no tag (unit test).
-- Open idea: user-editable per-site hints (which element is main / nav /
-  comments) for pages without landmarks, as an S-expression sheet like
-  the `.xss` style sheets; not started.
+- Site hints prototype (docs/SITEHINTS.md): `sites/*.xsite` S-expression
+  sheets (shipped in data_dir()/sites, own ones in user_data_dir()/sites)
+  with `main` / `chrome` / `content` / `drop` / `thread` rules over a small
+  CSS selector subset. `sites/slashdot.xsite`: reader mode shows the story
+  and the comments as a Thread of Messages (author, date, score, reply
+  tree). Checked under Xvfb on the Mailchimp story (20 of 21 comments; the
+  21st is an empty placeholder the site fills by script).
+- Next: more sheets (sites that need them), maybe `(title …)` /
+  `(byline …)` rules, a menu entry to open the user sites folder, and
+  `>` child selectors if a sheet needs them.
 
 ## Status (2026-11-20) — Odysee: newer videos play as HLS
 

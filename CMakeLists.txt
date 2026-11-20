@@ -279,6 +279,7 @@ add_executable(xanatoo
   src/inflate.cpp
   src/html_min.cpp
   src/html_page.cpp
+  src/site_hints.cpp
   src/html_footnotes.cpp
   src/download.cpp
   src/wikipedia.cpp
@@ -627,7 +628,7 @@ endif()
 # --data-dir $XANATOO_BUILD_DIR/share/xanatoo.
 set(XANATOO_BUILD_DATA_DIR ${CMAKE_CURRENT_BINARY_DIR}/share/xanatoo)
 file(MAKE_DIRECTORY ${XANATOO_BUILD_DATA_DIR})
-foreach(_entry styles examples FORMAT.md)
+foreach(_entry styles sites examples FORMAT.md)
   if(WIN32)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${_entry}
          DESTINATION ${XANATOO_BUILD_DATA_DIR})
@@ -686,6 +687,9 @@ install(FILES FORMAT.md DESTINATION share/xanatoo)
 install(DIRECTORY styles/
         DESTINATION share/xanatoo/styles
         FILES_MATCHING PATTERN "*.xss")
+install(DIRECTORY sites/
+        DESTINATION share/xanatoo/sites
+        FILES_MATCHING PATTERN "*.xsite")
 # Everything under examples/ (pages, pictures, collection/): a test checks
 # that the menu lists every page.
 install(DIRECTORY examples/ DESTINATION share/xanatoo/examples)
@@ -718,6 +722,7 @@ if(EMSCRIPTEN)
     --profiling-funcs
     "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/examples@/data/examples"
     "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/styles@/data/styles"
+    "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/sites@/data/sites"
     "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/data/fonts@/data/fonts"
     "SHELL:--preload-file ${XANATOO_ICON_DIR}@/data/icons"
     "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/FORMAT.md@/data/FORMAT.md"
@@ -806,6 +811,7 @@ add_executable(xanatoo_tests
   src/inflate.cpp
   src/html_min.cpp
   src/html_page.cpp
+  src/site_hints.cpp
   src/html_footnotes.cpp
   src/download.cpp
   src/wikipedia.cpp
@@ -876,6 +882,7 @@ target_compile_definitions(xanatoo_tests PRIVATE
   XANATOO_FONTCONFIG=$<BOOL:${XANATOO_FONTCONFIG}>
   XANATOO_SQLITE=$<BOOL:${XANATOO_SQLITE}>
   "XANATOO_STYLE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/styles\""
+  "XANATOO_SITES_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/sites\""
   "XANATOO_TEST_DATA=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\""
   "XANATOO_VERSION=\"${PROJECT_VERSION_FULL}\""
 )

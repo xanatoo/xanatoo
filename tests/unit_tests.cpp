@@ -12,6 +12,7 @@
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/html_page.hpp"
+#include "xanatoo/site_hints.hpp"
 #include "xanatoo/download.hpp"
 #include "xanatoo/table_grid.hpp"
 #include "xanatoo/native.hpp"
@@ -6652,6 +6653,186 @@ void test_html_link_footnotes() {
   EXPECT(serialize_markup(plain).find("[^") == std::string::npos);
 }
 
+// Site hints (site_hints.hpp, docs/SITEHINTS.md).
+void test_site_hints() {
+  using namespace xanatoo;
+  // Selectors: tag#id.class[attr=v], descendants by spaces.
+  {
+    std::string err;
+    HintSelector s = parse_hint_selector("ul#a.b.c [role=x] a[href]", &err);
+    EXPECT(err.empty());
+    EXPECT_EQ(s.chain.size(), 3u);
+    EXPECT_EQ(s.chain[0].tag, "ul");
+    EXPECT_EQ(s.chain[0].id, "a");
+    EXPECT_EQ(s.chain[0].classes.size(), 2u);
+    EXPECT_EQ(s.chain[1].attrs[0].second, "x");
+    EXPECT_EQ(s.chain[2].attrs[0].first, "href");
+    parse_hint_selector("div > p", &err);
+    EXPECT(!err.empty());
+    err.clear();
+    EXPECT(parse_hint_selector("a[x", &err).empty());
+  }
+  // The tolerant tree: implied </li> and </p>, a stray end tag ignored, an
+  // end tag closing what is open inside it, comments and scripts skipped.
+  {
+    const std::string h =
+        "<ul><li>a<li>b</ul><p>x<div>y</span></div>"
+        "<section><b>z</section><!-- <p> --><script>'<p>'</script>";
+    std::vector<HtmlElem> els = html_elements(h);
+    std::vector<std::string> tags;
+    for (const HtmlElem& e : els) tags.push_back(e.tag);
+    EXPECT_EQ(tags.size(), 8u);
+    if (tags.size() == 8u) {
+      EXPECT_EQ(els[2].tag, "li");
+      EXPECT_EQ(els[2].parent, 0);  // a sibling of the first li
+      EXPECT_EQ(els[4].tag, "div");
+      EXPECT_EQ(els[4].parent, -1);  // <div> closed the <p>
+      EXPECT_EQ(h.substr(els[4].open, els[4].close - els[4].open),
+                "y</span>");
+      EXPECT_EQ(els[6].parent, 5);  // <b> in <section>
+      EXPECT_EQ(els[6].end, els[5].close);
+      EXPECT_EQ(els[7].tag, "script");
+    }
+    HintSelector in_ul = parse_hint_selector("ul li");
+    EXPECT(hint_matches(in_ul, els, 2));
+    EXPECT(!hint_matches(in_ul, els, 4));
+  }
+  // Sheets: problems are reported, the rest loads; hosts match subdomains.
+  {
+    std::string err;
+    std::vector<SiteHints> sites = parse_site_hints(
+        "(site \"www.Example.org\" (main \"#m\") (bogus \"x\")"
+        "  (thread \"#t\") (chrome sidebar \".side\" \"aside.x\"))"
+        "(other)",
+        "t.xsite", &err);
+    EXPECT_EQ(sites.size(), 1u);
+    EXPECT(err.find("t.xsite: unknown rule (bogus") != std::string::npos);
+    EXPECT(err.find("thread without (message") != std::string::npos);
+    EXPECT(err.find("only (site") != std::string::npos);
+    if (!sites.empty()) {
+      EXPECT_EQ(sites[0].rules.size(), 2u);
+      EXPECT_EQ(sites[0].rules[1].role, "sidebar");
+      EXPECT_EQ(sites[0].rules[1].sels.size(), 2u);
+      EXPECT(site_hints_match_host(sites[0], "example.org"));
+      EXPECT(site_hints_match_host(sites[0], "news.EXAMPLE.org"));
+      EXPECT(!site_hints_match_host(sites[0], "badexample.org"));
+    }
+  }
+  auto in_chrome = [](const Document& d, NodeId n) {
+    for (NodeId p = d.get(n).parent; p != INVALID_NODE; p = d.get(p).parent)
+      if (d.get(p).kind == NodeKind::Chrome) return true;
+    return false;
+  };
+  auto node_with = [](const Document& d, std::string_view text) {
+    for (const Node& n : d.nodes)
+      for (const InlineSpan& s : n.spans)
+        if (s.text.find(text) != std::string::npos) return n.id;
+    return INVALID_NODE;
+  };
+  // drop / chrome / content on a page without landmarks.
+  {
+    std::vector<SiteHints> sites = parse_site_hints(
+        "(site \"example.org\" (drop \".ad\") (chrome sidebar \"#side\")"
+        " (content \"nav.tools\"))",
+        "t");
+    Document d = parse_html_page(
+        "<body><div class=ad><p>Buy</div><div id=side><p>Links</div>"
+        "<nav class=tools><p>Tools</nav><p>Text</body>",
+        "https://example.org/", true, &sites[0]);
+    EXPECT_EQ(node_with(d, "Buy"), INVALID_NODE);
+    NodeId links = node_with(d, "Links");
+    EXPECT(links != INVALID_NODE && in_chrome(d, links));
+    NodeId tools = node_with(d, "Tools");
+    EXPECT(tools != INVALID_NODE && !in_chrome(d, tools));
+  }
+  // sites/slashdot.xsite on a page built like a Slashdot story: two
+  // <article>s, the comments as nested lists, a hidden comment shell.
+  {
+    std::ifstream in(XANATOO_SITES_DIR "/slashdot.xsite", std::ios::binary);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string err;
+    std::vector<SiteHints> sites =
+        parse_site_hints(ss.str(), "slashdot.xsite", &err);
+    EXPECT(err.empty());
+    EXPECT_EQ(sites.size(), 1u);
+    if (sites.empty()) return;
+    auto comment = [](const std::string& id, const std::string& who,
+                      const std::string& text, const std::string& replies) {
+      return "<li id=\"tree_" + id + "\" class=\"comment full\">"
+             "<div class=\"commentTop\"><div class=\"title\"><h4>"
+             "<a href=\"//slashdot.org/comments.pl?cid=" + id + "\">Re: " +
+             id + "</a> <span class=\"score\">(<a href=\"#\">"
+             "<span class=opt>Score:</span>5</a>, Funny)</span></h4></div>"
+             "<div class=\"details\"><span class=\"by\">by <a "
+             "href=\"//slashdot.org/~" + who + "\">" + who + "</a></span>"
+             "<span class=\"otherdetails\"> on Friday November 20, 2026 "
+             "@06:16AM (<a href=\"//x/comments.pl?cid=" + id + "\">#" + id +
+             "</a>)</span></div></div><div class=\"commentBody\"><div><p>" +
+             text + "</p></div></div>"
+             "<ul id=\"commtree_" + id + "\">" + replies + "</ul></li>";
+    };
+    const std::string page =
+        "<html><body><nav><!-- x\" --><a href=/l>Login</a></nav>"
+        "<article class=\"fhitem fhitem-story\"><h2>Story title</h2>"
+        "<div class=body><p>Story text</p></div></article>"
+        "<div id=comments><p>Comments filter</p>"
+        "<ul id=\"commentlisting\">" +
+        comment("1", "alice", "First words",
+                comment("2", "bob", "Reply words", "") +
+                    "<li id=\"tree_3\" class=\"comment hidden\">"
+                    "<div class=cw></div><ul>" +
+                    comment("4", "carol", "Under hidden", "") +
+                    "</ul></li>") +
+        comment("5", "dave", "Second top", "") +
+        "</ul></div>"
+        "<div class=modal><article class=\"modal-content\"><p>Log in"
+        "</article></div><footer><p>Copyright</footer></body></html>";
+    Document d = parse_html_page(page, "https://tech.slashdot.org/story/1",
+                                 true, &sites[0]);
+    NodeId story = node_with(d, "Story text");
+    EXPECT(story != INVALID_NODE && !in_chrome(d, story));
+    NodeId filter = node_with(d, "Comments filter");
+    EXPECT(filter != INVALID_NODE && in_chrome(d, filter));
+    NodeId modal = node_with(d, "Log in");
+    EXPECT(modal != INVALID_NODE && in_chrome(d, modal));
+    NodeId thread = INVALID_NODE;
+    std::vector<NodeId> msgs;
+    for (const Node& n : d.nodes) {
+      if (n.kind == NodeKind::Thread && n.parent != INVALID_NODE) thread = n.id;
+      if (n.kind == NodeKind::Message && n.parent != INVALID_NODE)
+        msgs.push_back(n.id);
+    }
+    EXPECT(thread != INVALID_NODE && !in_chrome(d, thread));
+    if (thread != INVALID_NODE) {
+      NodeId t = thread_title(d, thread);
+      EXPECT(t != INVALID_NODE && d.get(t).spans.size() == 1 &&
+             d.get(t).spans[0].text == "Comments");
+    }
+    EXPECT_EQ(msgs.size(), 4u);  // the empty shell is left out
+    if (msgs.size() == 4u) {
+      const Node& a = d.get(msgs[0]);
+      EXPECT_EQ(a.label, "tree_1");
+      EXPECT_EQ(a.src, "alice");
+      EXPECT_EQ(a.alt, "");
+      EXPECT_EQ(a.summary, "Friday November 20, 2026 @06:16AM");
+      EXPECT_EQ(a.spans[0].href, "https://slashdot.org/~alice");
+      EXPECT_EQ(a.spans[1].href, "https://x/comments.pl?cid=1");
+      EXPECT_EQ(a.spans.back().text, "5, Funny");
+      EXPECT_EQ(a.spans.back().rel, "score");
+      EXPECT_EQ(d.get(msgs[1]).alt, "tree_1");
+      EXPECT_EQ(d.get(msgs[2]).src, "carol");
+      EXPECT_EQ(d.get(msgs[2]).alt, "tree_1");  // past the hidden shell
+      EXPECT_EQ(d.get(msgs[3]).alt, "");
+      NodeId words = node_with(d, "Under hidden");
+      EXPECT(words != INVALID_NODE && d.get(words).parent == msgs[2]);
+      // Replies are their own messages, not part of the parent's body.
+      for (NodeId c : a.children)
+        EXPECT(d.get(c).kind != NodeKind::List);
+    }
+  }
+}
+
 void test_html_page() {
   using namespace xanatoo;
   EXPECT(is_web_url("https://example.org"));
@@ -8312,6 +8493,7 @@ int main() {
   test_html_min();
   test_html_chrome_regions();
   test_html_page();
+  test_site_hints();
   test_html_link_footnotes();
   test_feed_urls();
   test_parse_feeds();

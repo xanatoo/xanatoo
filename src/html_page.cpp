@@ -10,6 +10,7 @@
 #include "xanatoo/media.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
+#include "xanatoo/site_hints.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/url_cache.hpp"
@@ -20,6 +21,7 @@
 #include "xanatoo/paths.hpp"
 #endif
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
@@ -168,6 +170,13 @@ std::string html_page_title(std::string_view html) {
 
 Document parse_html_page(std::string_view html, std::string_view page_url,
                          bool keep_chrome) {
+  std::shared_ptr<const SiteHints> hints;
+  if (is_remote(page_url)) hints = site_hints_for_host(url_host(page_url));
+  return parse_html_page(html, page_url, keep_chrome, hints.get());
+}
+
+Document parse_html_page(std::string_view html, std::string_view page_url,
+                         bool keep_chrome, const SiteHints* hints) {
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
 
@@ -202,21 +211,47 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
     }
   }
 
-  std::string_view body = main_content(html);
-  // Around <main> / the article: the page's header and footer.
+  // Site hints (site_hints.hpp): per-element rules, and the main content
+  // as one or more elements (whole, start tag included, so rules on them
+  // apply), the rest of the body as chrome.
+  PageHints page;
+  std::vector<std::string_view> parts;
+  if (hints) {
+    page = bind_site_hints(*hints, html);
+    attach_page_hints(opt, page);
+    for (int m : page.main)
+      parts.push_back(html.substr(page.els[m].lt,
+                                  page.els[m].end - page.els[m].lt));
+  }
+  const bool hinted_main = !parts.empty();
+  if (!hinted_main) parts.push_back(main_content(html));
+  const std::string_view all = body_content(html);
+  const auto inside_all = [&](std::string_view v) {
+    return v.data() >= all.data() &&
+           v.data() + v.size() <= all.data() + all.size();
+  };
+  // Around <main> / the article: the page's header and footer; between
+  // hinted parts, what lies between them.
   std::string_view before, after;
-  if (keep_chrome) {
-    std::string_view all = body_content(html);
-    if (body.data() >= all.data() &&
-        body.data() + body.size() <= all.data() + all.size()) {
-      before = all.substr(0, static_cast<size_t>(body.data() - all.data()));
-      after = all.substr(before.size() + body.size());
+  std::vector<std::string_view> gaps(parts.size());
+  if (keep_chrome && std::all_of(parts.begin(), parts.end(), inside_all)) {
+    before = all.substr(0, static_cast<size_t>(parts[0].data() - all.data()));
+    const char* tail = parts.back().data() + parts.back().size();
+    after = all.substr(static_cast<size_t>(tail - all.data()));
+    for (size_t k = 1; k < parts.size(); ++k) {
+      const char* from = parts[k - 1].data() + parts[k - 1].size();
+      if (parts[k].data() > from)
+        gaps[k] = std::string_view(
+            from, static_cast<size_t>(parts[k].data() - from));
     }
   }
   if (!before.empty()) html_append_chrome(doc, root, "page header", before, opt);
-  const bool has_h1 = scan_tags(body, [](const TagRef& t) {
-                        return t.name == "h1";
-                      }).has_value();
+  const bool has_h1 =
+      std::any_of(parts.begin(), parts.end(), [](std::string_view b) {
+        return scan_tags(b, [](const TagRef& t) {
+                 return t.name == "h1";
+               }).has_value();
+      });
   NodeId parent = root;
   doc.meta.title = html_page_title(html);
   if (std::string title = doc.meta.title; !title.empty() && !has_h1) {
@@ -230,8 +265,11 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
   // Inside <main> / the article an <aside> is part of the text (a box
   // beside it); around it, or on a page without either, a sidebar.
   HtmlOptions body_opt = opt;
-  body_opt.asides = body.data() != body_content(html).data();
-  html_append_blocks(doc, parent, body, body_opt);
+  body_opt.asides = hinted_main || parts[0].data() != all.data();
+  for (size_t k = 0; k < parts.size(); ++k) {
+    if (!gaps[k].empty()) html_append_chrome(doc, parent, "page", gaps[k], opt);
+    html_append_blocks(doc, parent, parts[k], body_opt);
+  }
   if (doc.nodes.size() == before_nodes) {
     NodeId p = doc.create(NodeKind::Paragraph, parent);
     auto& spans = doc.get(p).spans;
