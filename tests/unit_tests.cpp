@@ -7672,8 +7672,6 @@ static void test_font_face_index() {
   EXPECT(!missing.load(negative, 18, nullptr));
 }
 
-// Thread titles are a leading Header: `subject=` is read as one, saved as
-// `:::heading`, and the outline nests the messages' headings below it.
 static void test_long_ordered_list_markers() {
   using namespace xanatoo;
   // Markers past "99." must not overlap the item text, and every item of
@@ -7714,6 +7712,61 @@ static void test_long_ordered_list_markers() {
   EXPECT_EQ(checked, 120);
 }
 
+// Footnote keys past "99." hang the bodies further instead of running
+// into them; every note of the run keeps the same body column.
+static void test_long_footnote_keys() {
+  using namespace xanatoo;
+  std::string md = "Text";
+  for (int i = 1; i <= 120; ++i) md += "[^" + std::to_string(i) + "]";
+  md += "\n\n";
+  for (int i = 1; i <= 120; ++i)
+    md += "[^" + std::to_string(i) + "]: note\n\n";
+  Document doc = parse_document(md, "t.md");
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_long_footnote_keys (no font)\n");
+    return;
+  }
+  LayoutEngine engine(fonts);
+  LayoutResult result = engine.layout(doc, 800.f);
+  int checked = 0;
+  float text_col = -1.f;
+  for (const Node& n : doc.nodes) {
+    if (n.id == INVALID_NODE || n.kind != NodeKind::Footnote) continue;
+    const NodeId body = n.children.empty() ? INVALID_NODE : n.children[0];
+    float body_x = -1.f;
+    for (const PositionedGlyph& g : result.glyphs)
+      if (g.node == body) {
+        body_x = g.x;
+        break;
+      }
+    float key_end = -1.f;
+    // The key glyphs follow the body's glyphs in the result.
+    bool in_body = false;
+    for (const PositionedGlyph& g : result.glyphs) {
+      if (g.node == body) {
+        in_body = true;
+        continue;
+      }
+      if (in_body && g.node == INVALID_NODE &&
+          g.kind == InlineKind::FootnoteRef)
+        key_end = std::max(key_end, g.x + g.advance);
+      else if (in_body && key_end >= 0.f)
+        break;
+    }
+    EXPECT(body_x > 0.f);
+    EXPECT(key_end > 0.f);
+    EXPECT(body_x > key_end);
+    if (text_col < 0.f) text_col = body_x;
+    EXPECT(std::abs(body_x - text_col) < 2.f);
+    ++checked;
+  }
+  EXPECT_EQ(checked, 120);
+}
+
+// Thread titles are a leading Header: `subject=` is read as one, saved as
+// `:::heading`, and the outline nests the messages' headings below it.
 static void test_thread_titles() {
   using namespace xanatoo;
   Document d = parse_markup(
@@ -7868,6 +7921,7 @@ int main() {
   test_feed_urls();
   test_parse_feeds();
   test_long_ordered_list_markers();
+  test_long_footnote_keys();
   test_thread_titles();
   test_page_links();
   test_opensearch();

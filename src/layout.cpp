@@ -154,6 +154,18 @@ thread_local std::unordered_map<std::string, NodeId> g_msg_label_map;
 // List → widest ordered marker number among its items (rebuilt each layout),
 // so a list past "99." widens its marker slot for every item alike.
 thread_local std::unordered_map<NodeId, int> g_list_max_number;
+// Parent → widest footnote key ("97.") among its Footnote children, in
+// pixels of the footnote font (rebuilt each layout), so long note runs
+// hang their bodies past the widest key.
+thread_local std::unordered_map<NodeId, float> g_footnote_key_w;
+
+// The key a Footnote shows before its body: "12." for numbers, else as is.
+static std::string footnote_marker(const std::string& label) {
+  if (!label.empty() &&
+      label.find_first_not_of("0123456789") == std::string::npos)
+    return label + ".";
+  return label;
+}
 
 bool LayoutEngine::try_skip_block(NodeId id, float x, float& y, float max_width,
                                   LayoutResult& out) {
@@ -847,6 +859,7 @@ LayoutResult LayoutEngine::layout(
   result.boxes.reserve(doc.nodes.size());
   g_msg_label_map.clear();
   g_list_max_number.clear();
+  g_footnote_key_w.clear();
   for (const auto& n : doc.nodes) {
     if (n.kind == NodeKind::Message && !n.label.empty())
       g_msg_label_map.emplace(n.label, n.id);
@@ -1798,7 +1811,30 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       // Body blocks hang right of the key; the key sits on the first line.
       const float start_y = y;
       y += before(BlockRole::Footnote);
-      const float hang = indent(BlockRole::Footnote);
+      const FontRole mrole = st[BlockRole::Footnote].font;
+      Font& mf = fonts_.pick(mrole);
+      // Hang past the widest key of the run ("100." etc.) so keys never run
+      // into the body, but never more than a quarter of the column.
+      float hang = indent(BlockRole::Footnote);
+      {
+        float widest = static_cast<float>(mf.measure(footnote_marker(node.label)));
+        if (node.parent != INVALID_NODE) {
+          auto it = g_footnote_key_w.find(node.parent);
+          if (it == g_footnote_key_w.end()) {
+            float w = 0.f;
+            for (NodeId sib : doc.get(node.parent).children) {
+              const Node& sn = doc.get(sib);
+              if (sn.id == sib && sn.kind == NodeKind::Footnote)
+                w = std::max(w, static_cast<float>(
+                                    mf.measure(footnote_marker(sn.label))));
+            }
+            it = g_footnote_key_w.emplace(node.parent, w).first;
+          }
+          widest = std::max(widest, it->second);
+        }
+        const float gap = static_cast<float>(mf.glyph(' ').advance >> 6);
+        hang = std::max(hang, std::min(widest + gap, 0.25f * max_width));
+      }
       const size_t first = out.glyphs.size();
       const float body_y = y;
       // Paragraphs take the footnote role (font, colour, tighter spacing).
@@ -1816,20 +1852,14 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
                          max_width - hang, out);
         out.boxes.push_back({cid, x + hang, py, max_width - hang, y - py});
       }
-      const FontRole mrole = st[BlockRole::Footnote].font;
-      Font& mf = fonts_.pick(mrole);
       float baseline = body_y + static_cast<float>(mf.ascender());
       for (size_t gi = first; gi < out.glyphs.size(); ++gi) {
         if (out.glyphs[gi].node == INVALID_NODE) continue;
         baseline = out.glyphs[gi].y;
         break;
       }
-      std::string marker = node.label;
-      if (!marker.empty() &&
-          marker.find_first_not_of("0123456789") == std::string::npos)
-        marker += ".";
       std::vector<uint32_t> m_cps;
-      decode_utf8(marker, m_cps);
+      decode_utf8(footnote_marker(node.label), m_cps);
       float mx = x;
       for (uint32_t cp : m_cps) {
         const Glyph& g = mf.glyph(cp);
