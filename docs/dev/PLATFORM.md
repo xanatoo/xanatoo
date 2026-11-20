@@ -55,6 +55,9 @@ ports, the SDL3 transition and Android.
 - Video: `media_android.cpp` (AMediaExtractor + AMediaCodec, `-lmediandk`
   in `Android.mk`); the decoder's picture layout is logged
   ("video decoder output: …") for devices that show garbled colours.
+  `AMediaExtractor_setDataSource(url)` goes through Java: the worker
+  thread attaches via `SDL_AndroidGetJNIEnv()` first (Android 5 crashes
+  on a NULL JNIEnv instead of failing).
 - Test on the device: `adb logcat -s xanatoo` shows std::cout / std::cerr.
 
 ## Website and downloads

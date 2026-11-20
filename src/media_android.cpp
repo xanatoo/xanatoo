@@ -24,6 +24,7 @@
 #include <deque>
 
 #include "xanatoo/media.hpp"
+#include "xanatoo/sdl.hpp"
 
 namespace xanatoo {
 
@@ -76,6 +77,16 @@ public:
     if (!ex_) return fail("out of memory");
     media_status_t st;
     if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
+      // A path or address goes through Java (MediaHTTPService): the
+      // calling thread must be attached to the VM. The media worker is a
+      // plain std::thread; SDL's getter attaches it (and detaches it when
+      // the thread ends). Without that, Android 5's extractor dereferences
+      // the missing JNIEnv and crashes instead of returning an error.
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+      if (!SDL_GetAndroidJNIEnv()) return fail("cannot attach to the Java VM");
+#else
+      if (!SDL_AndroidGetJNIEnv()) return fail("cannot attach to the Java VM");
+#endif
       st = AMediaExtractor_setDataSource(ex_, url.c_str());
     } else {
       fd_ = ::open(url.c_str(), O_RDONLY | O_CLOEXEC);
