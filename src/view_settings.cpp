@@ -103,6 +103,8 @@ bool load_view_settings(ViewSettings& out) {
         out.footnote_overlay = (val == "1" || val == "true" || val == "yes");
       else if (key == "bookmark_marks")
         out.bookmark_marks = (val == "1" || val == "true" || val == "yes");
+      else if (key == "heading_ticks")
+        out.heading_ticks = (val == "1" || val == "true" || val == "yes");
       else if (key == "hover_preview")
         out.hover_preview = (val == "1" || val == "true" || val == "yes");
       else if (key == "history_rewinds")
@@ -165,6 +167,7 @@ bool save_view_settings(const ViewSettings& in) {
   out << "justify=" << (v.justify ? "1" : "0") << "\n";
   out << "footnotes=" << (v.footnote_overlay ? "1" : "0") << "\n";
   out << "bookmark_marks=" << (v.bookmark_marks ? "1" : "0") << "\n";
+  out << "heading_ticks=" << (v.heading_ticks ? "1" : "0") << "\n";
   out << "hover_preview=" << (v.hover_preview ? "1" : "0") << "\n";
   out << "history_rewinds=" << (v.history_rewinds ? "1" : "0") << "\n";
   out << "auto_links=" << (v.auto_links ? "1" : "0") << "\n";

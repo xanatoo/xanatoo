@@ -18,6 +18,9 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   margins, text width, line spacing, justification and style sheets. **View**
   holds reading modes, document/source representations and viewing overlays;
   edit-only **Format** remains reserved for document formatting actions.
+- **View → Headings on the scrollbar** toggles the scrollbar ticks for the
+  page's headings (`ViewSettings::heading_ticks`); bookmark, annotation and
+  search ticks stay.
 - Right-click a document **tab** to select it, move it into a document window
   or close it. Right-click a document **window title** to move that *specific*
   window back to a tab, even when another window has focus. Moving a view

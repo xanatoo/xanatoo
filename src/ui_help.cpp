@@ -304,6 +304,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "bottom of the view."},
     {"bookmarks in the page", "Bookmarks in the page",
      "Marks bookmarked passages with an icon in the page margin."},
+    {"headings on the scrollbar", "Headings on the scrollbar",
+     "Draws a tick on the scrollbar track for each heading of the page."},
     {"make web addresses clickable", "Clickable web addresses",
      "Turns plain-text addresses in pages into links."},
     {"show images of image addresses", "Images of image addresses",

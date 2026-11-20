@@ -195,6 +195,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.justify = app.view_settings.justify;
   ui_state.footnote_overlay = app.view_settings.footnote_overlay;
   ui_state.bookmark_marks = app.view_settings.bookmark_marks;
+  ui_state.heading_ticks = app.view_settings.heading_ticks;
   ui_state.hover_preview = app.view_settings.hover_preview;
   ui_state.history_rewinds = app.view_settings.history_rewinds;
   ui_state.auto_links = app.view_settings.auto_links;
@@ -2834,6 +2835,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
                             ? "Bookmarks marked in the page"
                             : "Bookmarks not marked in the page");
       break;
+    case C::ToggleHeadingTicks:
+      app.view_settings.heading_ticks = !app.view_settings.heading_ticks;
+      xanatoo::save_view_settings(app.view_settings);
+      flash_status(app, app.view_settings.heading_ticks
+                            ? "Headings marked on the scrollbar"
+                            : "Headings not marked on the scrollbar");
+      break;
     case C::ToggleAutoUpdates:
       app.view_settings.auto_updates = !app.view_settings.auto_updates;
       xanatoo::save_view_settings(app.view_settings);
@@ -4201,12 +4209,13 @@ static void draw_pane_scrollbar(App& app, int i) {
       xanatoo::sdl::fill_rect(app.sdl, &tick);
     };
     // Chapter / section breaks, from this pane's own document and layout.
-    for (const SectionMark& m : section_marks(app, pane).sections) {
-      if (m.level <= 1)
-        mark_at(m.y, 25, 90, 170);
-      else
-        mark_at(m.y, 140, 160, 190);
-    }
+    if (app.view_settings.heading_ticks)
+      for (const SectionMark& m : section_marks(app, pane).sections) {
+        if (m.level <= 1)
+          mark_at(m.y, 25, 90, 170);
+        else
+          mark_at(m.y, 140, 160, 190);
+      }
     // Bookmarks inside the page: from the layout where it holds the text,
     // else from the estimated position of the block.
     if (bookmark_marks_fresh(pane) && !pane.bookmark_marks.items.empty()) {

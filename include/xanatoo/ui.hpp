@@ -275,6 +275,7 @@ enum class UiCommand {
   ToggleJustify,            // view: justify wrapped lines
   ToggleFootnoteOverlay,    // view: notes of on-screen footnote marks
   ToggleBookmarkMarks,      // view: wash over bookmarks inside the page
+  ToggleHeadingTicks,       // view: heading ticks on the scrollbar
   ToggleAutoUpdates,         // Android update checks
   ToggleAutoLinks,          // view: plain-text http(s):// URLs become links
   ToggleAutoImages,         // view: image URLs in text show the picture
@@ -346,6 +347,7 @@ struct UiState {
   bool justify = false;
   bool footnote_overlay = true;
   bool bookmark_marks = true;
+  bool heading_ticks = true;
   bool annotations_panel_open = false;
   int annotation_x = 0, annotation_y = 0, annotation_w = 0, annotation_h = 0;
   bool revisions_panel_open = false;

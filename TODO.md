@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Heading ticks on the scrollbar can be turned off
+
+- View → Headings on the scrollbar (and Preferences → Reading) toggles the
+  per-heading ticks on the pane scrollbar (`ViewSettings::heading_ticks`,
+  `heading_ticks=` in view.conf, on by default). Long pages paint the whole
+  track blue; open: a sparser presentation (top levels only, merge ticks
+  that fall on the same pixel, or a density cap) before turning it back on
+  by default.
+
 ## Status (2026-11-20) — Tables: content-fit width, alignment, head / foot
 
 - Tables in the flow are as wide as their content (simplified CSS auto

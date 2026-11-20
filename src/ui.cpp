@@ -2770,6 +2770,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Bookmarks in the page", nullptr,
                           state.bookmark_marks))
         cmd = UiCommand::ToggleBookmarkMarks;
+      if (ImGui::MenuItem("Headings on the scrollbar", nullptr,
+                          state.heading_ticks))
+        cmd = UiCommand::ToggleHeadingTicks;
       if (ImGui::MenuItem("Make web addresses clickable", nullptr,
                           state.auto_links))
         cmd = UiCommand::ToggleAutoLinks;
@@ -3623,6 +3626,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       toggle("Mark bookmarks in the page", state.bookmark_marks,
              UiCommand::ToggleBookmarkMarks,
              "Wash over bookmarked passages, a ribbon at reading positions");
+      toggle("Headings on the scrollbar", state.heading_ticks,
+             UiCommand::ToggleHeadingTicks,
+             "A tick on the scrollbar track for each heading of the page");
       toggle("Justify text", state.justify, UiCommand::ToggleJustify,
              "Wrapped body lines fill the column");
 #ifdef __ANDROID__

@@ -28,6 +28,8 @@ struct ViewSettings {
   bool footnote_overlay = true;
   // Wash over the bookmarked passages of the page shown.
   bool bookmark_marks = true;
+  // Ticks for the headings of the page on the scrollbar track.
+  bool heading_ticks = true;
   // Split view: hovering a link in the left pane previews it on the right.
   // Off by default: the right pane changing without a click confuses.
   bool hover_preview = false;
