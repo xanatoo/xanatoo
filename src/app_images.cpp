@@ -130,11 +130,21 @@ bool download_image(const std::string& url, bool& page) {
     std::string final_url;
     auto r = xanatoo::https_get_follow_pooled(
         url, xanatoo::user_agent("image fetch"), &err, &final_url);
+    auto cache_entry = [&](const std::string& u, const std::string& fu,
+                           const xanatoo::HttpResult& res) {
+      xanatoo::UrlCacheEntry e;
+      e.url = u;
+      e.final_url = fu;
+      e.status = res.status;
+      e.content_type = res.content_type;
+      return e;
+    };
     if (r && r->status == 200 && !xanatoo::content_type_is_image(r->content_type) &&
         !xanatoo::looks_like_image(r->body)) {
       // Kept as what it is: the page, which navigation then fetches as one.
       const std::string_view bytes = r->body;
-      xanatoo::url_cache_put({url, final_url, r->status, r->content_type},
+      const xanatoo::UrlCacheEntry entry = cache_entry(url, final_url, *r);
+      xanatoo::url_cache_put(entry,
                              r->body.size() < 12 * 1024 * 1024 ? &bytes
                                                                : nullptr);
       std::cerr << "image: " << url << ": not an image ("
@@ -157,7 +167,8 @@ bool download_image(const std::string& url, bool& page) {
     }
     // The URL cache writes the bytes where ImageCache reads them.
     const std::string_view bytes = r->body;
-    if (!xanatoo::url_cache_put({url, final_url, r->status, r->content_type},
+    const xanatoo::UrlCacheEntry entry = cache_entry(url, final_url, *r);
+    if (!xanatoo::url_cache_put(entry,
                                 &bytes))
       return false;
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO

@@ -4092,6 +4092,17 @@ void test_gallery_linked_inline_thumb() {
 
 // The URL cache remembers what an address served, across runs: a name
 // like "File:X.jpg" may be a web page, only the Content-Type tells.
+// A URL cache entry for url_cache_put (no validators).
+static xanatoo::UrlCacheEntry cache_entry(std::string url, std::string final_url,
+                                         int status, std::string type) {
+  xanatoo::UrlCacheEntry e;
+  e.url = std::move(url);
+  e.final_url = std::move(final_url);
+  e.status = status;
+  e.content_type = std::move(type);
+  return e;
+}
+
 void test_url_cache() {
   using namespace xanatoo;
   namespace fs = std::filesystem;
@@ -4136,17 +4147,17 @@ void test_url_cache() {
   const std::string from = "https://x.org/a.jpg";
   const std::string to = "https://cdn.x.org/a.jpg";
   const std::string_view jpeg = "\xff\xd8\xff\xe0rest";
-  EXPECT(url_cache_put({from, to, 200, "image/jpeg"}, &jpeg));
+  EXPECT(url_cache_put(cache_entry(from, to, 200, "image/jpeg"), &jpeg));
   EXPECT(fs::file_size(url_cache_body_path(to)) == jpeg.size());
 #if XANATOO_SQLITE
   EXPECT(url_cache_kind(from) == UrlKind::Image);
   EXPECT(url_cache_kind(to) == UrlKind::Image);
   EXPECT_EQ(url_cache_find(from)->final_url, to);
   // An error answer says nothing about what the address serves.
-  EXPECT(url_cache_put({"https://x.org/gone.png", {}, 404, "text/html"}));
+  EXPECT(url_cache_put(cache_entry("https://x.org/gone.png", {}, 404, "text/html")));
   EXPECT(url_cache_kind("https://x.org/gone.png") == UrlKind::Unknown);
   // A newer answer replaces the old one.
-  EXPECT(url_cache_put({page, {}, 200, "image/jpeg"}));
+  EXPECT(url_cache_put(cache_entry(page, {}, 200, "image/jpeg")));
   EXPECT(url_cache_kind(page) == UrlKind::Image);
   url_cache_prune_rows(-60 * 1000);  // older than a minute from now: all
   EXPECT(url_cache_kind(page) == UrlKind::Unknown);

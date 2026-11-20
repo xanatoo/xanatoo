@@ -705,7 +705,10 @@ std::vector<std::string> style_dirs() {
 
 std::vector<StyleEntry> list_styles() {
   std::map<std::string, StyleEntry> by_name;
-  by_name["default"] = {"default", "Default", ""};
+  StyleEntry builtin;
+  builtin.name = "default";
+  builtin.title = "Default";
+  by_name["default"] = builtin;
   for (const std::string& dir : style_dirs()) {
     std::error_code ec;
     for (const auto& de : fs::directory_iterator(dir, ec)) {

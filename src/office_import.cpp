@@ -538,8 +538,6 @@ std::string docx_body_html(std::string_view document_xml,
 
 // ---------- ODT (OpenDocument text) ---------------------------------------
 
-std::string odt_inline(std::string_view xml);
-
 std::string odt_children_html(std::string_view xml) {
   std::string html;
   size_t i = 0;

@@ -188,8 +188,10 @@ xanatoo::Document build_source_view(const DocBuffer& b,
         b.doc, kind, raw ? std::optional<std::string_view>(*raw)
                          : std::nullopt));
   } catch (const std::invalid_argument& e) {
-    return xanatoo::source_view_document(
-        {"Could not produce source view:\n" + std::string(e.what()) + "\n", "text"});
+    xanatoo::SourceViewText failed;
+    failed.text = "Could not produce source view:\n" + std::string(e.what()) + "\n";
+    failed.language = "text";
+    return xanatoo::source_view_document(failed);
   }
 }
 
