@@ -4865,10 +4865,14 @@ void draw_context_window(App& app) {
     app.context_win.w = std::max(app.context_win.w, 280);
     app.context_win.h = std::max(app.context_win.h, 200);
   }
-  // Title reflects what is being previewed.
+  // Title reflects what is being previewed, but always keeps the "Context"
+  // prefix so it is not mistaken for another panel ("Context: Page" vs the
+  // "Page Navigation" panel).
   std::string title = "Context";
-  if (!app.context_kind.empty() && app.context_kind != "Context")
-    title = app.context_kind;
+  if (!app.context_kind.empty() && app.context_kind != "Context") {
+    title += ": ";
+    title += app.context_kind;
+  }
   if (!app.context_title.empty()) {
     title += " — ";
     title += app.context_title;  // draw_floating_frame fits it (fit_text)
