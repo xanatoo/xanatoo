@@ -1921,6 +1921,47 @@ void test_markup_blockquote_code_table() {
   (void)table;
 }
 
+// List items take continuation lines (indented or lazy); inline markup
+// may span the break.
+void test_markup_list_continuation() {
+  using namespace xanatoo;
+  Document doc = parse_document(
+      "- a **b\n"
+      "  c** d\n"
+      "- e\n"
+      "lazy\n"
+      "  - nested\n"
+      "    more\n",
+      "t.md");
+  std::vector<NodeId> items;
+  std::vector<NodeId> stack{doc.root};
+  while (!stack.empty()) {
+    NodeId id = stack.back();
+    stack.pop_back();
+    const Node& n = doc.get(id);
+    if (n.kind == NodeKind::ListItem) items.push_back(id);
+    for (auto it = n.children.rbegin(); it != n.children.rend(); ++it)
+      stack.push_back(*it);
+  }
+  EXPECT_EQ(items.size(), 3u);
+  if (items.size() == 3) {
+    std::string t0;
+    bool bold = false;
+    for (const InlineSpan& sp : doc.get(items[0]).spans) {
+      t0 += sp.text;
+      if (sp.kind == InlineKind::Strong && sp.text == "b c") bold = true;
+    }
+    EXPECT_EQ(t0, "a b c d");
+    EXPECT(bold);
+    std::string t1;
+    for (const InlineSpan& sp : doc.get(items[1]).spans) t1 += sp.text;
+    EXPECT_EQ(t1, "e lazy");
+    std::string t2;
+    for (const InlineSpan& sp : doc.get(items[2]).spans) t2 += sp.text;
+    EXPECT_EQ(t2, "nested more");
+  }
+}
+
 void test_markup_columns() {
   using namespace xanatoo;
   Document doc = parse_document(
@@ -7640,6 +7681,7 @@ int main() {
   test_sexpr_image_link();
   test_markup_stretch_and_link();
   test_markup_blockquote_code_table();
+  test_markup_list_continuation();
   test_markup_columns();
   test_gemtext_structures();
   test_serialize_roundtrip_md();

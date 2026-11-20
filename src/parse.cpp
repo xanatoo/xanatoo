@@ -1395,8 +1395,28 @@ Document parse_markup(std::string_view source) {
                 body.remove_prefix(1);
             }
           }
-          parse_inlines(doc.get(item), body);
-          ++i;
+          // Continuation lines (indented or lazy): no list marker and no
+          // block start; joined with a space so inline markup may span them.
+          std::string joined;
+          size_t next = i + 1;
+          while (next < lines.size() && !lines[next].blank) {
+            std::string_view ct = lines[next].text;
+            size_t cl = 0;
+            while (cl < ct.size() && (ct[cl] == ' ' || ct[cl] == '\t')) ++cl;
+            std::string_view ctrim = ct.substr(cl);
+            int dummy = 0;
+            if (list_marker_len(ctrim, &dummy) > 0 || starts_with(ctrim, "#") ||
+                starts_with(ctrim, ">") || starts_with(ctrim, "```") ||
+                starts_with(ctrim, "~~~") || starts_with(ctrim, "|") ||
+                starts_with(ctrim, ":::") || starts_with(ctrim, "<!--"))
+              break;
+            if (joined.empty()) joined.assign(body);
+            joined += ' ';
+            joined += ctrim;
+            ++next;
+          }
+          parse_inlines(doc.get(item), joined.empty() ? body : std::string_view(joined));
+          i = next;
         }
         // Ordered item numbers were set while scanning; no second pass.
         continue;

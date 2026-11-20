@@ -49,9 +49,9 @@
   figures.
 - Known: no caption centring (no text-align style property yet; the
   caption role also styles non-figure captions such as HN metadata).
-- Seen while testing (not fixed): Markdown list items do not join lazy
-  continuation lines (examples/welcome.md "the **Native / view**" splits
-  into a second paragraph, bold lost).
+- Markdown list items now take their continuation lines (indented or
+  lazy), so inline markup can span the break (examples/welcome.md
+  "the **Native view** button"); `test_markup_list_continuation`.
 
 ## Status (2026-11-19) — LessWrong client (`lesswrong:`)
 
