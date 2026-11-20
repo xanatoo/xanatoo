@@ -366,6 +366,9 @@ void write_node(const Document& doc, NodeId id, std::string& out,
   if (!node.expanded) attr(out, "expanded", "false");
   if (!node.summary.empty()) attr(out, "summary", node.summary);
   if (!node.float_side.empty()) attr(out, "float", node.float_side);
+  if (!node.align.empty()) attr(out, "align", node.align);
+  if (!node.valign.empty()) attr(out, "valign", node.valign);
+  if (!node.cols.empty()) attr(out, "cols", node.cols);
   if (node.display_scale != 1.f) attr(out, "scale", float_string(node.display_scale));
   if (!node.label.empty()) attr(out, "label", node.label);
   if (!node.tags.empty()) attr(out, "tags", node.tags);
@@ -630,6 +633,9 @@ private:
     } else if (key == "expanded") node.expanded = boolean(value);
     else if (key == "summary") node.summary = value;
     else if (key == "float") node.float_side = value;
+    else if (key == "align") node.align = value;
+    else if (key == "valign") node.valign = value;
+    else if (key == "cols") node.cols = value;
     else if (key == "scale") node.display_scale = scale(value);
     else if (key == "label") node.label = value;
     else if (key == "tags") node.tags = value;

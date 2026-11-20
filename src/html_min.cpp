@@ -8,6 +8,7 @@
 
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/json_min.hpp"
+#include "xanatoo/table_grid.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
@@ -132,6 +133,9 @@ constexpr int kIconEdge = 48;
 template <class F>
 void for_each_class(std::string_view attrs, F&& fn);
 std::string table_float_side(std::string_view attrs);
+std::string css_decl(std::string_view attrs, std::string_view key);
+std::string html_cell_align(std::string_view attrs);
+std::string html_cell_valign(std::string_view attrs);
 std::string figure_float_side(std::string_view attrs);
 
 class Builder {
@@ -180,6 +184,7 @@ class Builder {
     std::string tag;
     NodeId table;
     size_t first_row;
+    std::string align, valign;  // passed down to the group's rows
   };
 
   void open_tag(const std::string& tag, std::string_view attrs);
@@ -432,6 +437,8 @@ void Builder::pop() {
     finish_row_group(f.node);
     resolve_rowspans(f.node, resolved_table_rows_[f.node]);
     resolved_table_rows_.erase(f.node);
+    std::string& cols = doc_.get(f.node).cols;  // <col>s without alignment
+    if (cols.find_first_not_of('l') == std::string::npos) cols.clear();
   }
   if (f.kind == FrameKind::Leaf) finalize(f.node);
   strong_ -= f.strong_add;
@@ -515,7 +522,8 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
       // before the next thead/tbody/tfoot starts.
       const size_t count = resolve_rowspans(table, resolved_table_rows_[table]);
       resolved_table_rows_[table] = count;
-      row_groups_.push_back({tag, table, count});
+      row_groups_.push_back({tag, table, count, html_cell_align(attrs),
+                             html_cell_valign(attrs)});
     }
     return;
   }
@@ -728,9 +736,36 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
       close_para();
       f.kind = FrameKind::Container;
       f.node = doc_.create(NodeKind::Table, container());
-      doc_.get(f.node).float_side = table_float_side(attrs);
+      Node& t = doc_.get(f.node);
+      t.float_side = table_float_side(attrs);
+      // width="100%" / style width: a percentage stretches the table; fixed
+      // lengths are ignored (the table fits its content).
+      std::string width = css_decl(attrs, "width");
+      if (width.empty()) width = ascii_lower(html_attr(attrs, "width"));
+      t.width = table_width_percent(width);
+      const std::string align = ascii_lower(html_attr(attrs, "align"));
+      if (t.float_side.empty() &&
+          (align == "center" || (css_decl(attrs, "margin-left") == "auto" &&
+                                 css_decl(attrs, "margin-right") == "auto") ||
+           css_decl(attrs, "margin").find("auto") != std::string::npos))
+        t.align = "center";
+      t.valign = html_cell_valign(attrs);
     }
     push(std::move(f));
+    return;
+  }
+  if (tag == "col" && !in_leaf) {
+    // <col span=2 align=right>: column letters for the table's `cols`.
+    const int ti = top_index("table");
+    if (ti >= 0 && frames_[static_cast<size_t>(ti)].kind == FrameKind::Container &&
+        !in_layout_table()) {
+      Node& t = doc_.get(frames_[static_cast<size_t>(ti)].node);
+      const std::string a = html_cell_align(attrs);
+      long n = std::strtol(html_attr(attrs, "span").c_str(), nullptr, 10);
+      n = std::clamp(n, 1L, 1000L);
+      if (t.cols.size() + static_cast<size_t>(n) <= 1000)
+        t.cols.append(static_cast<size_t>(n), a.empty() ? 'l' : a[0]);
+    }
     return;
   }
   if ((tag == "tr" || tag == "td" || tag == "th") && in_layout_table()) {
@@ -759,7 +794,17 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
     f.tag = tag;
     if (tag == "tr") {
       f.kind = FrameKind::Container;
-      f.node = doc_.create(NodeKind::TableRow, frames_.back().node);
+      const NodeId table = frames_.back().node;
+      f.node = doc_.create(NodeKind::TableRow, table);
+      Node& row = doc_.get(f.node);
+      row.align = html_cell_align(attrs);
+      row.valign = html_cell_valign(attrs);
+      if (!row_groups_.empty() && row_groups_.back().table == table) {
+        const RowGroup& g = row_groups_.back();
+        row.level = g.tag == "thead" ? 1 : g.tag == "tfoot" ? 2 : 0;
+        if (row.align.empty()) row.align = g.align;
+        if (row.valign.empty()) row.valign = g.valign;
+      }
     } else {
       f.kind = FrameKind::Leaf;
       f.node = doc_.create(NodeKind::TableCell, frames_.back().node);
@@ -778,6 +823,8 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
       };
       doc_.get(f.node).col_span = span("colspan", 1000, false);
       doc_.get(f.node).row_span = span("rowspan", 65534, true);
+      doc_.get(f.node).align = html_cell_align(attrs);
+      doc_.get(f.node).valign = html_cell_valign(attrs);
     }
     push(std::move(f));
     return;
@@ -933,6 +980,45 @@ std::string figure_float_side(std::string_view attrs) {
       type.find("mw:file/frame") != std::string::npos)
     return "right";
   return {};
+}
+
+// One declaration of a style attribute, lower-case and trimmed ("" if none).
+std::string css_decl(std::string_view attrs, std::string_view want) {
+  const std::string style = ascii_lower(html_attr(attrs, "style"));
+  std::string found;
+  size_t pos = 0;
+  while (pos < style.size()) {
+    size_t end = style.find(';', pos);
+    if (end == std::string::npos) end = style.size();
+    std::string_view decl(style.data() + pos, end - pos);
+    size_t colon = decl.find(':');
+    if (colon != std::string_view::npos) {
+      std::string_view key = decl.substr(0, colon), value = decl.substr(colon + 1);
+      trim_ascii(key);
+      trim_ascii(value);
+      if (ends_with(value, "!important")) {
+        value.remove_suffix(10);
+        trim_ascii(value);
+      }
+      if (key == want) found = std::string(value);  // the last one wins
+    }
+    pos = end + 1;
+  }
+  return found;
+}
+
+// Cell / row alignment: CSS text-align, then the HTML 4 align attribute
+// (align=char is decimal alignment); canonical words (table_grid.hpp).
+std::string html_cell_align(std::string_view attrs) {
+  std::string a = canonical_align(css_decl(attrs, "text-align"));
+  if (a.empty()) a = canonical_align(html_attr(attrs, "align"));
+  return a;
+}
+
+std::string html_cell_valign(std::string_view attrs) {
+  std::string v = canonical_valign(css_decl(attrs, "vertical-align"));
+  if (v.empty()) v = canonical_valign(html_attr(attrs, "valign"));
+  return v;
 }
 
 // HTML float hints and MediaWiki's semantic infobox class. Explicit CSS or

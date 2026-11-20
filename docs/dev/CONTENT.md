@@ -187,6 +187,21 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `:::cell` / `:::th` with `colspan=` / `rowspan=`; S-expressions use
   `:colspan` / `:rowspan`. Enter inside a cell extends spans crossing the
   inserted row. Details: `docs/TABLES.md`.
+- Layout: `plan_table` measures every cell (`measure_cell`: max-content at
+  the available width, min-content at 1px, text-only cells trimmed to their
+  ink) into a `TablePlan`; `distribute_table_widths` picks column widths
+  (content-fit unless `Node::width` is a percent); `place_table` positions
+  cells with their resolved `CellAlign` / `CellVAlign`
+  (`table_cell_align` / `table_cell_valign`: cell → row → table `cols` /
+  `valign`). Decimal columns keep per-column widths before / after the
+  point (`TablePlan::dec_b`). Head rows (`TableRow::level` 1) and foot rows
+  (2) get a 2× rule (`table_head_rows`).
+- Column-drag weights live in the weight row's cells' `display_scale`;
+  `seed_table_weights` turns the shown widths into weights at drag start.
+  Idle table column handles are not drawn (the table rules show them).
+- HTML (`html_min.cpp`): `html_cell_align` / `html_cell_valign` read CSS
+  first (`css_decl`, last declaration wins), then attributes; row groups
+  pass theirs on to their rows; `<col>` fills `cols`.
 
 ## Inline images and asides
 

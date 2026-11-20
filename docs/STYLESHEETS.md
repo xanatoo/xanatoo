@@ -225,7 +225,7 @@ Their properties:
 | `width` | preferred width of a side box (`aside`) or floating `table` |
 | `side` | `left`, `right` or `none`: which side of the page a side box goes to |
 | `placement` | `margin`, `float` or `flow`: where a side box goes (below) |
-| `align` | `start` or `center`: line alignment; on `figure` it places the image and the caption lines in the figure's column (default `center`) |
+| `align` | `start` or `center`: line alignment; on `figure` it places the image and the caption lines in the figure's column (default `center`); on `table` it places a table narrower than the column (`start`, `center`, `end`) |
 
 Side boxes are `aside` (text boxes of the document: `:::aside`, HTML
 `<aside>` inside the article). Navigation and side bars of web pages are not

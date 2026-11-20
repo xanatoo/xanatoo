@@ -379,7 +379,8 @@ class SheetReader {
         const std::string a = sexpr_text(value(v));
         if (a == "center") b.align = TextAlign::Center;
         else if (a == "start") b.align = TextAlign::Start;
-        else warn("align is start or center");
+        else if (a == "end") b.align = TextAlign::End;
+        else warn("align is start, center or end");
       } else if (prop == "font") {
         const std::string s = sexpr_text(value(v));
         auto it = std::find_if(std::begin(kFontRoles), std::end(kFontRoles),

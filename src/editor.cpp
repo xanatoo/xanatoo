@@ -822,6 +822,9 @@ std::optional<NodeId> duplicate_block(Document& doc, NodeId block) {
   dst.expanded = src.expanded;
   dst.summary = src.summary;
   dst.float_side = src.float_side;
+  dst.align = src.align;
+  dst.valign = src.valign;
+  dst.cols = src.cols;
   dst.display_scale = src.display_scale;
   dst.spans = src.spans;  // copy spans
   dst.parent = src.parent;
@@ -1693,6 +1696,9 @@ static void copy_node_deep(Document& doc, NodeId src_id, NodeId new_parent,
   dst.expanded = src.expanded;
   dst.summary = src.summary;
   dst.float_side = src.float_side;
+  dst.align = src.align;
+  dst.valign = src.valign;
+  dst.cols = src.cols;
   dst.display_scale = src.display_scale;
   dst.spans = src.spans;
   for (NodeId cid : src.children) {

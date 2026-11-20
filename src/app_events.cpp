@@ -529,6 +529,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         app.col_gap_right = gap.right;
         app.col_gap_start_x = mx;
         app.col_gap_px = std::max(1.f, gap.left_w + gap.right_w);
+        seed_table_weights(doc_of(app, p), p.layout, gap.columns);
         float lw = doc_of(app, p).get(gap.left).display_scale;
         float rw = doc_of(app, p).get(gap.right).display_scale;
         if (lw < 0.1f) lw = 1.f;

@@ -5,6 +5,7 @@
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/org.hpp"
 #include "xanatoo/sexpr.hpp"
+#include "xanatoo/table_grid.hpp"
 #include "xanatoo/util.hpp"
 #include <cctype>
 #include <charconv>
@@ -144,7 +145,11 @@ size_t footnote_def_close(std::string_view trimmed) {
 std::string fence_attr(std::string_view line, std::string_view key) {
   std::string pat(key);
   pat += '=';
+  // A whole key: "align=" is not the end of "valign=".
   auto pos = line.find(pat);
+  while (pos != std::string_view::npos && pos > 0 &&
+         !std::isspace(static_cast<unsigned char>(line[pos - 1])))
+    pos = line.find(pat, pos + 1);
   if (pos == std::string_view::npos) return {};
   pos += pat.size();
   if (pos >= line.size()) return {};
@@ -1094,8 +1099,14 @@ Document parse_markup(std::string_view source) {
     }
     if (starts_with(trimmed, ":::table")) {
       NodeId n = doc.create(NodeKind::Table, current_parent());
+      Node& t = doc.get(n);
       std::string side = fence_attr(trimmed, "float");
-      if (side == "left" || side == "right") doc.get(n).float_side = side;
+      if (side == "left" || side == "right") t.float_side = side;
+      t.align = canonical_align(fence_attr(trimmed, "align"));
+      if (t.align == "decimal") t.align.clear();
+      t.valign = canonical_valign(fence_attr(trimmed, "valign"));
+      t.cols = canonical_cols(fence_attr(trimmed, "cols"));
+      t.width = table_width_percent(fence_attr(trimmed, "width"));
       push_fence(n);
       ++i;
       continue;
@@ -1106,6 +1117,10 @@ Document parse_markup(std::string_view source) {
       if (doc.get(parent).kind != NodeKind::Table)
         parent = doc.create(NodeKind::Table, parent);
       NodeId n = doc.create(NodeKind::TableRow, parent);
+      const std::string part = fence_attr(trimmed, "part");
+      doc.get(n).level = part == "head" ? 1 : part == "foot" ? 2 : 0;
+      doc.get(n).align = canonical_align(fence_attr(trimmed, "align"));
+      doc.get(n).valign = canonical_valign(fence_attr(trimmed, "valign"));
       push_fence(n);
       ++i;
       continue;
@@ -1130,6 +1145,8 @@ Document parse_markup(std::string_view source) {
       };
       doc.get(n).col_span = cell_span("colspan", 1000);
       doc.get(n).row_span = cell_span("rowspan", 65534);
+      doc.get(n).align = canonical_align(fence_attr(trimmed, "align"));
+      doc.get(n).valign = canonical_valign(fence_attr(trimmed, "valign"));
       // Optional weight=N on the fence line
       auto wpos = trimmed.find("weight=");
       if (wpos != std::string_view::npos) {
@@ -1496,6 +1513,17 @@ Document parse_markup(std::string_view source) {
         std::string_view ltrim = lt.substr(llead);
         if (ltrim.empty() || ltrim[0] != '|') break;
         if (is_sep_row(ltrim)) {
+          // GFM alignment (:--- / :---: / ---:) unless the fence set cols.
+          if (doc.get(table).cols.empty()) {
+            std::string cols;
+            for (const std::string& c : split_cells(ltrim)) {
+              const bool l = !c.empty() && c.front() == ':';
+              const bool r = !c.empty() && c.back() == ':';
+              cols += l && r ? 'c' : r ? 'r' : 'l';
+            }
+            if (cols.find_first_not_of('l') != std::string::npos)
+              doc.get(table).cols = cols;
+          }
           ++i;
           continue;
         }
@@ -2140,23 +2168,39 @@ void serialize_node(const Document& doc, NodeId id, std::string& out,
 case NodeKind::Table: {
       // Prefer GFM pipes when every cell is inline-only; otherwise use
       // :::row / :::cell so nested blocks round-trip.
+      // Alignment, spans and head / foot rows other than a leading row of
+      // header cells need them too.
       bool needs_blocks = false;
+      bool header_row = false;  // a pipe header row (and its --- line)
+      size_t row_index = 0;
       for (NodeId row_id : node.children) {
         const Node& row = doc.get(row_id);
         if (row.kind != NodeKind::TableRow) continue;
+        bool all_header = true, any_header = false;
         for (NodeId cell_id : row.children) {
           const Node& cell = doc.get(cell_id);
-          if (cell.kind == NodeKind::TableCell &&
-              (!cell.children.empty() || cell.col_span > 1 || cell.row_span > 1)) {
+          if (cell.kind != NodeKind::TableCell) continue;
+          if (!cell.children.empty() || cell.col_span > 1 || cell.row_span > 1 ||
+              !cell.align.empty() || !cell.valign.empty())
             needs_blocks = true;
-            break;
-          }
+          all_header &= cell.level > 0;
+          any_header |= cell.level > 0;
         }
-        if (needs_blocks) break;
+        if (!row.align.empty() || !row.valign.empty() ||
+            (row.level != 0 && !(row.level == 1 && row_index == 0 && all_header)))
+          needs_blocks = true;
+        if (any_header) header_row = true;
+        ++row_index;
       }
       out += pad;
       out += ":::table";
       if (!node.float_side.empty()) out += " float=" + node.float_side;
+      if (!node.align.empty()) out += " align=" + node.align;
+      if (!node.valign.empty()) out += " valign=" + node.valign;
+      if (!node.cols.empty() &&
+          (needs_blocks || !header_row || node.cols.find('d') != std::string::npos))
+        out += " cols=" + node.cols;
+      if (node.width > 0) out += " width=" + std::to_string(node.width) + "%";
       out += "\n";
       if (needs_blocks) {
         for (NodeId row_id : node.children) {
@@ -2166,7 +2210,12 @@ case NodeKind::Table: {
             continue;
           }
           out += pad;
-          out += ":::row\n";
+          out += ":::row";
+          if (row.level == 1) out += " part=head";
+          else if (row.level == 2) out += " part=foot";
+          if (!row.align.empty()) out += " align=" + row.align;
+          if (!row.valign.empty()) out += " valign=" + row.valign;
+          out += "\n";
           for (NodeId cell_id : row.children) {
             const Node& cell = doc.get(cell_id);
             if (cell.kind != NodeKind::TableCell) continue;
@@ -2174,6 +2223,8 @@ case NodeKind::Table: {
             out += (cell.level > 0) ? ":::th" : ":::cell";
             if (cell.col_span > 1) out += " colspan=" + std::to_string(cell.col_span);
             if (cell.row_span > 1) out += " rowspan=" + std::to_string(cell.row_span);
+            if (!cell.align.empty()) out += " align=" + cell.align;
+            if (!cell.valign.empty()) out += " valign=" + cell.valign;
             if (cell.display_scale > 0.15f &&
                 (cell.display_scale < 0.99f || cell.display_scale > 1.01f)) {
               out += " weight=";
@@ -2218,9 +2269,12 @@ case NodeKind::Table: {
           if (any_header) {
             out += pad;
             out += "|";
+            size_t col = 0;
             for (NodeId cell_id : row.children) {
               if (doc.get(cell_id).kind != NodeKind::TableCell) continue;
-              out += " --- |";
+              const char a = col < node.cols.size() ? node.cols[col] : 'l';
+              out += a == 'c' ? " :---: |" : a == 'r' || a == 'd' ? " ---: |" : " --- |";
+              ++col;
             }
             out += "\n";
           }
@@ -2615,6 +2669,38 @@ void parse_sexpr_children(Document& doc, NodeId parent,
     }
     parse_sexpr_node(doc, parent, c);
   }
+}
+
+// Table alignment keywords (:align :valign; tables also :cols :width,
+// rows :part head|foot) from the leading keyword pairs of a form.
+void read_table_kwargs(Node& n, const std::vector<SExpr>& kids) {
+  for (size_t k = 1; k + 1 < kids.size(); k += 2) {
+    const SExpr& key = kids[k];
+    if (key.kind != SExpr::Kind::Atom || key.text.empty() || key.text[0] != ':') break;
+    const std::string v = sexpr_text(kids[k + 1]);
+    if (key.text == ":align") {
+      n.align = canonical_align(v);
+      if (n.kind == NodeKind::Table && n.align == "decimal") n.align.clear();
+    } else if (key.text == ":valign") {
+      n.valign = canonical_valign(v);
+    } else if (key.text == ":cols" && n.kind == NodeKind::Table) {
+      n.cols = canonical_cols(v);
+    } else if (key.text == ":width" && n.kind == NodeKind::Table) {
+      n.width = table_width_percent(v);
+    } else if (key.text == ":part" && n.kind == NodeKind::TableRow) {
+      n.level = v == "head" ? 1 : v == "foot" ? 2 : 0;
+    }
+  }
+}
+
+void emit_table_kwargs(const Node& n, std::string& out) {
+  if (n.kind == NodeKind::TableRow && n.level == 1) out += " :part head";
+  if (n.kind == NodeKind::TableRow && n.level == 2) out += " :part foot";
+  if (!n.align.empty()) out += " :align " + n.align;
+  if (!n.valign.empty()) out += " :valign " + n.valign;
+  if (n.kind == NodeKind::Table && !n.cols.empty()) out += " :cols \"" + n.cols + "\"";
+  if (n.kind == NodeKind::Table && n.width > 0)
+    out += " :width \"" + std::to_string(n.width) + "%\"";
 }
 
 void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
@@ -3067,12 +3153,14 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
         std::string side = sexpr_text(e.kids[k + 1]);
         if (side == "left" || side == "right") doc.get(n).float_side = side;
       }
+    read_table_kwargs(doc.get(n), e.kids);
     parse_sexpr_children(doc, n, e.kids, i);
     return;
   }
 
   if (tag == "tr" || tag == "row") {
     NodeId n = doc.create(NodeKind::TableRow, parent);
+    read_table_kwargs(doc.get(n), e.kids);
     parse_sexpr_children(doc, n, e.kids, 1);
     return;
   }
@@ -3090,6 +3178,7 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
         doc.get(n).row_span = std::clamp(sexpr_int(e.kids[k + 1], 1), 1, 65534);
     }
     if (weight > 0.15f && weight < 20.f) doc.get(n).display_scale = weight;
+    read_table_kwargs(doc.get(n), e.kids);
     while (i + 1 < e.kids.size() && e.kids[i].kind == SExpr::Kind::Atom &&
            !e.kids[i].text.empty() && e.kids[i].text[0] == ':')
       i += 2;
@@ -3641,6 +3730,7 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
       emit_node_id(node, out);
       emit_label(node, out);
       if (!node.float_side.empty()) out += " :float " + node.float_side;
+      emit_table_kwargs(node, out);
       serialize_sexpr_children(doc, node, out, indent + 2);
       out.push_back('\n');
       out += pad;
@@ -3652,6 +3742,7 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
       out += pad;
       out += "(tr";
       emit_node_id(node, out);
+      emit_table_kwargs(node, out);
       serialize_sexpr_children(doc, node, out, indent + 2);
       out += ")";
       break;
@@ -3663,6 +3754,7 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
       emit_node_id(node, out);
       if (node.col_span > 1) out += " :colspan " + std::to_string(node.col_span);
       if (node.row_span > 1) out += " :rowspan " + std::to_string(node.row_span);
+      emit_table_kwargs(node, out);
       if (node.display_scale > 0.15f &&
           (node.display_scale < 0.99f || node.display_scale > 1.01f)) {
         out += " :weight ";

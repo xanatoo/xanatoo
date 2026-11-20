@@ -117,6 +117,9 @@ void copy_clean(const Document& src, NodeId id, Document& dst, NodeId parent,
       c.src = n.kind == NodeKind::Image ? foreign_url(base, n.src) : n.src;
       c.summary = n.summary;
       c.float_side = n.float_side;
+      c.align = n.align;
+      c.valign = n.valign;
+      c.cols = n.cols;
       c.display_scale = n.display_scale;
       if (n.kind == NodeKind::Footnote) c.label = n.label;
     }

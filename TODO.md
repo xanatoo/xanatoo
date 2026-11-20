@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-20) — Tables: content-fit width, alignment, head / foot
+
+- Tables in the flow are as wide as their content (simplified CSS auto
+  table layout, `distribute_table_widths`); `width=N%` / `full` stretches,
+  table `align` or style `(role table (align center))` places a narrower one.
+  Column drags seed weights from the shown widths first.
+- Cell alignment: `align` (left/center/right/decimal) and `valign`
+  (top/middle/bottom/baseline) on cell → row → table, plus a LaTeX-style
+  `cols` spec; header cells default to bottom. Decimal columns line up at
+  the point; right-aligned columns of numbers become decimal by themselves.
+- Head / foot rows (`part=head|foot`, HTML thead / tfoot) get a heavier
+  rule. GFM colons, fenced attributes, S-expression keys and XML attributes
+  round-trip; HTML import maps align / valign / char / CSS / `<col>` /
+  thead / tfoot / percent width / centring. Docs: `docs/TABLES.md`.
+- Line breaker no longer force-splits words that fit the line only
+  without the ↩ mark; table rows are trimmed to their ink.
+- Checked under Xvfb (GFM, fenced and HTML tables).
+
 ## Status (2026-11-20) — Context panel: text selection and live links
 
 - A laid-out page in the Context panel takes a press: links open in the

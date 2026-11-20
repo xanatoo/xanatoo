@@ -5170,7 +5170,7 @@ void test_inline_images_and_asides() {
         const auto* row4 = box_for(rows[4]);
         EXPECT(table && head && tall && right && row0 && row2 && row4);
         if (table && head && tall && right && row0 && row2 && row4) {
-          EXPECT(head->width > tall->width * 1.8f);
+          EXPECT(head->width > tall->width + right->width);
           EXPECT(right->x > tall->x + tall->width - 1.f);
           EXPECT(tall->y + tall->height <= row4->y + 0.1f);
           EXPECT(tall->y + tall->height >= row4->y - 9.f);
@@ -5353,7 +5353,7 @@ void test_inline_images_and_asides() {
           text_between = true;
       EXPECT(text_between);
     }
-    LayoutResult tight = engine.layout(paired, 400.f);
+    LayoutResult tight = engine.layout(paired, 330.f);
     table = box_for(tight, table_id);
     figure = box_for(tight, figure_id);
     EXPECT(table && figure);
@@ -7940,6 +7940,225 @@ static void test_transfer_label() {
   EXPECT(!xanatoo::transfer_cancelled());
 }
 
+// Table markup and layout: alignment words, content-fit widths, head rows,
+// Markdown / S-expression / HTML mapping (docs/TABLES.md).
+void test_table_alignment() {
+  using namespace xanatoo;
+  EXPECT_EQ(canonical_align("Start"), "left");
+  EXPECT_EQ(canonical_align("centre"), "center");
+  EXPECT_EQ(canonical_align("end"), "right");
+  EXPECT_EQ(canonical_align("char"), "decimal");
+  EXPECT(canonical_align("bogus").empty());
+  EXPECT_EQ(canonical_valign("after"), "bottom");
+  EXPECT_EQ(canonical_valign("center"), "middle");
+  EXPECT_EQ(canonical_cols("|l|r|c|"), "lrc");
+  EXPECT_EQ(canonical_cols("p{3cm}S d"), "ldd");
+  EXPECT_EQ(canonical_cols("left, right decimal"), "lrd");
+  EXPECT_EQ(table_width_percent("100%"), 100);
+  EXPECT_EQ(table_width_percent(" 50% "), 50);
+  EXPECT_EQ(table_width_percent("400px"), 0);
+  EXPECT_EQ(table_width_percent("auto"), 0);
+  EXPECT(numeric_text("1,234.5"));
+  EXPECT(numeric_text("−3 %"));
+  EXPECT(!numeric_text("n/a"));
+  EXPECT(!numeric_text("--"));
+
+  {
+    auto w = distribute_table_widths({10, 10}, {40, 60}, 200, false);
+    EXPECT(w[0] == 40 && w[1] == 60);  // fits: content widths
+    w = distribute_table_widths({10, 10}, {40, 60}, 200, true);
+    EXPECT(w[0] == 80 && w[1] == 120);  // explicit width: stretched
+    w = distribute_table_widths({10, 30}, {40, 60}, 70, false);
+    EXPECT(std::abs(w[0] + w[1] - 70.f) < 0.01f && w[0] >= 10 && w[1] >= 30);
+    w = distribute_table_widths({50, 50}, {80, 80}, 50, false);
+    EXPECT(std::abs(w[0] - 25.f) < 0.01f);
+  }
+
+  // Markdown: GFM alignment colons, fence attributes, round trip.
+  Document md = parse_markup(
+      "| Name | Count | Note |\n| :--- | ---: | :--: |\n| a | 1 | x |\n| b | 22 | y |\n");
+  NodeId table = kids_of(md, md.root)[0];
+  EXPECT_EQ(md.get(table).cols, "lrc");
+  {
+    const TableGrid grid = build_table_grid(md, table);
+    auto head = table_head_rows(md, grid);
+    EXPECT(head.size() == 3 && head[0] && !head[1]);
+    EXPECT(table_cell_align(md, table, grid.cells[4]) == CellAlign::Right);
+    EXPECT(table_cell_align(md, table, grid.cells[5]) == CellAlign::Center);
+    EXPECT(table_cell_valign(md, table, grid.cells[0]) == CellVAlign::Bottom);
+    EXPECT(table_cell_valign(md, table, grid.cells[3]) == CellVAlign::Top);
+  }
+  const std::string md_out = serialize_markup(md);
+  EXPECT(md_out.find("| :--- | ---: | :---: |") != std::string::npos ||
+         md_out.find("| --- | ---: | :---: |") != std::string::npos);
+  EXPECT_EQ(parse_markup(md_out).get(kids_of(parse_markup(md_out), parse_markup(md_out).root)[0]).cols, "lrc");
+
+  Document fenced = parse_markup(
+      ":::table cols=ld width=80% align=center valign=middle\n"
+      ":::row part=head\n:::th\nItem\n:::\n:::th\nPrice\n:::\n:::\n"
+      ":::row valign=bottom\n:::cell align=right\nTea\n:::\n:::cell\n1.5\n:::\n:::\n"
+      ":::row part=foot\n:::cell\nSum\n:::\n:::cell\n12.25\n:::\n:::\n:::\n");
+  NodeId ft = kids_of(fenced, fenced.root)[0];
+  auto check_fenced = [&](const Document& d, NodeId t) {
+    const Node& n = d.get(t);
+    EXPECT_EQ(n.cols, "ld");
+    EXPECT_EQ(n.width, 80);
+    EXPECT_EQ(n.align, "center");
+    EXPECT_EQ(n.valign, "middle");
+    auto rows = kids_of(d, t);
+    EXPECT_EQ(rows.size(), 3u);
+    if (rows.size() != 3) return;
+    EXPECT_EQ(d.get(rows[0]).level, 1);
+    EXPECT_EQ(d.get(rows[1]).valign, "bottom");
+    EXPECT_EQ(d.get(rows[2]).level, 2);
+    auto cells = kids_of(d, rows[1]);
+    EXPECT(cells.size() == 2 && d.get(cells[0]).align == "right");
+  };
+  check_fenced(fenced, ft);
+  {
+    Document again = parse_markup(serialize_markup(fenced));
+    check_fenced(again, kids_of(again, again.root)[0]);
+    Document sx = parse_sexpr(serialize_sexpr(fenced));
+    check_fenced(sx, kids_of(sx, sx.root)[0]);
+  }
+  // "align=" is a whole key, not the tail of "valign=".
+  EXPECT(parse_markup(":::table valign=top\n| a |\n:::\n")
+             .get(kids_of(parse_markup(":::table valign=top\n| a |\n:::\n"),
+                          parse_markup(":::table valign=top\n| a |\n:::\n").root)[0])
+             .align.empty());
+
+  // HTML: thead / tfoot rows, align / valign / text-align, <col>, width.
+  Document html;
+  NodeId hroot = html.create(NodeKind::Document);
+  HtmlOptions opts;
+  html_append_blocks(html, hroot,
+      "<table width='100%' style='margin: 0 auto'><col><col align=right>"
+      "<thead valign=bottom><tr><th>A</th><th>B</th></tr></thead>"
+      "<tbody><tr style='vertical-align: middle'><td style='text-align:center'>x</td>"
+      "<td align=char>1.5</td></tr></tbody>"
+      "<tfoot><tr><td>s</td><td>2</td></tr></tfoot></table>", opts);
+  auto htop = kids_of(html, hroot);
+  EXPECT_EQ(htop.size(), 1u);
+  if (htop.size() == 1) {
+    const Node& t = html.get(htop[0]);
+    EXPECT_EQ(t.width, 100);
+    EXPECT_EQ(t.align, "center");
+    EXPECT_EQ(t.cols, "lr");
+    auto rows = kids_of(html, htop[0]);
+    EXPECT_EQ(rows.size(), 3u);
+    if (rows.size() == 3) {
+      EXPECT_EQ(html.get(rows[0]).level, 1);
+      EXPECT_EQ(html.get(rows[0]).valign, "bottom");
+      EXPECT_EQ(html.get(rows[1]).valign, "middle");
+      EXPECT_EQ(html.get(rows[2]).level, 2);
+      auto cells = kids_of(html, rows[1]);
+      EXPECT(cells.size() == 2 && html.get(cells[0]).align == "center" &&
+             html.get(cells[1]).align == "decimal");
+    }
+  }
+
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_table_alignment layout (no font)\n");
+    return;
+  }
+  DocStyle st = builtin_style();
+  LayoutEngine engine(fonts, nullptr);
+  engine.set_style(&st);
+  auto box_of = [](const LayoutResult& l, NodeId id) -> const LayoutBox* {
+    for (const auto& b : l.boxes) if (b.node == id) return &b;
+    return nullptr;
+  };
+  // Glyph x of a code point in a cell (or a paragraph in it).
+  auto in_cell = [](const Document& d, NodeId g, NodeId cell) {
+    return g == cell || (g != INVALID_NODE && d.get(g).parent == cell);
+  };
+  auto glyph_x = [&](const Document& d, const LayoutResult& l, NodeId id, uint32_t cp) {
+    for (const auto& g : l.glyphs) if (in_cell(d, g.node, id) && g.codepoint == cp) return g.x;
+    return -1.f;
+  };
+  // App view settings (a margin) must not make a fitted word wrap.
+  {
+    Document d = parse_markup("| Fruit | Count |\n| :---- | ----: |\n| Banana | 12 |\n| Cherry | 120 |\n");
+    engine.set_options(LayoutOptions::from_view(ViewSettings{}));
+    LayoutResult l = engine.layout(d, 1000.f);
+    engine.set_options(LayoutOptions{});
+    float y0 = -1.f;
+    bool one_line = true;
+    for (const auto& g : l.glyphs) {
+      if (g.codepoint == 0x21A9 || g.codepoint == 0x21B5) one_line = false;
+      if (g.codepoint == 'B') y0 = g.y;
+    }
+    for (const auto& g : l.glyphs)
+      if (g.codepoint == 'n' && std::abs(g.y - y0) > 1.f && g.y > y0 && g.y < y0 + 10.f)
+        one_line = false;
+    EXPECT(one_line);
+  }
+  // A small table is as wide as its content, not the whole column.
+  {
+    LayoutResult l = engine.layout(md, 800.f);
+    const LayoutBox* b = box_of(l, table);
+    EXPECT(b && b->width < 400.f);
+    EXPECT(!l.table_header_fills.empty());
+  }
+  // Explicit width stretches; align=center centres in the column.
+  {
+    Document d = parse_markup(":::table width=100%\n| a | b |\n| - | - |\n| 1 | 2 |\n:::\n");
+    LayoutResult l = engine.layout(d, 800.f);
+    const LayoutBox* b = box_of(l, kids_of(d, d.root)[0]);
+    EXPECT(b && b->width > 700.f);
+    Document c = parse_markup(":::table align=center\n| a | b |\n| - | - |\n| 1 | 2 |\n:::\n");
+    LayoutResult lc = engine.layout(c, 800.f);
+    const LayoutBox* bc = box_of(lc, kids_of(c, c.root)[0]);
+    EXPECT(bc && bc->x > 200.f && std::abs((bc->x + bc->width * 0.5f) - 400.f) < 40.f);
+  }
+  // Right / centre / decimal alignment inside cells.
+  {
+    Document d = parse_markup(
+        ":::table cols=lrd\n:::row\n:::cell\nwide wide wide\n:::\n:::cell\nwide wide\n:::\n"
+        ":::cell\n100.5\n:::\n:::\n"
+        ":::row\n:::cell\nL\n:::\n:::cell\nR\n:::\n:::cell\n3.25\n:::\n:::\n:::\n");
+    LayoutResult l = engine.layout(d, 800.f);
+    NodeId t = kids_of(d, d.root)[0];
+    auto rows = kids_of(d, t);
+    auto r0 = kids_of(d, rows[0]);
+    auto r1 = kids_of(d, rows[1]);
+    const LayoutBox* lb = box_of(l, r1[0]);
+    const LayoutBox* rb = box_of(l, r1[1]);
+    EXPECT(lb && rb);
+    if (lb && rb) {
+      const float lx = glyph_x(d, l, r1[0], 'L');
+      const float rx = glyph_x(d, l, r1[1], 'R');
+      EXPECT(lx >= lb->x && lx < lb->x + 0.3f * lb->width);
+      EXPECT(rx > rb->x + 0.6f * rb->width);
+    }
+    // The decimal points of 100.5 and 3.25 line up.
+    float d0 = -1.f, d1 = -1.f;
+    for (const auto& g : l.glyphs) {
+      if (g.codepoint != '.') continue;
+      if (in_cell(d, g.node, r0[2])) d0 = g.x;
+      if (in_cell(d, g.node, r1[2])) d1 = g.x;
+    }
+    EXPECT(d0 > 0.f && std::abs(d0 - d1) < 1.f);
+  }
+  // A column drag on a content-fit table starts from the shown widths.
+  {
+    Document d = parse_markup("| short | a much longer heading |\n| - | - |\n| 1 | 2 |\n");
+    LayoutResult before = engine.layout(d, 800.f);
+    NodeId t = kids_of(d, d.root)[0];
+    EXPECT(!before.column_gaps.empty());
+    seed_table_weights(d, before, t);
+    LayoutResult after = engine.layout(d, 800.f);
+    EXPECT(before.column_gaps.size() == after.column_gaps.size());
+    if (!before.column_gaps.empty() && before.column_gaps.size() == after.column_gaps.size())
+      EXPECT(std::abs(before.column_gaps[0].x - after.column_gaps[0].x) < 1.5f);
+    if (!before.column_gaps.empty())
+      EXPECT(d.get(before.column_gaps[0].left).display_scale <
+             d.get(before.column_gaps[0].right).display_scale);
+  }
+}
+
 int main() {
   test_plain_text_files();
   test_looks_like_binary();
@@ -8040,6 +8259,7 @@ int main() {
   test_layout_margins_and_measure();
   test_layout_reader_mode();
   test_inline_images_and_asides();
+  test_table_alignment();
   test_search();
   test_search_results();
   test_examples_in_menu();

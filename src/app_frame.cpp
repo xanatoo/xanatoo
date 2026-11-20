@@ -3970,12 +3970,17 @@ static void draw_pane_overlays(App& app, int i) {
     }
   }
 
-  // Column gutters (subtle vertical handles)
+  // Column gutters (subtle vertical handles). A table's rule already shows
+  // where its columns meet: its handle only appears while being dragged.
+  const xanatoo::Document& gap_doc = doc_of(app, pane);
   for (const auto& gap : pane.layout.column_gaps) {
     int gx = pane.x + static_cast<int>(gap.x);
     int gy = static_cast<int>(gap.y - pane.scroll_y + py);
     int gh = static_cast<int>(gap.height);
     bool active = app.dragging_col_gap && gap.left == app.col_gap_left;
+    if (!active && gap.columns != xanatoo::INVALID_NODE &&
+        gap_doc.get(gap.columns).kind == xanatoo::NodeKind::Table)
+      continue;
     SDL_SetRenderDrawColor(app.sdl, active ? 25 : 190, active ? 90 : 188,
                            active ? 170 : 180, 255);
     SDL_Rect gbar{gx - 1, gy, 3, gh};

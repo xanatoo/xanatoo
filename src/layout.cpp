@@ -10,6 +10,7 @@
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <cstring>
 #include <limits>
@@ -912,30 +913,119 @@ std::pair<float, float> LayoutEngine::text_column(float max_width) {
   return {mx, content_w};
 }
 
-void LayoutEngine::layout_spanned_table(const Document& doc, NodeId table,
-                                       const std::vector<NodeId>& rows, float x,
-                                       float& y, float width, LayoutResult& out) {
+// ---- Tables ----
+
+// The measured cells and chosen column widths of one table (plan_table).
+struct TablePlan {
   struct Cell {
-    NodeId id;
-    size_t row, col, rows, cols;
-    float height = 0.f;
+    TablePlacement p;
+    CellAlign align = CellAlign::Left;
+    CellVAlign valign = CellVAlign::Top;
+    float max_w = 0.f;     // content width unbroken (at most the column)
+    float min_w = 0.f;     // longest word / picture
+    float height = 0.f;    // content height at the planned width
+    float baseline = 0.f;  // first baseline below the content top
+    float dec_a = 0.f;     // Decimal: ink left of the decimal point …
+    float dec_b = 0.f;     // … and from it to the right
   };
-  const TableGrid table_grid = build_table_grid(doc, table);
+  TableGrid grid;
   std::vector<Cell> cells;
-  for (const TablePlacement& cell : table_grid.cells)
-    cells.push_back({cell.id, cell.row, cell.col, cell.rows, cell.cols});
-  const auto& grid = table_grid.slots;
-  const size_t columns = table_grid.columns;
+  std::vector<float> col_w;     // including the padding
+  std::vector<float> dec_b;     // per column: widest part right of the point
+  std::vector<bool> head;       // head rows
+  std::vector<NodeId> weight_cells;  // a complete unspanned row (resizing)
+  size_t weight_row = 0;
+  float pad_x = 4.f, pad_y = 4.f;
+  float width = 0.f;
+};
+
+namespace {
+
+// How far right `r` put ink, from x0 (spaces do not count).
+float content_extent(const LayoutResult& r, float x0) {
+  float right = x0;
+  for (const PositionedGlyph& g : r.glyphs)
+    if (g.codepoint != ' ' && g.codepoint != '\t' && g.codepoint != '\n')
+      right = std::max(right, g.x + g.advance);
+  for (const PositionedImage& im : r.images) right = std::max(right, im.x + im.width);
+  for (const PositionedMath& m : r.maths)
+    if (m.box) right = std::max(right, m.x + m.box->width);
+  for (const LayoutBox& b : r.table_lines) right = std::max(right, b.x + b.width);
+  // Glyph positions are rounded; line breaking sums the exact advances.
+  // Slack keeps a word that just fits from being broken at this width.
+  return right > x0 ? std::ceil(right - x0) + 2.f : 0.f;
+}
+
+bool single_line(const LayoutResult& r) {
+  if (r.glyphs.empty() || !r.images.empty()) return false;
+  const float y0 = r.glyphs.front().y;
+  for (const PositionedGlyph& g : r.glyphs)
+    if (std::abs(g.y - y0) > 0.5f) return false;
+  return true;
+}
+
+// The decimal point of a one-line cell: the first '.', else after the last
+// digit, else the line's end. a = ink before it, b = from it on.
+void decimal_parts(const LayoutResult& r, float x0, float& a, float& b) {
+  float right = x0, dot = -1.f, digit = -1.f;
+  for (const PositionedGlyph& g : r.glyphs) {
+    if (g.codepoint == ' ') continue;
+    right = std::max(right, g.x + g.advance);
+    if (g.codepoint == '.' && dot < 0.f) dot = g.x;
+    if (g.codepoint >= '0' && g.codepoint <= '9') digit = g.x + g.advance;
+  }
+  const float at = dot >= 0.f ? dot : digit >= 0.f ? digit : right;
+  a = at - x0;
+  b = right - at;
+}
+
+}  // namespace
+
+LayoutResult LayoutEngine::measure_cell(const Document& doc, NodeId cell,
+                                        float w, float& height) {
+  LayoutResult r;
+  const auto saved_floats = floats_;
+  const TextAlign saved_align = line_align_;
+  const bool saved_cell = in_cell_;
+  floats_.clear();
+  line_align_ = TextAlign::Start;
+  in_cell_ = true;
+  float bottom = 0.f;
+  layout_node(doc, cell, 0.f, bottom, std::max(1.f, w), r);
+  for (const FloatBox& f : floats_) bottom = std::max(bottom, f.bottom);
+  // Text only: end at the last line's descent, not after the spacing that
+  // paragraphs leave below themselves (the cell padding does that job).
+  if (!r.glyphs.empty() && r.images.empty() && r.maths.empty() && floats_.empty()) {
+    float ink = 0.f;
+    for (const PositionedGlyph& g : r.glyphs)
+      ink = std::max(ink, g.y - static_cast<float>(fonts_.pick(g.font).descender()));
+    for (const LayoutBox& b : r.table_lines) ink = std::max(ink, b.y + b.height);
+    if (ink > 0.f) bottom = std::min(bottom, std::ceil(ink) + 1.f);
+  }
+  floats_ = saved_floats;
+  line_align_ = saved_align;
+  in_cell_ = saved_cell;
+  height = bottom;
+  return r;
+}
+
+void LayoutEngine::plan_table(const Document& doc, NodeId table, float avail,
+                              TablePlan& plan) {
+  plan.grid = build_table_grid(doc, table);
+  const TableGrid& grid = plan.grid;
+  const size_t columns = grid.columns;
+  plan.head = table_head_rows(doc, grid);
+  const float em = static_cast<float>(fonts_.regular.pixel_size());
+  plan.pad_x = std::max(4.f, std::round(0.4f * em));
+  plan.pad_y = std::max(4.f, std::round(0.3f * em));
   if (columns == 0) return;
 
-  // A complete row of unspanned cells supplies the existing column weights
-  // and resize handles. A spanning heading is not a column definition.
-  std::vector<NodeId> weight_cells;
-  size_t weight_row = 0;
-  for (size_t r = 0; r < rows.size(); ++r) {
+  // A complete row of unspanned cells supplies the column weights (dragged
+  // column widths) and resize handles. A spanning heading is not one.
+  for (size_t r = 0; r < grid.rows.size(); ++r) {
     std::vector<NodeId> candidate;
-    for (NodeId id : grid[r]) {
-      if (id == INVALID_NODE || doc.get(id).parent != rows[r] ||
+    for (NodeId id : grid.slots[r]) {
+      if (id == INVALID_NODE || doc.get(id).parent != grid.rows[r] ||
           doc.get(id).col_span != 1 || doc.get(id).row_span != 1) {
         candidate.clear();
         break;
@@ -943,110 +1033,271 @@ void LayoutEngine::layout_spanned_table(const Document& doc, NodeId table,
       candidate.push_back(id);
     }
     if (candidate.size() == columns) {
-      weight_cells = std::move(candidate);
-      weight_row = r;
+      plan.weight_cells = std::move(candidate);
+      plan.weight_row = r;
       break;
     }
   }
-  std::vector<float> col_x(columns + 1, x);
-  std::vector<float> weights(columns, 1.f);
-  float total_weight = 0.f;
-  for (size_t c = 0; c < columns; ++c) {
-    if (!weight_cells.empty())
-      weights[c] = std::clamp(doc.get(weight_cells[c]).display_scale, 0.15f, 20.f);
-    total_weight += weights[c];
-  }
-  for (size_t c = 0; c < columns; ++c)
-    col_x[c + 1] = col_x[c] + width * weights[c] / total_weight;
-  col_x.back() = x + width;
 
-  constexpr float pad = 4.f;
-  std::vector<float> heights(rows.size(), pad * 2.f + 2.f);
-  // Measure each cell once at its combined column width, without allowing
-  // nested floats from the measurement to affect the surrounding page.
-  const auto saved_floats = floats_;
+  const float pads = 2.f * plan.pad_x;
+  const float inner = std::max(1.f, avail - pads);
   const LayoutViewport saved_viewport = viewport_;
   viewport_ = {};
-  for (Cell& cell : cells) {
-    LayoutResult measure;
-    float bottom = 0.f;
-    floats_.clear();
-    layout_node(doc, cell.id, col_x[cell.col] + pad, bottom,
-                std::max(1.f, col_x[cell.col + cell.cols] - col_x[cell.col] - 2.f * pad),
-                measure);
-    for (const FloatBox& f : floats_) bottom = std::max(bottom, f.bottom);
-    floats_ = saved_floats;
-    cell.height = bottom + pad * 2.f + 2.f;
-    if (cell.rows == 1) heights[cell.row] = std::max(heights[cell.row], cell.height);
+  std::vector<float> dec_a(columns, 0.f);
+  plan.dec_b.assign(columns, 0.f);
+  for (const TablePlacement& p : grid.cells) {
+    TablePlan::Cell c;
+    c.p = p;
+    c.align = table_cell_align(doc, table, p);
+    c.valign = table_cell_valign(doc, table, p);
+    plan.cells.push_back(c);
+  }
+  // A right-aligned column of numbers lines them up at the decimal point.
+  std::vector<int> numeric(columns, 0);  // 1 numbers, -1 not, 0 empty
+  auto body_cell = [&](const TablePlan::Cell& c) {
+    return c.p.cols == 1 && doc.get(c.p.id).level == 0;
+  };
+  for (const TablePlan::Cell& c : plan.cells) {
+    if (!body_cell(c)) continue;
+    const std::string text = plain_text(doc, c.p.id);
+    int& k = numeric[c.p.col];
+    if (text.find_first_not_of(" \t") == std::string::npos) continue;
+    if (c.align != CellAlign::Right) k = -1;
+    else if (k == 0 && numeric_text(text)) k = 1;
+    else if (!numeric_text(text)) k = -1;
+  }
+  for (TablePlan::Cell& c : plan.cells)
+    if (body_cell(c) && numeric[c.p.col] == 1) c.align = CellAlign::Decimal;
+  for (TablePlan::Cell& c : plan.cells) {
+    const TablePlacement& p = c.p;
+    LayoutResult r = measure_cell(doc, p.id, inner, c.height);
+    c.max_w = content_extent(r, 0.f);
+    c.baseline = r.glyphs.empty() ? 0.f : r.glyphs.front().y;
+    if (c.align == CellAlign::Decimal) {
+      if (single_line(r)) {
+        decimal_parts(r, 0.f, c.dec_a, c.dec_b);
+        dec_a[p.col] = std::max(dec_a[p.col], c.dec_a);
+        plan.dec_b[p.col] = std::max(plan.dec_b[p.col], c.dec_b);
+      } else {
+        c.align = CellAlign::Right;  // prose in a number column
+      }
+    }
+  }
+
+  // Widest and narrowest content per column; spanning cells widen the
+  // columns they cover evenly when those do not hold them already.
+  auto per_column = [&](auto width_of, std::vector<float>& col) {
+    col.assign(columns, pads + 0.75f * em);
+    for (const TablePlan::Cell& c : plan.cells)
+      if (c.p.cols == 1) col[c.p.col] = std::max(col[c.p.col], width_of(c) + pads);
+    for (size_t k = 0; k < columns; ++k)
+      if (dec_a[k] + plan.dec_b[k] > 0.f)
+        col[k] = std::max(col[k], dec_a[k] + plan.dec_b[k] + pads);
+    std::vector<const TablePlan::Cell*> spans;
+    for (const TablePlan::Cell& c : plan.cells)
+      if (c.p.cols > 1) spans.push_back(&c);
+    std::stable_sort(spans.begin(), spans.end(),
+                     [](auto* a, auto* b) { return a->p.cols < b->p.cols; });
+    for (const TablePlan::Cell* c : spans) {
+      float have = 0.f;
+      for (size_t k = c->p.col; k < c->p.col + c->p.cols; ++k) have += col[k];
+      const float need = width_of(*c) + pads;
+      if (need > have)
+        for (size_t k = c->p.col; k < c->p.col + c->p.cols; ++k)
+          col[k] += (need - have) / static_cast<float>(c->p.cols);
+    }
+  };
+  std::vector<float> col_max, col_min;
+  per_column([](const TablePlan::Cell& c) { return c.max_w; }, col_max);
+  const int pct = doc.get(table).width;
+  const float target = pct > 0 ? avail * std::min(pct, 100) / 100.f : avail;
+  float sum_max = 0.f;
+  for (float w : col_max) sum_max += w;
+  if (sum_max > target) {
+    for (TablePlan::Cell& c : plan.cells) {
+      float h = 0.f;
+      c.min_w = content_extent(measure_cell(doc, c.p.id, 1.f, h), 0.f);
+      if (c.align == CellAlign::Decimal) c.min_w = 0.f;  // numbers do not wrap
+    }
+    per_column([](const TablePlan::Cell& c) { return c.min_w; }, col_min);
+  } else {
+    col_min = col_max;
+  }
+  plan.col_w = distribute_table_widths(col_min, col_max, target, pct > 0);
+
+  // Dragged column widths: weights share out the table's width.
+  bool weighted = false;
+  for (NodeId id : plan.weight_cells)
+    weighted |= std::abs(doc.get(id).display_scale - 1.f) > 0.01f;
+  if (weighted) {
+    float total = 0.f, sum_w = 0.f;
+    for (float w : plan.col_w) total += w;
+    std::vector<float> weights(columns);
+    for (size_t k = 0; k < columns; ++k) {
+      weights[k] = std::clamp(doc.get(plan.weight_cells[k]).display_scale, 0.15f, 20.f);
+      sum_w += weights[k];
+    }
+    for (size_t k = 0; k < columns; ++k) plan.col_w[k] = total * weights[k] / sum_w;
+  }
+
+  // Heights at the chosen widths (only cells that now wrap change).
+  plan.width = 0.f;
+  for (float w : plan.col_w) plan.width += w;
+  for (TablePlan::Cell& c : plan.cells) {
+    float w = -pads;
+    for (size_t k = c.p.col; k < c.p.col + c.p.cols; ++k) w += plan.col_w[k];
+    if (c.max_w > w + 0.5f) {
+      LayoutResult r = measure_cell(doc, c.p.id, w, c.height);
+      c.baseline = r.glyphs.empty() ? 0.f : r.glyphs.front().y;
+    }
   }
   viewport_ = saved_viewport;
-  // Satisfy shorter spans first; distributing a deficit can only help longer
-  // spans and never shrinks a row that another cell needs.
-  std::vector<size_t> order;
-  for (size_t i = 0; i < cells.size(); ++i)
-    if (cells[i].rows > 1) order.push_back(i);
-  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-    return cells[a].rows < cells[b].rows;
-  });
-  for (size_t index : order) {
-    const Cell& cell = cells[index];
-    float have = 0.f;
-    for (size_t r = cell.row; r < cell.row + cell.rows; ++r) have += heights[r];
-    const float extra = std::max(0.f, cell.height - have) / cell.rows;
-    for (size_t r = cell.row; r < cell.row + cell.rows; ++r) heights[r] += extra;
-  }
-  std::vector<float> row_y(rows.size() + 1, y);
-  for (size_t r = 0; r < rows.size(); ++r) row_y[r + 1] = row_y[r] + heights[r];
+}
 
-  for (const Cell& cell : cells) {
-    const float left = col_x[cell.col], right = col_x[cell.col + cell.cols];
-    const float top = row_y[cell.row], bottom = row_y[cell.row + cell.rows];
-    float content_y = top + pad;
+void LayoutEngine::place_table(const Document& doc, NodeId table,
+                               const TablePlan& plan, float x, float& y,
+                               LayoutResult& out) {
+  const TableGrid& grid = plan.grid;
+  const size_t columns = grid.columns, n_rows = grid.rows.size();
+  if (columns == 0 || n_rows == 0) return;
+  const float pad_x = plan.pad_x, pad_y = plan.pad_y;
+  std::vector<float> col_x(columns + 1, x);
+  for (size_t k = 0; k < columns; ++k) col_x[k + 1] = col_x[k] + plan.col_w[k];
+
+  // Row heights: single-row cells first (baseline cells line their first
+  // baselines up), then spans, shorter first; a deficit is shared out.
+  std::vector<float> heights(n_rows, pad_y * 2.f + 2.f);
+  std::vector<float> row_base(n_rows, 0.f);
+  for (const TablePlan::Cell& c : plan.cells)
+    if (c.p.rows == 1 && c.valign == CellVAlign::Baseline)
+      row_base[c.p.row] = std::max(row_base[c.p.row], c.baseline);
+  auto cell_need = [&](const TablePlan::Cell& c) {
+    float h = c.height;
+    if (c.p.rows == 1 && c.valign == CellVAlign::Baseline)
+      h += row_base[c.p.row] - c.baseline;
+    return h + pad_y * 2.f + 2.f;
+  };
+  for (const TablePlan::Cell& c : plan.cells)
+    if (c.p.rows == 1) heights[c.p.row] = std::max(heights[c.p.row], cell_need(c));
+  std::vector<const TablePlan::Cell*> spans;
+  for (const TablePlan::Cell& c : plan.cells)
+    if (c.p.rows > 1) spans.push_back(&c);
+  std::stable_sort(spans.begin(), spans.end(),
+                   [](auto* a, auto* b) { return a->p.rows < b->p.rows; });
+  for (const TablePlan::Cell* c : spans) {
+    float have = 0.f;
+    for (size_t r = c->p.row; r < c->p.row + c->p.rows; ++r) have += heights[r];
+    const float extra = std::max(0.f, cell_need(*c) - have) / c->p.rows;
+    for (size_t r = c->p.row; r < c->p.row + c->p.rows; ++r) heights[r] += extra;
+  }
+  std::vector<float> row_y(n_rows + 1, y);
+  for (size_t r = 0; r < n_rows; ++r) row_y[r + 1] = row_y[r] + heights[r];
+
+  const auto saved_floats = floats_;
+  const TextAlign saved_align = line_align_;
+  const bool saved_cell = in_cell_;
+  in_cell_ = true;
+  for (const TablePlan::Cell& c : plan.cells) {
+    const float left = col_x[c.p.col], right = col_x[c.p.col + c.p.cols];
+    const float top = row_y[c.p.row], bottom = row_y[c.p.row + c.p.rows];
+    const float w = std::max(1.f, right - left - 2.f * pad_x);
+    const float room = std::max(0.f, bottom - top - 2.f * pad_y - 2.f - c.height);
+    float dy = 0.f;
+    switch (c.valign) {
+      case CellVAlign::Top: break;
+      case CellVAlign::Middle: dy = std::round(room * 0.5f); break;
+      case CellVAlign::Bottom: dy = room; break;
+      case CellVAlign::Baseline:
+        if (c.p.rows == 1) dy = row_base[c.p.row] - c.baseline;
+        break;
+    }
+    float dx = 0.f;
+    line_align_ = TextAlign::Start;
+    if (c.align == CellAlign::Center) line_align_ = TextAlign::Center;
+    else if (c.align == CellAlign::Right) line_align_ = TextAlign::End;
+    else if (c.align == CellAlign::Decimal)
+      dx = std::clamp(w - plan.dec_b[c.p.col] - c.dec_a, 0.f,
+                      std::max(0.f, w - c.dec_a - c.dec_b));
+    float content_y = top + pad_y + dy;
     const size_t box_at = out.boxes.size();
     const size_t fill_at = out.table_header_fills.size();
     floats_.clear();
-    layout_node(doc, cell.id, left + pad, content_y,
-                std::max(1.f, right - left - 2.f * pad), out);
+    layout_node(doc, c.p.id, left + pad_x + dx, content_y, w - dx, out);
     floats_ = saved_floats;
     for (size_t i = box_at; i < out.boxes.size(); ++i)
-      if (out.boxes[i].node == cell.id)
-        out.boxes[i].height = std::max(0.f, bottom - top - 2.f * pad);
+      if (out.boxes[i].node == c.p.id)
+        out.boxes[i] = {c.p.id, left + pad_x, top + pad_y, w,
+                        std::max(0.f, bottom - top - 2.f * pad_y)};
     for (size_t i = fill_at; i < out.table_header_fills.size(); ++i)
-      if (out.table_header_fills[i].node == cell.id)
-        out.table_header_fills[i] = {cell.id, left + 2.f, top + 2.f,
-                                     std::max(0.f, right - left - 4.f),
-                                     std::max(0.f, bottom - top - 4.f)};
+      if (out.table_header_fills[i].node == c.p.id)
+        out.table_header_fills[i] = {c.p.id, left + 1.f, top + 1.f,
+                                     std::max(0.f, right - left - 2.f),
+                                     std::max(0.f, bottom - top - 2.f)};
   }
-  for (size_t r = 0; r < rows.size(); ++r)
-    out.boxes.push_back({rows[r], x, row_y[r], width, heights[r]});
+  line_align_ = saved_align;
+  in_cell_ = saved_cell;
+  const float width = col_x.back() - x;
+  for (size_t r = 0; r < n_rows; ++r)
+    out.boxes.push_back({grid.rows[r], x, row_y[r], width, heights[r]});
 
-  constexpr float stroke = 1.f;
+  // Frame, the lines between cells (not through merged ones) and a heavier
+  // rule under the head rows and over the foot rows.
+  const float stroke = std::max(1.f, std::round(options_.px_scale));
   const float top = row_y.front(), bottom = row_y.back();
   out.table_lines.push_back({table, x, top, width, stroke});
   out.table_lines.push_back({table, x, bottom - stroke, width, stroke});
   out.table_lines.push_back({table, x, top, stroke, bottom - top});
   out.table_lines.push_back({table, x + width - stroke, top, stroke, bottom - top});
-  for (size_t r = 1; r < rows.size(); ++r)
-    for (size_t c = 0; c < columns; ++c)
-      if (grid[r - 1][c] == INVALID_NODE || grid[r - 1][c] != grid[r][c])
-        out.table_lines.push_back({table, col_x[c], row_y[r] - stroke * 0.5f,
-                                   col_x[c + 1] - col_x[c], stroke});
-  for (size_t c = 1; c < columns; ++c) {
-    for (size_t r = 0; r < rows.size(); ++r)
-      if (grid[r][c - 1] == INVALID_NODE || grid[r][c - 1] != grid[r][c])
-        out.table_lines.push_back({table, col_x[c] - stroke * 0.5f, row_y[r],
+  for (size_t r = 1; r < n_rows; ++r) {
+    const bool heavy = (plan.head[r - 1] && !plan.head[r]) ||
+                       (doc.get(grid.rows[r]).level == 2 &&
+                        doc.get(grid.rows[r - 1]).level != 2);
+    const float s = heavy ? 2.f * stroke : stroke;
+    for (size_t k = 0; k < columns; ++k)
+      if (grid.slots[r - 1][k] == INVALID_NODE || grid.slots[r - 1][k] != grid.slots[r][k])
+        out.table_lines.push_back({table, col_x[k], row_y[r] - s * 0.5f,
+                                   col_x[k + 1] - col_x[k], s});
+  }
+  for (size_t k = 1; k < columns; ++k) {
+    for (size_t r = 0; r < n_rows; ++r)
+      if (grid.slots[r][k - 1] == INVALID_NODE || grid.slots[r][k - 1] != grid.slots[r][k])
+        out.table_lines.push_back({table, col_x[k] - stroke * 0.5f, row_y[r],
                                    stroke, heights[r]});
-    if (!weight_cells.empty()) {
+    if (!plan.weight_cells.empty()) {
       ColumnGap gap;
       gap.columns = table;
-      gap.left = weight_cells[c - 1]; gap.right = weight_cells[c];
-      gap.x = col_x[c]; gap.y = row_y[weight_row]; gap.height = heights[weight_row];
-      gap.left_w = col_x[c] - col_x[c - 1];
-      gap.right_w = col_x[c + 1] - col_x[c];
+      gap.left = plan.weight_cells[k - 1];
+      gap.right = plan.weight_cells[k];
+      gap.x = col_x[k];
+      gap.y = row_y[plan.weight_row];  // not over a spanning heading
+      gap.height = bottom - gap.y;
+      gap.left_w = col_x[k] - col_x[k - 1];
+      gap.right_w = col_x[k + 1] - col_x[k];
       out.column_gaps.push_back(gap);
     }
   }
   y = bottom;
+}
+
+void seed_table_weights(Document& doc, const LayoutResult& layout, NodeId table) {
+  if (table == INVALID_NODE || doc.get(table).kind != NodeKind::Table) return;
+  std::vector<std::pair<NodeId, float>> widths;  // weight cells, left to right
+  for (const ColumnGap& g : layout.column_gaps) {
+    if (g.columns != table) continue;
+    if (widths.empty()) widths.push_back({g.left, g.left_w});
+    if (widths.back().first != g.left) return;  // not one chain of gaps
+    widths.push_back({g.right, g.right_w});
+  }
+  if (widths.size() < 2) return;
+  float sum = 0.f;
+  for (const auto& [id, w] : widths) {
+    if (std::abs(doc.get(id).display_scale - 1.f) > 0.01f) return;
+    sum += w;
+  }
+  if (sum <= 0.f) return;
+  const float mean = sum / static_cast<float>(widths.size());
+  for (const auto& [id, w] : widths)
+    doc.get(id).display_scale = std::clamp(w / mean, 0.2f, 19.f);
 }
 
 void LayoutEngine::layout_node(const Document& doc, NodeId id,
@@ -1797,11 +2048,12 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       y += before(BlockRole::Caption);
       float start_y = y;
       const float pad = 4.f + indent(BlockRole::Caption);
-      const bool was_centered = center_lines_;
-      center_lines_ = in_figure_column_ && figure_centered();
+      const TextAlign was_aligned = line_align_;
+      line_align_ = in_figure_column_ && figure_centered() ? TextAlign::Center
+                                                           : TextAlign::Start;
       layout_role_text(doc, node, BlockRole::Caption, x + pad, y,
                        max_width - pad * 2.f, out);
-      center_lines_ = was_centered;
+      line_align_ = was_aligned;
       y += after(BlockRole::Caption);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
@@ -1902,13 +2154,17 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
     }
 
     case NodeKind::Table: {
+      const float em = static_cast<float>(fonts_.regular.pixel_size());
       if (!in_table_float_ && !in_margin_ &&
           (node.float_side == "left" || node.float_side == "right")) {
-        const float em = static_cast<float>(fonts_.regular.pixel_size());
         const float gap = em;
         const float want = (*style_)[BlockRole::Table].width.px(em, options_.px_scale);
-        const float fw = std::min(want, max_width * 0.45f);
+        float fw = std::min(want, max_width * 0.45f);
         if (fw >= 6.f * em && max_width - fw - gap >= 10.f * em) {
+          // As wide as its content, up to the float width.
+          TablePlan plan;
+          plan_table(doc, id, fw, plan);
+          if (plan.width > 0.f) fw = std::min(fw, std::max(plan.width, 6.f * em));
           const bool right = node.float_side == "right";
           const float bx = right ? x + max_width - fw : x;
           float top = y;
@@ -1939,106 +2195,44 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       }
       y += before(BlockRole::Table);
       float start_y = y;
-      std::vector<NodeId> rows;
-      for (NodeId c : node.children) {
-        if (doc.get(c).kind == NodeKind::TableRow) rows.push_back(c);
-      }
-      if (rows.empty()) {
+      bool has_rows = false;
+      for (NodeId c : node.children)
+        has_rows |= doc.get(c).kind == NodeKind::TableRow;
+      if (!has_rows) {
         for (NodeId c : node.children)
           layout_node(doc, c, x, y, max_width, out);
-      } else {
-        for (NodeId c : node.children)
-          if (doc.get(c).kind == NodeKind::Caption)
-            layout_node(doc, c, x, y, max_width, out);
-        const float grid_y = y;
-        bool has_spans = false;
-        for (NodeId row : rows)
-          for (NodeId cell : doc.get(row).children)
-            if (doc.get(cell).kind == NodeKind::TableCell &&
-                (doc.get(cell).col_span > 1 || doc.get(cell).row_span > 1))
-              has_spans = true;
-        if (has_spans) {
-          layout_spanned_table(doc, id, rows, x, y, max_width, out);
-          y += after(BlockRole::Table);
-          out.boxes.push_back({id, x, start_y, max_width, y - start_y});
-          break;
-        }
-        // Column weights from the first row's cells (display_scale).
-        // All rows share the same relative widths; dragging a separator
-        // updates the first-row cell weights (and is mirrored on drag).
-        std::vector<NodeId> weight_cells;
-        for (NodeId c : doc.get(rows[0]).children) {
-          if (doc.get(c).kind == NodeKind::TableCell) weight_cells.push_back(c);
-        }
-        size_t n_cols = weight_cells.size();
-        for (NodeId rid : rows) {
-          size_t cells = 0;
-          for (NodeId c : doc.get(rid).children)
-            if (doc.get(c).kind == NodeKind::TableCell) ++cells;
-          if (cells > n_cols) n_cols = cells;
-        }
-        std::vector<float> weights(n_cols, 1.f);
-        float weight_sum = 0.f;
-        for (size_t i = 0; i < n_cols; ++i) {
-          float w = 1.f;
-          if (i < weight_cells.size()) {
-            w = doc.get(weight_cells[i]).display_scale;
-            if (w < 0.15f) w = 0.15f;
-            if (w > 20.f) w = 20.f;
-          }
-          weights[i] = w;
-          weight_sum += w;
-        }
-        if (weight_sum < 0.01f) weight_sum = static_cast<float>(n_cols);
-
-        std::vector<float> col_widths(n_cols);
-        for (size_t i = 0; i < n_cols; ++i) {
-          col_widths[i] = max_width * (weights[i] / weight_sum);
-          if (col_widths[i] < 32.f) col_widths[i] = 32.f;
-        }
-
-        std::vector<float> row_bottoms;
-        for (NodeId rid : rows) {
-          layout_node(doc, rid, x, y, max_width, out);
-          row_bottoms.push_back(y);
-        }
-
-        const float stroke = 1.f;
-        float table_h = y - grid_y;
-        if (table_h < 1.f) table_h = 1.f;
-        out.table_lines.push_back({id, x, grid_y, max_width, stroke});
-        out.table_lines.push_back({id, x, y - stroke, max_width, stroke});
-        out.table_lines.push_back({id, x, grid_y, stroke, table_h});
-        out.table_lines.push_back(
-            {id, x + max_width - stroke, grid_y, stroke, table_h});
-        for (size_t r = 0; r + 1 < row_bottoms.size(); ++r) {
-          float ly = row_bottoms[r] - stroke * 0.5f;
-          out.table_lines.push_back({id, x, ly, max_width, stroke});
-        }
-        // Vertical separators + draggable gaps (same mechanism as Columns)
-        if (n_cols > 1) {
-          float cx = x;
-          for (size_t c = 0; c + 1 < n_cols; ++c) {
-            cx += col_widths[c];
-            float lx = cx - stroke * 0.5f;
-            out.table_lines.push_back({id, lx, grid_y, stroke, table_h});
-            if (c < weight_cells.size() && c + 1 < weight_cells.size()) {
-              ColumnGap gap;
-              gap.columns = id;  // table id (hit-test uses left/right cells)
-              gap.left = weight_cells[c];
-              gap.right = weight_cells[c + 1];
-              gap.x = cx;
-              gap.y = grid_y;
-              gap.height = table_h;
-              gap.left_w = col_widths[c];
-              gap.right_w = col_widths[c + 1];
-              out.column_gaps.push_back(gap);
-            }
-          }
-        }
+        y += after(BlockRole::Table);
+        out.boxes.push_back({id, x, start_y, max_width, y - start_y});
+        break;
       }
+      TablePlan plan;
+      plan_table(doc, id, max_width, plan);
+      const float tw = std::min(max_width, plan.width);
+      // A table narrower than the column: where the node or the sheet says.
+      TextAlign place = (*style_)[BlockRole::Table].align;
+      const std::string side = canonical_align(node.align);
+      if (side == "left") place = TextAlign::Start;
+      else if (side == "center") place = TextAlign::Center;
+      else if (side == "right") place = TextAlign::End;
+      float tx = x;
+      if (!in_table_float_) {
+        if (place == TextAlign::Center) tx += std::round((max_width - tw) * 0.5f);
+        else if (place == TextAlign::End) tx += max_width - tw;
+      }
+      // Captions over the table, a readable measure even over a narrow one.
+      const float cap_w = std::min(max_width, std::max(tw, 20.f * em));
+      const float cap_x = std::clamp(tx + (tw - cap_w) * 0.5f, x, x + max_width - cap_w);
+      bool captioned = false;
+      for (NodeId c : node.children)
+        if (doc.get(c).kind == NodeKind::Caption) {
+          layout_node(doc, c, tw >= cap_w ? tx : cap_x, y, cap_w, out);
+          captioned = true;
+        }
+      place_table(doc, id, plan, tx, y, out);
       y += after(BlockRole::Table);
-      out.boxes.push_back({id, x, start_y, max_width, y - start_y});
+      const float bx = captioned ? std::min(tx, cap_x) : tx;
+      const float br = captioned ? std::max(tx + tw, cap_x + cap_w) : tx + tw;
+      out.boxes.push_back({id, bx, start_y, br - bx, y - start_y});
       break;
     }
 
@@ -3281,7 +3475,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
     float gap_extra = 0.f;
     const bool can_justify =
-        options_.justify && !center_lines_ && !last_or_hard && gaps > 0 &&
+        options_.justify && line_align_ == TextAlign::Start && !in_cell_ &&
+        !last_or_hard && gaps > 0 &&
         base_role != FontRole::Code && base_role != FontRole::SmallCode &&
         base_role != FontRole::Heading;
     if (can_justify) {
@@ -3294,7 +3489,10 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     }
 
     float lx = lx0;
-    if (center_lines_ && natural < lw) lx += (lw - natural) * 0.5f;
+    if (line_align_ == TextAlign::Center && natural < lw)
+      lx += (lw - natural) * 0.5f;
+    else if (line_align_ == TextAlign::End && natural < lw)
+      lx += lw - natural;
     // A display formula alone on its line is centred.
     if (content_hi == lo + 1 && atom_of(chars[lo]) &&
         atom_of(chars[lo])->display && natural < lw)
@@ -3381,6 +3579,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
   size_t word_lo = 0;       // start of current word
   float line_w = 0.f;       // width of committed content on this line
   float word_w = 0.f;       // width of current word (no leading spaces)
+  float word_full_w = 0.f;  // … of all of it (capped just above lw)
   bool in_word = false;
 
   auto flush_line = [&](size_t line_hi, bool hard) {
@@ -3527,10 +3726,22 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     // Non-space: accumulate into the current word. If an unbreakable run
     // exceeds the measure, split at this codepoint boundary and mark the
     // synthetic break with a return arrow.
+    // The rest of the word's width: one that fits the line is never split
+    // (the test below reserves room for the arrow on every character).
+    auto measure_rest = [&](size_t from) {
+      word_full_w = 0.f;
+      for (size_t j = from; j < chars.size(); ++j) {
+        if (chars[j].cp == ' ' || chars[j].cp == '\n' || chars[j].cp == '\r' ||
+            atom_w(chars[j]) > 0.f) break;
+        word_full_w += char_adv(chars[j]);
+        if (word_full_w > lw) break;
+      }
+    };
     if (!in_word) {
       in_word = true;
       word_lo = i;
       word_w = 0.f;
+      measure_rest(i);
     }
     // Decide whether a word fits alongside the text already on this line
     // *before* accumulating any of its characters. Otherwise an overlong
@@ -3548,7 +3759,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       if (line_w + remaining_word_w > lw)
         flush_line(word_lo, false);
     }
-    if (word_w > 0.f &&
+    if (word_w > 0.f && word_full_w > lw &&
         word_w + adv + forced_break_mark_width(chars[i - 1].role) > lw) {
       const FontRole role = chars[i - 1].role;
       if (emit_line(line_lo, i, false)) add_forced_break_mark(role);
@@ -3557,6 +3768,7 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       word_lo = i;
       line_w = 0.f;
       word_w = 0.f;
+      measure_rest(i);
     }
     word_w += adv;
   }

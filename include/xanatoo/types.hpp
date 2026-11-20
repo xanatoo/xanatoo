@@ -145,15 +145,29 @@ struct Node {
   bool expanded = true;           // for Stretch
   std::string summary;            // stretchtext collapsed label
   std::string float_side;        // image, figure or table: "left", "right", or flow
+  // Table: placement of a table narrower than the column ("left", "center",
+  //        "right"; empty = the style sheet's `table` align).
+  // TableRow / TableCell: horizontal alignment of the cell text ("left",
+  //        "center", "right", "decimal"; empty = row, then column, default).
+  std::string align;
+  // Table / TableRow / TableCell: vertical alignment of cell content in its
+  // row ("top", "middle", "bottom", "baseline"; empty = inherited).
+  std::string valign;
+  // Table: column alignments, one letter per column (LaTeX-style
+  // `l` / `c` / `r` / `d` = decimal point), e.g. "lrrd"; missing = `l`.
+  std::string cols;
   float display_scale = 1.f;      // image interactive scale (1 = natural fit)
   int width = 0;                  // Page: intrinsic size in source pixels,
   int height = 0;                 //       as thumtoo reports it (never guessed)
+                                  // Table: width in percent of the column
+                                  //        (0 = as wide as its content)
   std::string label;              // stable semantic anchor (links: #label)
   std::string tags;               // org-style tags without outer colons ("work:urgent")
   std::string style;              // optional named .xss variant for this subtree
   // CodeBlock: language id in `src` (e.g. "cpp"); Note: optional kind in `src`
   // Transclude: summary holds optional :excerpt phrase (range within target)
   // TableCell: level 1 = header cell, 0 = body cell
+  // TableRow: level 1 = head row (HTML thead), 2 = foot row (tfoot), 0 = body
   // Thread: label = thread id; summary = subject
   // Message: label = message-id; src = from/author; summary = date (ISO);
   //          alt = in-reply-to id, or "about:#anchor" for passage comments

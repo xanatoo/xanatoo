@@ -223,6 +223,11 @@ bool margin_chrome(const Document& doc, const Node& chrome);
 std::string chrome_hidden_text(const Document& doc,
                                const std::vector<NodeId>& regions);
 
+// Before a column drag on a content-fit table (no weights set yet), turn
+// its laid-out column widths into weights so the drag starts from what is
+// shown. No-op for side-by-side Columns and tables already weighted.
+void seed_table_weights(Document& doc, const LayoutResult& layout, NodeId table);
+
 // Rebuild LayoutResult::glyphs_by_y after glyphs were produced or moved.
 void index_glyphs(LayoutResult& layout);
 // Indices of the glyphs whose baseline y lies in [y0, y1], ascending (the
@@ -285,6 +290,8 @@ struct LayoutOptions {
     return o;
   }
 };
+
+struct TablePlan;  // layout.cpp
 
 class LayoutEngine {
 public:
@@ -398,7 +405,10 @@ private:
   MarginArea margins_[2];  // [0] left, [1] right
   bool in_image_float_ = false;
   bool in_figure_column_ = false;  // children of a block figure (figure_row)
-  bool center_lines_ = false;      // layout_paragraph centres each line
+  // How layout_paragraph sets each line (centred figure captions, table
+  // cells); in_cell_: inside a table cell (never justified).
+  TextAlign line_align_ = TextAlign::Start;
+  bool in_cell_ = false;
   // In a figure column: does the figure style centre its content?
   bool figure_centered() const;
   bool in_figure_float_ = false;
@@ -447,9 +457,16 @@ private:
   void layout_node(const Document& doc, NodeId id,
                    float x, float& y, float max_width,
                    LayoutResult& out);
-  void layout_spanned_table(const Document& doc, NodeId table,
-                            const std::vector<NodeId>& rows, float x, float& y,
-                            float width, LayoutResult& out);
+  // Tables (docs/TABLES.md): plan_table measures the cells and picks the
+  // column widths for at most `avail`; place_table lays the planned table
+  // out with its left edge at x.
+  void plan_table(const Document& doc, NodeId table, float avail, TablePlan& plan);
+  void place_table(const Document& doc, NodeId table, const TablePlan& plan,
+                   float x, float& y, LayoutResult& out);
+  // `cell` alone at content width w from (0, 0), lines flush left, nothing
+  // escaping (floats); its height in `height`.
+  LayoutResult measure_cell(const Document& doc, NodeId cell, float w,
+                            float& height);
   void layout_paragraph(const Document& doc, const Node& node,
                         float x, float& y, float max_width,
                         LayoutResult& out, FontRole base_role,

@@ -59,7 +59,8 @@ bool same_tree(const Document& a, NodeId ax, const Document& b, NodeId bx) {
   if (x.kind != y.kind || x.level != y.level || x.col_span != y.col_span ||
       x.row_span != y.row_span || x.alt != y.alt || x.src != y.src ||
       x.expanded != y.expanded || x.summary != y.summary ||
-      x.float_side != y.float_side || x.display_scale != y.display_scale ||
+      x.float_side != y.float_side || x.align != y.align ||
+      x.valign != y.valign || x.cols != y.cols || x.display_scale != y.display_scale ||
       x.label != y.label || x.tags != y.tags || x.style != y.style ||
       x.children.size() != y.children.size() || !same_spans(x, y))
     return false;
