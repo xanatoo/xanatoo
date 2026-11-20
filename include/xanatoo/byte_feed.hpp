@@ -52,6 +52,8 @@ struct ByteFeed {
   std::string content_type;       // under m, from the answer
   std::string etag, last_modified;
   int64_t mapped = 0;             // under m: `got` when the map was last written
+  bool stale = false;             // under m: the server's file changed; the cache
+                                  // file goes with the feed
   // Limits of the download (tests make them small).
   int64_t ahead = int64_t(64) << 20;       // at most this far ahead of the reader
   int64_t fill_whole = int64_t(128) << 20; // gaps behind the reader filled up to this size
@@ -118,7 +120,10 @@ using FeedFetch = std::function<std::string(int64_t from,
 // them it jumps to where a reader `want`s, stays at most `ahead` bytes in
 // front of the reader, fills the gaps of files up to `fill_whole`, and
 // picks up a broken connection where it broke. A cached feed whose file
-// changed on the server (length, ETag, Last-Modified) starts over.
+// changed on the server (length, ETag, Last-Modified) starts over. A
+// complete one ends at once (it plays from the cache) and then asks again,
+// stopping after the head, to compare: changed, it is `stale` and leaves the cache when the
+// feed goes, so the next play fetches the new file. No answer keeps it.
 void feed_download(ByteFeed& f, const FeedFetch& fetch);
 
 }  // namespace xanatoo

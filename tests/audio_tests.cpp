@@ -516,11 +516,48 @@ void test_audio(int& passed, int& failed) {
       auto feed = feed_open_cached(dir, url, budget);
       std::thread download = serve(feed, server);
       download.join();
-      EXPECT(feed_complete(*feed) && server.asked.empty());
+      // (Then one request stopped at the head, to see that it did not change.)
+      EXPECT(feed_complete(*feed) && server.asked.size() == 1 && server.asked[0] == 0);
+      EXPECT(feed->got.load() == int64_t(server.whole.size()));
+      EXPECT(!feed->stale);
       AudioDecoderPtr d = open_audio_feed(feed, FeedWait{}, nullptr);
       const auto ref = open_audio(server.whole, nullptr);
       EXPECT(d && ref && !audio_streaming(*d));
       if (d && ref) EXPECT(max_diff(decode_all(*d), decode_all(*ref)) < 1e-6f);
+    }
+    {  // Changed on the server since it was complete: plays what it has once,
+       // then the next play fetches the new file.
+      const std::vector<uint8_t> old = server.whole;
+      server.whole = make_wav(44100);
+      for (size_t i = 44; i < server.whole.size(); ++i) server.whole[i] ^= 0x33;
+      server.etag = "\"1b\"";
+      server.asked.clear();
+      auto feed = feed_open_cached(dir, url, budget);
+      std::thread download = serve(feed, server);
+      download.join();
+      EXPECT(feed_complete(*feed) && same(*feed, old) && feed->stale);
+      feed.reset();
+      server.asked.clear();
+      feed = feed_open_cached(dir, url, budget);
+      EXPECT(feed && feed->got.load() == 0);
+      download = serve(feed, server);
+      download.join();
+      EXPECT(feed_complete(*feed) && same(*feed, server.whole));
+      EXPECT(server.asked.size() == 1 && server.asked[0] == 0);
+    }
+    {  // No answer (offline): the cached file stays.
+      server.asked.clear();
+      auto feed = feed_open_cached(dir, url, budget);
+      std::thread download([feed] {
+        feed_download(*feed, [](int64_t, const auto&, const auto&) {
+          return std::string("network unreachable");
+        });
+      });
+      download.join();
+      EXPECT(feed_complete(*feed) && !feed->stale);
+      feed.reset();
+      feed = feed_open_cached(dir, url, budget);
+      EXPECT(feed && feed->got.load() == int64_t(server.whole.size()));
     }
     {  // Changed on the server (another ETag) while half cached: starts over.
       const std::string url2 = "http://example.test/b.wav";

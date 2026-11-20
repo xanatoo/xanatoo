@@ -198,7 +198,7 @@ void prune(const std::string& dir, int64_t budget) {
 
 ByteFeed::~ByteFeed() {
   if (!file) return;
-  if (have.empty()) {  // nothing to keep
+  if (have.empty() || stale) {  // nothing to keep
     std::fclose(file);
     std::error_code ec;
     fs::remove(path, ec);
@@ -375,6 +375,37 @@ bool feed_wait_answer(ByteFeed& f, const std::function<bool()>& give_up) {
   return true;
 }
 
+namespace {
+
+// A complete cache file, already playing: is it still the server's? Asks
+// from the start (any byte past the end would be refused when the file
+// shrank) and stops after the answer's head.
+void revalidate(ByteFeed& f, const FeedFetch& fetch) {
+  int64_t total;
+  std::string etag, modified;
+  {
+    std::lock_guard lock(f.m);
+    if (!f.file) return;  // (not from the cache)
+    total = f.total.load();
+    etag = f.etag;
+    modified = f.last_modified;
+  }
+  if (total <= 0 || f.cancel.load()) return;
+  fetch(0, [&](const FeedHead& h) {
+    auto differs = [](const std::string& a, const std::string& b) {
+      return !a.empty() && !b.empty() && a != b;
+    };
+    if ((h.total >= 0 && h.total != total) || differs(h.etag, etag) ||
+        differs(h.last_modified, modified)) {
+      std::lock_guard lock(f.m);
+      f.stale = true;
+    }
+    return false;  // the head was all of it
+  }, [](std::string_view) { return false; });
+}
+
+}  // namespace
+
 void feed_download(ByteFeed& f, const FeedFetch& fetch) {
   constexpr int kRetries = 3;  // broken connections in a row without a byte
   constexpr int64_t kIdle = -1, kComplete = -2;
@@ -407,6 +438,7 @@ void feed_download(ByteFeed& f, const FeedFetch& fetch) {
   }
   if (from < 0) {
     feed_end(f);
+    revalidate(f, fetch);
     return;
   }
   while (!f.cancel.load()) {

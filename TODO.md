@@ -41,11 +41,16 @@
   1 MB/s: 720p MP4 seek to 2:06 fetches from 33 MB, back to 0:04 plays at
   once without a request; after a restart only the first gap is fetched
   and 2:06 plays from disk; a complete MP3 replays with no request.
+- Then: a complete cached file is checked against the server after it
+  starts playing (one request, stopped at the head; length / ETag /
+  Last-Modified). Changed, the play goes on from the cache and the next
+  one fetches the new file; offline the cache stays. Checked with a WAV
+  shortened on the server: next play 2:00 from the cache, the one after
+  downloads the new 0:56 file.
 - Not yet: a streaming VBR MP3 seeks by average frame size (approximate
   place; the in-memory takeover then corrects it); a jump waits for the
-  download's next piece (no abort of a stalled read); a complete cached
-  file is never revalidated, and there is no "clear media cache" command
-  yet; HLS / DASH and servers without ranges are not cached; an extensionless
+  download's next piece (no abort of a stalled read); there is no "clear
+  media cache" command yet; HLS / DASH and servers without ranges are not cached; an extensionless
   address without Content-Disposition or tags is still titled by its last
   path part.
 - Then: a Content-Disposition file name titles the player; a startup

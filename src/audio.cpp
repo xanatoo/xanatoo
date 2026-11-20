@@ -610,6 +610,20 @@ AudioFormat feed_sniff(ByteFeed& f, const FeedWait& wait) {
 
 AudioDecoderPtr open_audio_feed(std::shared_ptr<ByteFeed> feed, const FeedWait& wait,
                                 std::string* error) {
+  // What a partial cache file has may be of a file the server changed since:
+  // its answer first.
+  bool cached;
+  {
+    std::lock_guard lock(feed->m);
+    cached = feed->file != nullptr;
+  }
+  if (cached) {
+    const uint64_t seen = wait.seeks ? wait.seeks->load() : 0;
+    if (!feed_wait_answer(*feed, [&] { return given_up(wait, seen); })) {
+      if (error) *error = "stopped";
+      return nullptr;
+    }
+  }
   const AudioFormat format = feed_sniff(*feed, wait);
   bool done;
   {

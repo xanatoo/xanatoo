@@ -514,9 +514,13 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `<name>.map` (address, length, type, ETag, Last-Modified, `have` lines;
   rewritten every 8 MiB, at the end and when the feed goes). The next feed
   of the address (`feed_open_cached`) starts with what is there: a
-  complete file plays without the network (no revalidation), a partial one
-  asks from its first gap and starts over when the length, ETag or
-  Last-Modified changed. One live feed per file (a registry; a second open
+  complete file plays at once without waiting for the network, while
+  `revalidate` asks once more and stops at the head (from byte 0: a byte
+  past the end of a file that shrank would be refused); a changed length,
+  ETag or Last-Modified makes the feed `stale`, the cache file goes with
+  it and the next play fetches the new file (no answer keeps it). A
+  partial one asks from its first gap and starts over when they changed;
+  `open_audio_feed` waits for that answer before it reads a cached feed. One live feed per file (a registry; a second open
   waits up to 2 s for the first to go, else takes a memory feed); files
   are pruned least recently used past 2 GiB (`kMediaCacheBytes`, one file
   at most half). Without a cache directory the built-in path keeps a
