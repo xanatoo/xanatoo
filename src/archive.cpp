@@ -346,12 +346,8 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
     }
     if (!list.empty()) {
       md += "## Files\n\n";
-      size_t n = 0;
+      // The metadata reply already lists every file, so show them all.
       for (const F& f : list) {
-        if (++n > 100) {
-          md += "- … " + std::to_string(list.size() - 100) + " more on archive.org\n";
-          break;
-        }
         md += "- " + link(f.name, base + percent_encode(f.name));
         std::string info = f.format;
         if (f.size > 0) info += (info.empty() ? "" : ", ") + human_size(f.size);
