@@ -10,15 +10,30 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
 
 | Ref | Shows |
 |-----|-------|
-| `ia:ID` | item: thumbnail, details (creator, date, language, collections, subjects, rights), description, files |
+| `ia:ID` | item: thumbnail, details, description, files, reviews |
 | `ia:ID?page=N` | page N (50 items, most downloaded first) of a collection's members |
 
 - Data: `https://archive.org/metadata/ID` (item) and `advancedsearch.php?q=collection:ID`
   (members of a collection; only fetched when `mediatype` is `collection`).
+- Details: creator, date, publisher, language, collections, subjects, rights,
+  license, source; for books volume, page count, ISBN / LCCN, OCLC (WorldCat
+  link), Open Library edition / work, call number, contributor, sponsor, scan
+  centre + ppi, OCR engine; for films runtime / sound / colour; a lending-library
+  note for `access-restricted-item`; added / last updated date, total size and
+  file count (`item_size`, `files_count`, `item_last_updated`), notes. The
+  uploader (an e-mail address) is not shown.
 - Files link to `archive.org/download/ID/NAME`; bookkeeping files (`*_meta.xml`,
-  `*_files.xml`, torrents, item tiles) are left out, originals come first, at
-  most 100 are listed. PDFs / EPUBs / images route through the usual
+  `*_files.xml`, torrents, item tiles) are left out, all others are listed (the
+  metadata reply already carries them). Each file's `source` sorts them:
+  "Original files" lists the uploads, each with the derivatives whose
+  `original` names it nested below (recursively: raw scans → JP2 → OCR →
+  PDF / EPUB); derivatives without a listed original go to "Other derived
+  files" with "(from NAME)", `metadata` files to "Other files"; a reply without
+  `source` gives one "Files" list. Lines show format, size, duration (`length`),
+  width × height and track number + title (not repeated on a derivative with
+  its original's title). PDFs / EPUBs / images route through the usual
   download / viewer handling.
+- Reviews (`reviews` in the metadata reply): stars, title, reviewer, date, body.
 - Movies, audio and etree items get "▶ Play" (the first file this build plays,
   `is_playable_url` passed into `ia_markdown`; opens the Media panel) and a
   "Watch / listen with mpv" link (`external:mpv:URL`).
@@ -28,7 +43,7 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
 
 ## Limits
 
-- Reviews, the full-text viewer and uploads are not supported.
+- Writing reviews, the full-text viewer and uploads are not supported.
 - Items with restricted access (`is_dark`, lending-only books) only show what
   the metadata API reveals; the files may not download.
 

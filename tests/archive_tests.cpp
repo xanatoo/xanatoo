@@ -81,6 +81,50 @@ int main() {
   assert(has(ia_markdown(coll, members, {"c", 2}), "[Previous page](ia:c)"));
   assert(has(ia_members_url({"c", 2}), "q=collection%3Ac"));
 
+  // Originals with their derivatives nested below; book details; reviews.
+  const char* scan = R"({"files":[
+    {"name":"b.pdf","format":"Text PDF","source":"original","size":"4096"},
+    {"name":"b_jp2.zip","format":"Single Page Processed JP2 ZIP","source":"derivative","original":"b.pdf"},
+    {"name":"b_djvu.txt","format":"DjVuTXT","source":"derivative","original":["b_jp2.zip","b.pdf"]},
+    {"name":"x.ogg","format":"Ogg Vorbis","source":"derivative","original":"x.mp3","title":"Song"},
+    {"name":"lost.gif","format":"Animated GIF","source":"derivative","original":"gone.avi"},
+    {"name":"x.mp3","format":"VBR MP3","source":"original","length":"245.4","title":"Song","track":"3"},
+    {"name":"loop.a","source":"derivative","original":"loop.b"},
+    {"name":"loop.b","source":"derivative","original":"loop.a"},
+    {"name":"cover.jpg","format":"JPEG","source":"metadata"}],
+   "item_size":3145728,"files_count":9,"item_last_updated":1700000000,
+   "reviews":[{"reviewtitle":"Great","reviewer":"ann","reviewdate":"2020-01-02 03:04:05",
+               "stars":"4","reviewbody":"Worth *reading*."}],
+   "metadata":{"identifier":"b","title":"B","mediatype":"texts","imagecount":"312",
+     "isbn":["0123456789"],"oclc-id":"12345","openlibrary_edition":"OL1M",
+     "scanningcenter":"Hong Kong","ppi":"400","access-restricted-item":"true",
+     "addeddate":"2015-06-07 08:09:10"}})";
+  const std::string sm = ia_markdown(scan, "", {"b", 1});
+  assert(has(sm, "## Original files"));
+  assert(has(sm, "\n- [b.pdf](https://archive.org/download/b/b.pdf) — Text PDF, 4.0 KB\n"
+                 "  - [b_jp2.zip]"));
+  assert(has(sm, "\n    - [b_djvu.txt]"));  // derived from the derivative
+  assert(has(sm, "VBR MP3, 4:05 · 3. “Song”"));
+  assert(has(sm, "x.ogg) — Ogg Vorbis\n"));  // the original's title is not repeated
+  assert(has(sm, "## Other derived files\n\n- [lost.gif]"));
+  assert(has(sm, "(from gone.avi)"));
+  assert(has(sm, "[loop.a]") && has(sm, "[loop.b]"));  // a cycle still lists both
+  assert(has(sm, "## Other files\n\n- [cover.jpg]"));
+  assert(has(sm, "Pages: 312"));
+  assert(has(sm, "ISBN: 0123456789"));
+  assert(has(sm, "[12345](https://search.worldcat.org/title/12345)"));
+  assert(has(sm, "[OL1M](https://openlibrary.org/books/OL1M)"));
+  assert(has(sm, "Scanned: Hong Kong, 400 ppi"));
+  assert(has(sm, "Access: lending library"));
+  assert(has(sm, "Added: 2015-06-07\n"));
+  assert(has(sm, "Updated: 2023-11-14"));
+  assert(has(sm, "Size: 3.0 MB in 9 files"));
+  assert(has(sm, "## Reviews\n\n★★★★☆ **Great** — ann, 2020-01-02\n\nWorth \\*reading\\*."));
+  // Replies without `source` keep one plain list.
+  assert(has(md, "## Original files") && !has(ia_markdown(movie, "", {"m", 1}), "## Files"));
+  const char* bare = R"({"files":[{"name":"a.txt"}],"metadata":{"identifier":"z","mediatype":"texts"}})";
+  assert(has(ia_markdown(bare, "", {"z", 1}), "## Files\n\n- [a.txt]"));
+
   // Unknown / malformed replies.
   assert(has(ia_markdown("{}", "", {"nope", 1}), "# Not found"));
   assert(has(ia_markdown("garbage", "", {"nope", 1}), "# Not found"));

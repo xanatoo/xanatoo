@@ -14,6 +14,9 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
+#include <functional>
+#include <map>
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
@@ -130,6 +133,33 @@ std::string human_size(long long n) {
   else if (n >= (1LL << 20)) std::snprintf(b, sizeof b, "%.1f MB", n / double(1LL << 20));
   else if (n >= (1LL << 10)) std::snprintf(b, sizeof b, "%.1f KB", n / double(1LL << 10));
   else std::snprintf(b, sizeof b, "%lld bytes", n);
+  return b;
+}
+
+// A media length: seconds ("245.3") or already "m:ss" / "h:mm:ss".
+std::string duration(const std::string& v) {
+  if (v.empty() || v.find(':') != std::string::npos) return v;
+  char* end = nullptr;
+  const double sec = std::strtod(v.c_str(), &end);
+  if (end == v.c_str() || sec <= 0) return {};
+  const long long t = static_cast<long long>(sec + 0.5);
+  char b[32];
+  if (t >= 3600) std::snprintf(b, sizeof b, "%lld:%02lld:%02lld", t / 3600, t / 60 % 60, t % 60);
+  else std::snprintf(b, sizeof b, "%lld:%02lld", t / 60, t % 60);
+  return b;
+}
+
+std::string utc_date(long long unix_time) {
+  if (unix_time <= 0) return {};
+  const std::time_t t = static_cast<std::time_t>(unix_time);
+  std::tm tm{};
+#ifdef _WIN32
+  gmtime_s(&tm, &t);
+#else
+  gmtime_r(&t, &tm);
+#endif
+  char b[16];
+  std::strftime(b, sizeof b, "%Y-%m-%d", &tm);
   return b;
 }
 
@@ -312,6 +342,55 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
     const auto src = field("source");
     if (!src.empty() && (starts_with(src[0], "http://") || starts_with(src[0], "https://")))
       add("Source", link(src[0], src[0]));
+    // Books: catalogue numbers and the scan.
+    add("Volume", joined(field("volume"), "; ", 1));
+    add("Pages", joined(field("imagecount"), "", 1));
+    add("ISBN", joined(field("isbn"), ", ", 4));
+    add("LCCN", joined(field("lccn"), ", ", 2));
+    {
+      std::string oclc;
+      for (const std::string& n : field("oclc-id"))
+        if (!n.empty() && n.size() < 20 && std::all_of(n.begin(), n.end(), [](char c) { return c >= '0' && c <= '9'; }))
+          oclc += (oclc.empty() ? "" : ", ") + link(n, "https://search.worldcat.org/title/" + n);
+      add("OCLC", oclc);
+      std::string ol;
+      for (const std::string& e : field("openlibrary_edition"))
+        if (valid_id(e)) ol += (ol.empty() ? "" : ", ") + link(e, "https://openlibrary.org/books/" + e);
+      for (const std::string& w : field("openlibrary_work"))
+        if (valid_id(w)) ol += (ol.empty() ? "" : ", ") + link(w, "https://openlibrary.org/works/" + w);
+      add("Open Library", ol);
+    }
+    add("Call number", joined(field("call_number"), "; ", 2));
+    add("Contributor", joined(field("contributor"), "; ", 3));
+    add("Sponsor", joined(field("sponsor"), "; ", 3));
+    {
+      std::string scan = joined(field("scanningcenter"), "; ", 1);
+      const std::string ppi = joined(field("ppi"), "", 1);
+      if (!ppi.empty()) scan += (scan.empty() ? "" : ", ") + ppi + " ppi";
+      add("Scanned", scan);
+    }
+    add("OCR", joined(field("ocr"), "; ", 1));
+    // Films and recordings.
+    add("Runtime", joined(field("runtime"), "; ", 1));
+    add("Sound", joined(field("sound"), "; ", 1));
+    add("Color", joined(field("color"), "; ", 1));
+    {
+      const auto restricted = field("access-restricted-item");
+      if (!restricted.empty() && restricted[0] == "true")
+        add("Access", "lending library; most files only open when borrowed on archive.org");
+    }
+    {
+      const auto added = field("addeddate");
+      if (!added.empty()) add("Added", esc(added[0].substr(0, 10)));
+      add("Updated", utc_date(json_number(json_get(*reply, "item_last_updated"))));
+      const long long size = json_number(json_get(*reply, "item_size"));
+      const long long count = json_number(json_get(*reply, "files_count"));
+      if (size > 0)
+        add("Size", human_size(size) +
+                        (count > 0 ? " in " + std::to_string(count) + (count == 1 ? " file" : " files")
+                                   : std::string()));
+    }
+    add("Notes", joined(field("notes"), "; ", 3));
     if (!facts.empty()) md += facts + "\n";
 
     const auto desc = field("description");
@@ -319,12 +398,24 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
 
     // Files.
     const Json* files = json_get(*reply, "files");
-    struct F { std::string name, format, source; long long size; };
+    // `source` is "original" (uploaded), "derivative" (made by archive.org
+    // from the file(s) in `original`) or "metadata".
+    struct F {
+      std::string name, format, source;
+      std::vector<std::string> from;
+      long long size;
+      std::string length, title, track, width, height;
+    };
     std::vector<F> list;
     if (files && type != "collection")  // a collection's files are its own icons
       for (const Json& f : files->items) {
-        F x{json_string(json_get(f, "name")), json_string(json_get(f, "format")),
-            json_string(json_get(f, "source")), json_number(json_get(f, "size"))};
+        auto str = [&](const char* k) {
+          const auto v = values(json_get(f, k));
+          return v.empty() ? std::string() : v[0];
+        };
+        F x{str("name"), str("format"), str("source"), values(json_get(f, "original")),
+            json_number(json_get(f, "size")), str("length"), str("title"), str("track"),
+            str("width"), str("height")};
         if (x.name.empty() || hidden_file(x.name, x.format)) continue;
         list.push_back(std::move(x));
       }
@@ -345,16 +436,98 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
       if (!mpv.empty()) md += link("Watch / listen with mpv", "external:mpv:" + mpv) + "\n\n";
     }
     if (!list.empty()) {
-      md += "## Files\n\n";
-      // The metadata reply already lists every file, so show them all.
-      for (const F& f : list) {
-        md += "- " + link(f.name, base + percent_encode(f.name));
+      // The metadata reply already lists every file, so show them all:
+      // each original with the files derived from it nested below.
+      std::map<std::string, size_t> by_name;
+      for (size_t i = 0; i < list.size(); ++i) by_name.emplace(list[i].name, i);
+      std::vector<std::vector<size_t>> derived(list.size());
+      std::vector<bool> placed(list.size(), false);
+      for (size_t i = 0; i < list.size(); ++i) {
+        if (list[i].source != "derivative") continue;
+        for (const std::string& o : list[i].from) {
+          const auto it = by_name.find(o);
+          if (it != by_name.end() && it->second != i) {
+            derived[it->second].push_back(i);
+            break;
+          }
+        }
+      }
+      // A derived track repeats its original's title: `parent_title` drops it.
+      auto line = [&](const F& f, size_t depth, bool show_from, const std::string& parent_title) {
+        std::string l = std::string(depth * 2, ' ') + "- " + link(f.name, base + percent_encode(f.name));
         std::string info = f.format;
-        if (f.size > 0) info += (info.empty() ? "" : ", ") + human_size(f.size);
-        if (!info.empty()) md += " — " + esc(info);
+        auto more = [&](const std::string& v) {
+          if (!v.empty()) info += (info.empty() ? "" : ", ") + v;
+        };
+        if (f.size > 0) more(human_size(f.size));
+        more(duration(f.length));
+        if (!f.width.empty() && !f.height.empty() && f.width != "0") more(f.width + "×" + f.height);
+        if (!info.empty()) l += " — " + esc(info);
+        if (!f.title.empty() && f.title != parent_title)
+          l += " · " + (f.track.empty() ? "" : esc(f.track) + ". ") + "“" + esc(one_line(f.title)) + "”";
+        if (show_from && !f.from.empty()) l += " (from " + esc(f.from[0]) + ")";
+        return l + "\n";
+      };
+      // Depth-first; `placed` also breaks cycles in odd `original` chains.
+      std::function<void(std::string&, size_t, size_t, bool, const std::string&)> emit =
+          [&](std::string& out, size_t i, size_t depth, bool from, const std::string& parent_title) {
+            placed[i] = true;
+            out += line(list[i], depth, from, parent_title);
+            const std::string& title = list[i].title.empty() ? parent_title : list[i].title;
+            for (size_t c : derived[i])
+              if (!placed[c]) emit(out, c, std::min<size_t>(depth + 1, 4), false, title);
+          };
+      size_t originals = 0, derivatives = 0;
+      for (const F& f : list) {
+        originals += f.source == "original";
+        derivatives += f.source == "derivative";
+      }
+      if (originals > 0) {
+        md += "## Original files\n\n";
+        if (derivatives > 0)
+          md += "As uploaded; the files archive.org derived from each (other formats, "
+                "OCR text, thumbnails, …) are listed below it.\n\n";
+        for (size_t i = 0; i < list.size(); ++i)
+          if (list[i].source == "original" && !placed[i]) emit(md, i, 0, false, {});
         md += "\n";
       }
-      md += "\n";
+      // Derived files whose original is not listed, then the rest
+      // ("metadata" files, or a reply without `source`).
+      std::string orphans, rest;
+      for (size_t i = 0; i < list.size(); ++i)
+        if (!placed[i] && list[i].source == "derivative") emit(orphans, i, 0, true, {});
+      for (size_t i = 0; i < list.size(); ++i)
+        if (!placed[i]) emit(rest, i, 0, false, {});
+      if (!orphans.empty())
+        md += (originals > 0 ? "## Other derived files\n\n" : "## Derived files\n\n") + orphans + "\n";
+      if (!rest.empty())
+        md += (originals + derivatives > 0 ? "## Other files\n\n" : "## Files\n\n") + rest + "\n";
+    }
+
+    // Reviews (part of the metadata reply).
+    if (const Json* reviews = json_get(*reply, "reviews");
+        reviews && reviews->type == Json::Type::Array && !reviews->items.empty()) {
+      md += "## Reviews\n\n";
+      for (const Json& r : reviews->items) {
+        const auto rv = [&](const char* k) {
+          const auto v = values(json_get(r, k));
+          return v.empty() ? std::string() : one_line(v[0]);
+        };
+        const std::string title = rv("reviewtitle"), who = rv("reviewer"),
+                          when = rv("reviewdate"), body = rv("reviewbody");
+        const long long stars = std::clamp(json_number(json_get(r, "stars")), 0LL, 5LL);
+        std::string head;
+        if (stars > 0) {
+          for (long long k = 0; k < 5; ++k) head += k < stars ? "\xE2\x98\x85" : "\xE2\x98\x86";
+          head += " ";
+        }
+        if (!title.empty()) head += "**" + esc(title) + "**";
+        std::string by = who.empty() ? std::string() : esc(who);
+        if (!when.empty()) by += (by.empty() ? "" : ", ") + esc(when.substr(0, 10));
+        if (!by.empty()) head += (head.empty() ? "" : " — ") + by;
+        if (!head.empty()) md += head + "\n\n";
+        if (!body.empty()) md += description_md(body);
+      }
     }
   }
   if (type == "collection" && !members_json.empty()) md += members_md(members_json, ref);

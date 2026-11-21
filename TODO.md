@@ -1584,8 +1584,14 @@ Next bundle number: **348** (this delivery is **347**)
   The `ia` search engine and `archive.org/details|download|stream|embed/ID`
   (native toggle) map to it. Live-checked mapper output against a Gutenberg
   item and the Prelinger collection; the in-app GUI path was not run.
-- Open: reviews, Wayback Machine, full-text viewer; lending-only items show
-  metadata but their files will not download.
+- 2026-11-21: all files listed (no 100 cap); "Original files" with their
+  derivatives nested by the per-file `original` field, then other derived /
+  metadata files; per-file duration, size, track titles; book / film details
+  (pages, ISBN, OCLC, Open Library, scan, OCR, runtime …), size / file count /
+  dates; reviews. Checked against live `alicesadventures00carr` and a
+  Grateful Dead etree item (mapper output only).
+- Open: full-text viewer; lending-only items show metadata but their files
+  will not download.
 
 ## Status (2026-11-11) — Clickable web addresses
 
