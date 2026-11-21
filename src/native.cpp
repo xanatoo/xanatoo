@@ -188,13 +188,16 @@ std::string up_url(std::string_view url) {
   }
   if (auto r = parse_forum_ref(url)) return forum_up_ref(*r);
   if (is_lemmy_ref(url)) {
-    // Communities and posts sit under the instance, which has no native
-    // view: up leaves for its web page.
+    // Communities, posts and profiles sit under the instance's front
+    // page ("lemmy:host/"), which is the top.
     std::string_view rest = after_prefix(url, kLemmyPrefix);
-    std::string result = "https://";
-    result += rest.substr(0, rest.find_first_of("/?#"));
-    result += '/';
-    return result;
+    const size_t host_end = rest.find_first_of("/?#");
+    const std::string_view host = rest.substr(0, host_end);
+    std::string_view path =
+        host_end == std::string_view::npos ? "" : rest.substr(host_end);
+    path = path.substr(0, path.find_first_of("?#"));
+    if (host.empty() || path.empty() || path == "/") return {};
+    return std::string(kLemmyPrefix) + std::string(host) + "/";
   }
   return {};
 }

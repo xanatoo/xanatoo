@@ -7359,7 +7359,12 @@ void test_wikipedia() {
   EXPECT_EQ(up_url("reddit:r/linux/"), "reddit:");
   EXPECT_EQ(up_url("reddit:r/linux/top/"), "reddit:r/linux/");
   EXPECT_EQ(up_url("reddit:"), "");
-  EXPECT_EQ(up_url("lemmy:lemmy.world/post/7"), "https://lemmy.world/");
+  EXPECT_EQ(up_url("lemmy:lemmy.world/post/7"), "lemmy:lemmy.world/");
+  EXPECT_EQ(up_url("lemmy:lemmy.world/c/technology"), "lemmy:lemmy.world/");
+  EXPECT_EQ(up_url("lemmy:lemmy.world/u/alice@programming.dev"),
+            "lemmy:lemmy.world/");
+  EXPECT_EQ(up_url("lemmy:lemmy.world/"), "");
+  EXPECT_EQ(up_url("lemmy:lemmy.world/?listingType=All"), "");
   EXPECT_EQ(up_url("wikipedia:Hypertext"), "");
   EXPECT_EQ(up_url("notes.md"), "");
   {
