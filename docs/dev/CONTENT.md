@@ -21,6 +21,19 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `Font::glyph` draws codepoints the face lacks from fallback faces
   (`fallback_font_faces`: FontConfig coverage sort, fixed list on Android);
   line metrics stay the primary face's.
+- Colour emoji: fallback faces may be colour fonts. Fixed-strike CBDT /
+  sbix faces (Noto Color Emoji) select the nearest strike (`size_face`) and
+  are scaled to the pixel size (`resample_premultiplied`); COLR outlines
+  render to BGRA through FreeType. Such glyphs carry `Glyph::color` and the
+  renderer draws them untinted (only alpha). OpenType-SVG-only faces
+  (Twemoji SVGinOT) have no renderer here: their monochrome outlines are
+  used, and only when no other face covers the codepoint.
+- No face has it: `missing_glyph_bitmap` draws a hex box (4 digits, 6
+  past U+FFFF) tinted like text; default-ignorables (`is_default_ignorable`:
+  variation selectors, joiners, bidi marks, tags) take no space. No
+  shaping yet, so ZWJ sequences and skin-tone modifiers show as their
+  parts, and VS16 does not force emoji presentation (❤️ stays the body
+  face's ❤ when it has one).
 - Font lookups return a `FontFace` (file + collection index); `Font::load`
   opens that member, so a `.ttc` / `.otc` match is the requested family,
   not face 0. FontConfig supplies `FC_INDEX`; without FontConfig

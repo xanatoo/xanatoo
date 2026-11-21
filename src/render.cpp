@@ -404,8 +404,11 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
       dst.w = rg.width;
       dst.h = rg.height;
       if (rg.texture && visible(dst.x, dst.y, dst.w, dst.h)) {
-        SDL_SetTextureColorMod(rg.texture, pg.color.r, pg.color.g,
-                               pg.color.b);
+        if (rg.color)  // emoji keep their own colours
+          SDL_SetTextureColorMod(rg.texture, 255, 255, 255);
+        else
+          SDL_SetTextureColorMod(rg.texture, pg.color.r, pg.color.g,
+                                 pg.color.b);
         SDL_SetTextureAlphaMod(rg.texture, pg.color.a);
         xanatoo::sdl::copy(sdl_, rg.texture, nullptr, &dst);
       }
@@ -539,7 +542,10 @@ void Renderer::draw_text(Font& font, float x, float y_baseline,
     int gx = 0;
     const Glyph& gl = font.raster(cp, pen, light_text(Rgba{r, g, b, 255}), &gx);
     if (gl.texture) {
-      SDL_SetTextureColorMod(gl.texture, r, g, b);
+      if (gl.color)
+        SDL_SetTextureColorMod(gl.texture, 255, 255, 255);
+      else
+        SDL_SetTextureColorMod(gl.texture, r, g, b);
       SDL_SetTextureAlphaMod(gl.texture, 255);  // glyphs share textures
       SDL_Rect dst{gx, static_cast<int>(y_baseline - gl.bearing_y), gl.width,
                    gl.height};

@@ -8203,6 +8203,58 @@ static void test_font_face_index() {
   EXPECT(!missing.load(negative, 18, nullptr));
 }
 
+// Codepoints the primary face lacks: colour emoji from a fallback face,
+// a hex box when no face has them, nothing for default-ignorables.
+static void test_font_missing_glyphs() {
+  using namespace xanatoo;
+  EXPECT(is_default_ignorable(0xfe0f));
+  EXPECT(is_default_ignorable(0x200d));
+  EXPECT(!is_default_ignorable('a'));
+  EXPECT(!is_default_ignorable(0x1f4ac));
+
+  const MissingGlyphBitmap small = missing_glyph_bitmap(0x378, 16);
+  const MissingGlyphBitmap wide = missing_glyph_bitmap(0x1f4ac, 16);
+  EXPECT(small.width > 0 && small.height > 0);
+  EXPECT_EQ(small.alpha.size(), static_cast<size_t>(small.width) * small.height);
+  EXPECT(wide.width > small.width);  // 3 columns of digits instead of 2
+  EXPECT_EQ(wide.height, small.height);
+  EXPECT_EQ(small.alpha[0], 255);  // the frame's corner
+  EXPECT(missing_glyph_bitmap(0x378, 40).height > small.height);
+
+  // A 2 × 2 premultiplied image averages to one pixel.
+  const uint8_t px[16] = {255, 0, 0, 255, 0, 0, 0, 0,
+                          0, 255, 0, 255, 0, 0, 0, 0};
+  const auto one = resample_premultiplied(px, 2, 2, 8, 1, 1);
+  EXPECT_EQ(one.size(), 4u);
+  EXPECT_EQ(one[0], 64);
+  EXPECT_EQ(one[1], 64);
+  EXPECT_EQ(one[3], 128);
+
+  const std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) {
+    std::fprintf(stderr, "SKIP test_font_missing_glyphs (no font)\n");
+    return;
+  }
+  Font font;
+  EXPECT(font.load(path, 16, nullptr));
+  // Unassigned (plane 3 noncharacter neighbour): no face should have it.
+  if (fallback_font_faces(0x3fffd, "DejaVu Sans", 0, 0).empty()) {
+    const Glyph& box = font.glyph(0x3fffd);
+    EXPECT(!box.color);
+    EXPECT(box.advance > 0 && box.width == wide.width);
+  }
+  const Glyph& vs = font.glyph(0xe0101);  // ignorable, not in DejaVu
+  EXPECT_EQ(vs.advance, 0);
+  EXPECT_EQ(vs.width, 0);
+  if (!fallback_font_faces(0x1f4ac, "DejaVu Sans", 0, 0).empty()) {
+    const Glyph& emoji = font.glyph(0x1f4ac);
+    EXPECT(emoji.width > 0 && emoji.width < 40);  // scaled from its strike
+    EXPECT(emoji.advance > 8 * 64 && emoji.advance < 40 * 64);
+  } else {
+    std::fprintf(stderr, "SKIP test_font_missing_glyphs emoji (no face)\n");
+  }
+}
+
 static void test_long_ordered_list_markers() {
   using namespace xanatoo;
   // Markers past "99." must not overlap the item text, and every item of
@@ -8647,6 +8699,7 @@ int main() {
   test_looks_like_binary();
   test_transfer_label();
   test_font_face_index();
+  test_font_missing_glyphs();
   test_reply_markdown();
   test_sdl_time_bridge();
   test_about_markdown();

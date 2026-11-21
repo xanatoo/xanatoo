@@ -30,6 +30,8 @@ struct Glyph {
   int bearing_x = 0;
   int bearing_y = 0;
   int advance = 0;  // in 1/64th pixels, unhinted (fractional)
+  // A colour bitmap (emoji): draw it untinted, only the alpha applies.
+  bool color = false;
   float advance_px() const { return static_cast<float>(advance) / 64.f; }
 };
 
@@ -93,15 +95,24 @@ private:
   static constexpr int kVariants = kSubpixelSteps * 2;
   std::array<const Glyph*, 256 * kVariants> latin1_{};
   // Faces opened for codepoints the primary face lacks, same pixel size.
+  // Colour bitmap faces (CBDT emoji) come in fixed strikes: `scale`
+  // maps the chosen strike onto the pixel size.
   struct FallbackFace {
     FontFace file;
     FT_Face face = nullptr;
+    float scale = 1.f;
+    // Colour only as OpenType-SVG (no renderer here): its monochrome
+    // outlines are drawn, and other faces covering a codepoint win.
+    bool svg_only = false;
   };
   std::vector<FallbackFace> fallbacks_;
 
   Glyph load_glyph(uint32_t codepoint, int variant);
+  Glyph color_glyph(FT_GlyphSlot slot, float scale);
+  Glyph missing_glyph(uint32_t codepoint);
+  SDL_Texture* make_texture(const std::vector<uint8_t>& rgba, int w, int h);
   const Glyph& variant(uint32_t codepoint, int variant);
-  FT_Face fallback_face(uint32_t codepoint);
+  const FallbackFace* fallback_face(uint32_t codepoint);
   void drop_cache();
 };
 
@@ -111,6 +122,25 @@ private:
 std::vector<FontFace> fallback_font_faces(uint32_t codepoint,
                                           const std::string& family,
                                           int weight, int slant);
+
+// Codepoints drawn as nothing when no face maps them (variation selectors,
+// joiners, bidi marks, tags …) instead of a missing-glyph box.
+bool is_default_ignorable(uint32_t codepoint);
+
+// The box drawn for a codepoint that no installed face covers: a frame
+// around its hex digits in two rows (4 digits, or 6 past U+FFFF), as
+// coverage bytes (0 / 255), row-major, `width` × `height`.
+struct MissingGlyphBitmap {
+  int width = 0;
+  int height = 0;
+  std::vector<uint8_t> alpha;
+};
+MissingGlyphBitmap missing_glyph_bitmap(uint32_t codepoint, int pixel_size);
+
+// Area-average resample of a 4-channel premultiplied image (FreeType's
+// BGRA colour bitmaps) to dw × dh; the channel order is kept.
+std::vector<uint8_t> resample_premultiplied(const uint8_t* src, int sw, int sh,
+                                            int pitch, int dw, int dh);
 
 // Which face to use when laying out / drawing a glyph.
 enum class FontRole : uint8_t {

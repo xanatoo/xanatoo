@@ -9,6 +9,8 @@
 #include FT_OUTLINE_H
 #include FT_DRIVER_H
 #include FT_MODULE_H
+#include FT_TRUETYPE_TABLES_H
+#include FT_TRUETYPE_TAGS_H
 #ifndef XANATOO_FONTCONFIG
 #define XANATOO_FONTCONFIG 1
 #endif
@@ -89,23 +91,67 @@ void Font::drop_cache() {
   latin1_.fill(nullptr);
 }
 
+// Sizes a face for `px` and returns the factor from its glyphs to `px`:
+// 1 for outline faces; fixed-strike faces (colour emoji) pick the smallest
+// strike at least `px` (else the largest) and get scaled when drawn.
+static float size_face(FT_Face face, int px) {
+  if (FT_IS_SCALABLE(face)) {
+    FT_Set_Pixel_Sizes(face, 0, px);
+    return 1.f;
+  }
+  if (face->num_fixed_sizes <= 0 || px <= 0) return 1.f;
+  int best = -1, largest = 0;
+  for (int i = 0; i < face->num_fixed_sizes; ++i) {
+    const FT_Pos ppem = face->available_sizes[i].y_ppem;
+    if (ppem > face->available_sizes[largest].y_ppem) largest = i;
+    if (ppem >= px * 64 &&
+        (best < 0 || ppem < face->available_sizes[best].y_ppem))
+      best = i;
+  }
+  if (best < 0) best = largest;
+  FT_Select_Size(face, best);
+  const FT_Pos ppem = face->available_sizes[best].y_ppem;
+  return ppem > 0 ? static_cast<float>(px * 64) / static_cast<float>(ppem)
+                  : 1.f;
+}
+
 void Font::set_size(int pixel_size) {
   // Drop cached textures — they are sized for the old pixel size
   drop_cache();
 
   pixel_size_ = pixel_size;
   FT_Set_Pixel_Sizes(face_, 0, pixel_size);
-  for (FallbackFace& f : fallbacks_) FT_Set_Pixel_Sizes(f.face, 0, pixel_size);
+  for (FallbackFace& f : fallbacks_) f.scale = size_face(f.face, pixel_size);
   line_height_ = static_cast<int>(face_->size->metrics.height >> 6);
   ascender_ = static_cast<int>(face_->size->metrics.ascender >> 6);
   descender_ = static_cast<int>(face_->size->metrics.descender >> 6);
 }
 
+static bool has_sfnt_table(FT_Face face, FT_ULong tag) {
+  FT_ULong length = 0;
+  return FT_Load_Sfnt_Table(face, tag, 0, nullptr, &length) == 0 &&
+         length > 0;
+}
+
+// Colour that FreeType cannot draw by itself: only an SVG table, no
+// bitmap strikes (CBDT / sbix) or COLR layers.
+static bool svg_only_color(FT_Face face) {
+  return FT_HAS_COLOR(face) && has_sfnt_table(face, TTAG_SVG) &&
+         !has_sfnt_table(face, TTAG_CBDT) && !has_sfnt_table(face, TTAG_sbix) &&
+         !has_sfnt_table(face, TTAG_COLR);
+}
+
 // A face that maps `codepoint`, opening fallback files on first need.
 // Line metrics stay the primary face's; only the glyph comes from here.
-FT_Face Font::fallback_face(uint32_t codepoint) {
-  for (const FallbackFace& f : fallbacks_)
-    if (FT_Get_Char_Index(f.face, codepoint) != 0) return f.face;
+// SVG-only colour faces are the last resort. The pointer is good until
+// the next call (fallbacks_ may grow).
+const Font::FallbackFace* Font::fallback_face(uint32_t codepoint) {
+  int last_resort = -1;
+  for (size_t i = 0; i < fallbacks_.size(); ++i) {
+    if (FT_Get_Char_Index(fallbacks_[i].face, codepoint) == 0) continue;
+    if (!fallbacks_[i].svg_only) return &fallbacks_[i];
+    if (last_resort < 0) last_resort = static_cast<int>(i);
+  }
   const std::string family = face_->family_name ? face_->family_name : "";
   const int weight = (face_->style_flags & FT_STYLE_FLAG_BOLD) ? 1 : 0;
   const int slant = (face_->style_flags & FT_STYLE_FLAG_ITALIC) ? 1 : 0;
@@ -117,15 +163,21 @@ FT_Face Font::fallback_face(uint32_t codepoint) {
     if (open) continue;  // already checked above
     FT_Face face = nullptr;
     if (FT_New_Face(library_, file.path.c_str(), file.index, &face)) continue;
-    if (!FT_IS_SCALABLE(face)) {  // bitmap-only (colour emoji) faces
+    // Fixed-strike faces only when they are colour (emoji); plain bitmap
+    // fonts would look blocky once scaled.
+    if (!FT_IS_SCALABLE(face) &&
+        (!FT_HAS_COLOR(face) || face->num_fixed_sizes <= 0)) {
       FT_Done_Face(face);
       continue;
     }
-    FT_Set_Pixel_Sizes(face, 0, pixel_size_);
-    fallbacks_.push_back({file, face});
-    if (FT_Get_Char_Index(face, codepoint) != 0) return face;
+    const float scale = size_face(face, pixel_size_);
+    const bool svg_only = svg_only_color(face);
+    fallbacks_.push_back({file, face, scale, svg_only});
+    if (FT_Get_Char_Index(face, codepoint) == 0) continue;
+    if (!svg_only) return &fallbacks_.back();
+    if (last_resort < 0) last_resort = static_cast<int>(fallbacks_.size() - 1);
   }
-  return nullptr;
+  return last_resort >= 0 ? &fallbacks_[last_resort] : nullptr;
 }
 
 // Coverage curves for blending in sRGB: plain alpha blending makes dark
@@ -149,19 +201,100 @@ static const std::array<uint8_t, 256>& coverage_curve(bool light_text) {
   return curves[light_text ? 1 : 0];
 }
 
+SDL_Texture* Font::make_texture(const std::vector<uint8_t>& rgba, int w,
+                                int h) {
+  SDL_Surface* surf = xanatoo::sdl::rgba_surface_from(
+      const_cast<uint8_t*>(rgba.data()), w, h, w * 4);
+  if (!surf) return nullptr;
+  SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
+  if (tex) {
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    xanatoo::sdl::set_nearest(tex);
+  }
+  xanatoo::sdl::destroy_surface(surf);
+  return tex;
+}
+
+// A colour (BGRA, premultiplied) bitmap, scaled from its strike to the
+// pixel size and handed to SDL as straight RGBA.
+Glyph Font::color_glyph(FT_GlyphSlot slot, float scale) {
+  Glyph g;
+  g.color = true;
+  const FT_Bitmap& bm = slot->bitmap;
+  const int sw = static_cast<int>(bm.width), sh = static_cast<int>(bm.rows);
+  g.width = std::max(1, static_cast<int>(std::lround(sw * scale)));
+  g.height = std::max(1, static_cast<int>(std::lround(sh * scale)));
+  g.bearing_x = static_cast<int>(std::lround(slot->bitmap_left * scale));
+  g.bearing_y = static_cast<int>(std::lround(slot->bitmap_top * scale));
+  g.advance = static_cast<int>(std::lround(slot->advance.x * scale));
+  if (sw == 0 || sh == 0) {
+    g.width = g.height = 0;
+    return g;
+  }
+  if (!renderer_) return g;
+  std::vector<uint8_t> px = resample_premultiplied(bm.buffer, sw, sh, bm.pitch,
+                                                  g.width, g.height);
+  for (size_t i = 0; i + 3 < px.size(); i += 4) {
+    const int a = px[i + 3];
+    const auto straight = [a](int c) {
+      return static_cast<uint8_t>(a ? std::min(255, (c * 255 + a / 2) / a) : 0);
+    };
+    const uint8_t b = straight(px[i]), gr = straight(px[i + 1]),
+                  r = straight(px[i + 2]);
+    px[i] = r;
+    px[i + 1] = gr;
+    px[i + 2] = b;
+  }
+  g.texture = make_texture(px, g.width, g.height);
+  return g;
+}
+
+// The hex box for a codepoint no face has, centred on the x-height band.
+Glyph Font::missing_glyph(uint32_t codepoint) {
+  Glyph g;
+  const MissingGlyphBitmap box = missing_glyph_bitmap(codepoint, pixel_size_);
+  const int margin = std::max(1, pixel_size_ / 16);
+  g.width = box.width;
+  g.height = box.height;
+  g.bearing_x = margin;
+  g.bearing_y = (ascender_ + descender_ + box.height) / 2;
+  g.advance = (box.width + 2 * margin) * 64;
+  if (!renderer_ || box.alpha.empty()) return g;
+  std::vector<uint8_t> rgba(box.alpha.size() * 4);
+  for (size_t i = 0; i < box.alpha.size(); ++i) {
+    rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 255;
+    rgba[i * 4 + 3] = box.alpha[i];
+  }
+  g.texture = make_texture(rgba, g.width, g.height);
+  return g;
+}
+
 // `variant` = sub-pixel phase + kSubpixelSteps * light_text.
 Glyph Font::load_glyph(uint32_t codepoint, int variant) {
   Glyph g;
   FT_Face face = face_;
+  float scale = 1.f;
+  bool svg_only = false;
   if (codepoint >= 0x20 && FT_Get_Char_Index(face_, codepoint) == 0) {
-    if (FT_Face fb = fallback_face(codepoint)) face = fb;
+    if (is_default_ignorable(codepoint)) return g;  // zero width, no ink
+    const FallbackFace* fb = fallback_face(codepoint);
+    // Nothing covers it: a hex box (C1 controls keep the face's .notdef).
+    if (!fb && (codepoint < 0x7f || codepoint >= 0xa0))
+      return missing_glyph(codepoint);
+    if (fb) {
+      face = fb->face;
+      scale = fb->scale;
+      svg_only = fb->svg_only;
+    }
   }
   // Light hinting snaps only vertical metrics and keeps stroke weights
   // fractional, as browsers / fontconfig "hintslight" do. Full native
   // hinting rounds strokes to whole pixels, so text visibly jumps in
   // weight between sizes (DejaVu Sans: 1 px bars at 16 px, 2 px at 17 px).
   // It leaves x alone, so outlines can shift by sub-pixel phases.
-  if (FT_Load_Char(face, codepoint, FT_LOAD_TARGET_LIGHT)) return g;
+  FT_Int32 flags = FT_LOAD_TARGET_LIGHT;
+  if (FT_HAS_COLOR(face) && !svg_only) flags |= FT_LOAD_COLOR;
+  if (FT_Load_Char(face, codepoint, flags)) return g;
   FT_GlyphSlot slot = face->glyph;
   const int phase = variant % kSubpixelSteps;
   const bool light_text = variant >= kSubpixelSteps;
@@ -170,6 +303,9 @@ Glyph Font::load_glyph(uint32_t codepoint, int variant) {
   if (slot->format != FT_GLYPH_FORMAT_BITMAP &&
       FT_Render_Glyph(slot, FT_RENDER_MODE_LIGHT))
     return g;
+  // CBDT strikes and COLR layers (FreeType renders those to BGRA).
+  if (slot->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA)
+    return color_glyph(slot, scale);
   g.width = slot->bitmap.width;
   g.height = slot->bitmap.rows;
   g.bearing_x = slot->bitmap_left;
@@ -197,16 +333,7 @@ Glyph Font::load_glyph(uint32_t codepoint, int variant) {
         px[3] = a;
       }
     }
-    SDL_Surface* surf = xanatoo::sdl::rgba_surface_from(
-        rgba.data(), g.width, g.height, g.width * 4);
-    if (surf) {
-      g.texture = SDL_CreateTextureFromSurface(renderer_, surf);
-      if (g.texture) {
-        SDL_SetTextureBlendMode(g.texture, SDL_BLENDMODE_BLEND);
-        xanatoo::sdl::set_nearest(g.texture);
-      }
-      xanatoo::sdl::destroy_surface(surf);
-    }
+    g.texture = make_texture(rgba, g.width, g.height);
   }
   return g;
 }
@@ -236,6 +363,91 @@ const Glyph& Font::raster(uint32_t codepoint, float pen_x, bool light_text,
       variant(codepoint, phase + (light_text ? kSubpixelSteps : 0));
   *x = ix + g.bearing_x;
   return g;
+}
+
+bool is_default_ignorable(uint32_t c) {
+  return c == 0xad || c == 0x34f || c == 0x61c || c == 0x115f ||
+         c == 0x1160 || c == 0x17b4 || c == 0x17b5 ||
+         (c >= 0x180b && c <= 0x180f) || (c >= 0x200b && c <= 0x200f) ||
+         (c >= 0x202a && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) ||
+         c == 0x3164 || (c >= 0xfe00 && c <= 0xfe0f) || c == 0xfeff ||
+         c == 0xffa0 || (c >= 0xfff0 && c <= 0xfff8) ||
+         (c >= 0x1bca0 && c <= 0x1bca3) || (c >= 0x1d173 && c <= 0x1d17a) ||
+         (c >= 0xe0000 && c <= 0xe0fff);
+}
+
+// 3 × 5 hex digits, one bit per pixel, rows top-down, MSB = left.
+static constexpr uint16_t kHexDigits[16] = {
+    0b111'101'101'101'111, 0b010'110'010'010'111, 0b111'001'111'100'111,
+    0b111'001'111'001'111, 0b101'101'111'001'001, 0b111'100'111'001'111,
+    0b111'100'111'101'111, 0b111'001'001'001'001, 0b111'101'111'101'111,
+    0b111'101'111'001'111, 0b111'101'111'101'101, 0b110'101'110'101'110,
+    0b111'100'100'100'111, 0b110'101'101'101'110, 0b111'100'111'100'111,
+    0b111'100'111'100'100};
+
+MissingGlyphBitmap missing_glyph_bitmap(uint32_t codepoint, int pixel_size) {
+  MissingGlyphBitmap out;
+  const int s = std::max(1, (pixel_size + 4) / 16);  // dot size
+  const int pad = pixel_size >= 14 ? s : 0;          // frame to digits
+  const int ndigits = codepoint > 0xffff ? 6 : 4;
+  const int cols = ndigits / 2;
+  const int inset = s + pad;
+  out.width = 2 * inset + cols * 3 * s + (cols - 1) * s;
+  out.height = 2 * inset + 2 * 5 * s + s;
+  out.alpha.assign(static_cast<size_t>(out.width) * out.height, 0);
+  auto fill = [&](int x0, int y0, int w, int h) {
+    for (int y = y0; y < y0 + h; ++y)
+      for (int x = x0; x < x0 + w; ++x)
+        out.alpha[static_cast<size_t>(y) * out.width + x] = 255;
+  };
+  fill(0, 0, out.width, s);
+  fill(0, out.height - s, out.width, s);
+  fill(0, 0, s, out.height);
+  fill(out.width - s, 0, s, out.height);
+  for (int i = 0; i < ndigits; ++i) {
+    const int digit = (codepoint >> (4 * (ndigits - 1 - i))) & 0xf;
+    const int x0 = inset + (i % cols) * 4 * s;
+    const int y0 = inset + (i / cols) * 6 * s;
+    for (int r = 0; r < 5; ++r)
+      for (int c = 0; c < 3; ++c)
+        if (kHexDigits[digit] & (1 << (14 - (r * 3 + c))))
+          fill(x0 + c * s, y0 + r * s, s, s);
+  }
+  return out;
+}
+
+std::vector<uint8_t> resample_premultiplied(const uint8_t* src, int sw, int sh,
+                                            int pitch, int dw, int dh) {
+  std::vector<uint8_t> out(static_cast<size_t>(std::max(dw, 0)) *
+                           std::max(dh, 0) * 4);
+  if (!src || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return out;
+  const double fx = static_cast<double>(sw) / dw;
+  const double fy = static_cast<double>(sh) / dh;
+  for (int y = 0; y < dh; ++y) {
+    const double y0 = y * fy, y1 = y0 + fy;
+    for (int x = 0; x < dw; ++x) {
+      const double x0 = x * fx, x1 = x0 + fx;
+      double acc[4] = {0, 0, 0, 0}, area = 0;
+      for (int sy = static_cast<int>(y0); sy < sh && sy < y1; ++sy) {
+        const double wy = std::min<double>(sy + 1, y1) - std::max<double>(sy, y0);
+        if (wy <= 0) continue;
+        const uint8_t* row = src + static_cast<ptrdiff_t>(sy) * pitch;
+        for (int sx = static_cast<int>(x0); sx < sw && sx < x1; ++sx) {
+          const double wx =
+              std::min<double>(sx + 1, x1) - std::max<double>(sx, x0);
+          if (wx <= 0) continue;
+          const double w = wx * wy;
+          for (int k = 0; k < 4; ++k) acc[k] += w * row[sx * 4 + k];
+          area += w;
+        }
+      }
+      uint8_t* px = &out[(static_cast<size_t>(y) * dw + x) * 4];
+      for (int k = 0; k < 4; ++k)
+        px[k] = static_cast<uint8_t>(
+            area > 0 ? std::min(255L, std::lround(acc[k] / area)) : 0);
+    }
+  }
+  return out;
 }
 
 int Font::measure(const std::string& text) {
@@ -340,10 +552,10 @@ std::vector<FontFace> fallback_font_faces(uint32_t codepoint,
         for (int i = 0; i < set->nfont && paths.size() < 3; ++i) {
           FcPattern* f = set->fonts[i];
           FcCharSet* cs = nullptr;
-          FcBool scalable = FcTrue, color = FcFalse;
+          // Colour faces (emoji) count: Font draws their BGRA bitmaps.
+          FcBool scalable = FcTrue;
           FcPatternGetBool(f, FC_SCALABLE, 0, &scalable);
-          FcPatternGetBool(f, FC_COLOR, 0, &color);
-          if (!scalable || color) continue;
+          if (!scalable) continue;
           if (FcPatternGetCharSet(f, FC_CHARSET, 0, &cs) != FcResultMatch ||
               !FcCharSetHasChar(cs, codepoint))
             continue;
@@ -573,7 +785,8 @@ std::vector<FontFace> fallback_font_faces(uint32_t, const std::string&,
                           "NotoSansSymbols-Regular.ttf",
                           "NotoSansSymbols2-Regular.ttf",
                           "NotoSansMath-Regular.ttf", "DroidSansFallback.ttf",
-                          "DroidSansFallbackFull.ttf"}) {
+                          "DroidSansFallbackFull.ttf", "NotoColorEmoji.ttf",
+                          "NotoColorEmojiLegacy.ttf"}) {
       for (const auto& dir : font_dirs()) {
         std::error_code ec;
         const auto p = dir / f;

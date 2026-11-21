@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Colour emoji and missing-glyph boxes
+
+- Font fallback now takes colour faces: 💬 and other emoji the body face
+  lacks come from Noto Color Emoji (CBDT strike scaled to the text size,
+  drawn untinted); SVG-only Twemoji is a monochrome last resort.
+- Codepoints no installed face has draw a hex box (`01F/4AC` style)
+  instead of the primary face's .notdef; default-ignorables take no space.
+- Unit test `test_font_missing_glyphs`; checked under Xvfb. Open: emoji
+  sequences (ZWJ, skin tones, VS16) need shaping (HarfBuzz); ImGui chrome
+  still has no emoji.
+
 ## Status (2026-11-21) — Services menu overhaul
 
 - Services menu regrouped by protocol (Reference · News and forums ·
