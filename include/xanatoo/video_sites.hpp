@@ -17,6 +17,11 @@
 //   dailymotion:xID[?comments=N]              video
 //   dailymotion:user/xID[?page=N]             channel uploads
 //   dailymotion:search?search=Q[&page=N]      search
+//   mediaccc:[?page=N]                        recent talks of media.ccc.de
+//   mediaccc:conferences[?page=N]             every conference / event series
+//   mediaccc:c/ACRONYM[?page=N]               one conference's talks
+//   mediaccc:v/SLUG                           talk (no comments on the site)
+//   mediaccc:search?q=Q[&page=N]              search
 //
 // Parsers are pure (JSON text in, structs / Document out) and tested with cut
 // down recorded replies; only video_site_fetch touches the network.
@@ -31,11 +36,12 @@
 
 namespace xanatoo {
 
-enum class VideoSite { PeerTube, Odysee, Dailymotion };
+enum class VideoSite { PeerTube, Odysee, Dailymotion, MediaCCC };
 
 struct VsRef {
   VideoSite site = VideoSite::PeerTube;
-  enum class Kind { Home, Channel, Account, Video, Search } kind = Kind::Home;
+  // Index: the site's list of channels (media.ccc.de's conferences).
+  enum class Kind { Home, Channel, Account, Video, Search, Index } kind = Kind::Home;
   std::string host;  // PeerTube instance host
   // Channel / Account / Video: the site's id (PeerTube name or uuid, Odysee
   // "@chan:8" or "@chan:8/slug:e", Dailymotion xID or user id).
@@ -73,11 +79,14 @@ struct VsComment {
 
 struct VsVideoInfo {
   std::string title, owner, owner_ref, views, date, likes, duration;
+  // The series the video belongs to (media.ccc.de: its conference).
+  std::string group, group_ref;
   std::string description, thumb, web_url, play_url;
   // The video itself for the Media panel (a file or an HLS playlist; empty:
   // none known), its quality ("720p"), and a sound-only file.
   std::string stream_url, stream_label, audio_url;
   int comment_count = 0;
+  bool no_comments = false;  // the site has none: no Comments section
 };
 
 struct VsComments {
@@ -123,6 +132,19 @@ VsListing dm_parse_videos(const Json& reply, int page);
 VsVideoInfo dm_parse_video(const Json& reply);
 void dm_parse_channel_header(const Json& reply, VsListing& l);
 VsComments dm_parse_comments(const Json& reply, int page);
+
+// ---- media.ccc.de (voctoweb public API, api.media.ccc.de/public) ----
+// An `{events:[…]}` reply (recent, search, or a conference's events).
+VsListing ccc_parse_events(const Json& reply);
+// `{conferences:[…]}`, newest release first.
+VsListing ccc_parse_conferences(const Json& reply);
+// Title / description of a /public/conferences/ACRONYM reply into `l`.
+void ccc_parse_conference_header(const Json& reply, VsListing& l);
+// One /public/events/ID reply with its `recordings`: the video in the talk's
+// own language (H.264 HD first), and a sound-only file.
+VsVideoInfo ccc_parse_event(const Json& reply);
+// Page `page` of a listing the site sends whole (`per_page` per page).
+void vs_slice_page(VsListing& l, int page, int per_page);
 
 // ---- documents ----
 Document vs_listing_document(const VsListing& l, const VsRef& ref);

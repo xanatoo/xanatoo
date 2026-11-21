@@ -313,8 +313,9 @@ read-only service clients. Every client is read-only: never post or log in.
 ## Video sites
 
 - `src/video_sites.cpp`, gated by `XANATOO_VIDEO` (default ON; needs TLS).
-  Read-only PeerTube / Odysee / Dailymotion clients over public JSON APIs:
-  `peertube:HOST/w/ID`, `odysee:@chan:8/slug:e`, `dailymotion:xID`, plus
+  Read-only PeerTube / Odysee / Dailymotion / media.ccc.de clients over
+  public JSON APIs: `peertube:HOST/w/ID`, `odysee:@chan:8/slug:e`,
+  `dailymotion:xID`, `mediaccc:c/38c3` / `mediaccc:v/SLUG`, plus
   channel and search refs and comments. Parsers are pure and tested; never
   post or log in. See `docs/VIDEO_SITES.md`.
 
@@ -421,3 +422,29 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   pages. Check a new URL with curl before adding it; use the `feed:` prefix
   where `is_feed_url` cannot tell it is a feed. Sub-pages live in the
   subdirectory so the Examples-menu test only lists the front page.
+
+## Services menu and `examples/services.md`
+
+- The Services menu (`kServices` in `src/app_frame.cpp`, drawn in
+  `src/ui.cpp`) is quick access only, grouped by what the client speaks:
+  Reference, News and forums, Social and chat, Video, Small net,
+  Directories. `UiService::group` puts a `SeparatorText` heading before an
+  entry. A protocol with many hosts (Lemmy, Discourse, Flarum, Stack
+  Exchange, Matrix, PeerTube, Gemini, Gopher, Spartan, Nex) opens its
+  directory page instead of one arbitrary host; `probe` is the ref whose
+  `remote_fetch_supported` greys the entry out.
+- Everything in the menu is also hypertext: `examples/services.md` is the
+  hub (more entry points per service), the host directories live in
+  `examples/services/*.md` (sub-pages, so not in `kExamples`). Keep menu
+  and hub in step when adding a client.
+- The big host lists were generated once (2026-11-21) and are plain
+  Markdown now; refresh them by hand or regenerate from the same sources:
+  PeerTube from `instances.joinpeertube.org/api/v1/instances` (not NSFW,
+  health ≥ 90, ≥ 10 local videos, grouped by first language), Lemmy from
+  `data.lemmyverse.net` (not suspicious / private; ≥ 10 monthly active
+  users, plus a "smaller" tier with ≥ 1 and ≥ 20 posts), Stack Exchange
+  from `api.stackexchange.com/2.3/sites` (main sites), Discourse from forums
+  that answered `/latest.json` (titles from `/site/basic-info.json`).
+  Matrix directories, Flarum forums and the small-net hosts were probed
+  by hand (anonymous `publicRooms`, `/api`, a request on the protocol's
+  port) and only those that answered are listed.

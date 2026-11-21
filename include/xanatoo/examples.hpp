@@ -22,6 +22,7 @@ inline constexpr ExampleEntry kExamples[] = {
     {"Sound (audio links)", "sound.md"},
     {"Video (video links)", "video.md"},
     {nullptr, nullptr},
+    {"Services (every protocol and host directory)", "services.md"},
     {"Directory (links and feeds)", "directory.md"},
     {"Finger (public hosts)", "finger.md"},
     {"Usenet (news servers)", "usenet.md"},

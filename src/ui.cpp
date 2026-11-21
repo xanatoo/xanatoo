@@ -3422,7 +3422,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     force_menu("Services");
     if (bar_menu("Services")) {
       for (const UiService& s : state.services) {
-        if (s.separator_before) ImGui::Separator();
+        if (!s.group.empty()) ImGui::SeparatorText(s.group.c_str());
         if (ImGui::MenuItem(s.label.c_str(), nullptr, false, s.enabled)) {
           cmd = s.example ? UiCommand::OpenExample : UiCommand::NavigateUrl;
           result.arg = s.target;

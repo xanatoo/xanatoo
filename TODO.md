@@ -2,6 +2,23 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Services menu overhaul
+
+- Services menu regrouped by protocol (Reference · News and forums ·
+  Social and chat · Video · Small net · Directories, `SeparatorText`
+  headings); "Wikipedia (Deutsch)" dropped (it is `wikipedia:de:…`).
+  Multi-host protocols open directory pages under `examples/services/`:
+  PeerTube (1,219 instances by language), Lemmy (~170), Discourse (105),
+  Stack Exchange (183), Flarum, Matrix room directories, Gemini, Gopher,
+  Spartan, Nex. `examples/services.md` is the hypertext hub of everything,
+  also in the Examples menu and linked from the Directory.
+- New media.ccc.de client (`mediaccc:` recent / `conferences` / `c/ACR` /
+  `v/SLUG` / `search?q=`, web URLs map both ways, search keyword `ccc`),
+  part of the video-site framework; recordings pick original-language
+  MP4 ≥ 720p. Offline test `test_mediaccc`.
+- `stackexchange:` also accepts the local-language `*.stackoverflow.com`.
+- Host lists are a 2026-11-21 snapshot; sources in `docs/dev/SERVICES.md`.
+
 ## Status (2026-11-21) — Open Article / Section / Block
 
 - HTML pages: `<article>` → Article, `<section>` with an id or a heading →

@@ -314,14 +314,15 @@ enum class UiCommand {
 
 
 
-// One entry of the Services menu (front pages of the built-in clients).
+// One entry of the Services menu: a client's front page, or for protocols
+// with many hosts a directory page of them under examples/services/.
 struct UiService {
   std::string label;
   std::string target;    // URL / ref, or example file name when `example`
   bool example = false;  // local page from examples/ (OpenExample)
   bool enabled = true;
   std::string tip;       // URL, or why the client is unavailable
-  bool separator_before = false;
+  std::string group;     // non-empty: a group heading starts before this entry
 };
 
 // One engine of the search bar's menu.

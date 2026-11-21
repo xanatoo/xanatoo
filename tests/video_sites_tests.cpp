@@ -274,10 +274,89 @@ static void test_dailymotion() {
          has_href(vd, "external:mpv:https://www.dailymotion.com/video/x6gnvwh"));
 }
 
+// media.ccc.de: refs, events, conferences, a talk's recordings.
+static void test_mediaccc() {
+  auto r = parse_video_site_ref("mediaccc:");
+  assert(r && r->site == VideoSite::MediaCCC && r->kind == VsRef::Kind::Home);
+  assert(video_site_ref_string(*r) == "mediaccc:");
+  assert(video_site_web_url(*r) == "https://media.ccc.de/");
+  r = parse_video_site_ref("mediaccc:conferences?page=2");
+  assert(r && r->kind == VsRef::Kind::Index && r->page == 2);
+  assert(video_site_ref_string(*r) == "mediaccc:conferences?page=2");
+  r = parse_video_site_ref("mediaccc:c/38c3");
+  assert(r && r->kind == VsRef::Kind::Channel && r->id == "38c3");
+  assert(video_site_web_url(*r) == "https://media.ccc.de/c/38c3");
+  r = parse_video_site_ref("mediaccc:v/38c3-1-opening");
+  assert(r && r->kind == VsRef::Kind::Video && video_site_ref_string(*r) == "mediaccc:v/38c3-1-opening");
+  r = parse_video_site_ref("mediaccc:search?q=free+software&page=3");
+  assert(r && r->kind == VsRef::Kind::Search && r->id == "free+software" && r->page == 3);
+  assert(video_site_ref_string(*r) == "mediaccc:search?q=free+software&page=3");
+  assert(!parse_video_site_ref("mediaccc:v/a/b"));
+  assert(!parse_video_site_ref("mediaccc:bogus"));
+  assert(video_site_ref_from_web_url("https://media.ccc.de/v/38c3-1-opening") == "mediaccc:v/38c3-1-opening");
+  assert(video_site_ref_from_web_url("https://media.ccc.de/c/38c3/") == "mediaccc:c/38c3");
+  assert(video_site_ref_from_web_url("https://media.ccc.de/search/?q=rust") == "mediaccc:search?q=rust");
+  assert(video_site_ref_from_web_url("https://media.ccc.de/") == "mediaccc:");
+  assert(video_site_ref_from_web_url("https://media.ccc.de/b/congress").empty());
+
+  const Json events = parse(R"({"events":[{"guid":"g1","title":"Quo Vadis IPv6?","subtitle":null,
+    "slug":"denog18-100-quo-vadis","persons":["Wilhelm  Boeddinghaus "],"view_count":175,
+    "date":"2026-11-17T10:40:00.000+01:00","duration":1773,"thumb_url":"https://static.media.ccc.de/t.jpg",
+    "conference_title":"DENOG18","conference_url":"https://api.media.ccc.de/public/conferences/denog18"},
+    {"guid":"g2","title":"Bad","slug":"a/b"}]})");
+  VsListing l = ccc_parse_events(events);
+  assert(l.videos.size() == 1);
+  const VsVideo& v = l.videos[0];
+  assert(v.ref == "mediaccc:v/denog18-100-quo-vadis" && v.age == "2026-11-17" && v.duration == "29:33");
+  assert(v.channel_ref == "mediaccc:c/denog18" && has(v.channel, "Wilhelm  Boeddinghaus") &&
+         has(v.channel, "DENOG18"));
+  assert(v.views == "175 views");
+
+  const Json confs = parse(R"({"conferences":[
+    {"acronym":"27c3","title":"27C3: We Come In Peace","event_last_released_at":"2011-01-04T01:00:00.000+01:00","logo_url":"https://x/27c3.png"},
+    {"acronym":"38c3","title":"38C3: Illegal Instructions","event_last_released_at":"2025-01-10T00:00:00.000+01:00"}]})");
+  l = ccc_parse_conferences(confs);
+  assert(l.videos.size() == 2 && l.videos[0].id == "38c3" && l.videos[0].ref == "mediaccc:c/38c3");
+  assert(l.videos[1].thumb == "https://x/27c3.png" && l.subtitle == "2 conferences");
+  vs_slice_page(l, 2, 1);
+  assert(l.videos.size() == 1 && l.videos[0].id == "27c3" && !l.has_next);
+  l = ccc_parse_conferences(confs);
+  vs_slice_page(l, 1, 1);
+  assert(l.videos.size() == 1 && l.has_next);
+  r = parse_video_site_ref("mediaccc:conferences");
+  Document d = vs_listing_document(l, *r);
+  assert(has_href(d, "mediaccc:c/38c3") && has_href(d, "mediaccc:conferences?page=2"));
+
+  const Json ev = parse(R"({"guid":"g1","title":"Opening","subtitle":"Welcome","slug":"38c3-1-opening",
+    "original_language":"eng","persons":["Alice","Bob"],"view_count":2000,"date":"2024-12-27T10:30:00.000+01:00",
+    "duration":600,"poster_url":"https://static/p.jpg","description":"Hello.","link":"https://events.ccc.de/talk/1",
+    "frontend_link":"https://media.ccc.de/v/38c3-1-opening","conference_title":"38C3",
+    "conference_url":"https://api.media.ccc.de/public/conferences/38c3","recordings":[
+      {"mime_type":"video/webm","folder":"webm-hd","language":"eng","height":1080,"recording_url":"https://cdn/x.webm"},
+      {"mime_type":"video/mp4","folder":"h264-sd","language":"eng","height":576,"recording_url":"https://cdn/sd.mp4"},
+      {"mime_type":"video/mp4","folder":"h264-hd","language":"deu-eng","height":1080,"recording_url":"https://cdn/de.mp4"},
+      {"mime_type":"video/mp4","folder":"h264-hd","language":"eng","height":1080,"recording_url":"https://cdn/hd.mp4"},
+      {"mime_type":"video/mp4","folder":"h264-hd-slides","language":"eng","height":1080,"recording_url":"https://cdn/slides.mp4"},
+      {"mime_type":"audio/opus","folder":"opus","language":"eng","recording_url":"https://cdn/a.opus"},
+      {"mime_type":"audio/mpeg","folder":"mp3","language":"eng","recording_url":"https://cdn/a.mp3"}]})");
+  VsVideoInfo info = ccc_parse_event(ev);
+  assert(info.title == "Opening \xE2\x80\x93 Welcome" && info.owner == "Alice, Bob");
+  assert(info.owner_ref == "mediaccc:search?q=Alice" && info.group_ref == "mediaccc:c/38c3");
+  assert(info.stream_url == "https://cdn/hd.mp4" && info.stream_label == "1080p");
+  assert(info.audio_url == "https://cdn/a.mp3" && info.no_comments);
+  assert(has(info.description, "https://events.ccc.de/talk/1"));
+  r = parse_video_site_ref("mediaccc:v/38c3-1-opening");
+  d = vs_video_document(info, VsComments{}, *r);
+  const std::string text = all_text(d);
+  assert(has_href(d, "https://cdn/hd.mp4") && has_href(d, "mediaccc:c/38c3"));
+  assert(!has(text, "Comments") && has(text, "Open on media.ccc.de"));
+}
+
 int main() {
   test_refs();
   test_peertube();
   test_odysee();
   test_dailymotion();
+  test_mediaccc();
   return 0;
 }

@@ -140,6 +140,9 @@ bool is_se_host(std::string_view h) {
       h == "serverfault.com" || h == "askubuntu.com" ||
       h == "mathoverflow.net" || h == "stackapps.com")
     return true;
+  // Local-language Stack Overflows: pt. / ru. / es. / ja.stackoverflow.com.
+  if (ends_with(h, ".stackoverflow.com"))
+    return h != "chat.stackoverflow.com" && h != "api.stackoverflow.com";
   return ends_with(h, ".stackexchange.com") && h != "api.stackexchange.com" &&
          h != "chat.stackexchange.com" && h != "data.stackexchange.com";
 }

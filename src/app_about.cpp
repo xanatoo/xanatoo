@@ -83,8 +83,8 @@ AboutSection services() {
                      "and `youtube:watch?v=ID` pages with comments (InnerTube)",
                      "youtube:@GoogleDevelopers", "`-DXANATOO_YOUTUBE=ON`"});
   s.items.push_back({"Video sites", XANATOO_VIDEO,
-                     "`peertube:host/c/channel`, `odysee:@channel:id` and "
-                     "`dailymotion:xID` listings, search and video pages with "
+                     "`peertube:host/c/channel`, `odysee:@channel:id`, "
+                     "`dailymotion:xID` and `mediaccc:c/38c3` (media.ccc.de) listings, search and video pages with "
                      "comments and a Watch-with-mpv link (public JSON APIs)",
                      "peertube:video.blender.org", "`-DXANATOO_VIDEO=ON`"});
   s.items.push_back({"Internet Archive", kHttps,

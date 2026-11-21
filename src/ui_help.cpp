@@ -73,10 +73,13 @@ const std::vector<UiHelpTopic> kTopics = {
      "page, refresh all, or open the Subscriptions panel with the unread "
      "counts."},
     {"services", "Services menu",
-     "Start pages of the services xanatoo reads natively: Wikipedia, Hacker "
-     "News, Reddit, Lemmy, Nostr, Matrix, Gemini, Usenet, feeds, the "
-     "Internet Archive, ebooks and more. Greyed-out entries need a feature "
-     "this build lacks."},
+     "Quick access to the services xanatoo reads natively, grouped: "
+     "reference, news and forums, social and chat, video, the small net "
+     "(Gemini, Gopher, Spartan, Nex, Finger, Usenet) and the link "
+     "directories. Protocols with many hosts (Lemmy, PeerTube, Matrix, "
+     "Discourse, Gemini, …) open a directory page of hosts; *All services* "
+     "is the hypertext version of the whole menu. Greyed-out entries need a "
+     "feature this build lacks."},
     {"help", "Help menu",
      "The keyboard reference (**F1**), the Help panel (**Shift+F1**), the "
      "format reference, example documents and About. **Alt+H**."},

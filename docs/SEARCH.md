@@ -77,7 +77,7 @@ Search is an address, not a widget in the document and not a panel.
 | `gutendex` | Project Gutenberg | Gutendex JSON → `gutenberg.org/ebooks/N` (opens as epub) |
 | `lemmy` | Lemmy (lemmy.world) | `/api/v3/search` → `lemmy:host/post/N` |
 | `bluesky` | Bluesky | `searchPosts` → one card per post, link to bsky.app |
-| `page` | PeerTube (`pt`, sepiasearch), Odysee (`od`), Dailymotion (`dm`) | `peertube:` / `odysee:` / `dailymotion:` search refs (`docs/VIDEO_SITES.md`) |
+| `page` | PeerTube (`pt`, sepiasearch), Odysee (`od`), Dailymotion (`dm`), media.ccc.de (`ccc`) | `peertube:` / `odysee:` / `dailymotion:` / `mediaccc:` search refs (`docs/VIDEO_SITES.md`) |
 | `feed` | arXiv, Reddit, Mastodon hashtag, Flickr tags | the feed path |
 | `page` | YouTube (`youtube:results?…`, native InnerTube search), Standard Ebooks, Marginalia, Wiby, DuckDuckGo (html), Grokipedia (`gk`) | the web / ebook path |
 

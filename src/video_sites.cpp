@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
-// Read-only PeerTube, Odysee and Dailymotion clients (docs/VIDEO_SITES.md).
-// All three speak plain JSON, so the parsers are small and pure; listings and
+// Read-only PeerTube, Odysee, Dailymotion and media.ccc.de clients
+// (docs/VIDEO_SITES.md). All of them speak plain JSON, so the parsers are small and pure; listings and
 // video pages become Thread + Article / Message documents like YouTube's.
 
 #include "xanatoo/video_sites.hpp"
@@ -42,7 +42,11 @@ constexpr SiteInfo kSites[] = {
     {VideoSite::PeerTube, "peertube:", "PeerTube"},
     {VideoSite::Odysee, "odysee:", "Odysee"},
     {VideoSite::Dailymotion, "dailymotion:", "Dailymotion"},
+    {VideoSite::MediaCCC, "mediaccc:", "media.ccc.de"},
 };
+// media.ccc.de sends recent talks, conferences and a conference's talks
+// whole; the pages cut them.
+constexpr int kCccPerPage = 50;
 
 const SiteInfo& info_of(VideoSite s) {
   for (const SiteInfo& i : kSites)
@@ -270,7 +274,9 @@ std::optional<VsRef> parse_video_site_ref(std::string_view ref) {
     if (!host_ok(r.host)) return std::nullopt;
     sub = slash == std::string_view::npos ? std::string_view() : path.substr(slash + 1);
   }
-  const std::string_view search_key = r.site == VideoSite::Odysee ? "s" : "search";
+  const std::string_view search_key = r.site == VideoSite::Odysee     ? "s"
+                                      : r.site == VideoSite::MediaCCC ? "q"
+                                                                      : "search";
   const size_t slash = sub.find('/');
   const std::string_view head = sub.substr(0, slash);
   const std::string_view tail =
@@ -317,8 +323,24 @@ std::optional<VsRef> parse_video_site_ref(std::string_view ref) {
         return std::nullopt;
       }
       break;
+    case VideoSite::MediaCCC:
+      if (sub.empty()) {
+        r.kind = VsRef::Kind::Home;
+      } else if (sub == "conferences") {
+        r.kind = VsRef::Kind::Index;
+      } else if (sub == "search") {
+        r.kind = VsRef::Kind::Search;
+        r.id = query_param(query, search_key);
+      } else if ((head == "c" || head == "v") && tail.find('/') == std::string_view::npos) {
+        r.kind = head == "c" ? VsRef::Kind::Channel : VsRef::Kind::Video;
+        r.id = std::string(tail);
+      } else {
+        return std::nullopt;
+      }
+      break;
   }
-  if (r.kind != VsRef::Kind::Home && !id_ok(r.id)) return std::nullopt;
+  if (r.kind != VsRef::Kind::Home && r.kind != VsRef::Kind::Index && !id_ok(r.id))
+    return std::nullopt;
   r.page = parse_page(query_param(query, r.kind == VsRef::Kind::Video ? "comments" : "page"));
   return r;
 }
@@ -335,19 +357,24 @@ std::string video_site_ref_string(const VsRef& r) {
   auto join = [&](const std::string& p) { out += (out.back() == ':' ? "" : "/") + p; };
   switch (r.kind) {
     case VsRef::Kind::Home: break;
+    case VsRef::Kind::Index: out += "conferences"; break;
     case VsRef::Kind::Search:
       if (r.site == VideoSite::Odysee) out += "search";
       else join("search");
-      add(std::string(r.site == VideoSite::Odysee ? "s=" : "search=") + r.id);
+      add(std::string(r.site == VideoSite::Odysee     ? "s="
+                      : r.site == VideoSite::MediaCCC ? "q="
+                                                      : "search=") +
+          r.id);
       break;
     case VsRef::Kind::Channel:
-      if (r.site == VideoSite::PeerTube) join("c/" + r.id);
+      if (r.site == VideoSite::PeerTube || r.site == VideoSite::MediaCCC) join("c/" + r.id);
       else if (r.site == VideoSite::Dailymotion) out += "user/" + r.id;
       else out += r.id;
       break;
     case VsRef::Kind::Account: join("a/" + r.id); break;
     case VsRef::Kind::Video:
       if (r.site == VideoSite::PeerTube) join("w/" + r.id);
+      else if (r.site == VideoSite::MediaCCC) join("v/" + r.id);
       else out += r.id;
       break;
   }
@@ -365,7 +392,8 @@ std::string video_site_web_url(const VsRef& r) {
     case VideoSite::PeerTube: {
       const std::string base = "https://" + r.host;
       switch (r.kind) {
-        case VsRef::Kind::Home: return base + "/";
+        case VsRef::Kind::Home:
+        case VsRef::Kind::Index: return base + "/";
         case VsRef::Kind::Search: return base + "/search?search=" + r.id;
         case VsRef::Kind::Channel: return base + "/c/" + r.id;
         case VsRef::Kind::Account: return base + "/a/" + r.id;
@@ -380,6 +408,16 @@ std::string video_site_web_url(const VsRef& r) {
       if (r.kind == VsRef::Kind::Video) return "https://www.dailymotion.com/video/" + r.id;
       if (r.kind == VsRef::Kind::Search) return "https://www.dailymotion.com/search/" + r.id;
       return {};
+    case VideoSite::MediaCCC: {
+      const std::string base = "https://media.ccc.de/";
+      switch (r.kind) {
+        case VsRef::Kind::Index: return base + "b";
+        case VsRef::Kind::Search: return base + "search/?q=" + r.id;
+        case VsRef::Kind::Channel: return base + "c/" + r.id;
+        case VsRef::Kind::Video: return base + "v/" + r.id;
+        default: return base;
+      }
+    }
   }
   return {};
 }
@@ -411,6 +449,24 @@ std::string video_site_ref_from_web_url(std::string_view url) {
     else if (starts_with(path, "video/")) r.id = std::string(path.substr(6));
     else return {};
     if (r.id.find('/') != std::string::npos) return {};
+  } else if (host == "media.ccc.de") {
+    r.site = VideoSite::MediaCCC;
+    const size_t sl = path.find('/');
+    const std::string_view head = path.substr(0, sl);
+    const std::string_view tail =
+        sl == std::string_view::npos ? std::string_view() : path.substr(sl + 1);
+    if (path.empty()) {
+      r.kind = VsRef::Kind::Home;
+    } else if (path == "search") {
+      r.kind = VsRef::Kind::Search;
+      r.id = query_param(query, "q");
+    } else if ((head == "c" || head == "v") && !tail.empty() &&
+               tail.find('/') == std::string_view::npos) {
+      r.kind = head == "c" ? VsRef::Kind::Channel : VsRef::Kind::Video;
+      r.id = std::string(tail);
+    } else {
+      return {};  // browse folders, about pages: the web page
+    }
   } else {
     // PeerTube lives on any host: /w/ID, /videos/watch/ID, /c/NAME, /a/NAME.
     r.site = VideoSite::PeerTube;
@@ -437,7 +493,7 @@ std::string video_site_ref_from_web_url(std::string_view url) {
     if (r.kind == VsRef::Kind::Video && !pt_video_id(r.id)) return {};
   }
   if ((r.site == VideoSite::PeerTube && !host_ok(r.host)) ||
-      (r.kind != VsRef::Kind::Home && !id_ok(r.id)))
+      (r.kind != VsRef::Kind::Home && r.kind != VsRef::Kind::Index && !id_ok(r.id)))
     return {};
   return video_site_ref_string(r);
 }
@@ -918,6 +974,189 @@ VsComments dm_parse_comments(const Json& reply, int) {
   return out;
 }
 
+// ---- media.ccc.de -----------------------------------------------------------
+
+namespace {
+
+std::string ccc_ref(VsRef::Kind kind, std::string id) {
+  VsRef r;
+  r.site = VideoSite::MediaCCC;
+  r.kind = kind;
+  r.id = std::move(id);
+  return video_site_ref_string(r);
+}
+
+// ".../public/conferences/38c3" → the conference's ref.
+std::string ccc_conference_ref(const std::string& api_url) {
+  const size_t sl = api_url.rfind('/');
+  if (sl == std::string::npos || sl + 1 >= api_url.size()) return {};
+  const std::string acr = api_url.substr(sl + 1);
+  return id_ok(acr) ? ccc_ref(VsRef::Kind::Channel, acr) : std::string();
+}
+
+std::string trim_copy(const std::string& s) {
+  std::string_view v = s;
+  trim_ascii(v);
+  return std::string(v);
+}
+
+std::string ccc_people(const Json* persons) {
+  std::string out;
+  if (persons && persons->type == Json::Type::Array)
+    for (const Json& p : persons->items) {
+      std::string name = trim_copy(json_string(&p));
+      if (name.empty()) continue;
+      out += (out.empty() ? "" : ", ") + name;
+    }
+  return out;
+}
+
+}  // namespace
+
+VsListing ccc_parse_events(const Json& reply) {
+  VsListing out;
+  const Json* list = list_of(reply, "events");
+  if (!list) return out;
+  for (const Json& e : list->items) {
+    VsVideo o;
+    o.id = json_string(json_get(e, "guid"));
+    const std::string slug = json_string(json_get(e, "slug"));
+    if (!id_ok(slug) || slug.find('/') != std::string::npos) continue;
+    o.ref = ccc_ref(VsRef::Kind::Video, slug);
+    if (o.id.empty()) o.id = slug;
+    o.title = json_string(json_get(e, "title"));
+    const std::string sub = json_string(json_get(e, "subtitle"));
+    if (!sub.empty()) o.title += " \xE2\x80\x93 " + sub;
+    o.channel = json_string(json_get(e, "conference_title"));
+    if (!o.channel.empty()) o.channel_ref = ccc_conference_ref(json_string(json_get(e, "conference_url")));
+    if (const std::string who = ccc_people(json_get(e, "persons")); !who.empty())
+      o.channel = o.channel.empty() ? who : who + kDot + o.channel;
+    if (json_get(e, "view_count"))
+      o.views = count_label(json_number(json_get(e, "view_count")), "view", "views");
+    o.age = date_iso(json_string(json_get(e, "date")));
+    if (o.age.empty()) o.age = date_iso(json_string(json_get(e, "release_date")));
+    o.duration = fmt_duration(json_number(json_get(e, "duration")));
+    o.thumb = json_string(json_get(e, "thumb_url"));
+    out.videos.push_back(std::move(o));
+  }
+  return out;
+}
+
+VsListing ccc_parse_conferences(const Json& reply) {
+  VsListing out;
+  out.title = "Conferences";
+  const Json* list = list_of(reply, "conferences");
+  if (!list) return out;
+  std::vector<std::pair<std::string, VsVideo>> rows;  // last release, row
+  for (const Json& c : list->items) {
+    VsVideo o;
+    o.id = json_string(json_get(c, "acronym"));
+    if (!id_ok(o.id) || o.id.find('/') != std::string::npos) continue;
+    o.ref = ccc_ref(VsRef::Kind::Channel, o.id);
+    o.title = json_string(json_get(c, "title"));
+    if (o.title.empty()) o.title = o.id;
+    const std::string last = json_string(json_get(c, "event_last_released_at"));
+    o.age = date_iso(last);
+    o.views = o.id;
+    o.thumb = json_string(json_get(c, "logo_url"));
+    rows.emplace_back(last, std::move(o));
+  }
+  std::stable_sort(rows.begin(), rows.end(),
+                   [](const auto& a, const auto& b) { return a.first > b.first; });
+  for (auto& [when, v] : rows) out.videos.push_back(std::move(v));
+  out.subtitle = count_label(static_cast<long long>(out.videos.size()), "conference", "conferences");
+  return out;
+}
+
+void ccc_parse_conference_header(const Json& r, VsListing& l) {
+  l.title = json_string(json_get(r, "title"));
+  if (l.title.empty()) l.title = json_string(json_get(r, "acronym"));
+  l.description = text_of(json_string(json_get(r, "description")), false);
+  if (const std::string link = json_string(json_get(r, "link")); !link.empty())
+    l.description += (l.description.empty() ? "" : "\n\n") + link;
+}
+
+namespace {
+std::string first_person(const Json* p) {
+  if (!p || p->type != Json::Type::Array || p->items.empty()) return {};
+  return trim_copy(json_string(&p->items[0]));
+}
+}  // namespace
+
+VsVideoInfo ccc_parse_event(const Json& e) {
+  VsVideoInfo o;
+  o.no_comments = true;
+  o.title = json_string(json_get(e, "title"));
+  if (const std::string sub = json_string(json_get(e, "subtitle")); !sub.empty())
+    o.title += " \xE2\x80\x93 " + sub;
+  o.owner = ccc_people(json_get(e, "persons"));
+  // A speaker's other talks: the site's search finds names.
+  if (const std::string first = first_person(json_get(e, "persons")); !first.empty())
+    o.owner_ref = ccc_ref(VsRef::Kind::Search, search_encode(first));
+  o.group = json_string(json_get(e, "conference_title"));
+  o.group_ref = ccc_conference_ref(json_string(json_get(e, "conference_url")));
+  if (json_get(e, "view_count"))
+    o.views = count_label(json_number(json_get(e, "view_count")), "view", "views");
+  o.date = date_iso(json_string(json_get(e, "date")));
+  if (o.date.empty()) o.date = date_iso(json_string(json_get(e, "release_date")));
+  o.duration = fmt_duration(json_number(json_get(e, "duration")));
+  o.thumb = json_string(json_get(e, "poster_url"));
+  if (o.thumb.empty()) o.thumb = json_string(json_get(e, "thumb_url"));
+  o.description = text_of(json_string(json_get(e, "description")), false);
+  if (const std::string link = json_string(json_get(e, "link")); !link.empty())
+    o.description += (o.description.empty() ? "" : "\n\n") + link;
+  o.web_url = json_string(json_get(e, "frontend_link"));
+  o.play_url = o.web_url;
+
+  // Recordings: the talk's own language before translations ("deu-eng" is
+  // a file with both tracks), H.264 (plays everywhere) before WebM / AV1,
+  // HD before SD. Slides-only and subtitle files are not videos.
+  const std::string lang = json_string(json_get(e, "original_language"));
+  const Json* recs = json_get(e, "recordings");
+  int best = -1, best_audio = -1;
+  if (recs && recs->type == Json::Type::Array) {
+    for (const Json& r : recs->items) {
+      const std::string url = json_string(json_get(r, "recording_url"));
+      if (!starts_with(url, "https://") && !starts_with(url, "http://")) continue;
+      const std::string mime = json_string(json_get(r, "mime_type"));
+      const std::string folder = json_string(json_get(r, "folder"));
+      const std::string rlang = json_string(json_get(r, "language"));
+      const int lang_score = rlang == lang ? 2 : starts_with(rlang, lang) ? 1 : 0;
+      if (starts_with(mime, "video/") && folder.find("slides") == std::string::npos) {
+        const long long h = json_number(json_get(r, "height"));
+        const int codec = starts_with(mime, "video/mp4") ? 2 : mime == "video/webm" ? 1 : 0;
+        const int score = lang_score * 1000 + codec * 100 + (h >= 720 ? 10 : 0);
+        if (score > best) {
+          best = score;
+          o.stream_url = url;
+          o.stream_label = h > 0 ? std::to_string(h) + "p" : std::string();
+        }
+      } else if (starts_with(mime, "audio/")) {
+        const int score = lang_score * 10 + (mime == "audio/mpeg" ? 1 : 0);
+        if (score > best_audio) {
+          best_audio = score;
+          o.audio_url = url;
+        }
+      }
+    }
+  }
+  return o;
+}
+
+void vs_slice_page(VsListing& l, int page, int per_page) {
+  const size_t from = static_cast<size_t>(std::max(page - 1, 0)) * static_cast<size_t>(per_page);
+  const size_t n = l.videos.size();
+  if (from >= n) {
+    l.videos.clear();
+    l.has_next = false;
+    return;
+  }
+  const size_t to = std::min(n, from + static_cast<size_t>(per_page));
+  l.has_next = to < n;
+  l.videos = std::vector<VsVideo>(std::make_move_iterator(l.videos.begin() + from),
+                                  std::make_move_iterator(l.videos.begin() + to));
+}
+
 // ---- documents --------------------------------------------------------------
 
 namespace {
@@ -935,7 +1174,8 @@ Document vs_listing_document(const VsListing& l, const VsRef& ref) {
   std::string title = l.title;
   if (title.empty())
     title = ref.kind == VsRef::Kind::Search ? "Search: " + search_decode(ref.id)
-            : ref.kind == VsRef::Kind::Home ? "Recent videos" : ref.id;
+            : ref.kind == VsRef::Kind::Home ? "Recent videos"
+            : ref.kind == VsRef::Kind::Index ? "Conferences" : ref.id;
   const bool search = ref.kind == VsRef::Kind::Search;
   doc.meta.title = site_title(ref, title);
 
@@ -1007,6 +1247,11 @@ Document vs_video_document(const VsVideoInfo& v, const VsComments& c, const VsRe
     if (v.owner_ref.empty()) add_meta(doc, by, v.owner);
     else add_link(doc, by, v.owner, v.owner_ref);
   }
+  if (!v.group.empty() && !replies_page) {
+    if (!doc.get(by).spans.empty()) add_meta(doc, by, kDot);
+    if (v.group_ref.empty()) add_meta(doc, by, v.group);
+    else add_link(doc, by, v.group, v.group_ref);
+  }
   for (const std::string* part : {&v.views, &v.date, &v.duration, &v.likes})
     if (!part->empty() && !replies_page)
       add_meta(doc, by, (doc.get(by).spans.empty() ? "" : kDot) + *part);
@@ -1039,6 +1284,14 @@ Document vs_video_document(const VsVideoInfo& v, const VsComments& c, const VsRe
       }
     }
     if (!v.description.empty()) append_plain(doc, root, v.description);
+  }
+
+  if (v.no_comments) {
+    if (!v.web_url.empty()) {
+      NodeId nav = doc.create(NodeKind::Paragraph, root);
+      add_link(doc, nav, std::string("Open on ") + site, external(v.web_url), InlineRole::Metadata);
+    }
+    return doc;
   }
 
   if (!replies_page) {
@@ -1336,6 +1589,55 @@ std::optional<Document> dm_fetch_video(const VsRef& ref, std::string* err) {
   return vs_video_document(info, comments, ref);
 }
 
+// ---- media.ccc.de
+
+constexpr const char* kCccApi = "https://api.media.ccc.de/public/";
+
+std::optional<Document> ccc_fetch_listing(const VsRef& ref, std::string* err) {
+  VsListing l;
+  switch (ref.kind) {
+    case VsRef::Kind::Search: {
+      auto reply = get_json(std::string(kCccApi) + "events/search?q=" + ref.id + "&page=" +
+                                std::to_string(ref.page), err);
+      if (!reply) return std::nullopt;
+      l = ccc_parse_events(*reply);
+      l.has_next = l.videos.size() >= 25;  // the API's page size
+      return vs_listing_document(l, ref);
+    }
+    case VsRef::Kind::Index: {
+      auto reply = get_json(std::string(kCccApi) + "conferences", err);
+      if (!reply) return std::nullopt;
+      l = ccc_parse_conferences(*reply);
+      break;
+    }
+    case VsRef::Kind::Channel: {
+      auto reply = get_json(std::string(kCccApi) + "conferences/" + ref.id, err);
+      if (!reply) return std::nullopt;
+      l = ccc_parse_events(*reply);
+      std::stable_sort(l.videos.begin(), l.videos.end(),
+                       [](const VsVideo& a, const VsVideo& b) { return a.age > b.age; });
+      ccc_parse_conference_header(*reply, l);
+      l.subtitle = count_label(static_cast<long long>(l.videos.size()), "talk", "talks");
+      break;
+    }
+    default: {
+      auto reply = get_json(std::string(kCccApi) + "events/recent", err);
+      if (!reply) return std::nullopt;
+      l = ccc_parse_events(*reply);
+      l.title = "Recent talks";
+      break;
+    }
+  }
+  vs_slice_page(l, ref.page, kCccPerPage);
+  return vs_listing_document(l, ref);
+}
+
+std::optional<Document> ccc_fetch_video(const VsRef& ref, std::string* err) {
+  auto reply = get_json(std::string(kCccApi) + "events/" + ref.id, err);
+  if (!reply) return std::nullopt;
+  return vs_video_document(ccc_parse_event(*reply), VsComments{}, ref);
+}
+
 }  // namespace
 
 std::optional<Document> video_site_fetch(std::string_view ref, std::string* err) {
@@ -1349,6 +1651,7 @@ std::optional<Document> video_site_fetch(std::string_view ref, std::string* err)
     case VideoSite::PeerTube: return video ? pt_fetch_video(*r, err) : pt_fetch_listing(*r, err);
     case VideoSite::Odysee: return video ? od_fetch_video(*r, err) : od_fetch_listing(*r, err);
     case VideoSite::Dailymotion: return video ? dm_fetch_video(*r, err) : dm_fetch_listing(*r, err);
+    case VideoSite::MediaCCC: return video ? ccc_fetch_video(*r, err) : ccc_fetch_listing(*r, err);
   }
   return std::nullopt;
 }

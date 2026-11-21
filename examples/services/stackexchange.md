@@ -1,0 +1,195 @@
+# Stack Exchange — sites
+
+[← Services](../services.md)
+
+[Stack Exchange](https://stackexchange.com/sites) runs question-and-answer sites on one shared
+engine. xanatoo reads them through the public API: `stackexchange:HOST` lists the newest
+questions, `stackexchange:HOST/questions/tagged/TAG` one tag, and a question opens with its
+answers (best first) and comments. No account; the API allows a few hundred pages a day
+without a key.
+
+All 183 sites, from the Stack Exchange API on 2026-11-21, biggest first:
+
+- [Stack Overflow](stackexchange:stackoverflow.com) — professional and enthusiast programmers
+- [Server Fault](stackexchange:serverfault.com) — system and network administrators
+- [Super User](stackexchange:superuser.com) — computer enthusiasts and power users
+- [Meta Stack Exchange](stackexchange:meta.stackexchange.com) — meta-discussion of the Stack Exchange family of Q&A websites
+- [Web Applications](stackexchange:webapps.stackexchange.com) — power users of web applications
+- [Arqade](stackexchange:gaming.stackexchange.com) — passionate videogamers on all platforms
+- [Webmasters](stackexchange:webmasters.stackexchange.com) — webmasters
+- [Seasoned Advice](stackexchange:cooking.stackexchange.com) — professional and amateur chefs
+- [Game Development](stackexchange:gamedev.stackexchange.com) — professional and independent game developers
+- [Photography](stackexchange:photo.stackexchange.com) — professional, enthusiast and amateur photographers
+- [Cross Validated](stackexchange:stats.stackexchange.com) — people interested in statistics, machine learning, data analysis, data mining, and data…
+- [Mathematics](stackexchange:math.stackexchange.com) — people studying math at any level and professionals in related fields
+- [Home Improvement](stackexchange:diy.stackexchange.com) — contractors and serious DIYers
+- [Geographic Information Systems](stackexchange:gis.stackexchange.com) — cartographers, geographers and GIS professionals
+- [TeX - LaTeX](stackexchange:tex.stackexchange.com) — users of TeX, LaTeX, ConTeXt, and related typesetting systems
+- [Ask Ubuntu](stackexchange:askubuntu.com) — Ubuntu users and developers
+- [Personal Finance & Money](stackexchange:money.stackexchange.com) — people who want to be financially literate
+- [English Language & Usage](stackexchange:english.stackexchange.com) — linguists, etymologists, and serious English language enthusiasts
+- [Stack Apps](stackexchange:stackapps.com) — apps, scripts, and development with the Stack Exchange API
+- [User Experience](stackexchange:ux.stackexchange.com) — user experience researchers and experts
+- [Unix & Linux](stackexchange:unix.stackexchange.com) — users of Linux, FreeBSD and other Un\*x-like operating systems
+- [WordPress Development](stackexchange:wordpress.stackexchange.com) — WordPress developers and administrators
+- [Theoretical Computer Science](stackexchange:cstheory.stackexchange.com) — theoretical computer scientists and researchers in related fields
+- [Ask Different](stackexchange:apple.stackexchange.com) — power users of Apple hardware and software
+- [Role-playing Games](stackexchange:rpg.stackexchange.com) — gamemasters and players of tabletop, paper-and-pencil role-playing games
+- [Bicycles](stackexchange:bicycles.stackexchange.com) — people who build and repair bicycles, people who train cycling, or commute on bicycles
+- [Software Engineering](stackexchange:softwareengineering.stackexchange.com) — professionals, academics, and students working within the systems development life cycle
+- [Electrical Engineering](stackexchange:electronics.stackexchange.com) — electronics and electrical engineering professionals, students, and enthusiasts
+- [Android Enthusiasts](stackexchange:android.stackexchange.com) — enthusiasts and power users of the Android operating system
+- [Board & Card Games](stackexchange:boardgames.stackexchange.com) — people who like playing board games, designing board games or modifying the rules of…
+- [Physics](stackexchange:physics.stackexchange.com) — active researchers, academics and students of physics
+- [Homebrewing](stackexchange:homebrew.stackexchange.com) — dedicated home brewers and serious enthusiasts
+- [Information Security](stackexchange:security.stackexchange.com) — information security professionals
+- [Writing](stackexchange:writing.stackexchange.com) — the craft of professional writing, including fiction, non-fiction, technical, scholarly…
+- [Video Production](stackexchange:video.stackexchange.com) — engineers, producers, editors, and enthusiasts spanning the fields of video, and media…
+- [Graphic Design](stackexchange:graphicdesign.stackexchange.com) — Graphic Design professionals, students, and enthusiasts
+- [Database Administrators](stackexchange:dba.stackexchange.com) — database professionals who wish to improve their database skills and learn from others in…
+- [Science Fiction & Fantasy](stackexchange:scifi.stackexchange.com) — science fiction and fantasy enthusiasts
+- [Code Review](stackexchange:codereview.stackexchange.com) — peer programmer code reviews
+- [Code Golf](stackexchange:codegolf.stackexchange.com) — programming puzzle enthusiasts and code golfers
+- [Quantitative Finance](stackexchange:quant.stackexchange.com) — finance professionals and academics
+- [Project Management](stackexchange:pm.stackexchange.com) — project managers
+- [Skeptics](stackexchange:skeptics.stackexchange.com) — scientific skepticism
+- [Physical Fitness](stackexchange:fitness.stackexchange.com) — physical fitness professionals, athletes, trainers, and those providing health-related…
+- [Drupal Answers](stackexchange:drupal.stackexchange.com) — Drupal developers and administrators
+- [Motor Vehicle Maintenance & Repair](stackexchange:mechanics.stackexchange.com) — mechanics and DIY enthusiast owners of cars, trucks, and motorcycles
+- [Parenting](stackexchange:parenting.stackexchange.com) — parents, grandparents, nannies and others with a parenting role
+- [SharePoint](stackexchange:sharepoint.stackexchange.com) — SharePoint enthusiasts
+- [Music: Practice & Theory](stackexchange:music.stackexchange.com) — musicians, students, and enthusiasts
+- [Software Quality Assurance & Testing](stackexchange:sqa.stackexchange.com) — software quality control experts, automation engineers, and software testers
+- [Mi Yodeya](stackexchange:judaism.stackexchange.com) — those who base their lives on Jewish law and tradition and anyone interested in learning…
+- [German Language](stackexchange:german.stackexchange.com) — speakers of German wanting to discuss the finer points of the language and translation
+- [Japanese Language](stackexchange:japanese.stackexchange.com) — students, teachers, and linguists wanting to discuss the finer points of the Japanese…
+- [Philosophy](stackexchange:philosophy.stackexchange.com) — those interested in the study of the fundamental nature of knowledge, reality, and…
+- [Gardening & Landscaping](stackexchange:gardening.stackexchange.com) — gardeners and landscapers
+- [Travel](stackexchange:travel.stackexchange.com) — road warriors and seasoned travelers
+- [Cryptography](stackexchange:crypto.stackexchange.com) — software developers, mathematicians and others interested in cryptography
+- [Signal Processing](stackexchange:dsp.stackexchange.com) — practitioners of the art and science of signal, image and video processing
+- [French Language](stackexchange:french.stackexchange.com) — students, teachers, and linguists wanting to discuss the finer points of the French…
+- [Christianity](stackexchange:christianity.stackexchange.com) — committed Christians, experts in Christianity and those interested in learning more
+- [Bitcoin](stackexchange:bitcoin.stackexchange.com) — Bitcoin users, developers, and enthusiasts
+- [Linguistics](stackexchange:linguistics.stackexchange.com) — professional linguists and others with an interest in linguistic research and theory
+- [Biblical Hermeneutics](stackexchange:hermeneutics.stackexchange.com) — professors, theologians, and those interested in exegetical analysis of biblical texts
+- [History](stackexchange:history.stackexchange.com) — historians and history buffs
+- [Bricks](stackexchange:bricks.stackexchange.com) — LEGO&\#174; and building block enthusiasts
+- [Spanish Language](stackexchange:spanish.stackexchange.com) — linguists, teachers, students and Spanish language enthusiasts in general wanting to…
+- [Computational Science](stackexchange:scicomp.stackexchange.com) — scientists using computers to solve scientific problems
+- [Movies & TV](stackexchange:movies.stackexchange.com) — movie and TV enthusiasts
+- [Chinese Language](stackexchange:chinese.stackexchange.com) — students, teachers, and linguists wanting to discuss the finer points of the Chinese…
+- [Biology](stackexchange:biology.stackexchange.com) — biology researchers, academics, and students
+- [Poker](stackexchange:poker.stackexchange.com) — serious players and enthusiasts of poker
+- [Mathematica](stackexchange:mathematica.stackexchange.com) — users of Wolfram Mathematica
+- [Psychology & Neuroscience](stackexchange:psychology.stackexchange.com) — practitioners, researchers, and students in cognitive science, psychology, neuroscience…
+- [The Great Outdoors](stackexchange:outdoors.stackexchange.com) — people who love being outdoors enjoying nature and wilderness, and learning about the…
+- [Martial Arts](stackexchange:martialarts.stackexchange.com) — students and teachers of all martial arts
+- [Sports](stackexchange:sports.stackexchange.com) — participants in team and individual sport activities
+- [Academia](stackexchange:academia.stackexchange.com) — academics and those enrolled in higher education
+- [Computer Science](stackexchange:cs.stackexchange.com) — students, researchers and practitioners of computer science
+- [The Workplace](stackexchange:workplace.stackexchange.com) — members of the workforce navigating the professional setting
+- [Chemistry](stackexchange:chemistry.stackexchange.com) — scientists, academics, teachers, and students in the field of chemistry
+- [Chess](stackexchange:chess.stackexchange.com) — serious players and enthusiasts of chess
+- [Raspberry Pi](stackexchange:raspberrypi.stackexchange.com) — users and developers of hardware and software for Raspberry Pi
+- [Russian Language](stackexchange:russian.stackexchange.com) — students, teachers, and linguists wanting to discuss the finer points of the Russian…
+- [Islam](stackexchange:islam.stackexchange.com) — Muslims, experts in Islam, and those interested in learning more about Islam
+- [Salesforce](stackexchange:salesforce.stackexchange.com) — Salesforce administrators, implementation experts, developers and anybody in-between
+- [Ask Patents](stackexchange:patents.stackexchange.com) — people interested in improving and participating in the patent system
+- [Genealogy & Family History](stackexchange:genealogy.stackexchange.com) — expert genealogists and people interested in genealogy or family history
+- [Robotics](stackexchange:robotics.stackexchange.com) — professional robotic engineers, hobbyists, researchers and students
+- [ExpressionEngine® Answers](stackexchange:expressionengine.stackexchange.com) — administrators, end users, developers and designers for ExpressionEngine&\#174; CMS
+- [Politics](stackexchange:politics.stackexchange.com) — people interested in governments, policies, and political processes
+- [Anime & Manga](stackexchange:anime.stackexchange.com) — anime and manga fans
+- [Magento](stackexchange:magento.stackexchange.com) — users of the Magento e-Commerce platform
+- [English Language Learners](stackexchange:ell.stackexchange.com) — speakers of other languages learning English
+- [Sustainable Living](stackexchange:sustainability.stackexchange.com) — folks dedicated to a lifestyle that can be maintained indefinitely without depleting…
+- [Tridion](stackexchange:tridion.stackexchange.com) — Tridion developers and administrators
+- [Reverse Engineering](stackexchange:reverseengineering.stackexchange.com) — researchers and developers who explore the principles of a system through analysis of its…
+- [Network Engineering](stackexchange:networkengineering.stackexchange.com) — network engineers
+- [Open Data](stackexchange:opendata.stackexchange.com) — developers and researchers interested in open data
+- [Freelancing](stackexchange:freelancing.stackexchange.com) — self-employed and freelance workers
+- [Blender](stackexchange:blender.stackexchange.com) — people who use Blender to create 3D graphics, animations, or games
+- [MathOverflow](stackexchange:mathoverflow.net) — professional mathematicians
+- [Space Exploration](stackexchange:space.stackexchange.com) — spacecraft operators, scientists, engineers, and enthusiasts
+- [Sound Design](stackexchange:sound.stackexchange.com) — sound engineers, producers, editors, and enthusiasts
+- [Astronomy](stackexchange:astronomy.stackexchange.com) — astronomers and astrophysicists
+- [Tor](stackexchange:tor.stackexchange.com) — researchers, developers, and users of Tor
+- [Pets](stackexchange:pets.stackexchange.com) — pet owners, caretakers, breeders, veterinarians, and trainers
+- [Amateur Radio](stackexchange:ham.stackexchange.com) — amateur radio enthusiasts
+- [Italian Language](stackexchange:italian.stackexchange.com) — students, teachers, and linguists wanting to discuss the finer points of the Italian…
+- [Stack Overflow em Português](stackexchange:pt.stackoverflow.com) — programadores profissionais e entusiastas
+- [Aviation](stackexchange:aviation.stackexchange.com) — aircraft pilots, mechanics, and enthusiasts
+- [Ebooks](stackexchange:ebooks.stackexchange.com) — ebook publishers and readers
+- [Beer, Wine & Spirits](stackexchange:alcohol.stackexchange.com) — alcoholic beverage aficionados and those interested in beer, wine, or spirits
+- [Software Recommendations](stackexchange:softwarerecs.stackexchange.com) — people seeking specific software recommendations
+- [Arduino](stackexchange:arduino.stackexchange.com) — developers of open-source hardware and software that is compatible with Arduino
+- [Expatriates](stackexchange:expatriates.stackexchange.com) — people living abroad on a long-term basis
+- [Mathematics Educators](stackexchange:matheducators.stackexchange.com) — those involved in the field of teaching mathematics
+- [Earth Science](stackexchange:earthscience.stackexchange.com) — those interested in the geology, meteorology, oceanography, and environmental sciences
+- [Joomla](stackexchange:joomla.stackexchange.com) — Joomla! administrators, users, developers and designers
+- [Data Science](stackexchange:datascience.stackexchange.com) — Data science professionals, Machine Learning specialists, and those interested in…
+- [Puzzling](stackexchange:puzzling.stackexchange.com) — those who create, solve, and study puzzles
+- [Craft CMS](stackexchange:craftcms.stackexchange.com) — administrators, end users, developers and designers for Craft CMS
+- [Buddhism](stackexchange:buddhism.stackexchange.com) — people practicing or interested in Buddhist philosophy, teaching, and practice
+- [Hinduism](stackexchange:hinduism.stackexchange.com) — followers of the Hindu religion and those interested in learning more about Hinduism
+- [Community Building](stackexchange:communitybuilding.stackexchange.com) — community managers, administrators, and moderators
+- [Worldbuilding](stackexchange:worldbuilding.stackexchange.com) — writers/artists using science, geography and culture to construct imaginary worlds and…
+- [スタック・オーバーフロー](stackexchange:ja.stackoverflow.com) — プログラマーとプログラミングに熱心な人
+- [Emacs](stackexchange:emacs.stackexchange.com) — those using, extending or developing Emacs
+- [History of Science and Mathematics](stackexchange:hsm.stackexchange.com) — people interested in the history and origins of science and mathematics
+- [Economics](stackexchange:economics.stackexchange.com) — those who study, teach, research and apply economics and econometrics
+- [Lifehacks](stackexchange:lifehacks.stackexchange.com) — people looking to bypass life&\#39;s everyday problems with simple tricks
+- [Engineering](stackexchange:engineering.stackexchange.com) — professionals and students of engineering
+- [Coffee](stackexchange:coffee.stackexchange.com) — people interested in all aspects of producing and consuming coffee
+- [Vi and Vim](stackexchange:vi.stackexchange.com) — people using the vi and Vim families of text editors
+- [Music Fans](stackexchange:musicfans.stackexchange.com) — music historians, critics, and fans
+- [Woodworking](stackexchange:woodworking.stackexchange.com) — professional and amateur woodworkers
+- [CiviCRM](stackexchange:civicrm.stackexchange.com) — administrators and users of the CiviCRM Constituent Relationship Management software
+- [Medical Sciences](stackexchange:medicalsciences.stackexchange.com) — professionals in medical and allied health fields, students of those professions, related…
+- [Stack Overflow на русском](stackexchange:ru.stackoverflow.com) — программистов
+- [Русский язык](stackexchange:rus.stackexchange.com) — лингвистов и энтузиастов русского языка
+- [Mythology & Folklore](stackexchange:mythology.stackexchange.com) — enthusiasts and scholars of mythology and folklore
+- [Law](stackexchange:law.stackexchange.com) — legal professionals, students, and others with experience or interest in law
+- [Open Source](stackexchange:opensource.stackexchange.com) — people organizing, marketing or licensing open source development projects
+- [elementary OS](stackexchange:elementaryos.stackexchange.com) — developers and users of elementary OS and applications
+- [Portuguese Language](stackexchange:portuguese.stackexchange.com) — linguists, teachers and learners wanting to discuss the finer points of the Portuguese…
+- [Computer Graphics](stackexchange:computergraphics.stackexchange.com) — computer graphics researchers and programmers
+- [Hardware Recommendations](stackexchange:hardwarerecs.stackexchange.com) — people seeking specific hardware recommendations
+- [Stack Overflow en español](stackexchange:es.stackoverflow.com) — programadores y profesionales de la inform&\#225;tica
+- [3D Printing](stackexchange:3dprinting.stackexchange.com) — 3D printing enthusiasts
+- [Ethereum](stackexchange:ethereum.stackexchange.com) — users of Ethereum, the decentralized application platform and smart contract enabled…
+- [Latin Language](stackexchange:latin.stackexchange.com) — linguists, teachers, and students wanting to discuss the finer points of the Latin…
+- [Language Learning](stackexchange:languagelearning.stackexchange.com) — students, teachers, polyglots, and anyone interested in the techniques of second-language…
+- [Retrocomputing](stackexchange:retrocomputing.stackexchange.com) — vintage-computer hobbyists interested in restoring, preserving, and using the classic…
+- [Arts & Crafts](stackexchange:crafts.stackexchange.com) — artists and crafters
+- [Korean Language](stackexchange:korean.stackexchange.com) — linguists, teachers and students of the Korean language
+- [Monero](stackexchange:monero.stackexchange.com) — developers and users of the secure, private and untraceable cryptocurrency Monero
+- [Artificial Intelligence](stackexchange:ai.stackexchange.com) — people interested in conceptual questions about life and challenges in a world where…
+- [Esperanto Language](stackexchange:esperanto.stackexchange.com) — teachers and students of the Esperanto language
+- [Sitecore](stackexchange:sitecore.stackexchange.com) — developers and end users of the Sitecore CMS and multichannel marketing software
+- [Internet of Things](stackexchange:iot.stackexchange.com) — builders and users of networked sensors and control devices in the contexts of smart…
+- [Literature](stackexchange:literature.stackexchange.com) — scholars and enthusiasts of literature
+- [Veganism & Vegetarianism](stackexchange:vegetarianism.stackexchange.com) — those committed to a vegan or vegetarian lifestyle and anyone interested in learning more
+- [Ukrainian Language](stackexchange:ukrainian.stackexchange.com) — linguists, teachers and students of the Ukrainian language
+- [DevOps](stackexchange:devops.stackexchange.com) — software engineers working on automated testing, continuous delivery, service integration…
+- [Bioinformatics](stackexchange:bioinformatics.stackexchange.com) — researchers, developers, students, teachers, and end users interested in bioinformatics
+- [Computer Science Educators](stackexchange:cseducators.stackexchange.com) — those involved in the field of teaching Computer Science
+- [Interpersonal Skills](stackexchange:interpersonal.stackexchange.com) — people looking to improve their interpersonal communication skills
+- [Iota](stackexchange:iota.stackexchange.com) — users of Iota, the open-source cryptocurrency for IoT that does not use a blockchain
+- [Stellar](stackexchange:stellar.stackexchange.com) — developers and users of Stellar and the Stellar Distributed Exchange
+- [Constructed Languages](stackexchange:conlang.stackexchange.com) — designers and users of artificial or invented languages, consciously developed instead of…
+- [Quantum Computing](stackexchange:quantumcomputing.stackexchange.com) — engineers, scientists, programmers, and computing professionals interested in quantum…
+- [EOS.IO](stackexchange:eosio.stackexchange.com) — users and developers of distributed applications built on top of the blockchain operating…
+- [Tezos](stackexchange:tezos.stackexchange.com) — users, experts, and developers of the Tezos blockchain project
+- [Operations Research](stackexchange:or.stackexchange.com) — operations research and analytics professionals, educators, and students
+- [Drones and Model Aircraft](stackexchange:drones.stackexchange.com) — experienced flyers, pilots, and builders of drones and model aircraft
+- [Matter Modeling](stackexchange:mattermodeling.stackexchange.com) — materials modelers and data scientists
+- [Cardano](stackexchange:cardano.stackexchange.com) — users and developers of the Cardano cryptocurrency ecosystem
+- [Proof Assistants](stackexchange:proofassistants.stackexchange.com) — mathematicians and computer scientists who develop and use proof assistants
+- [Substrate and Polkadot](stackexchange:substrate.stackexchange.com) — developers building blockchains with the Substrate SDK
+- [Bioacoustics](stackexchange:bioacoustics.stackexchange.com) — people interested in the studies of non-human animal sounds and the impacts of sounds on…
+- [Solana](stackexchange:solana.stackexchange.com) — Solana software users and developers
+- [Programming Language Design and Implementation](stackexchange:langdev.stackexchange.com) — designers and implementers of computer programming languages
+- [GenAI](stackexchange:genai.stackexchange.com) — GenAI enthusiasts and practitioners and those interested in learning more about using…
+- [Stack Overflow for Agents Meta](stackexchange:agents.meta.stackoverflow.com) — Humans discussing Stack Overflow for Agents

@@ -20,21 +20,24 @@ plain Markdown files under `examples/directory/`.
 - [Culture, design and long reads](directory/culture.md) — essays, art, design, history, music, film, philosophy
 - [Games and comics](directory/games.md) — game news, devlogs, webcomics, retro, tabletop
 - [News](directory/news.md) — world news in English, German, French, Spanish, Italian and Japanese; text-only editions; independent outlets
-- [Video and podcasts](directory/media.md) — YouTube channels as feeds, audio fiction
+- [Video and podcasts](directory/media.md) — media.ccc.de, PeerTube, YouTube channels as feeds, audio fiction
 - [Search](directory/search.md) — engines and keywords
 - [Libraries, archives and the old web](directory/reference.md) — Internet Archive, Gutenberg, Wikimedia, RFCs, indexes of small sites
 - [The wider web](directory/web.md) — well-known domains, reference, code hosts, odd corners, small-net entry points
 
 ## Built-in services
 
-Native views (no HTML scraping) — see also [Books](books.md) and
+Native views (no HTML scraping). [Services](services.md) lists all of them,
+with a directory of hosts for each federated protocol (Lemmy, PeerTube,
+Matrix, Discourse, Gemini, Gopher, …) — see also [Books](books.md) and
 [Feeds](feeds.md):
 
 - [Hacker News](hn:) · [new](hn:newest) · [Ask HN](hn:ask) · [Show HN](hn:show)
 - [Reddit: r/popular](reddit:r/popular/) · [r/scifi](reddit:r/scifi/) · [r/printSF](reddit:r/printSF/) · [r/space](reddit:r/space/) · [r/programming](reddit:r/programming/)
 - [Lemmy: technology](lemmy:lemmy.world/c/technology) · [space](lemmy:lemmy.world/c/space) · [Linux](lemmy:lemmy.ml/c/linux) · [Rust](lemmy:programming.dev/c/rust)
-- [Wikipedia](wikipedia:Main_Page) · [Wikipedia (Deutsch)](wikipedia:de:Wikipedia:Hauptseite) · [Science fiction](wikipedia:Science_fiction)
+- [Wikipedia](wikipedia:Main_Page) · [Science fiction](wikipedia:Science_fiction)
 - [Nostr: recent notes](nostr:recent)
+- [media.ccc.de: recent talks](mediaccc:) · [conferences](mediaccc:conferences) · [PeerTube: Blender](peertube:video.blender.org) · [PeerTube instances](services/peertube.md)
 - [Gemini: geminiprotocol.net](gemini://geminiprotocol.net/)
 - [Gopher: Floodgap](gopher://gopher.floodgap.com/1/) · [SDF](gopher://sdf.org/1/)
 - [Spartan: mozz.us](spartan://spartan.mozz.us/)

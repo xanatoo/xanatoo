@@ -397,57 +397,70 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
           {f.url, f.title.empty() ? f.type + " feed" : f.title + " (" + f.type + ")"});
   }
   if (ui_state.services.empty()) {
-    // Front pages of the in-app clients; greyed out when not built in.
+    // Quick access to the in-app clients, grouped by what they speak. A
+    // protocol with many hosts opens its directory page (examples/services/,
+    // all of it linked from services.md) instead of one arbitrary host.
+    // Greyed out when `probe` (else `target`) needs a feature not built in.
     struct Entry {
+      const char* group;  // heading before this entry, or nullptr
       const char* label;
       const char* target;
       bool example;
-      bool sep;
+      const char* probe;
     };
     static const Entry kServices[] = {
-        {"Wikipedia", "wikipedia:Main_Page", false, false},
-        {"Wikipedia (Deutsch)", "wikipedia:de:Wikipedia:Hauptseite", false, false},
-        {"Hacker News", "hn:", false, true},
-        {"Lobsters", "lobsters:", false, false},
-        {"Stack Overflow", "stackexchange:stackoverflow.com", false, false},
-        {"Discourse (NixOS)", "discourse:discourse.nixos.org", false, false},
-        {"Flarum (community)", "flarum:discuss.flarum.org", false, false},
-        {"LessWrong", "lesswrong:", false, false},
-        {"4chan (boards)", "fourchan:", false, false},
-        {"Bluesky (@bsky.app)", "bsky:bsky.app", false, false},
-        {"Reddit (r/popular)", "reddit:r/popular/", false, false},
-        {"Lemmy (lemmy.world, all)", "lemmy:lemmy.world/?listingType=All",
-         false, false},
-        {"Matrix (matrix.org rooms)", "matrix:directory/matrix.org", false, false},
-        {"Nostr (recent notes)", "nostr:recent", false, false},
-        {"YouTube (Google for Developers)", "youtube:@GoogleDevelopers", false,
-         true},
-        {"PeerTube (video.blender.org)", "peertube:video.blender.org", false,
-         false},
-        {"Internet Archive (Prelinger)", "ia:prelinger", false, false},
-        {"Gemini (geminiprotocol.net)", "gemini://geminiprotocol.net/", false,
-         true},
-        {"Gopher (Floodgap)", "gopher://gopher.floodgap.com/1/", false, false},
-        {"Spartan (mozz.us)", "spartan://spartan.mozz.us/", false, false},
-        {"Nex (nightfall.city)", "nex://nightfall.city/", false, false},
-        {"Finger (public hosts)", "finger.md", true, false},
-        {"Usenet (news servers)", "usenet.md", true, false},
-        {"Usenet (Gmane mailing lists)", "news://news.gmane.io/gmane.*", false,
-         false},
-        {"Standard Ebooks", "https://standardebooks.org/ebooks", false, false},
-        {"Directory (links and feeds)", "directory.md", true, false},
-        {"Books and long reads", "books.md", true, false},
-        {"Feeds (RSS / Atom)", "feeds.md", true, false},
+        {"Reference", "Wikipedia", "wikipedia:Main_Page", false, nullptr},
+        {nullptr, "Internet Archive (Prelinger films)", "ia:prelinger", false,
+         nullptr},
+        {nullptr, "Standard Ebooks", "https://standardebooks.org/ebooks", false,
+         nullptr},
+        {"News and forums", "Hacker News", "hn:", false, nullptr},
+        {nullptr, "Lobsters", "lobsters:", false, nullptr},
+        {nullptr, "LessWrong", "lesswrong:", false, nullptr},
+        {nullptr, "Reddit (r/popular)", "reddit:r/popular/", false, nullptr},
+        {nullptr, "4chan (boards)", "fourchan:", false, nullptr},
+        {nullptr, "Lemmy instances", "services/lemmy.md", true,
+         "lemmy:lemmy.world/"},
+        {nullptr, "Discourse forums", "services/discourse.md", true,
+         "discourse:discourse.nixos.org"},
+        {nullptr, "Flarum forums", "services/flarum.md", true,
+         "flarum:discuss.flarum.org"},
+        {nullptr, "Stack Exchange sites", "services/stackexchange.md", true,
+         "stackexchange:stackoverflow.com"},
+        {"Social and chat", "Bluesky (@bsky.app)", "bsky:bsky.app", false,
+         nullptr},
+        {nullptr, "Nostr (recent notes)", "nostr:recent", false, nullptr},
+        {nullptr, "Matrix homeservers", "services/matrix.md", true,
+         "matrix:directory/matrix.org"},
+        {"Video", "YouTube (Google for Developers)", "youtube:@GoogleDevelopers",
+         false, nullptr},
+        {nullptr, "media.ccc.de (talks)", "mediaccc:", false, nullptr},
+        {nullptr, "PeerTube instances", "services/peertube.md", true,
+         "peertube:video.blender.org"},
+        {"Small net", "Gemini capsules", "services/gemini.md", true,
+         "gemini://geminiprotocol.net/"},
+        {nullptr, "Gopher holes", "services/gopher.md", true,
+         "gopher://gopher.floodgap.com/1/"},
+        {nullptr, "Spartan hosts", "services/spartan.md", true,
+         "spartan://spartan.mozz.us/"},
+        {nullptr, "Nex hosts", "services/nex.md", true, "nex://nightfall.city/"},
+        {nullptr, "Finger hosts", "finger.md", true, "finger://tilde.town/"},
+        {nullptr, "Usenet servers", "usenet.md", true, "news://news.gmane.io/"},
+        {"Directories", "All services", "services.md", true, nullptr},
+        {nullptr, "Directory (links and feeds)", "directory.md", true, nullptr},
+        {nullptr, "Books and long reads", "books.md", true, nullptr},
+        {nullptr, "Feeds (RSS / Atom)", "feeds.md", true, nullptr},
     };
     for (const Entry& e : kServices) {
       xanatoo::UiService s;
       s.label = e.label;
       s.target = e.target;
       s.example = e.example;
-      s.separator_before = e.sep;
-      s.tip = e.target;
+      if (e.group) s.group = e.group;
+      s.tip = e.example ? std::string("examples/") + e.target : e.target;
+      const char* probe = e.probe ? e.probe : e.example ? nullptr : e.target;
       std::string why;
-      if (!e.example && !remote_fetch_supported(e.target, &why)) {
+      if (probe && !remote_fetch_supported(probe, &why)) {
         s.enabled = false;
         s.tip = why;
       }

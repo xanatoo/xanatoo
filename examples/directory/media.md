@@ -2,6 +2,15 @@
 
 [← Directory](../directory.md)
 
+## Open video archives
+
+Read natively, with **▶ Play** in the Media panel:
+
+- [media.ccc.de](mediaccc:) — the Chaos Computer Club's archive of conference talks, free to watch and download: [all conferences](mediaccc:conferences) · [39C3](mediaccc:c/39c3) · [38C3](mediaccc:c/38c3) · [Camp 2023](mediaccc:c/camp2023) · [search](mediaccc:search?q=open+source)
+- PeerTube, federated video hosting: [Blender](peertube:video.blender.org) · [Framatube](peertube:framatube.org) · [TILvids](peertube:tilvids.com) · [Debian](peertube:peertube.debian.social) · [SepiaSearch](peertube:sepiasearch.org/search?search=documentary) — and [1,200 more instances](../services/peertube.md)
+- [Prelinger Archives](ia:prelinger) · [Computer Chronicles](ia:computerchronicles) — Internet Archive collections (`ia:`)
+- All video services: [Services](../services.md#Video)
+
 ## YouTube channels
 
 YouTube publishes an Atom feed per channel: titles, descriptions and links

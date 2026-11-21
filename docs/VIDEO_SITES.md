@@ -1,4 +1,4 @@
-# Video sites (PeerTube, Odysee, Dailymotion)
+# Video sites (PeerTube, Odysee, Dailymotion, media.ccc.de)
 
 Read-only, local-only, like `youtube:` (`docs/YOUTUBE.md`). Gated by
 `XANATOO_VIDEO` (default ON, needs a TLS backend; off in the minimal port).
@@ -22,8 +22,14 @@ Code: `include/xanatoo/video_sites.hpp`, `src/video_sites.cpp`. Parsers
 | `odysee:search?s=Q` | search (lighthouse → claim_search) |
 | `dailymotion:xID` | video, comments |
 | `dailymotion:user/ID`, `dailymotion:search?search=Q` | channel videos / search |
+| `mediaccc:[?page=N]` | recent talks on media.ccc.de |
+| `mediaccc:conferences` | every conference, newest release first |
+| `mediaccc:c/ACRONYM` | one conference's talks (`38c3`, `fosdem2025`, …) |
+| `mediaccc:v/SLUG` | talk: speakers (→ search), conference, Play / Sound only |
+| `mediaccc:search?q=Q` | search (title, speakers, description) |
 
-Search-bar engines: `peertube` (`pt`), `odysee` (`od`), `dailymotion` (`dm`).
+Search-bar engines: `peertube` (`pt`), `odysee` (`od`), `dailymotion` (`dm`),
+`mediaccc` (`ccc`).
 Video pages carry "▶ Play (label)" (the stream itself, plays in the Media
 panel), "♪ Sound only" when the site has a separate audio file, "Watch on X"
 (`external:URL`) and "Watch with mpv" (`external:mpv:URL`) links.
@@ -41,13 +47,22 @@ panel), "♪ Sound only" when the site has a separate audio file, "Watch on X"
   `.../v6/streams/{claim_id}/{sd_hash}/master.m3u8` (`od_hls_url`, no
   Referer needed for it or its segments); when that answers `#EXTM3U` the
   link is "▶ Play (HLS)", else (404, older uploads) the `.mp4` stays.
+- media.ccc.de (`ccc_parse_event`, voctoweb's `api.media.ccc.de/public`):
+  the recording in the talk's `original_language` first (`deu-eng` files
+  carry both tracks and rank after it), H.264 MP4 before WebM / AV1, HD
+  before SD, never the `*-slides` folders; MP3 before Opus for "Sound
+  only". The site has no comments (`VsVideoInfo::no_comments` drops the
+  section). Recent talks (100), the conference list and a conference's
+  talks arrive whole and are cut into pages of 50 (`vs_slice_page`);
+  search pages are the API's (25).
 - Dailymotion: no Play link (the metadata m3u8 answers 403,
   protected delivery). A PeerTube video's ref uses the host it really
 lives on (search results can span instances).
 
 Web URLs map through `video_site_ref_from_web_url` (native toggle):
 `odysee.com/@…`, `dailymotion.com/video/xID`, `dai.ly`, PeerTube `/w/ID`,
-`/videos/watch/ID`, `/video-channels/NAME`, `/accounts/NAME`. Other PeerTube
+`/videos/watch/ID`, `/video-channels/NAME`, `/accounts/NAME`, and
+`media.ccc.de/`, `/v/SLUG`, `/c/ACRONYM`, `/search/?q=`. Other PeerTube
 paths are not claimed (an arbitrary `/w/…` is MediaWiki).
 
 ## Limits
