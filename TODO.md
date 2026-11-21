@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Touch: two-finger gutter grab
+
+- Gutters are hard to hit with one finger: place one finger on each side
+  of a tile divider, dock split or docked panel edge and move them — the
+  gutter follows their midpoint (`TouchMode::GutterDrag`, app_touch.cpp).
+  Without a gutter between the fingers the second finger still starts a
+  pinch. The gutter nearest the midpoint wins (`segment_hit_near_middle`,
+  `touch_gutter.hpp`, unit-tested); the tile-mode badge is left out.
+- A single finger on a dock split / edge now drags it too (was tile
+  divider only).
+- Open: not yet tried on a real touchscreen.
+
 ## Status (2026-11-21) — Identity panel (Gemini client certificates)
 
 - New Identities panel (Panels → Identities, `app_identity.cpp`): create

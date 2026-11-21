@@ -607,6 +607,7 @@ enum class TouchMode : uint8_t {
   Pinch,    // two fingers: zoom
   Image,    // one finger on a single-image gallery view: pan / swipe / tap
   ImagePinch,  // two fingers there: zoom the image
+  GutterDrag,  // two fingers either side of a gutter: they drag it along
   Ignored,  // ImGui's touch or a finished pinch; wait for all fingers up
 };
 
@@ -635,6 +636,8 @@ struct Touch {
   float pinch_dist = 0.f;
   int pinch_body_px = 0;
   std::optional<ViewAnchor> pinch_anchor;
+  // GutterDrag: grabbed gutter point minus the fingers' midpoint.
+  float gutter_dx = 0.f, gutter_dy = 0.f;
 };
 
 // ---- background page fetches (app_fetch.cpp) ----
@@ -2578,6 +2581,8 @@ std::optional<UiPanelLayer> float_layer_at(App& app, int x, int y);
 // Same edge hit-test as float_press, including the resize slack outside a frame.
 // bit 1=right, 2=bottom, 4=left, 8=top. Zero if nothing resizable is hit.
 int float_resize_at(App& app, int x, int y);
+// A docked panel's outer resize edge (the gutter beside it) is at (x, y).
+bool dock_edge_at(App& app, int x, int y);
 // Separator between two adjacent panels sharing a dock, not the dock's
 // outer resize edge. Returned axis is the direction the divider moves.
 enum class DockSplitAxis : uint8_t { None, Horizontal, Vertical };

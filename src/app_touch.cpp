@@ -7,6 +7,10 @@
 // click; on no text it opens on lift without the selection), two-finger
 // pinch = zoom. Touches on ImGui chrome are left
 // to ImGui, which sees SDL's touch-synthesised mouse events.
+// Gutters (tile divider, dock splits, dock edges) are thin: besides a finger
+// right on one, two fingers placed either side of a gutter grab it and drag
+// it along with their midpoint. Pinches stay within one page, so a pair of
+// fingers straddling a gutter is never a pinch.
 // A finger has no hover: when the last one lifts, pointer_leave clears
 // every hover effect, which a mouse would end by moving away.
 
@@ -16,6 +20,7 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/editor.hpp"
 #include "xanatoo/layout.hpp"
+#include "xanatoo/touch_gutter.hpp"
 
 namespace xanatoo::app {
 
@@ -59,6 +64,51 @@ bool scroll_target(App& app, float dy) {
   p.scroll_y = s;
   ensure_virtual_layout(app, p);
   return moved;
+}
+
+// A gutter a pointer press at (x, y) would drag: the tile divider (not its
+// mode badge), a split between docked panels or a dock's outer edge.
+bool gutter_at(App& app, int x, int y) {
+  const auto within = [&](const SDL_Rect& rc) {
+    return x >= rc.x && x < rc.x + rc.w && y >= rc.y && y < rc.y + rc.h;
+  };
+  if (app.split && within(tile_divider_rect(app)) &&
+      !within(tile_mode_button_rect(app)))
+    return true;
+  return dock_split_at(app, x, y) != DockSplitAxis::None ||
+         dock_edge_at(app, x, y);
+}
+
+// Two fingers either side of a gutter: grab it at the point between them.
+bool begin_gutter_drag(App& app) {
+  Touch& t = app.touch;
+  const TouchPoint& a = t.fingers[0];
+  const TouchPoint& b = t.fingers[1];
+  const auto g = segment_hit_near_middle(
+      a.x, a.y, b.x, b.y, [&](int x, int y) {
+        return y >= app.ui_top && y < app.win_h - status_bar_h &&
+               !app.ui.captures_point(static_cast<float>(x),
+                                      static_cast<float>(y),
+                                      float_layer_at(app, x, y)) &&
+               gutter_at(app, x, y);
+      });
+  if (!g) return false;
+  t.flinging = false;
+  if (t.mode == TouchMode::Pan) t.velocity = 0.f;
+  const float mx = (a.x + b.x) * 0.5f, my = (a.y + b.y) * 0.5f;
+  t.gutter_dx = static_cast<float>(g->first) + 0.5f - mx;
+  t.gutter_dy = static_cast<float>(g->second) + 0.5f - my;
+  t.mode = TouchMode::GutterDrag;
+  pointer_left_down(app, g->first, g->second, false);
+  return true;
+}
+
+// Where the grabbed gutter point is now (the fingers' midpoint + offset).
+std::pair<int, int> gutter_point(const Touch& t) {
+  const float mx = (t.fingers[0].x + t.fingers[1].x) * 0.5f;
+  const float my = (t.fingers[0].y + t.fingers[1].y) * 0.5f;
+  return {static_cast<int>(std::floor(mx + t.gutter_dx)),
+          static_cast<int>(std::floor(my + t.gutter_dy))};
 }
 
 // Decide what a first finger at (x, y) is for.
@@ -111,8 +161,8 @@ void begin_gesture(App& app, float x, float y) {
     return xi >= rc.x - pad && xi < rc.x + rc.w + pad &&
            yi >= rc.y - pad && yi < rc.y + rc.h + pad;
   };
-  const bool on_gutter = app.split &&
-      (within(divider, 3) || within(badge));
+  const bool on_gutter = (app.split && (within(divider, 3) || within(badge))) ||
+                         gutter_at(app, xi, yi);
   if (on_scrollbar || on_gutter) {
     t.mode = TouchMode::Direct;
     pointer_left_down(app, xi, yi, false);
@@ -205,7 +255,7 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
     begin_gesture(app, x, y);
   } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
              t.mode == TouchMode::Pan || t.mode == TouchMode::Image) {
-    begin_pinch(app);
+    if (!begin_gutter_drag(app)) begin_pinch(app);
   }
 }
 
@@ -272,6 +322,11 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
     case TouchMode::Image:
       if (primary) gallery_pan(app, t.pane, dx, dy);
       break;
+    case TouchMode::GutterDrag: {
+      const auto [gx, gy] = gutter_point(t);
+      pointer_motion(app, gx, gy, false);
+      break;
+    }
     case TouchMode::Idle:
     case TouchMode::Ignored:
       break;
@@ -326,6 +381,12 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
     case TouchMode::Direct:
       if (primary) pointer_left_up(app, xi, yi);
       break;
+    case TouchMode::GutterDrag: {  // either finger lets go of the gutter
+      const auto [gx, gy] = gutter_point(t);
+      pointer_left_up(app, gx, gy);
+      t.mode = TouchMode::Ignored;
+      break;
+    }
     case TouchMode::Pinch:  // the remaining finger does nothing
     case TouchMode::ImagePinch:
       t.mode = TouchMode::Ignored;

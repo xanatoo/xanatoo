@@ -15,6 +15,7 @@
 #include "xanatoo/site_hints.hpp"
 #include "xanatoo/download.hpp"
 #include "xanatoo/table_grid.hpp"
+#include "xanatoo/touch_gutter.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/nav_history.hpp"
 #include "xanatoo/history_menu.hpp"
@@ -8699,7 +8700,37 @@ void test_table_alignment() {
   }
 }
 
+// Two fingers either side of a gutter find the gutter between them; with two
+// gutters in reach, the one nearer the middle wins; none → nullopt.
+void test_touch_gutter_between() {
+  using xanatoo::segment_hit_near_middle;
+  const auto col = [](int lo, int hi) {
+    return [=](int x, int) { return x >= lo && x < hi; };
+  };
+  auto g = segment_hit_near_middle(100.f, 50.f, 200.f, 60.f, col(170, 174));
+  EXPECT(g.has_value());
+  if (g) {
+    EXPECT(g->first >= 170 && g->first < 174);
+    EXPECT(g->second >= 50 && g->second <= 60);
+  }
+  g = segment_hit_near_middle(200.f, 50.f, 100.f, 50.f, col(120, 122));
+  EXPECT(g && g->first >= 120 && g->first < 122);
+  const auto two = [](int x, int) {
+    return (x >= 105 && x < 107) || (x >= 160 && x < 162);
+  };
+  g = segment_hit_near_middle(100.f, 0.f, 200.f, 0.f, two);
+  EXPECT(g && g->first >= 160 && g->first < 162);
+  EXPECT(!segment_hit_near_middle(100.f, 0.f, 200.f, 0.f, col(300, 310)));
+  // A row gutter crossed vertically.
+  g = segment_hit_near_middle(40.f, 10.f, 40.f, 90.f,
+                              [](int, int y) { return y == 30; });
+  EXPECT(g && g->first == 40 && g->second == 30);
+  // Both fingers on one spot.
+  EXPECT(segment_hit_near_middle(5.f, 5.f, 5.f, 5.f, col(5, 6)));
+}
+
 int main() {
+  test_touch_gutter_between();
   test_plain_text_files();
   test_looks_like_binary();
   test_transfer_label();

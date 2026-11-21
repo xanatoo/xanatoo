@@ -648,6 +648,16 @@ static int float_resize_bits(const FloatWindow& w, int mx, int my) {
   return (on_r ? 1 : 0) | (on_b ? 2 : 0) | (on_l ? 4 : 0) | (on_t ? 8 : 0);
 }
 
+bool dock_edge_at(App& app, int mx, int my) {
+  auto st = float_stack(app);
+  for (auto it = st.rbegin(); it != st.rend(); ++it) {
+    const FloatWindow& w = **it;
+    const int bits = float_resize_bits(w, mx, my);
+    if (bits || contains(w, mx, my)) return bits && float_docked(w);
+  }
+  return false;
+}
+
 int float_resize_at(App& app, int mx, int my) {
   auto st = float_stack(app);
   for (auto it = st.rbegin(); it != st.rend(); ++it) {
