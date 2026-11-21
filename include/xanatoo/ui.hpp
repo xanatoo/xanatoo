@@ -109,6 +109,9 @@ enum class UiCommand {
   CopyText,        // arg = text for the clipboard (an address)
   OpenLinkInTab,   // arg = href of a link in the focused view: new tab
   OpenLinkInTrail, // arg = href of a link in the focused view: Trail tiles
+  OpenBlock,        // arg = index into UiState::context_blocks: cut the view to it
+  OpenBlockInWindow, // … in a new document window (tabs keep no cut)
+  CopyBlockAddress, // … copy its address (page//id:…)
   DownloadUrl,     // arg = http(s) URL: open the download confirmation dialog
   ConfirmDownload, // user accepted the download dialog (default folder)
   DownloadToFolder,// user chose "Download to…" (native folder picker)
@@ -522,6 +525,11 @@ struct UiState {
   std::string context_link;       // right-clicked link target, if any
   std::string context_link_href;  // … as written in the page
   bool context_link_web = false;  // … and it is http(s): can be downloaded
+  // Blocks around the right-click, innermost first ("Article · Title"), and
+  // the innermost Article / Section among them (-1 = none).
+  std::vector<std::string> context_blocks;
+  int context_article = -1;
+  int context_section = -1;
   bool reply_open = false;
   // Embedded panels whose native window is rolled up (`ui_panel_bit`): their
   // ImGui body is not built while the frame shows only its title.
@@ -692,6 +700,9 @@ struct UiFrameResult {
   // A tab is being dragged away from the strip (the app shows where a drop
   // would dock it).
   bool tab_drag_out = false;
+  // Index into UiState::context_blocks whose menu item is under the
+  // pointer (the block is washed in the page), -1 = none.
+  int context_block_hot = -1;
 };
 
 class Ui {

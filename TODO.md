@@ -2,6 +2,21 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Open Article / Section / Block
+
+- HTML pages: `<article>` → Article, `<section>` with an id or a heading →
+  Section, the first heading titles the box (nested articles stay nested;
+  untitled id-less sections are transparent). Unit test
+  `test_html_article_boxes`.
+- Context menu: Open Article, Open Section, Open Block ▸ (chain innermost →
+  outermost, labelled kind · title), each also "in New Window", and Copy
+  Block Address ▸; hovered items outline their block. They cut the view via
+  `page//id:…` / `//path:…` (no new selector syntax needed). Checked live
+  under Xvfb on a local blog page.
+- Open: "in New Tab" became "in New Window" because tabs are buffers without
+  view state; real per-tab cuts need per-tab view state (`SelectTab` only
+  sets `Pane::buf`).
+
 ## Status (2026-11-21) — Site bars are page navigation
 
 - The "LessWrong: Frontpage · New · Top · Curated · Quick takes" line of

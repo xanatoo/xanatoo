@@ -204,6 +204,17 @@ same thing, generalised:
 - Images (slice 5): a source rect at draw time, in the pane, on the Image node and in
   the gallery's single-image view. Same decode and tile cache, no new image.
 
+**Opening a block.** The document context menu offers Open Article, Open
+Section (the innermost one around the pointer), Open Block ▸ (the whole
+chain from the paragraph or the grip's block outwards, "Article · First
+Post", so nested articles are told apart), each also "in New Window", and
+Copy Block Address ▸. They navigate to `page//id:LABEL` (or `//path:…`,
+`node_selector`), a history stop in the same view; hovering an item outlines
+its block. Tabs keep no view state of their own (a tab is a buffer), so the
+"new" variant is a document window on the same buffer, which keeps the cut.
+Helpers: `cut_blocks`, `block_kind_name`, `block_title` (locator.hpp),
+`open_context_block` / `block_address` (app).
+
 **Gallery.** `//gallery` is a view pipe like `//source-xml`: the pane shows
 the images of what the pipes before it select (the whole page without any)
 instead of the page, `//gallery//item:N` one of them on its own.

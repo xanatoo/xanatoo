@@ -3716,6 +3716,40 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Reply…", UiCommand::OpenReply, cmd);
       ImGui::Separator();
     }
+    if (!state.context_blocks.empty()) {
+      // Cut the view to a block around the pointer (page//id:…); hovering
+      // an item washes its block in the page.
+      const auto block_item = [&](const char* label, int index, UiCommand c) {
+        if (ImGui::MenuItem(label)) {
+          cmd = c;
+          result.arg = std::to_string(index);
+        }
+        if (ImGui::IsItemHovered()) result.context_block_hot = index;
+      };
+      const auto block_menu = [&](const char* title, UiCommand c) {
+        if (!ImGui::BeginMenu(title)) return;
+        for (size_t i = 0; i < state.context_blocks.size(); ++i) {
+          const std::string label =
+              state.context_blocks[i] + "##block" + std::to_string(i);
+          block_item(label.c_str(), static_cast<int>(i), c);
+        }
+        ImGui::EndMenu();
+      };
+      if (state.context_article >= 0) {
+        block_item("Open Article", state.context_article, UiCommand::OpenBlock);
+        block_item("Open Article in New Window", state.context_article,
+                   UiCommand::OpenBlockInWindow);
+      }
+      if (state.context_section >= 0) {
+        block_item("Open Section", state.context_section, UiCommand::OpenBlock);
+        block_item("Open Section in New Window", state.context_section,
+                   UiCommand::OpenBlockInWindow);
+      }
+      block_menu("Open Block", UiCommand::OpenBlock);
+      block_menu("Open Block in New Window", UiCommand::OpenBlockInWindow);
+      block_menu("Copy Block Address", UiCommand::CopyBlockAddress);
+      ImGui::Separator();
+    }
     if (state.browse) {
       // Read-only: no edit / format / insert / structure items.
       menu_item_cmd("Copy", UiCommand::Copy, cmd, state.selection, "Ctrl+C");

@@ -78,6 +78,18 @@ Selector node_selector(const Document& doc, NodeId node);
 // From the first to the last character of the text below `node`.
 Selection node_range(const Document& doc, NodeId node);
 
+// The blocks a view can be cut to around `node`, innermost first: the block
+// itself and each enclosing one below the root. A heading stands for its
+// section; lists, columns, table rows / cells and a Thread's title are
+// skipped (their item, the table, the thread are the blocks).
+std::vector<NodeId> cut_blocks(const Document& doc, NodeId node);
+// What a block is called in menus ("Article", "Section", "Paragraph", …).
+std::string_view block_kind_name(NodeKind kind);
+// Its title: the heading's text, else the start of its text; at most
+// `max_chars` characters (with "…").
+std::string block_title(const Document& doc, NodeId node,
+                        size_t max_chars = 40);
+
 // Text selectors, grammar of the web's text fragments, parts percent-encoded:
 //   [prefix-,]start[,end][,-suffix]   a range
 //   prefix-,,-suffix                  a point between two contexts

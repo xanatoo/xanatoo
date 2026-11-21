@@ -663,6 +663,38 @@ void pop_out_focused(App& app) {
   flash_status(app, "Popped out to window");
 }
 
+void open_context_block(App& app, size_t index, bool new_window) {
+  const int pi = app.context_blocks_pane;
+  if (index >= app.context_blocks.size() || pi < 0 ||
+      app.panes[pi].buf != app.context_blocks_buf ||
+      !find_buf(app, app.context_blocks_buf))
+    return;
+  const xanatoo::NodeId node = app.context_blocks[index];
+  Pane& from = app.panes[pi];
+  const xanatoo::Document& d = doc_of(app, from);
+  if (node >= d.next_id || d.get(node).id != node) return;
+  const std::string address = block_address(app, from, node);
+  if (!new_window) {
+    focus_view(app, pi);
+    navigate_pane(app, pi, address);
+    return;
+  }
+  FloatWindow* w = new_doc_window(app, app.context_blocks_buf);
+  if (!w) return;
+  const int view = w->view;
+  Pane& v = app.panes[view];
+  v.reader = from.reader;
+  v.paged = from.paged;
+  v.nav = {};
+  push_nav_history(app, view, address);
+  set_pane_cut(app, v, node);
+  const xanatoo::Selection r = xanatoo::node_range(d, node);
+  v.sel.anchor = v.sel.focus = r.anchor;
+  xanatoo::ensure_valid_caret(buf(app, app.context_blocks_buf).doc, v.sel.focus);
+  v.sel.anchor = v.sel.focus;
+  focus_view(app, view);
+}
+
 void tear_tab(App& app, BufferId bi, int mx, int my) {
   if (!find_buf(app, bi)) return;
   if (raise_window_of(app, bi)) {

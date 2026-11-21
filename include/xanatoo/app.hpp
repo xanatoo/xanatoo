@@ -1440,6 +1440,13 @@ struct App {
   std::string context_link;
   std::string context_link_href;  // as written in the page (new tab)
   bool context_link_web = false;
+  // Blocks around the right-click (xanatoo::cut_blocks), innermost first,
+  // in view `context_blocks_pane` showing `context_blocks_buf`; the one
+  // whose menu item is hovered is washed in the page.
+  std::vector<xanatoo::NodeId> context_blocks;
+  BufferId context_blocks_buf = kNoBuffer;
+  int context_blocks_pane = -1;
+  xanatoo::NodeId context_block_hot = xanatoo::INVALID_NODE;
   BufferId context_reply_buffer = kNoBuffer;
   xanatoo::NodeId context_reply_node = xanatoo::INVALID_NODE;
   // Quote links under the right-click (context menu "Go to …" items).
@@ -1966,6 +1973,11 @@ bool same_page(std::string_view a, std::string_view b);
 void apply_locator(App& app, int pi, xanatoo::Locator loc);
 // Cut the view to `node` (INVALID_NODE: the whole document).
 void set_pane_cut(App& app, Pane& p, xanatoo::NodeId node);
+// Address of view `p`'s page cut to `node` (page//id:… or page//path:…).
+std::string block_address(App& app, Pane& p, xanatoo::NodeId node);
+// The context menu's "Open …" verbs on app.context_blocks[index]: cut the
+// view it was opened in, or a new document window on the same buffer.
+void open_context_block(App& app, size_t index, bool new_window);
 // Bookmark of what the view shows: the selection when there is one, with
 // `position` the caret, else the page.
 xanatoo::Bookmark bookmark_for_view(App& app, Pane& p, bool position);

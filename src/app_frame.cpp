@@ -274,6 +274,30 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_link = app.context_link;
   ui_state.context_link_href = app.context_link_href;
   ui_state.context_link_web = app.context_link_web;
+  ui_state.context_blocks.clear();
+  ui_state.context_article = ui_state.context_section = -1;
+  if (find_buf(app, app.context_blocks_buf) && app.context_blocks_pane >= 0 &&
+      app.panes[app.context_blocks_pane].buf == app.context_blocks_buf) {
+    const xanatoo::Document& d = buf(app, app.context_blocks_buf).doc;
+    for (const xanatoo::NodeId n : app.context_blocks) {
+      if (n >= d.next_id || d.get(n).id != n) {
+        ui_state.context_blocks.clear();
+        break;
+      }
+      const auto kind = d.get(n).kind;
+      const int at = static_cast<int>(ui_state.context_blocks.size());
+      if (kind == xanatoo::NodeKind::Article && ui_state.context_article < 0)
+        ui_state.context_article = at;
+      if (kind == xanatoo::NodeKind::Section && ui_state.context_section < 0)
+        ui_state.context_section = at;
+      std::string label(xanatoo::block_kind_name(kind));
+      const std::string title = xanatoo::block_title(d, n);
+      if (!title.empty()) label += " \xC2\xB7 " + title;  // ·
+      ui_state.context_blocks.push_back(std::move(label));
+    }
+    if (ui_state.context_blocks.empty())
+      ui_state.context_article = ui_state.context_section = -1;
+  }
   ui_state.context_can_reply =
       app.context_reply_buffer != kNoBuffer &&
       app.context_reply_node != xanatoo::INVALID_NODE;
@@ -1142,6 +1166,24 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       update_title(app);
       break;
     }
+    case C::OpenBlock:
+    case C::OpenBlockInWindow:
+      open_context_block(app, static_cast<size_t>(std::atoi(arg.c_str())),
+                         cmd == C::OpenBlockInWindow);
+      break;
+    case C::CopyBlockAddress:
+      if (const auto i = std::optional<size_t>(
+              static_cast<size_t>(std::atoi(arg.c_str())));
+          *i < app.context_blocks.size() &&
+          app.context_blocks_pane >= 0 &&
+          app.panes[app.context_blocks_pane].buf == app.context_blocks_buf) {
+        const std::string addr =
+            block_address(app, app.panes[app.context_blocks_pane],
+                          app.context_blocks[*i]);
+        SDL_SetClipboardText(addr.c_str());
+        flash_status(app, "Copied " + addr);
+      }
+      break;
     case C::NextTab:
     case C::PrevTab:
       if (!app.tab_order.empty()) {
@@ -3031,6 +3073,13 @@ void run_chrome(App& app) {
   app.ui_bottom = ui_frame.bottom_reserved;
   place_centre_rows(app);  // the toolbar may have changed height
   // A tab dragged off the strip previews where it would dock.
+  {
+    const auto hot = ui_frame.context_block_hot;
+    app.context_block_hot =
+        hot >= 0 && static_cast<size_t>(hot) < app.context_blocks.size()
+            ? app.context_blocks[static_cast<size_t>(hot)]
+            : xanatoo::INVALID_NODE;
+  }
   if (ui_frame.tab_drag_out) {
     app.dock_preview = compute_dock_zone(app, static_cast<int>(app.mouse_x),
                                          static_cast<int>(app.mouse_y));
@@ -3625,6 +3674,22 @@ static void draw_pane_overlays(App& app, int i) {
           SDL_Rect dot{gx, gy + d, 4, 4};
           xanatoo::sdl::fill_rect(app.sdl, &dot);
         }
+        break;
+      }
+    }
+    // The block a context-menu "Open …" item would cut the view to.
+    if (app.context_block_hot != xanatoo::INVALID_NODE &&
+        app.context_blocks_pane == i && pane.buf == app.context_blocks_buf) {
+      for (const auto& box : pane.layout.boxes) {
+        if (box.node != app.context_block_hot) continue;
+        SDL_Rect r{pane.x + static_cast<int>(box.x) - 4,
+                   static_cast<int>(box.y - pane.scroll_y + py) - 2,
+                   static_cast<int>(box.width) + 8,
+                   static_cast<int>(box.height) + 4};
+        SDL_SetRenderDrawColor(app.sdl, 80, 120, 180, 36);
+        xanatoo::sdl::fill_rect(app.sdl, &r);
+        SDL_SetRenderDrawColor(app.sdl, 60, 100, 170, 200);
+        xanatoo::sdl::draw_rect(app.sdl, &r);
         break;
       }
     }

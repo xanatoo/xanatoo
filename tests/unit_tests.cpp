@@ -6591,6 +6591,79 @@ void test_html_chrome_regions() {
   EXPECT_EQ(chrome_regions(doc).size(), 1u);
 }
 
+// <article> is always a block of its own, a <section> when it has an id or
+// a heading; the first heading titles the box (docs/dev/CONTENT.md). The
+// context menu's "Open Article / Block" chain walks them (cut_blocks).
+void test_html_article_boxes() {
+  using namespace xanatoo;
+  HtmlOptions opt;
+  opt.sections = true;
+  opt.anchors = true;
+  Document doc;
+  NodeId root = doc.create(NodeKind::Document);
+  doc.root = root;
+  html_append_blocks(
+      doc, root,
+      "<h1>Blog</h1>"
+      "<section><p>intro</p></section>"  // untitled, no id: transparent
+      "<article id=a1><h2>One</h2><p>first</p>"
+      "<section id=s1><h3>Part</h3><p>deep</p></section>"
+      "<article><h3>Comment</h3><p>c</p></article>"
+      "</article>"
+      "<article><p>untitled words here</p></article>"
+      "<p>after</p>",
+      opt);
+  auto top = kids_of(doc, root);
+  EXPECT_EQ(top.size(), 1u);
+  const NodeId blog = top[0];
+  EXPECT(doc.get(blog).kind == NodeKind::Section);
+  auto bk = kids_of(doc, blog);
+  EXPECT_EQ(bk.size(), 5u);  // Header, intro, a1, untitled, after
+  if (bk.size() != 5u) return;
+  EXPECT(doc.get(bk[1]).kind == NodeKind::Paragraph);
+  EXPECT_EQ(plain_text(doc, bk[1]), "intro");
+  const NodeId a1 = bk[2];
+  EXPECT(doc.get(a1).kind == NodeKind::Article);
+  EXPECT_EQ(doc.get(a1).label, "a1");
+  auto ak = kids_of(doc, a1);
+  EXPECT_EQ(ak.size(), 4u);  // Header One, first, s1, nested article
+  if (ak.size() != 4u) return;
+  EXPECT(doc.get(ak[0]).kind == NodeKind::Header);
+  EXPECT_EQ(plain_text(doc, ak[0]), "One");
+  const NodeId s1 = ak[2];
+  EXPECT(doc.get(s1).kind == NodeKind::Section);
+  EXPECT_EQ(doc.get(s1).label, "s1");
+  EXPECT(doc.get(ak[3]).kind == NodeKind::Article);
+  EXPECT_EQ(block_title(doc, ak[3]), "Comment");
+  EXPECT(doc.get(bk[3]).kind == NodeKind::Article);
+  EXPECT(doc.get(bk[4]).kind == NodeKind::Paragraph);
+  EXPECT_EQ(plain_text(doc, bk[4]), "after");
+
+  // The chain from the "deep" paragraph outwards; a box's title stands for
+  // the box, so it never shows up as a block of its own.
+  const NodeId deep = kids_of(doc, s1)[1];
+  auto chain = cut_blocks(doc, deep);
+  EXPECT_EQ(chain.size(), 4u);
+  if (chain.size() == 4u) {
+    EXPECT_EQ(chain[0], deep);
+    EXPECT_EQ(chain[1], s1);
+    EXPECT_EQ(chain[2], a1);
+    EXPECT_EQ(chain[3], blog);
+  }
+  EXPECT(cut_blocks(doc, kids_of(doc, s1)[0]) == cut_blocks(doc, s1));
+  EXPECT_EQ(block_kind_name(doc.get(a1).kind), "Article");
+  EXPECT_EQ(block_title(doc, a1), "One");
+  EXPECT_EQ(block_title(doc, bk[3], 9), "untitled\xE2\x80\xA6");
+  // Labelled boxes are addressed by id, others by path.
+  EXPECT(node_selector(doc, a1).kind == SelectorKind::Id);
+  EXPECT_EQ(node_selector(doc, a1).value, "a1");
+  EXPECT(node_selector(doc, bk[3]).kind == SelectorKind::Path);
+  NodeId found = INVALID_NODE;
+  EXPECT(resolve_node(doc, INVALID_NODE, node_selector(doc, bk[3]), found) ==
+         Resolve::Exact);
+  EXPECT_EQ(found, bk[3]);
+}
+
 // Bracketed same-page reference links into an ordered notes list
 // (Wikipedia / Grokipedia) become footnotes.
 void test_html_link_footnotes() {
@@ -8592,6 +8665,7 @@ int main() {
   test_pandoc_formats();
   test_html_min();
   test_html_chrome_regions();
+  test_html_article_boxes();
   test_html_page();
   test_site_hints();
   test_related_chrome();

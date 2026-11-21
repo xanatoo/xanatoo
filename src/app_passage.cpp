@@ -471,6 +471,13 @@ void set_pane_cut(App& app, Pane& p, xanatoo::NodeId node) {
   app.needs_layout = true;
 }
 
+std::string block_address(App& app, Pane& p, xanatoo::NodeId node) {
+  xanatoo::Locator loc;
+  loc.base = page_address(pane_page(app, p));
+  loc.pipes.push_back(xanatoo::node_selector(doc_of(app, p), node));
+  return xanatoo::format_locator(loc);
+}
+
 void clear_pane_point(App& app, Pane& p) {
   if (!locator_live(p) || !p.locator.point) return;
   p.locator.point.reset();

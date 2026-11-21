@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <optional>
 #include <string>
+#include <utility>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -182,12 +183,27 @@ class Builder {
   void finish() {
     close_para();
     while (!frames_.empty()) pop();
+    for (size_t i = wraps_.size(); i-- > 0;)
+      if (wraps_[i].node != INVALID_NODE) end_box(wraps_[i].node);
+    wraps_.clear();
   }
 
  private:
   struct Sec {
     NodeId node;
     int level;
+    bool box = false;   // an <article> / <section> element, not a heading's
+    size_t frames = 0;  // frames_ depth when the box opened
+  };
+  // An open <article> / <section> (sections mode). `node` is its Article /
+  // Section, or INVALID_NODE while it is just a wrapper: a <section>
+  // without id becomes one only when a heading is the first thing in it.
+  struct Wrap {
+    std::string tag;
+    NodeId node = INVALID_NODE;
+    NodeId parent = INVALID_NODE;  // container() at the start tag
+    size_t count = 0;              // its children then
+    bool dead = false;             // opened inside a leaf or container
   };
   struct RowGroup {
     std::string tag;
@@ -198,6 +214,11 @@ class Builder {
 
   void open_tag(const std::string& tag, std::string_view attrs);
   bool open_section(const std::string& tag);
+  void open_box_tag(const std::string& tag, std::string_view attrs);
+  NodeId open_box(const std::string& tag, std::string id);
+  bool close_box_tag(const std::string& tag);
+  bool fresh(NodeId parent, size_t count) const;
+  void end_box(NodeId n);
   void note_id(std::string id);
   void take_pending_id(NodeId n);
   bool in_container() const;
@@ -236,6 +257,8 @@ class Builder {
   std::vector<RowGroup> row_groups_;
   std::unordered_map<NodeId, size_t> resolved_table_rows_;
   std::vector<Sec> secs_;   // open Sections (sections mode)
+  std::vector<Wrap> wraps_;  // open <article> / <section> (sections mode)
+  bool id_taken_ = false;    // open_tag used the element's id itself
   std::string pending_id_;  // id= waiting for the next block (anchors mode)
   NodeId para_ = INVALID_NODE;
   int em_ = 0, strong_ = 0, code_ = 0, strike_ = 0;
@@ -496,8 +519,9 @@ void Builder::open(const std::string& tag, std::string_view attrs) {
   if (id.empty() && tag == "a") id = html_attr(attrs, "name");
   // An element's own id beats a wrapper's (<section id=x><h2 id=Title>).
   if (!id.empty()) pending_id_.clear();
+  id_taken_ = false;
   open_tag(tag, attrs);
-  note_id(std::move(id));
+  if (!std::exchange(id_taken_, false)) note_id(std::move(id));
 }
 
 // h1–h6 at block level in sections mode: close sections of the same or a
@@ -506,16 +530,117 @@ bool Builder::open_section(const std::string& tag) {
   if (!opt_.sections || owner() != INVALID_NODE || in_container()) return false;
   const int level = tag[1] - '0';
   close_para();
-  while (!secs_.empty() && secs_.back().level >= level) secs_.pop_back();
-  NodeId sec = doc_.create(NodeKind::Section, container());
+  // A wrapper <section> that starts with this heading is its section.
+  if (!wraps_.empty() && wraps_.back().node == INVALID_NODE &&
+      !wraps_.back().dead && container() == wraps_.back().parent &&
+      fresh(wraps_.back().parent, wraps_.back().count))
+    wraps_.back().node = open_box(wraps_.back().tag, {});
+  NodeId sec = INVALID_NODE;
+  if (!secs_.empty() && secs_.back().box && secs_.back().level == 0 &&
+      fresh(secs_.back().node, 0)) {
+    // The first heading in an <article> / <section> is its title.
+    sec = secs_.back().node;
+    secs_.back().level = level;
+  } else {
+    // Headings end the sections of other headings, never an element's.
+    while (!secs_.empty() && !secs_.back().box && secs_.back().level >= level)
+      secs_.pop_back();
+    sec = doc_.create(NodeKind::Section, container());
+    secs_.push_back({sec, level});
+  }
   doc_.get(sec).level = level;
-  secs_.push_back({sec, level});
   Frame f;
   f.tag = tag;
   f.kind = FrameKind::Leaf;
   f.node = doc_.create(NodeKind::Header, sec);
   doc_.get(f.node).level = level;
   push(std::move(f));
+  return true;
+}
+
+// Nothing but empty paragraphs below `parent` after its first `count`
+// children.
+bool Builder::fresh(NodeId parent, size_t count) const {
+  if (para_ != INVALID_NODE) return false;
+  const auto& kids = doc_.get(parent).children;
+  for (size_t i = count; i < kids.size(); ++i) {
+    const Node& n = doc_.get(kids[i]);
+    if (n.kind != NodeKind::Paragraph || !n.children.empty()) return false;
+    for (const InlineSpan& sp : n.spans)
+      if (!sp.text.empty()) return false;
+  }
+  return true;
+}
+
+// An unlabelled box that stayed empty leaves the tree (a page split around
+// its lone <article> sees just the start tag in the page header).
+void Builder::end_box(NodeId n) {
+  Node& box = doc_.get(n);
+  if (!box.label.empty() || box.parent == INVALID_NODE || !fresh(n, 0)) return;
+  auto& kids = doc_.get(box.parent).children;
+  if (kids.empty() || kids.back() != n) return;
+  kids.pop_back();
+  box.parent = INVALID_NODE;
+  box.children.clear();
+}
+
+// An Article / Section for an element at block level, `id` its label.
+NodeId Builder::open_box(const std::string& tag, std::string id) {
+  close_para();
+  const NodeId n = doc_.create(
+      tag == "article" ? NodeKind::Article : NodeKind::Section, container());
+  if (!id.empty()) {
+    doc_.get(n).label = std::move(id);
+    id_taken_ = true;
+  } else {
+    take_pending_id(n);
+  }
+  Sec s{n, 0};
+  s.box = true;
+  s.frames = frames_.size();
+  secs_.push_back(s);
+  return n;
+}
+
+// <article> and <section> in sections mode: an <article> is always an
+// Article, a <section> a Section when it has an id or starts with a heading
+// (open_section); other <section>s are layout wrappers.
+void Builder::open_box_tag(const std::string& tag, std::string_view attrs) {
+  Wrap w;
+  w.tag = tag;
+  if (owner() != INVALID_NODE || in_container()) {
+    block_boundary();
+    w.dead = true;
+  } else {
+    close_para();
+    w.parent = container();
+    w.count = doc_.get(w.parent).children.size();
+    const std::string id = opt_.anchors ? html_attr(attrs, "id") : "";
+    if (tag == "article" || !id.empty()) w.node = open_box(tag, id);
+  }
+  wraps_.push_back(std::move(w));
+}
+
+// End tag of an open <article> / <section>: closes what is still open in
+// it, and its Article / Section. False when none is open.
+bool Builder::close_box_tag(const std::string& tag) {
+  auto it = std::find_if(wraps_.rbegin(), wraps_.rend(),
+                         [&](const Wrap& w) { return w.tag == tag; });
+  if (it == wraps_.rend()) return false;
+  const size_t at = static_cast<size_t>(wraps_.rend() - it) - 1;
+  close_para();
+  for (size_t i = wraps_.size(); i-- > at;) {
+    const NodeId n = wraps_[i].node;
+    if (n == INVALID_NODE) continue;
+    auto sec = std::find_if(secs_.begin(), secs_.end(),
+                            [&](const Sec& s) { return s.node == n; });
+    if (sec == secs_.end()) continue;
+    while (frames_.size() > sec->frames) pop();
+    secs_.erase(sec, secs_.end());
+    end_box(n);
+  }
+  wraps_.resize(at);
+  block_boundary();
   return true;
 }
 
@@ -638,6 +763,11 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
     }
     push_text(t, InlineKind::Link, alt.empty() ? "[image]" : "[image: " + alt + "]",
               src);
+    return;
+  }
+
+  if ((tag == "article" || tag == "section") && opt_.sections) {
+    open_box_tag(tag, attrs);
     return;
   }
 
@@ -875,6 +1005,10 @@ void Builder::close(const std::string& tag) {
     int ri = top_index("tr");
     if (ri > ti && ti >= 0) pop_to("tr");
     finish_row_group(row_groups_.back().table);
+    return;
+  }
+  if ((tag == "article" || tag == "section") && opt_.sections) {
+    if (!close_box_tag(tag)) block_boundary();
     return;
   }
   if ((tag == "aside" || tag == "figure") && top_index(tag) >= 0) {

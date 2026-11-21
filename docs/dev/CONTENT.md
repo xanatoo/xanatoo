@@ -155,6 +155,16 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   through `html_min` page mode (`sections`, `anchors`, `drop_chrome`,
   `chrome_nodes`); also used for local `.html` files (`parse_document`
   dispatch). HTML is read-only: Save asks for a `.md` name.
+- Article / section boxes (page mode, `sections`): `<article>` is always an
+  Article node and `<section>` a Section when it has an id or starts with a
+  heading; other sections are transparent. The box's first heading becomes
+  its Header (the box takes the heading's level instead of opening a nested
+  Section); headings never close an element's box, its end tag does
+  (`Builder::open_box_tag` / `close_box_tag`, `Wrap` records the open
+  elements). Unlabelled boxes that stay empty are dropped (`end_box`), so
+  `<body><article>` split across chunks leaves nothing behind. The context
+  menu's Open Article / Section / Block verbs cut a view to these boxes
+  (docs/PASSAGES.md "Opening a block").
 - Page chrome (nav / aside / footer / form / dialog, landmark roles, navbox /
   share / cookie classes, what lies around `<main>`) is kept as
   `NodeKind::Chrome` nodes (`summary` = what it is); hidden / sr-only /

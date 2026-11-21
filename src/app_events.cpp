@@ -900,6 +900,31 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         app.collection_target = xanatoo::INVALID_NODE;
       else
         note_collection_target(app, app.focus, lx, my);
+      // "Open Article / Section / Block": the blocks around the pointer, from
+      // the grip's block or the innermost box under it outwards.
+      app.context_blocks.clear();
+      app.context_block_hot = xanatoo::INVALID_NODE;
+      app.context_blocks_buf = p.buf;
+      app.context_blocks_pane = app.focus;
+      if (!in_strip && !p.source_doc) {
+        const xanatoo::Document& d = doc_of(app, p);
+        xanatoo::NodeId start = xanatoo::INVALID_NODE;
+        if (app.hover.grip != xanatoo::INVALID_NODE &&
+            app.hover.grip_pane == app.focus)
+          start = app.hover.grip;
+        for (const auto& box : p.layout.boxes) {
+          if (start != xanatoo::INVALID_NODE) break;
+          if (lx >= box.x && lx < box.x + box.width && doc_y >= box.y &&
+              doc_y < box.y + box.height)
+            start = box.node;
+        }
+        if (start == xanatoo::INVALID_NODE)
+          if (auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y))
+            start = hit->node;
+        if (start != xanatoo::INVALID_NODE && start < d.next_id &&
+            d.get(start).id == start)
+          app.context_blocks = xanatoo::cut_blocks(d, start);
+      }
       app.ui.open_context_menu(static_cast<float>(rx),
                                static_cast<float>(ry));
     }

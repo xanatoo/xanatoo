@@ -490,6 +490,106 @@ Selection node_range(const Document& doc, NodeId node) {
   return {{texts.front(), 0, 0}, end};
 }
 
+std::vector<NodeId> cut_blocks(const Document& doc, NodeId node) {
+  std::vector<NodeId> out;
+  for (NodeId cur = node; cur != INVALID_NODE && cur != doc.root;
+       cur = doc.get(cur).parent) {
+    const Node& n = doc.get(cur);
+    if (n.parent == INVALID_NODE) break;  // detached
+    switch (n.kind) {
+      case NodeKind::Document:
+      case NodeKind::List:
+      case NodeKind::Columns:
+      case NodeKind::Column:
+      case NodeKind::TableRow:
+      case NodeKind::TableCell:
+      case NodeKind::Caption:
+        continue;
+      default:
+        break;
+    }
+    // A section's title is the section.
+    if (is_heading(n) && enclosing_section(doc, cur) == n.parent) continue;
+    if (is_heading(n) && doc.get(n.parent).kind == NodeKind::Thread) continue;
+    out.push_back(cur);
+  }
+  return out;
+}
+
+std::string_view block_kind_name(NodeKind kind) {
+  switch (kind) {
+    case NodeKind::Article: return "Article";
+    case NodeKind::Section: return "Section";
+    case NodeKind::Heading:
+    case NodeKind::Header: return "Heading";
+    case NodeKind::Paragraph: return "Paragraph";
+    case NodeKind::ListItem: return "List Item";
+    case NodeKind::Image: return "Image";
+    case NodeKind::Stretch: return "Stretchtext";
+    case NodeKind::BlockQuote: return "Quote";
+    case NodeKind::HorizontalRule: return "Rule";
+    case NodeKind::Transclude: return "Embed";
+    case NodeKind::CodeBlock: return "Code";
+    case NodeKind::Note: return "Note";
+    case NodeKind::DefList: return "Definitions";
+    case NodeKind::Term: return "Term";
+    case NodeKind::Definition: return "Definition";
+    case NodeKind::Figure: return "Figure";
+    case NodeKind::Biblio: return "Bibliography";
+    case NodeKind::BiblioEntry: return "Reference";
+    case NodeKind::Table: return "Table";
+    case NodeKind::Thread: return "Thread";
+    case NodeKind::Message: return "Comment";
+    case NodeKind::Footnote: return "Footnote";
+    case NodeKind::Collection: return "Collection";
+    case NodeKind::Chrome: return "Page Part";
+    case NodeKind::Aside: return "Aside";
+    case NodeKind::Page: return "Page";
+    default: return "Block";
+  }
+}
+
+std::string block_title(const Document& doc, NodeId node, size_t max_chars) {
+  const Node& n = doc.get(node);
+  NodeId from = node;
+  for (NodeId c : n.children)
+    if (is_heading(doc.get(c))) {
+      from = c;
+      break;
+    }
+  std::string text;
+  bool space = false;
+  // Depth-first over the block's text until there is enough of it.
+  std::vector<NodeId> todo{from};
+  while (!todo.empty() && text.size() < max_chars * 4 + 8) {
+    const NodeId cur = todo.back();
+    todo.pop_back();
+    const Node& cn = doc.get(cur);
+    for (char c : plain_text(doc, cur)) {
+      if (is_space(c)) {
+        space = !text.empty();
+        continue;
+      }
+      if (space) text.push_back(' ');
+      space = false;
+      text.push_back(c);
+    }
+    if (!text.empty()) space = true;  // blocks are separate words
+    for (auto it = cn.children.rbegin(); it != cn.children.rend(); ++it)
+      todo.push_back(*it);
+  }
+  size_t chars = 0;
+  for (size_t i = 0; i < text.size(); ++i) {
+    if ((static_cast<unsigned char>(text[i]) & 0xc0) == 0x80) continue;
+    if (chars++ == max_chars) {
+      text.resize(i);
+      while (!text.empty() && text.back() == ' ') text.pop_back();
+      return text + "\xE2\x80\xA6";  // …
+    }
+  }
+  return text;
+}
+
 std::optional<TextQuote> parse_text_quote(std::string_view value) {
   std::vector<std::string_view> parts;
   for (size_t at = 0;;) {
