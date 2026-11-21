@@ -70,7 +70,7 @@ void apply_ui_scale(App& app) {
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
                          &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
-                         &app.nostr_explorer_win, &app.nostr_accounts_win,
+                         &app.nostr_explorer_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
                          &app.subscriptions_win, &app.certs_win, &app.identities_win, &app.related_win,
                          &app.hover_help_win}) {
@@ -224,7 +224,6 @@ static xanatoo::theme::Tint window_tint(WindowRole role) {
     case WindowRole::Bookmarks: return Tint::Rose;
     case WindowRole::Reply:
     case WindowRole::NostrExplorer:
-    case WindowRole::NostrAccounts:
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer: return Tint::Plum;
     case WindowRole::Styles:

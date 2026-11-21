@@ -74,7 +74,7 @@ bool app_init(App& app) {
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
                          &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
-                         &app.nostr_explorer_win, &app.nostr_accounts_win,
+                         &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win,
                          &app.certs_win, &app.identities_win, &app.related_win,
@@ -89,7 +89,7 @@ bool app_init(App& app) {
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
                          &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
-                         &app.nostr_explorer_win, &app.nostr_accounts_win,
+                         &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win,
                          &app.certs_win, &app.identities_win, &app.related_win,
@@ -105,7 +105,6 @@ bool app_init(App& app) {
   app.annotation_win.dock = Dock::Right;
   app.revision_win.dock = Dock::Right;
   app.nostr_explorer_win.dock = Dock::Right;
-  app.nostr_accounts_win.dock = Dock::Right;
   app.certs_win.dock = Dock::Right;
   app.identities_win.dock = Dock::Right;
   app.related_win.dock = Dock::Right;

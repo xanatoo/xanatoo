@@ -24,6 +24,9 @@ namespace xanatoo {
 
 // Commands requested by the ImGui menu / toolbar / context menu.
 // Applied by the main loop.
+// Tabs of the Identities panel, one per protocol; each keeps its own store.
+enum class IdentitySection { Gemini, Nostr };
+
 enum class UiCommand {
   None = 0,
   // File
@@ -71,13 +74,14 @@ enum class UiCommand {
   MatrixSetSearch,      // arg = local filter text
   MatrixSetServer,      // arg = server name (selected for directory actions)
   MatrixAddServer,      // arg = server name or https://server
-  ToggleNostrAccounts, // local watch-only identities, signer management later
+  ToggleNostrAccounts, // Identities panel on its Nostr tab (or close it there)
   ToggleCertificates,  // Certificates panel; arg = host:port opens it on that row
   CertAccept,          // arg = host:port: trust the changed certificate
   CertReject,          // arg = host:port: keep the old pin
   CertForget,          // arg = host:port: remove the pin
   CertSelect,          // arg = host:port: show that row in detail
-  ToggleIdentities,    // Identity panel (Gemini client certificates)
+  ToggleIdentities,    // Identity panel (Gemini certificates, Nostr accounts)
+  IdentitySection,     // arg = "gemini" / "nostr": the tab the user picked
   IdentitySelect,      // arg = sha256 (empty: none)
   IdentityCreate,      // arg = name: a new certificate
   IdentityCreateHere,  // arg = name: new, used on the focused page's site
@@ -99,8 +103,10 @@ enum class UiCommand {
   NostrRefreshLocal,   // reload DB observations
   NostrPrevPage,       // previous 100 locally observed records
   NostrNextPage,
-  NostrAddWatchIdentity, // arg = label + newline + npub/hex key
-  NostrSelectIdentity, // arg = saved public key
+  NostrAddWatchIdentity, // arg = label + newline + npub/hex key (also renames)
+  NostrSelectIdentity, // arg = saved public key: make it the active account
+  NostrIdentityShow,   // arg = saved public key shown in detail (empty: none)
+  NostrIdentityRemove, // arg = saved public key
   NewAnnotationLayer,     // new local, independently versioned layer
   SelectAnnotationLayer,  // arg = layer id (local owner only)
   ToggleAnnotationLayer,  // arg = layer id; view-only visibility
@@ -392,7 +398,6 @@ struct UiState {
   int matrix_explorer_x = 0, matrix_explorer_y = 0;
   int matrix_explorer_w = 0, matrix_explorer_h = 0;
   std::vector<MatrixDirectoryEntry> matrix_entries;
-  bool nostr_accounts_open = false;
   int nostr_tab = 0;
   std::string nostr_search;
   int nostr_page = 0;
@@ -401,8 +406,6 @@ struct UiState {
   bool nostr_groups_more = false;
   int nostr_explorer_x = 0, nostr_explorer_y = 0;
   int nostr_explorer_w = 0, nostr_explorer_h = 0;
-  int nostr_accounts_x = 0, nostr_accounts_y = 0;
-  int nostr_accounts_w = 0, nostr_accounts_h = 0;
   // Site identity in the address bar (the favicon's place): a Gemini page
   // shows the Gemini icon, a refused changed certificate a warning.
   enum class SiteIdentity { None, Gemini, GeminiChanged };
@@ -429,7 +432,8 @@ struct UiState {
   std::string cert_selected;
   std::string cert_error;
   bool cert_no_save = false;
-  // Identity panel: Gemini client certificates.
+  // Identity panel: Gemini client certificates and Nostr accounts.
+  IdentitySection identity_section = IdentitySection::Gemini;
   struct IdentityRow {
     std::string sha256, name, created;
     std::vector<std::string> scopes;
@@ -469,7 +473,9 @@ struct UiState {
   std::vector<NostrCachedEvent> nostr_events;
   std::vector<NostrCachedGroup> nostr_groups;
   std::vector<NostrLocalIdentity> nostr_identities;
-  std::string nostr_selected_identity;
+  std::string nostr_selected_identity;  // the active account
+  std::string nostr_shown_identity;     // the row shown in detail
+  std::string nostr_page_pubkey;  // author of the focused nostr: profile page
   struct AnnotationLayerItem {
     std::string id, name, owner;
     bool visible = true;
@@ -941,6 +947,12 @@ private:
   bool style_delete_confirm_ = false;
   char nostr_identity_label_[160] = {};
   char nostr_identity_pubkey_[256] = {};
+  char nostr_identity_rename_[160] = {};
+  std::string nostr_identity_rename_for_;  // pubkey the rename field holds
+  // Tab the panel was last told to show (SetSelected once per change).
+  IdentitySection identity_section_shown_ = IdentitySection::Gemini;
+  bool identity_section_init_ = false;
+  int identity_section_settle_ = 0;  // frames to ignore the shown tab
   char reply_input_[16384] = {}; // Markdown draft, not sent to any server
   uint64_t reply_generation_seen_ = 0;
   char annotation_new_note_[16384] = {};

@@ -640,7 +640,6 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     }
     ui_state.matrix_has_token = app.matrix_has_token;
   }
-  ui_state.nostr_accounts_open = app.nostr_accounts_open;
   ui_state.nostr_tab = app.nostr_tab;
   ui_state.nostr_search = app.nostr_search;
   ui_state.nostr_page = app.nostr_page;
@@ -659,13 +658,6 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.nostr_explorer_y = y;
     ui_state.nostr_explorer_w = w;
     ui_state.nostr_explorer_h = h;
-  }
-  if (app.nostr_accounts_open) {
-    auto [x, y, w, h] = imgui_panel_rect(app, app.nostr_accounts_win);
-    ui_state.nostr_accounts_x = x;
-    ui_state.nostr_accounts_y = y;
-    ui_state.nostr_accounts_w = w;
-    ui_state.nostr_accounts_h = h;
   }
   {
     const DocBuffer* b = find_buf(app, focused_pane(app).buf);
@@ -1476,6 +1468,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       else
         show_identities(app);
       break;
+    case C::ToggleNostrAccounts:
+    case C::IdentitySection:
+    case C::NostrAddWatchIdentity:
+    case C::NostrSelectIdentity:
+    case C::NostrIdentityShow:
+    case C::NostrIdentityRemove:
     case C::IdentitySelect:
     case C::IdentityCreate:
     case C::IdentityCreateHere:
@@ -1511,13 +1509,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::CertForget:
       forget_gemini_cert(app, arg);
       break;
-    case C::ToggleNostrAccounts:
-      app.nostr_accounts_open = !app.nostr_accounts_open;
-      if (app.nostr_accounts_open) {
-        refresh_nostr_catalogue(app);
-        focus_panel(app, WindowRole::NostrAccounts);
-      }
-      break;
     case C::NostrSearchLocal:
       app.nostr_search = arg;
       app.nostr_page = 0;
@@ -1550,22 +1541,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
           app.nostr_tab == 1 ? app.nostr_events_more : app.nostr_groups_more)
         ++app.nostr_page;
       refresh_nostr_catalogue(app);
-      break;
-    case C::NostrAddWatchIdentity: {
-      const auto sep = arg.find('\n');
-      const bool ok = sep != std::string::npos &&
-          nostr_add_watch_identity(arg.substr(0, sep), arg.substr(sep + 1));
-      flash_status(app, ok ? "Added watch-only Nostr identity" :
-                           "Invalid Nostr public key or local database unavailable");
-      if (ok) refresh_nostr_catalogue(app);
-      break;
-    }
-    case C::NostrSelectIdentity:
-      if (std::any_of(app.nostr_identities.begin(), app.nostr_identities.end(),
-                      [&](const auto& item) { return item.pubkey == arg; })) {
-        app.nostr_active_identity = arg;
-        nostr_set_active_local_identity(arg);
-      }
       break;
     case C::ToggleAnnotationLayer:
       if (app.hidden_annotation_layers.contains(arg))

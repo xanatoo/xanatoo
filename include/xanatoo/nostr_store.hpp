@@ -100,7 +100,10 @@ std::vector<std::string> nostr_cached_recent_json();
 // Local *watch-only* profiles, not signing accounts. Adding one cannot
 // publish events; a NIP-46/NIP-49 signer workflow is future work.
 std::vector<NostrLocalIdentity> nostr_local_identities();
+// Adds a key, or renames one already saved (same key, new label).
 bool nostr_add_watch_identity(std::string_view label, std::string_view npub_or_hex);
+// Drops a saved key (hex); also stops it being the active one.
+bool nostr_remove_local_identity(std::string_view hex_pubkey);
 std::string nostr_active_local_identity();
 bool nostr_set_active_local_identity(std::string_view hex_pubkey);
 

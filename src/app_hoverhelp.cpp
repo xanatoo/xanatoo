@@ -35,7 +35,6 @@ const char* role_key(WindowRole role) {
     case WindowRole::Context: return "context";
     case WindowRole::Revisions: return "revisions";
     case WindowRole::NostrExplorer: return "nostr-explorer";
-    case WindowRole::NostrAccounts: return "nostr-accounts";
     case WindowRole::LemmyExplorer: return "lemmy-explorer";
     case WindowRole::Subscriptions: return "subscriptions";
     case WindowRole::Certificates: return "certificates";

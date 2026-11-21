@@ -1230,7 +1230,7 @@ void poll_fetches(App& app) {
     // Workers may have added Nostr events and newly seen public keys. Update
     // the explorer from the main thread after the fetch, not on every frame.
     if (std::string_view(job.shared->service) == "Nostr" &&
-        (app.nostr_explorer_open || app.nostr_accounts_open))
+        app.nostr_explorer_open)
       refresh_nostr_catalogue(app);
     note_gemini_peer(app, job);
     note_gemini_identity(app, job);

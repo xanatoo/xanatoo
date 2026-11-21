@@ -20,8 +20,21 @@
   checked under Xvfb against station.martinrue.com (no account created).
 - Open: import / export of identities (other clients' PEM pairs; the
   `tls_identity_matches` check exists), passwords / logins of other
-  protocols in the same panel, maybe folding Nostr Accounts into it,
-  an optional passphrase for the store.
+  protocols in the same panel, an optional passphrase for the store.
+
+## Status (2026-11-21) — Nostr accounts in the Identities panel
+
+- Identities panel has one tab per protocol (Gemini · Nostr); the data
+  stays separate (keys do not transfer). The tab follows the focused page;
+  clicks switch it. The separate Nostr Accounts panel is gone; its menu
+  entry and an old `nostr-accounts.open=1` session open the Nostr tab.
+- Nostr tab: watch-only accounts (label + npub/hex), "Save this author" on
+  an npub page, rename, make active, view profile, copy npub, remove
+  (`nostr_remove_local_identity`, clears the active key too).
+- Tests: store remove in `unit_tests`, panel layers, help keys; checked
+  under Xvfb (tabs both ways, row detail, session migration).
+- Open: signing accounts (NIP-46 remote signer, NIP-49 `ncryptsec`), then
+  per-account follows / relays.
 
 ## Status (2026-11-21) — Colour emoji and missing-glyph boxes
 

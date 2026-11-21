@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Identity panel (WindowRole::Identities): Gemini client certificates,
-// which servers treat as accounts. Creates them, chooses which one a page or
-// a whole server sees, renames and deletes them. A page that asks for a
-// certificate (status 60/61/62) opens the panel on itself. The store and
-// scope matching live in gemini_identity.cpp; certificates are made in the
-// TLS backend (tls_make_client_identity).
+// Identity panel (WindowRole::Identities), one tab per protocol.
+// Gemini: client certificates, which servers treat as accounts. Creates them,
+// chooses which one a page or a whole server sees, renames and deletes them.
+// A page that asks for a certificate (status 60/61/62) opens the panel on
+// itself. The store and scope matching live in gemini_identity.cpp;
+// certificates are made in the TLS backend (tls_make_client_identity).
+// Nostr: watch-only accounts (public keys, no signing) in nostr_store; one is
+// the active account. The tab follows the focused page's protocol.
 
 #include <ctime>
 #include <iostream>
@@ -14,6 +16,8 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gemini_identity.hpp"
+#include "xanatoo/nostr.hpp"
+#include "xanatoo/nostr_store.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/tls.hpp"
 
@@ -27,6 +31,100 @@ std::string pane_gemini_url(App& app, int pi) {
   return xanatoo::is_gemini_url(path) ? path : std::string{};
 }
 
+// "a\nb" → {a, b}
+std::pair<std::string, std::string> split_arg(const std::string& arg) {
+  const size_t nl = arg.find('\n');
+  if (nl == std::string::npos) return {arg, {}};
+  return {arg.substr(0, nl), arg.substr(nl + 1)};
+}
+
+// Protocol of view `pi`'s page: 0 none, 1 Gemini, 2 Nostr.
+int page_kind(App& app, int pi) {
+  if (!view_live(app, pi)) return 0;
+  const std::string& path = path_of(app, app.panes[pi]);
+  if (xanatoo::is_gemini_url(path)) return 1;
+  if (xanatoo::is_nostr_ref(path)) return 2;
+  return 0;
+}
+
+xanatoo::IdentitySection section_of(int kind, xanatoo::IdentitySection other) {
+  return kind == 1 ? xanatoo::IdentitySection::Gemini :
+         kind == 2 ? xanatoo::IdentitySection::Nostr : other;
+}
+
+// Hex key of a saved-account reference (npub1…, nprofile1…, hex).
+std::string nostr_hex(const std::string& ref) {
+  if (auto pk = xanatoo::nostr_decode_pubkey(ref)) return *pk;
+  std::string t = ref;
+  while (!t.empty() && (t.back() == ' ' || t.back() == '\t')) t.pop_back();
+  while (!t.empty() && (t.front() == ' ' || t.front() == '\t')) t.erase(t.begin());
+  if (t.size() != 64) return {};
+  for (char& c : t) {
+    if (c >= 'A' && c <= 'F') c = static_cast<char>(c - 'A' + 'a');
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return {};
+  }
+  return t;
+}
+
+const NostrLocalIdentity* nostr_account(const App& app, const std::string& pk) {
+  for (const auto& i : app.nostr_identities)
+    if (i.pubkey == pk) return &i;
+  return nullptr;
+}
+
+void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
+  using C = xanatoo::UiCommand;
+  app.identities.error.clear();
+  switch (cmd) {
+    case C::NostrAddWatchIdentity: {
+      auto [label, ref] = split_arg(arg);
+      const std::string pk = nostr_hex(ref);
+      if (label.empty() && !pk.empty())
+        label = xanatoo::nostr_bech32("npub", pk).substr(0, 16) + "…";
+      const bool renaming = !pk.empty() && nostr_account(app, pk);
+      if (pk.empty())
+        app.identities.error = "Not a Nostr public key (npub1… or 64 hex digits)";
+      else if (xanatoo::no_save())
+        app.identities.error = "--no-save: Nostr accounts are not saved";
+      else if (!nostr_add_watch_identity(label, pk))
+        app.identities.error = "The local Nostr database is not available";
+      if (!app.identities.error.empty()) {
+        flash_status(app, "No Nostr account saved: " + app.identities.error);
+        break;
+      }
+      refresh_nostr_identities(app);
+      app.identities.nostr_shown = pk;
+      const NostrLocalIdentity* a = nostr_account(app, pk);
+      flash_status(app, std::string(renaming ? "Renamed Nostr account " :
+                                               "Saved Nostr account ") +
+                            (a ? a->label : std::string{}));
+      break;
+    }
+    case C::NostrSelectIdentity:
+      if (nostr_account(app, arg) && nostr_set_active_local_identity(arg))
+        app.nostr_active_identity = arg;
+      else if (nostr_account(app, arg))
+        flash_status(app, "Active Nostr account not saved");
+      break;
+    case C::NostrIdentityShow:
+      app.identities.nostr_shown = arg;
+      break;
+    case C::NostrIdentityRemove:
+      if (!nostr_remove_local_identity(arg)) {
+        app.identities.error = "Nostr account not removed";
+        flash_status(app, app.identities.error);
+        break;
+      }
+      if (app.nostr_active_identity == arg) app.nostr_active_identity.clear();
+      if (app.identities.nostr_shown == arg) app.identities.nostr_shown.clear();
+      refresh_nostr_identities(app);
+      flash_status(app, "Removed the Nostr account (only its local label)");
+      break;
+    default:
+      break;
+  }
+}
+
 std::string today() {
   const std::time_t t = std::time(nullptr);
   std::tm tm{};
@@ -38,13 +136,6 @@ std::string today() {
   char buf[16];
   std::strftime(buf, sizeof buf, "%Y-%m-%d", &tm);
   return buf;
-}
-
-// "a\nb" → {a, b}
-std::pair<std::string, std::string> split_arg(const std::string& arg) {
-  const size_t nl = arg.find('\n');
-  if (nl == std::string::npos) return {arg, {}};
-  return {arg.substr(0, nl), arg.substr(nl + 1)};
 }
 
 bool report(App& app, bool ok, const std::string& err, const std::string& what) {
@@ -127,9 +218,17 @@ void refresh_identities(App& app) {
 }
 
 void show_identities(App& app) {
+  app.identities.page_kind = page_kind(app, app.focus);
+  show_identities(app, section_of(app.identities.page_kind,
+                                  app.identities.section));
+}
+
+void show_identities(App& app, xanatoo::IdentitySection section) {
   app.identities.open = true;
+  app.identities.section = section;
   focus_panel(app, WindowRole::Identities);
   refresh_identities(app);
+  refresh_nostr_identities(app);
   if (const auto* id = pane_gemini_identity(app, app.focus))
     app.identities.selected = id->sha256;
 }
@@ -143,6 +242,7 @@ void note_gemini_identity(App& app, const FetchJob& job) {
   app.identities.request_url = r.final_url.empty() ? job.url : r.final_url;
   app.identities.request_status = r.identity_status;
   app.identities.request_meta = r.identity_meta;
+  app.identities.section = xanatoo::IdentitySection::Gemini;
   std::cerr << "gemini: " << app.identities.request_url << " asks for a client "
             << "certificate (status " << r.identity_status << ")\n";
   show_identities(app);
@@ -160,6 +260,24 @@ void identity_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) 
   const std::string url = pane_gemini_url(app, app.focus);
   std::string err;
   switch (cmd) {
+    case C::ToggleNostrAccounts:
+      if (app.identities.open &&
+          app.identities.section == xanatoo::IdentitySection::Nostr)
+        app.identities.open = false;
+      else
+        show_identities(app, xanatoo::IdentitySection::Nostr);
+      break;
+    case C::IdentitySection:
+      app.identities.section = arg == "nostr" ?
+          xanatoo::IdentitySection::Nostr : xanatoo::IdentitySection::Gemini;
+      app.identities.error.clear();
+      break;
+    case C::NostrAddWatchIdentity:
+    case C::NostrSelectIdentity:
+    case C::NostrIdentityShow:
+    case C::NostrIdentityRemove:
+      nostr_command(app, cmd, arg);
+      break;
     case C::IdentitySelect:
       app.identities.selected = arg;
       break;
@@ -235,7 +353,19 @@ void identity_ui_state(App& app, xanatoo::UiState& st) {
   st.identity_active_name = active ? active->name : std::string{};
   if (!st.site_identity_tip.empty() && active)
     st.site_identity_tip += " · identity: " + active->name;
+  // The tab follows the focused page when it moves to another protocol.
+  const int kind = page_kind(app, app.focus);
+  if (kind != app.identities.page_kind) {
+    app.identities.page_kind = kind;
+    app.identities.section = section_of(kind, app.identities.section);
+  }
+  st.identity_section = app.identities.section;
   if (!app.identities.open) return;
+  st.nostr_shown_identity = app.identities.nostr_shown;
+  st.nostr_page_pubkey.clear();
+  if (kind == 2)
+    if (auto pk = xanatoo::nostr_decode_pubkey(path_of(app, app.panes[app.focus])))
+      st.nostr_page_pubkey = *pk;
   auto [x, y, w, h] = imgui_panel_rect(app, app.identities_win);
   st.identities_x = x;
   st.identities_y = y;

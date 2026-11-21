@@ -39,7 +39,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 23> panels(App& app) {
+std::array<PanelRef, 22> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -59,7 +59,6 @@ std::array<PanelRef, 23> panels(App& app) {
            {"nostr-explorer", &app.nostr_explorer_win, app.nostr_explorer_open},
            {"lemmy-explorer", &app.lemmy_explorer_win, app.lemmy_explorer_open},
            {"matrix-explorer", &app.matrix_explorer_win, app.matrix_explorer_open},
-           {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
            {"certificates", &app.certs_win, app.certs.open},
            {"identities", &app.identities_win, app.identities.open},
            {"related-sites", &app.related_win, app.related.open},
@@ -421,10 +420,9 @@ void restore_session(App& app) {
     // "recommendations" is the panel's first name (migration alias).
     for (const char* key : {"related-sites.open", "recommendations.open"})
       if (get(key) && *get(key) == "1") app.related.open = true;
-    if (get("nostr-accounts.open") && *get("nostr-accounts.open") == "1") {
-      app.nostr_accounts_open = true;
-      refresh_nostr_catalogue(app);
-    }
+    // The Nostr Accounts panel became the Identities panel's Nostr tab.
+    if (get("nostr-accounts.open") && *get("nostr-accounts.open") == "1")
+      show_identities(app, xanatoo::IdentitySection::Nostr);
     app.needs_layout = true;
     std::cerr << "session: restored from " << path << "\n";
   } catch (...) {

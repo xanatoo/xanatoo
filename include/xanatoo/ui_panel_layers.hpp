@@ -12,7 +12,7 @@ namespace xanatoo {
 // Menus, tooltips and popups have their own windows and must remain foreground.
 enum class UiPanelLayer { Chrome, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
                           Annotations, Context,
-                          NostrExplorer, NostrAccounts, LemmyExplorer, Certificates,
+                          NostrExplorer, LemmyExplorer, Certificates,
                           Identities, RelatedSites, MatrixExplorer };
 
 // Bit of `layer` in a set of embedded panels (UiState::shaded_panels).
@@ -30,7 +30,6 @@ inline const char* ui_panel_root(UiPanelLayer layer) {
     case UiPanelLayer::Annotations: return "##annotation_panel_body";
     case UiPanelLayer::Context: return "##context_panel_body";
     case UiPanelLayer::NostrExplorer: return "##nostr_explorer_body";
-    case UiPanelLayer::NostrAccounts: return "##nostr_accounts_body";
     case UiPanelLayer::LemmyExplorer: return "##lemmy_explorer_body";
     case UiPanelLayer::Certificates: return "##certificates_body";
     case UiPanelLayer::Identities: return "##identities_body";
@@ -54,7 +53,7 @@ inline UiPanelLayer ui_panel_layer(std::string_view owner) {
   constexpr UiPanelLayer panels[] = {
     UiPanelLayer::Reply, UiPanelLayer::Bookmarks, UiPanelLayer::Subscriptions, UiPanelLayer::Styles,
     UiPanelLayer::StyleManager, UiPanelLayer::Annotations, UiPanelLayer::Context,
-    UiPanelLayer::NostrExplorer, UiPanelLayer::NostrAccounts,
+    UiPanelLayer::NostrExplorer,
     UiPanelLayer::LemmyExplorer, UiPanelLayer::Certificates,
     UiPanelLayer::Identities, UiPanelLayer::RelatedSites, UiPanelLayer::MatrixExplorer,
   };

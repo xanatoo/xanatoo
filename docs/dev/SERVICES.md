@@ -224,10 +224,14 @@ read-only service clients. Every client is read-only: never post or log in.
   `verification=0` rows and require refetch. The UI distinguishes these cases.
   Claimed NIP-05 names are NOT verified. Do not portray the cache as a complete
   or uniformly authenticated Nostr directory. See `docs/NOSTR.md`.
-- Two native dockable `FloatWindow` panels are exposed in Panels: **Nostr
-  Explorer** searches local events/people and shows observed counts; **Nostr
-  Accounts** manages multiple named *watch-only* public keys. They use ImGui
-  only as controls within the native client frame. Explorer also has a NIP-29
+- Panels → **Nostr Explorer** (native dockable `FloatWindow`, ImGui only for
+  the controls inside the native frame) searches local events/people and shows
+  observed counts. Named *watch-only* public keys (`local_identities` in
+  `nostr.sqlite`) live on the **Nostr tab of the Identities panel**
+  (`app_identity.cpp`; Services → Nostr Accounts opens that tab): save / rename
+  (also "Save this author" on an npub page), make active, view profile, copy
+  npub, remove (`nostr_remove_local_identity`, only the local label). No
+  private keys; signing waits for NIP-46 / NIP-49. Explorer also has a NIP-29
   Groups tab, with `(relay,group ID)` identity, `kind:39000` metadata and
   `h`-tagged event counts. `nostr:groups@wss://relay` discovers public group
   metadata; clicking a group opens its relay-specific timeline. NIP-11 relay
@@ -262,7 +266,8 @@ read-only service clients. Every client is read-only: never post or log in.
   `--no-save` approvals stay in memory. See `docs/TLS.md` and the pure
   `gemini_tofu_tests.cpp` suite; do not bypass this with another fetch path.
 - Identities (client certificates, `gemini_identity.hpp/.cpp`, panel
-  `app_identity.cpp`, `WindowRole::Identities`, `IdentityPanel`): a server
+  `app_identity.cpp`, `WindowRole::Identities`, `IdentityPanel`; the panel's
+  Gemini tab, beside the Nostr tab): a server
   knows the client by the certificate's fingerprint, so an identity is an
   account and its key the password. Store `state_dir()/gemini-identities`
   (S-expression with PEM cert + key, written 0600 via temp file + rename;

@@ -1195,6 +1195,11 @@ void test_nostr_local_cache() {
   EXPECT_EQ(nostr_active_local_identity(), bob);
   EXPECT(!nostr_set_active_local_identity(carol));
   EXPECT(!nostr_add_watch_identity("Invalid", "not-a-public-key"));
+  EXPECT(nostr_remove_local_identity(bob));
+  EXPECT_EQ(nostr_local_identities().size(), size_t(1));
+  EXPECT_EQ(nostr_active_local_identity(), "");
+  EXPECT(!nostr_remove_local_identity(bob));
+  EXPECT(nostr_add_watch_identity("Bob watch", bob));
   set_no_save(true);
   nostr_cache_events({with_valid_id("{\"id\":\"" + zeros +
       "\",\"pubkey\":\"" + alice + "\",\"kind\":1,\"created_at\":1,"

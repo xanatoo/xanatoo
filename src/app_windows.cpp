@@ -54,7 +54,6 @@ std::pair<int, int> min_size(const FloatWindow& w) {
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer:
       return {340, 260};
-    case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::Identities:
     case WindowRole::RelatedSites:
@@ -99,7 +98,6 @@ bool imgui_scrolls(const App& app, const FloatWindow& w) {
     case WindowRole::NostrExplorer:
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer:
-    case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::Identities:
     case WindowRole::RelatedSites:
@@ -185,9 +183,6 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::MatrixExplorer:
       app.matrix_explorer_open = false;
-      break;
-    case WindowRole::NostrAccounts:
-      app.nostr_accounts_open = false;
       break;
     case WindowRole::Certificates:
       app.certs.open = false;
@@ -480,7 +475,6 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::NostrExplorer:
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer:
-    case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::Identities:
     case WindowRole::RelatedSites:
@@ -563,7 +557,6 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.nostr_explorer_open) st.push_back(&app.nostr_explorer_win);
   if (app.lemmy_explorer_open) st.push_back(&app.lemmy_explorer_win);
   if (app.matrix_explorer_open) st.push_back(&app.matrix_explorer_win);
-  if (app.nostr_accounts_open) st.push_back(&app.nostr_accounts_win);
   if (app.certs.open) st.push_back(&app.certs_win);
   if (app.identities.open) st.push_back(&app.identities_win);
   if (app.related.open) st.push_back(&app.related_win);
@@ -697,7 +690,6 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::NostrExplorer:
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer:
-    case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::Identities:
     case WindowRole::RelatedSites:
@@ -764,7 +756,6 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::NostrExplorer:
     case WindowRole::LemmyExplorer:
     case WindowRole::MatrixExplorer:
-    case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
     case WindowRole::Identities:
     case WindowRole::RelatedSites:
@@ -1105,10 +1096,6 @@ void draw_floats(App& app) {
       case WindowRole::MatrixExplorer:
         if (draw_floating_frame(app, *w, "Matrix Explorer", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::MatrixExplorer);
-        break;
-      case WindowRole::NostrAccounts:
-        if (draw_floating_frame(app, *w, "Nostr Accounts", float_active(app, *w)))
-          app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::NostrAccounts);
         break;
       case WindowRole::Certificates:
         if (draw_floating_frame(app, *w, "Certificates", float_active(app, *w)))

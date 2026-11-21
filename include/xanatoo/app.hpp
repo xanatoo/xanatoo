@@ -418,7 +418,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
-  Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
+  Annotations, Context, Revisions, NostrExplorer, LemmyExplorer,
   Subscriptions, Certificates, Identities, RelatedSites, MatrixExplorer, HoverHelp, Media,
   Document
 };
@@ -433,7 +433,6 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::Annotations: return UiPanelLayer::Annotations;
     case WindowRole::Context: return UiPanelLayer::Context;
     case WindowRole::NostrExplorer: return UiPanelLayer::NostrExplorer;
-    case WindowRole::NostrAccounts: return UiPanelLayer::NostrAccounts;
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
     case WindowRole::Certificates: return UiPanelLayer::Certificates;
     case WindowRole::Identities: return UiPanelLayer::Identities;
@@ -1063,11 +1062,18 @@ struct CertPanel {
   std::string error;     // last store / action error
 };
 
-// Identity panel (WindowRole::Identities, app_identity.cpp): Gemini client
-// certificates, which servers treat as accounts. Later also logins of other
-// protocols. Server certificates stay in the Certificates panel.
+// Identity panel (WindowRole::Identities, app_identity.cpp), one tab per
+// protocol: Gemini client certificates, which servers treat as accounts, and
+// watch-only Nostr accounts (App::nostr_identities, nostr_store). Keys do not
+// cross protocols; each tab keeps its own store. Server certificates stay in
+// the Certificates panel.
 struct IdentityPanel {
   bool open = false;
+  xanatoo::IdentitySection section = xanatoo::IdentitySection::Gemini;
+  // Protocol of the focused page last frame (0 none, 1 Gemini, 2 Nostr):
+  // the tab follows the page when that changes.
+  int page_kind = 0;
+  std::string nostr_shown;  // hex pubkey shown in detail
   bool loaded = false;   // `ids` read from the store
   std::string selected;  // sha256 of the identity shown in detail
   std::vector<xanatoo::GeminiIdentity> ids;  // gemini_identities_list
@@ -1278,7 +1284,6 @@ struct App {
   std::string matrix_server = "matrix.org";
   bool matrix_has_token = false;      // cached; credentials are read on demand
   uint64_t matrix_token_checked = 0;  // ticks of the last check (0 = never)
-  bool nostr_accounts_open = false;
   int nostr_tab = 0;  // 0: people, 1: events, 2: NIP-29 groups
   std::string nostr_search;
   int nostr_page = 0;
@@ -1436,7 +1441,6 @@ struct App {
   FloatWindow nostr_explorer_win = make_float_panel(WindowRole::NostrExplorer, 180, 120, 560, 520);
   FloatWindow lemmy_explorer_win = make_float_panel(WindowRole::LemmyExplorer, 190, 130, 560, 520);
   FloatWindow matrix_explorer_win = make_float_panel(WindowRole::MatrixExplorer, 200, 140, 560, 520);
-  FloatWindow nostr_accounts_win = make_float_panel(WindowRole::NostrAccounts, 200, 150, 440, 440);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
   FloatWindow identities_win = make_float_panel(WindowRole::Identities, 180, 140, 520, 480);
   FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);
@@ -1540,6 +1544,8 @@ struct App {
 // Nostr's local SQLite observation catalogue, refreshed only on open/search
 // or the explicit Refresh action (not with a database query per frame).
 void refresh_nostr_catalogue(App& app);
+// Just the saved accounts and the active one (Identities panel).
+void refresh_nostr_identities(App& app);
 
 // Write state_dir()/session.conf (at shutdown); restore it at startup when
 // no document was named on the command line; put the saved scroll back once
@@ -2168,7 +2174,9 @@ void reject_gemini_cert(App& app, const std::string& key);
 // Remove the pin: the next visit trusts what the server presents then.
 void forget_gemini_cert(App& app, const std::string& key);
 // Identity panel (app_identity.cpp): Gemini client certificates.
+// Opens it on `section`, or without one on the focused page's protocol.
 void show_identities(App& app);
+void show_identities(App& app, xanatoo::IdentitySection section);
 void refresh_identities(App& app);
 // Record a page's request for a certificate (60/61/62); opens the panel.
 void note_gemini_identity(App& app, const FetchJob& job);

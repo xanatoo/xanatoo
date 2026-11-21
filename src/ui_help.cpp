@@ -385,9 +385,12 @@ const std::vector<UiHelpTopic> kTopics = {
      "Gemini server certificates seen in this session: view, accept a "
      "changed one, or forget a pin."},
     {"identities", "Identities",
-     "Gemini client certificates. A server knows you by one, like an "
-     "account. Create one, choose which page or site it is used on, switch, "
-     "rename or delete it. Pages that ask for a certificate open this panel."},
+     "Your accounts, one tab per protocol. **Gemini**: client certificates; "
+     "a server knows you by one. Create one, choose which page or site it is "
+     "used on, switch, rename or delete it. Pages that ask for a certificate "
+     "open this panel. **Nostr**: watch-only accounts (public keys; nothing "
+     "here can sign or post): save, rename, make active, remove. The tab "
+     "follows the focused page."},
     {"style sheets", "Style sheets panel", "Pick the style sheet of the focused page."},
     {"annotations", "Annotations",
      "Notes attached to passages of the document, kept apart from it."},
@@ -397,7 +400,9 @@ const std::vector<UiHelpTopic> kTopics = {
     {"nostr explorer", "Nostr explorer", "Browse Nostr relays, groups and events."},
     {"lemmy explorer", "Lemmy explorer", "Browse Lemmy servers, communities, people and posts."},
     {"matrix explorer", "Matrix explorer", "Browse public Matrix rooms and servers."},
-    {"nostr accounts", "Nostr accounts", "Public Nostr profiles seen so far."},
+    {"nostr accounts", "Nostr accounts",
+     "Opens the Identities panel on its Nostr tab: watch-only accounts "
+     "(public keys), one of them active."},
 
     // ---- Go ----
     {"back|tb_back", "Back",
@@ -575,7 +580,6 @@ const std::vector<UiHelpTopic> kTopics = {
      "restore (restoring adds a new revision)."},
     {"@panel:nostr-explorer", "Nostr explorer",
      "Relays, groups and events seen; search and open them."},
-    {"@panel:nostr-accounts", "Nostr accounts", "Public profiles seen so far."},
     {"@panel:lemmy-explorer", "Lemmy explorer",
      "Lemmy servers, communities, people and posts; pick a server and "
      "search."},
@@ -584,8 +588,9 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@panel:certificates", "Certificates panel",
      "Gemini server certificates: accept a changed one or forget a pin."},
     {"@panel:identities", "Identities panel",
-     "Gemini client certificates (accounts): create one, use it on this page "
-     "or site, switch, rename or delete it."},
+     "Accounts per protocol. Gemini client certificates: create one, use it "
+     "on this page or site, switch, rename or delete it. Nostr: watch-only "
+     "public keys, one of them active."},
     {"@panel:related-sites", "Related sites panel",
      "Sites similar to the focused page's site. Click to open, middle-click "
      "for a new tab. *Follow page* off keeps the list while you explore."},

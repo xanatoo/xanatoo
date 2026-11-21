@@ -17,7 +17,7 @@ int main() {
   assert(ui_panel_layer("##style_manager_body/##style_manager_list") == UiPanelLayer::StyleManager);
   assert(ui_panel_layer("##annotation_panel_body") == UiPanelLayer::Annotations);
   assert(ui_panel_layer("##nostr_explorer_body") == UiPanelLayer::NostrExplorer);
-  assert(ui_panel_layer("##nostr_accounts_body") == UiPanelLayer::NostrAccounts);
+  assert(ui_panel_layer("##nostr_accounts_body") == UiPanelLayer::Chrome);
   assert(ui_panel_layer("##lemmy_explorer_body") == UiPanelLayer::LemmyExplorer);
   assert(ui_panel_layer("##subscriptions_panel_body") == UiPanelLayer::Subscriptions);
   assert(ui_panel_layer("##subscriptions_panel_body/##sub_child") == UiPanelLayer::Subscriptions);

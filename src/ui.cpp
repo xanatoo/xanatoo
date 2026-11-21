@@ -3269,7 +3269,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Matrix Explorer", nullptr, state.matrix_explorer_open,
                           state.matrix_supported || state.matrix_explorer_open))
         cmd = UiCommand::ToggleMatrixExplorer;
-      if (ImGui::MenuItem("Nostr Accounts", nullptr, state.nostr_accounts_open))
+      if (ImGui::MenuItem("Nostr Accounts", nullptr,
+                          state.identities_open &&
+                          state.identity_section == IdentitySection::Nostr))
         cmd = UiCommand::ToggleNostrAccounts;
       ImGui::EndMenu();
     }
@@ -5606,49 +5608,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::End();
   }
 
-  // ---- Account aliases: separate native panel, deliberately watch-only ----
-  if (state.nostr_accounts_open &&
-      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::NostrAccounts))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.nostr_accounts_x + 3),
-                                  float(state.nostr_accounts_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.nostr_accounts_w - 6)),
-                                   float(std::max(1, state.nostr_accounts_h - 6))));
-    if (ImGui::Begin("##nostr_accounts_body", nullptr, embedded_panel_flags)) {
-      ImGui::TextWrapped("Watch-only identities (public keys only). These cannot sign or publish events.");
-      if (state.nostr_identities.empty())
-        ImGui::TextDisabled("No local identities configured.");
-      for (const auto& identity : state.nostr_identities) {
-        ImGui::PushID(identity.pubkey.c_str());
-        if (ImGui::RadioButton(identity.label.c_str(),
-                               identity.pubkey == state.nostr_selected_identity)) {
-          cmd = UiCommand::NostrSelectIdentity;
-          result.arg = identity.pubkey;
-        }
-        ImGui::SameLine();
-        if (classic_button("View profile")) {
-          cmd = UiCommand::NavigateUrl;
-          result.arg = "nostr:" + nostr_bech32("npub", identity.pubkey);
-        }
-        ImGui::TextDisabled("%s…", identity.pubkey.substr(0, 24).c_str());
-        ImGui::PopID();
-      }
-      ImGui::Separator();
-      ImGui::TextUnformatted("Add or rename a public identity");
-      ImGui::InputText("Label", nostr_identity_label_,
-                       sizeof nostr_identity_label_);
-      ImGui::InputText("npub / hex", nostr_identity_pubkey_,
-                       sizeof nostr_identity_pubkey_);
-      if (classic_button("Save watch-only identity")) {
-        cmd = UiCommand::NostrAddWatchIdentity;
-        result.arg = std::string(nostr_identity_label_) + "\n" +
-                     nostr_identity_pubkey_;
-      }
-      ImGui::Separator();
-      ImGui::TextWrapped("Creating an account with a signing key needs secure NIP-46 remote signing or encrypted NIP-49 key storage. No private keys are accepted here.");
-    }
-    ImGui::End();
-  }
-
   // ---- Certificates: Gemini TOFU pins in a native dockable panel ----
   if (state.certs_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Certificates))) {
@@ -5773,7 +5732,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::End();
   }
 
-  // ---- Identities: Gemini client certificates (accounts) ----
+  // ---- Identities: Gemini client certificates, Nostr accounts ----
   if (state.identities_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Identities))) {
     ImGui::SetNextWindowPos(ImVec2(float(state.identities_x + 3),
@@ -5788,169 +5747,339 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = c;
         result.arg = std::move(arg);
       };
-      if (state.identity_request_status != 0) {
-        ImGui::PushStyleColor(ImGuiCol_Text, warn);
-        ImGui::TextWrapped("%s", state.identity_request_status == 60 ?
-            "This page asks for an identity." :
-            state.identity_request_status == 61 ?
-            "This page does not accept the identity you sent." :
-            "This page did not accept the identity you sent.");
-        ImGui::PopStyleColor();
-        if (!state.identity_request_meta.empty())
-          ImGui::TextWrapped("Server: %s", state.identity_request_meta.c_str());
-      } else {
-        ImGui::TextWrapped("A Gemini identity is a client certificate. A "
-                           "server knows you by it, like an account; it is "
-                           "only sent where you chose to use it.");
+      // One tab per protocol. The app chooses the tab (it follows the
+      // focused page): SetSelected once per change, then a click reports
+      // back. ImGui may show the old tab for a frame after SetSelected.
+      const bool told = !identity_section_init_ ||
+                        state.identity_section != identity_section_shown_;
+      if (told) {
+        identity_section_shown_ = state.identity_section;
+        identity_section_init_ = true;
+        identity_section_settle_ = 2;
       }
-      if (on_page) {
-        ImGui::TextDisabled("This page: %s",
-                            state.identity_active_name.empty() ?
-                                "no identity" :
-                                state.identity_active_name.c_str());
-        if (!state.identity_active_name.empty()) {
-          same_line_if_fits("Stop using here");
-          if (classic_button("Stop using here"))
-            pick(UiCommand::IdentityStopHere, {});
-          if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("This page and what is below it go out "
-                              "without a certificate.");
+      IdentitySection shown = identity_section_shown_;
+      if (ImGui::BeginTabBar("##identity_tabs")) {
+        auto tab = [&](const char* name, IdentitySection sec) {
+          const ImGuiTabItemFlags f =
+              told && state.identity_section == sec ?
+                  ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+          if (!ImGui::BeginTabItem(name, nullptr, f)) return;
+          shown = sec;
+          ImGui::EndTabItem();
+        };
+        tab("Gemini", IdentitySection::Gemini);
+        tab("Nostr", IdentitySection::Nostr);
+        ImGui::EndTabBar();
+      }
+      if (identity_section_settle_ > 0) {
+        --identity_section_settle_;
+        shown = identity_section_shown_;
+      } else if (shown != identity_section_shown_) {
+        identity_section_shown_ = shown;
+        pick(UiCommand::IdentitySection,
+             shown == IdentitySection::Nostr ? "nostr" : "gemini");
+      }
+      if (shown == IdentitySection::Gemini) {
+        if (state.identity_request_status != 0) {
+          ImGui::PushStyleColor(ImGuiCol_Text, warn);
+          ImGui::TextWrapped("%s", state.identity_request_status == 60 ?
+              "This page asks for an identity." :
+              state.identity_request_status == 61 ?
+              "This page does not accept the identity you sent." :
+              "This page did not accept the identity you sent.");
+          ImGui::PopStyleColor();
+          if (!state.identity_request_meta.empty())
+            ImGui::TextWrapped("Server: %s", state.identity_request_meta.c_str());
+        } else {
+          ImGui::TextWrapped("A Gemini identity is a client certificate. A "
+                             "server knows you by it, like an account; it is "
+                             "only sent where you chose to use it.");
         }
-      }
-      if (state.identity_no_save)
-        ImGui::TextDisabled("--no-save: identities last for this session only.");
-      if (!state.identity_error.empty())
-        ImGui::TextColored(warn, "%s", state.identity_error.c_str());
-
-      // New identity: a name, then create (and on a Gemini page, use it on
-      // the whole server right away).
-      ImGui::Separator();
-      ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x,
-                                       220.f * scale_));
-      ImGui::InputTextWithHint("##identity_new", "Name of a new identity",
-                               identity_new_name_, sizeof identity_new_name_);
-      const bool named = identity_new_name_[0] != '\0';
-      ImGui::BeginDisabled(!named);
-      if (on_page) {
-        same_line_if_fits("Create for this site");
-        if (classic_button("Create for this site")) {
-          pick(UiCommand::IdentityCreateHere, identity_new_name_);
-          identity_new_name_[0] = '\0';
-        }
-        if (ImGui::IsItemHovered())
-          ImGui::SetTooltip("Make a new certificate and use it on %s",
-                            state.identity_page_site.c_str());
-      }
-      same_line_if_fits("Create");
-      if (classic_button("Create")) {
-        pick(UiCommand::IdentityCreate, identity_new_name_);
-        identity_new_name_[0] = '\0';
-      }
-      ImGui::EndDisabled();
-
-      const UiState::IdentityRow* sel = nullptr;
-      for (const auto& row : state.identity_rows)
-        if (row.sha256 == state.identity_selected) sel = &row;
-      ImGui::Separator();
-      if (state.identity_rows.empty()) {
-        ImGui::TextDisabled("No identities yet.");
-      } else {
-        const float list_h = sel ?
-            std::max(80.f, ImGui::GetContentRegionAvail().y * 0.35f) : 0.f;
-        if (ImGui::BeginChild("##identity_list", ImVec2(0.f, list_h),
-                              ImGuiChildFlags_Borders)) {
-          for (const auto& row : state.identity_rows) {
-            ImGui::PushID(row.sha256.c_str());
-            std::string label = row.name;
-            if (row.active_here) label += "  (this page)";
-            if (!row.saved) label += "  session only";
-            if (ImGui::Selectable(label.c_str(), &row == sel))
-              pick(UiCommand::IdentitySelect,
-                   &row == sel ? std::string{} : row.sha256);
-            ImGui::PopID();
+        if (on_page) {
+          ImGui::TextDisabled("This page: %s",
+                              state.identity_active_name.empty() ?
+                                  "no identity" :
+                                  state.identity_active_name.c_str());
+          if (!state.identity_active_name.empty()) {
+            same_line_if_fits("Stop using here");
+            if (classic_button("Stop using here"))
+              pick(UiCommand::IdentityStopHere, {});
+            if (ImGui::IsItemHovered())
+              ImGui::SetTooltip("This page and what is below it go out "
+                                "without a certificate.");
           }
         }
-        ImGui::EndChild();
-      }
-      if (sel) {
-        ImGui::PushID(sel->sha256.c_str());
-        if (identity_rename_for_ != sel->sha256) {
-          identity_rename_for_ = sel->sha256;
-          std::snprintf(identity_rename_, sizeof identity_rename_, "%s",
-                        sel->name.c_str());
-          identity_delete_armed_.clear();
-        }
+        if (state.identity_no_save)
+          ImGui::TextDisabled("--no-save: identities last for this session only.");
+        if (!state.identity_error.empty())
+          ImGui::TextColored(warn, "%s", state.identity_error.c_str());
+
+        // New identity: a name, then create (and on a Gemini page, use it on
+        // the whole server right away).
+        ImGui::Separator();
         ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x,
                                          220.f * scale_));
-        ImGui::InputText("##identity_rename", identity_rename_,
-                         sizeof identity_rename_);
-        const bool renamed = identity_rename_[0] != '\0' &&
-                             sel->name != identity_rename_;
-        same_line_if_fits("Rename");
-        ImGui::BeginDisabled(!renamed);
-        if (classic_button("Rename"))
-          pick(UiCommand::IdentityRename,
-               sel->sha256 + "\n" + identity_rename_);
-        ImGui::EndDisabled();
-        if (!sel->created.empty())
-          ImGui::TextDisabled("Created %s", sel->created.c_str());
+        ImGui::InputTextWithHint("##identity_new", "Name of a new identity",
+                                 identity_new_name_, sizeof identity_new_name_);
+        const bool named = identity_new_name_[0] != '\0';
+        ImGui::BeginDisabled(!named);
         if (on_page) {
-          ImGui::BeginDisabled(sel->scope_here == state.identity_page_site);
-          if (classic_button("Use on this site"))
-            pick(UiCommand::IdentityUseSite, sel->sha256);
-          ImGui::EndDisabled();
-          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", state.identity_page_site.c_str());
-          same_line_if_fits("Use on this page");
-          ImGui::BeginDisabled(sel->scope_here == state.identity_page_scope);
-          if (classic_button("Use on this page"))
-            pick(UiCommand::IdentityUsePage, sel->sha256);
-          ImGui::EndDisabled();
-          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s and below",
-                              state.identity_page_scope.c_str());
-        }
-        ImGui::TextDisabled("%s", sel->scopes.empty() ?
-            "Not used anywhere." : "Used on:");
-        for (const auto& scope : sel->scopes) {
-          ImGui::PushID(scope.c_str());
-          if (classic_button("x"))
-            pick(UiCommand::IdentityDropScope, sel->sha256 + "\n" + scope);
+          same_line_if_fits("Create for this site");
+          if (classic_button("Create for this site")) {
+            pick(UiCommand::IdentityCreateHere, identity_new_name_);
+            identity_new_name_[0] = '\0';
+          }
           if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Stop using it here");
-          ImGui::SameLine();
-          ImGui::TextWrapped("%s", scope.c_str());
-          ImGui::PopID();
+            ImGui::SetTooltip("Make a new certificate and use it on %s",
+                              state.identity_page_site.c_str());
         }
-        ImGui::TextDisabled("SHA-256");
-        ImGui::Indent();
-        std::string fp;
-        for (size_t i = 0; i < sel->sha256.size(); i += 8)
-          fp += (i ? " " : "") + sel->sha256.substr(i, 8);
-        ImGui::TextWrapped("%s", fp.c_str());
-        ImGui::Unindent();
-        if (classic_button("Copy fingerprint"))
-          ImGui::SetClipboardText(sel->sha256.c_str());
-        same_line_if_fits("Delete…");
-        if (identity_delete_armed_ != sel->sha256) {
-          if (classic_button("Delete…")) identity_delete_armed_ = sel->sha256;
+        same_line_if_fits("Create");
+        if (classic_button("Create")) {
+          pick(UiCommand::IdentityCreate, identity_new_name_);
+          identity_new_name_[0] = '\0';
+        }
+        ImGui::EndDisabled();
+
+        const UiState::IdentityRow* sel = nullptr;
+        for (const auto& row : state.identity_rows)
+          if (row.sha256 == state.identity_selected) sel = &row;
+        ImGui::Separator();
+        if (state.identity_rows.empty()) {
+          ImGui::TextDisabled("No identities yet.");
         } else {
-          ImGui::PushStyleColor(ImGuiCol_Text, warn);
-          ImGui::TextWrapped("Deleting loses the accounts it is for, for "
-                             "good: no server can link a new identity to "
-                             "them.");
-          ImGui::PopStyleColor();
-          if (classic_button("Delete for good")) {
-            pick(UiCommand::IdentityDelete, sel->sha256);
+          const float list_h = sel ?
+              std::max(80.f, ImGui::GetContentRegionAvail().y * 0.35f) : 0.f;
+          if (ImGui::BeginChild("##identity_list", ImVec2(0.f, list_h),
+                                ImGuiChildFlags_Borders)) {
+            for (const auto& row : state.identity_rows) {
+              ImGui::PushID(row.sha256.c_str());
+              std::string label = row.name;
+              if (row.active_here) label += "  (this page)";
+              if (!row.saved) label += "  session only";
+              if (ImGui::Selectable(label.c_str(), &row == sel))
+                pick(UiCommand::IdentitySelect,
+                     &row == sel ? std::string{} : row.sha256);
+              ImGui::PopID();
+            }
+          }
+          ImGui::EndChild();
+        }
+        if (sel) {
+          ImGui::PushID(sel->sha256.c_str());
+          if (identity_rename_for_ != sel->sha256) {
+            identity_rename_for_ = sel->sha256;
+            std::snprintf(identity_rename_, sizeof identity_rename_, "%s",
+                          sel->name.c_str());
             identity_delete_armed_.clear();
           }
-          ImGui::SameLine();
-          if (classic_button("Keep")) identity_delete_armed_.clear();
+          ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x,
+                                           220.f * scale_));
+          ImGui::InputText("##identity_rename", identity_rename_,
+                           sizeof identity_rename_);
+          const bool renamed = identity_rename_[0] != '\0' &&
+                               sel->name != identity_rename_;
+          same_line_if_fits("Rename");
+          ImGui::BeginDisabled(!renamed);
+          if (classic_button("Rename"))
+            pick(UiCommand::IdentityRename,
+                 sel->sha256 + "\n" + identity_rename_);
+          ImGui::EndDisabled();
+          if (!sel->created.empty())
+            ImGui::TextDisabled("Created %s", sel->created.c_str());
+          if (on_page) {
+            ImGui::BeginDisabled(sel->scope_here == state.identity_page_site);
+            if (classic_button("Use on this site"))
+              pick(UiCommand::IdentityUseSite, sel->sha256);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+              ImGui::SetTooltip("%s", state.identity_page_site.c_str());
+            same_line_if_fits("Use on this page");
+            ImGui::BeginDisabled(sel->scope_here == state.identity_page_scope);
+            if (classic_button("Use on this page"))
+              pick(UiCommand::IdentityUsePage, sel->sha256);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+              ImGui::SetTooltip("%s and below",
+                                state.identity_page_scope.c_str());
+          }
+          ImGui::TextDisabled("%s", sel->scopes.empty() ?
+              "Not used anywhere." : "Used on:");
+          for (const auto& scope : sel->scopes) {
+            ImGui::PushID(scope.c_str());
+            if (classic_button("x"))
+              pick(UiCommand::IdentityDropScope, sel->sha256 + "\n" + scope);
+            if (ImGui::IsItemHovered())
+              ImGui::SetTooltip("Stop using it here");
+            ImGui::SameLine();
+            ImGui::TextWrapped("%s", scope.c_str());
+            ImGui::PopID();
+          }
+          ImGui::TextDisabled("SHA-256");
+          ImGui::Indent();
+          std::string fp;
+          for (size_t i = 0; i < sel->sha256.size(); i += 8)
+            fp += (i ? " " : "") + sel->sha256.substr(i, 8);
+          ImGui::TextWrapped("%s", fp.c_str());
+          ImGui::Unindent();
+          if (classic_button("Copy fingerprint"))
+            ImGui::SetClipboardText(sel->sha256.c_str());
+          same_line_if_fits("Delete…");
+          if (identity_delete_armed_ != sel->sha256) {
+            if (classic_button("Delete…")) identity_delete_armed_ = sel->sha256;
+          } else {
+            ImGui::PushStyleColor(ImGuiCol_Text, warn);
+            ImGui::TextWrapped("Deleting loses the accounts it is for, for "
+                               "good: no server can link a new identity to "
+                               "them.");
+            ImGui::PopStyleColor();
+            if (classic_button("Delete for good")) {
+              pick(UiCommand::IdentityDelete, sel->sha256);
+              identity_delete_armed_.clear();
+            }
+            ImGui::SameLine();
+            if (classic_button("Keep")) identity_delete_armed_.clear();
+          }
+          ImGui::PopID();
+        } else if (!state.identity_rows.empty()) {
+          ImGui::TextDisabled(on_page ? "Select an identity to use it here." :
+                                        "Select an identity to see it.");
         }
-        ImGui::PopID();
-      } else if (!state.identity_rows.empty()) {
-        ImGui::TextDisabled(on_page ? "Select an identity to use it here." :
-                                      "Select an identity to see it.");
+      } else {
+        // Nostr: watch-only accounts (public keys); nothing here can sign.
+        ImGui::TextWrapped("A Nostr account is a public key (npub). These "
+                           "are watch-only: xanatoo holds no private key, so "
+                           "it cannot sign or post as them.");
+        if (state.identity_no_save)
+          ImGui::TextDisabled("--no-save: no accounts can be saved.");
+        if (!state.identity_error.empty())
+          ImGui::TextColored(warn, "%s", state.identity_error.c_str());
+        auto account = [&](const std::string& pk) -> const NostrLocalIdentity* {
+          for (const auto& i : state.nostr_identities)
+            if (i.pubkey == pk) return &i;
+          return nullptr;
+        };
+        if (!state.nostr_page_pubkey.empty()) {
+          const NostrLocalIdentity* known = account(state.nostr_page_pubkey);
+          ImGui::TextDisabled("This page: %s",
+                              known ? known->label.c_str() :
+                                      "an author not saved here");
+          if (!known && !state.identity_no_save) {
+            same_line_if_fits("Save this author");
+            if (classic_button("Save this author"))
+              pick(UiCommand::NostrAddWatchIdentity,
+                   "\n" + state.nostr_page_pubkey);
+            if (ImGui::IsItemHovered())
+              ImGui::SetTooltip("Keep the page's author as a watch-only "
+                                "account.");
+          }
+        }
+
+        // Add: a label and a public key.
+        ImGui::Separator();
+        const float field_w = std::min(ImGui::GetContentRegionAvail().x,
+                                       220.f * scale_);
+        ImGui::SetNextItemWidth(field_w);
+        ImGui::InputTextWithHint("##nostr_new_label", "Label",
+                                 nostr_identity_label_,
+                                 sizeof nostr_identity_label_);
+        ImGui::SetNextItemWidth(field_w);
+        ImGui::InputTextWithHint("##nostr_new_key", "npub1… or hex key",
+                                 nostr_identity_pubkey_,
+                                 sizeof nostr_identity_pubkey_);
+        same_line_if_fits("Save account");
+        ImGui::BeginDisabled(nostr_identity_pubkey_[0] == '\0' ||
+                             state.identity_no_save);
+        if (classic_button("Save account")) {
+          pick(UiCommand::NostrAddWatchIdentity,
+               std::string(nostr_identity_label_) + "\n" +
+                   nostr_identity_pubkey_);
+          nostr_identity_label_[0] = '\0';
+          nostr_identity_pubkey_[0] = '\0';
+        }
+        ImGui::EndDisabled();
+
+        const NostrLocalIdentity* nsel = account(state.nostr_shown_identity);
+        ImGui::Separator();
+        if (state.nostr_identities.empty()) {
+          ImGui::TextDisabled("No Nostr accounts yet.");
+        } else {
+          // Sized to its rows (a few at least, a third of the panel at
+          // most) so the details and the footer stay in view.
+          const float row = ImGui::GetTextLineHeightWithSpacing();
+          const float rows = float(std::max<size_t>(
+              4, state.nostr_identities.size() + 1));
+          const float list_h = std::min(
+              row * rows + ImGui::GetStyle().WindowPadding.y * 2.f,
+              std::max(80.f, ImGui::GetContentRegionAvail().y *
+                                 (nsel ? 0.35f : 0.6f)));
+          if (ImGui::BeginChild("##nostr_identity_list", ImVec2(0.f, list_h),
+                                ImGuiChildFlags_Borders)) {
+            for (const auto& acc : state.nostr_identities) {
+              ImGui::PushID(acc.pubkey.c_str());
+              std::string label = acc.label;
+              if (acc.pubkey == state.nostr_selected_identity)
+                label += "  (active)";
+              if (acc.pubkey == state.nostr_page_pubkey) label += "  (this page)";
+              if (ImGui::Selectable(label.c_str(), &acc == nsel))
+                pick(UiCommand::NostrIdentityShow,
+                     &acc == nsel ? std::string{} : acc.pubkey);
+              ImGui::PopID();
+            }
+          }
+          ImGui::EndChild();
+        }
+        if (nsel) {
+          ImGui::PushID(nsel->pubkey.c_str());
+          if (nostr_identity_rename_for_ != nsel->pubkey) {
+            nostr_identity_rename_for_ = nsel->pubkey;
+            std::snprintf(nostr_identity_rename_, sizeof nostr_identity_rename_,
+                          "%s", nsel->label.c_str());
+          }
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputText("##nostr_rename", nostr_identity_rename_,
+                           sizeof nostr_identity_rename_);
+          same_line_if_fits("Rename");
+          ImGui::BeginDisabled(nostr_identity_rename_[0] == '\0' ||
+                               nsel->label == nostr_identity_rename_ ||
+                               state.identity_no_save);
+          if (classic_button("Rename"))
+            pick(UiCommand::NostrAddWatchIdentity,
+                 std::string(nostr_identity_rename_) + "\n" + nsel->pubkey);
+          ImGui::EndDisabled();
+          const std::string npub = nostr_bech32("npub", nsel->pubkey);
+          ImGui::TextDisabled("Public key");
+          ImGui::Indent();
+          ImGui::TextWrapped("%s", npub.c_str());
+          ImGui::Unindent();
+          if (classic_button("View profile"))
+            pick(UiCommand::NavigateUrl, "nostr:" + npub);
+          same_line_if_fits("Copy npub");
+          if (classic_button("Copy npub")) ImGui::SetClipboardText(npub.c_str());
+          const bool active = nsel->pubkey == state.nostr_selected_identity;
+          same_line_if_fits("Make active");
+          ImGui::BeginDisabled(active || state.identity_no_save);
+          if (classic_button(active ? "Active" : "Make active"))
+            pick(UiCommand::NostrSelectIdentity, nsel->pubkey);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("The account follows, bookmarks and posting "
+                              "will go with once signing exists.");
+          same_line_if_fits("Remove");
+          ImGui::BeginDisabled(state.identity_no_save);
+          if (classic_button("Remove"))
+            pick(UiCommand::NostrIdentityRemove, nsel->pubkey);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Forget the label here; the account itself "
+                              "is not touched.");
+          ImGui::PopID();
+        } else if (!state.nostr_identities.empty()) {
+          ImGui::TextDisabled("Select an account to see it.");
+        }
+        ImGui::Separator();
+        ImGui::TextWrapped("Signing accounts (a NIP-46 remote signer or a "
+                           "NIP-49 encrypted key) come later; no private "
+                           "keys are accepted here.");
       }
     }
     ImGui::End();

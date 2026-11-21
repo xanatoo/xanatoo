@@ -101,6 +101,13 @@ cache writes and schema migration.
 
 ### Nostr accounts
 
+Watch-only accounts are on the **Nostr tab of the Identities panel**
+(Services → Nostr Accounts, or Panels → Identities). It shares the panel with
+Gemini client certificates but not the data: the keys do not carry over
+between protocols. A page's author can be saved from there; an account can be
+renamed, made active, opened as a profile, copied as npub, or removed (only
+its local label).
+
 - Multiple labelled local identities, each with a public key, explicit
   signer association and separate follows/bookmarks/publishing preferences.
 - Watch-only identities are useful immediately. They **cannot sign** and

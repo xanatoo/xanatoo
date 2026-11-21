@@ -80,7 +80,7 @@ void test_ui_help(int& passed, int& failed) {
         "@panel:styles", "@panel:style-manager", "@panel:bookmarks",
         "@panel:context", "@panel:subscriptions", "@panel:downloads", "@panel:media",
         "@panel:reply", "@panel:annotations", "@panel:revisions",
-        "@panel:nostr-explorer", "@panel:nostr-accounts",
+        "@panel:nostr-explorer",
         "@panel:lemmy-explorer", "@panel:matrix-explorer",
         "@panel:certificates", "@panel:identities", "@panel:related-sites", "@float-title",
         "@doc-window-title", "@float-close", "@float-shade", "@float-max",

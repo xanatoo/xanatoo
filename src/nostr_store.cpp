@@ -681,6 +681,29 @@ bool nostr_add_watch_identity(std::string_view label, std::string_view ref) {
 #endif
 }
 
+bool nostr_remove_local_identity(std::string_view pubkey) {
+#if XANATOO_SQLITE
+  if (!hex_pubkey(pubkey) || no_save()) return false;
+  sqlite3* db = open_cache(true);
+  if (!db) return false;
+  DbOwner owner{db};
+  Statement del(db, "DELETE FROM local_identities WHERE pubkey=?;");
+  if (!del.valid()) return false;
+  del.bind(1, pubkey);
+  if (!del.exec() || sqlite3_changes(db) == 0) return false;
+  Statement active(db, "DELETE FROM local_settings"
+                       " WHERE key='active-identity' AND value=?;");
+  if (active.valid()) {
+    active.bind(1, pubkey);
+    active.exec();
+  }
+  return true;
+#else
+  (void)pubkey;
+  return false;
+#endif
+}
+
 std::string nostr_active_local_identity() {
 #if XANATOO_SQLITE
   sqlite3* db = open_cache(false);
