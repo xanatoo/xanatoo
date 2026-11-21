@@ -1588,7 +1588,8 @@ Next bundle number: **348** (this delivery is **347**)
   derivatives nested by the per-file `original` field, then other derived /
   metadata files; per-file duration, size, track titles; book / film details
   (pages, ISBN, OCLC, Open Library, scan, OCR, runtime …), size / file count /
-  dates; reviews. Checked against live `alicesadventures00carr` and a
+  dates; reviews (line breaks kept); the uploader, linking to
+  `ia:uploader:ADDRESS` (all their items, paged). Checked against live `alicesadventures00carr` and a
   Grateful Dead etree item (mapper output only).
 - Open: full-text viewer; lending-only items show metadata but their files
   will not download.

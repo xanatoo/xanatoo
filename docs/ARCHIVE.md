@@ -12,6 +12,7 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
 |-----|-------|
 | `ia:ID` | item: thumbnail, details, description, files, reviews |
 | `ia:ID?page=N` | page N (50 items, most downloaded first) of a collection's members |
+| `ia:uploader:ADDRESS[?page=N]` | everything one account uploaded, 50 per page, most downloaded first |
 
 - Data: `https://archive.org/metadata/ID` (item) and `advancedsearch.php?q=collection:ID`
   (members of a collection; only fetched when `mediatype` is `collection`).
@@ -20,8 +21,10 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
   link), Open Library edition / work, call number, contributor, sponsor, scan
   centre + ppi, OCR engine; for films runtime / sound / colour; a lending-library
   note for `access-restricted-item`; added / last updated date, total size and
-  file count (`item_size`, `files_count`, `item_last_updated`), notes. The
-  uploader (an e-mail address) is not shown.
+  file count (`item_size`, `files_count`, `item_last_updated`), notes, and the
+  uploader (an e-mail address, as the public API gives it) linking to
+  `ia:uploader:ADDRESS` (`advancedsearch` with `q=uploader:"ADDRESS"`; View →
+  web toggle opens the same search on archive.org).
 - Files link to `archive.org/download/ID/NAME`; bookkeeping files (`*_meta.xml`,
   `*_files.xml`, torrents, item tiles) are left out, all others are listed (the
   metadata reply already carries them). Each file's `source` sorts them:

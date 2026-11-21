@@ -29,6 +29,17 @@ namespace {
 
 constexpr std::string_view kPrefix = "ia:";
 
+// An uploader address: an e-mail address, kept to characters that need no
+// quoting in a ref, a Markdown link or the search query.
+bool valid_uploader(std::string_view u) {
+  if (u.empty() || u.size() > 200 || u.find('@') == std::string_view::npos) return false;
+  for (char c : u) {
+    const unsigned char x = static_cast<unsigned char>(c);
+    if (!(std::isalnum(x) || c == '_' || c == '-' || c == '.' || c == '+' || c == '@')) return false;
+  }
+  return true;
+}
+
 bool valid_id(std::string_view id) {
   if (id.empty() || id.size() > 200) return false;
   for (char c : id) {
@@ -237,9 +248,10 @@ std::string members_md(std::string_view members_json, const IaRef& ref) {
   if (!reply) return {};
   const Json* resp = json_get(*reply, "response");
   const Json* docs = resp ? json_get(*resp, "docs") : nullptr;
-  if (!docs || docs->items.empty()) return "This collection has no items.\n";
+  if (!docs || docs->items.empty())
+    return ref.uploader.empty() ? "This collection has no items.\n" : "No public items.\n";
   const long long total = json_number(json_get(*resp, "numFound"));
-  std::string md = "## Items\n\n";
+  std::string md = ref.uploader.empty() ? "## Items\n\n" : "";
   if (total > 0)
     md += std::to_string(total) + (total == 1 ? " item" : " items") +
           ", the most downloaded first.\n\n";
@@ -257,9 +269,9 @@ std::string members_md(std::string_view members_json, const IaRef& ref) {
   md += "\n";
   const long long shown = static_cast<long long>(ref.page) * kIaPageRows;
   if (ref.page > 1)
-    md += link("Previous page", ia_ref_string({ref.id, ref.page - 1})) + "  ";
+    md += link("Previous page", ia_ref_string({ref.id, ref.page - 1, ref.uploader})) + "  ";
   if (shown < total)
-    md += link("Next page", ia_ref_string({ref.id, ref.page + 1}));
+    md += link("Next page", ia_ref_string({ref.id, ref.page + 1, ref.uploader}));
   md += "\n";
   return md;
 }
@@ -281,6 +293,12 @@ std::optional<IaRef> parse_ia_ref(std::string_view ref) {
     }
   }
   if (const size_t h = rest.find('#'); h != std::string_view::npos) rest = rest.substr(0, h);
+  if (starts_with(rest, "uploader:")) {
+    rest.remove_prefix(9);
+    if (!valid_uploader(rest)) return std::nullopt;
+    r.uploader = std::string(rest);
+    return r;
+  }
   for (std::string_view p : {"details/", "download/", "stream/", "embed/"})
     if (starts_with(rest, p)) rest.remove_prefix(p.size());
   if (const size_t s = rest.find('/'); s != std::string_view::npos) rest = rest.substr(0, s);
@@ -292,12 +310,16 @@ std::optional<IaRef> parse_ia_ref(std::string_view ref) {
 bool is_ia_ref(std::string_view ref) { return parse_ia_ref(ref).has_value(); }
 
 std::string ia_ref_string(const IaRef& r) {
-  std::string s = "ia:" + r.id;
+  std::string s = r.uploader.empty() ? "ia:" + r.id : "ia:uploader:" + r.uploader;
   if (r.page > 1) s += "?page=" + std::to_string(r.page);
   return s;
 }
 
-std::string ia_web_url(const IaRef& r) { return "https://archive.org/details/" + r.id; }
+std::string ia_web_url(const IaRef& r) {
+  if (!r.uploader.empty())
+    return "https://archive.org/search?query=" + percent_encode("uploader:\"" + r.uploader + "\"");
+  return "https://archive.org/details/" + r.id;
+}
 
 std::string ia_ref_from_web_url(std::string_view url) {
   for (std::string_view p : {"https://archive.org/", "http://archive.org/",
@@ -307,7 +329,7 @@ std::string ia_ref_from_web_url(std::string_view url) {
     for (std::string_view d : {"details/", "download/", "stream/", "embed/"})
       if (starts_with(rest, d)) {
         auto r = parse_ia_ref(std::string("ia:") + std::string(rest));
-        return r ? ia_ref_string({r->id, 1}) : std::string();
+        return r ? ia_ref_string({r->id, 1, {}}) : std::string();
       }
   }
   return {};
@@ -318,7 +340,8 @@ std::string ia_metadata_url(const IaRef& r) {
 }
 
 std::string ia_members_url(const IaRef& r) {
-  return "https://archive.org/advancedsearch.php?q=collection%3A" + percent_encode(r.id) +
+  const std::string q = r.uploader.empty() ? "collection:" + r.id : "uploader:\"" + r.uploader + "\"";
+  return "https://archive.org/advancedsearch.php?q=" + percent_encode(q) +
          "&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=mediatype&fl%5B%5D=creator"
          "&sort%5B%5D=downloads+desc&rows=" + std::to_string(kIaPageRows) +
          "&page=" + std::to_string(r.page) + "&output=json";
@@ -420,6 +443,13 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
                                    : std::string()));
     }
     add("Notes", joined(field("notes"), "; ", 3));
+    {
+      std::string up;
+      for (const std::string& u : field("uploader"))
+        up += (up.empty() ? "" : ", ") +
+              (valid_uploader(u) ? link(u, "ia:uploader:" + u) : esc(one_line(u)));
+      add("Uploader", up);
+    }
     if (!facts.empty()) md += facts + "\n";
 
     const auto desc = field("description");
@@ -559,8 +589,17 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
       }
     }
   }
-  if (type == "collection" && !members_json.empty()) md += members_md(members_json, ref);
+  if (type == "collection" && !members_json.empty()) md += members_md(members_json, ref) + "\n";
   md += link("Open on archive.org", "external:" + ia_web_url(ref)) + "\n";
+  return md;
+}
+
+std::string ia_uploads_markdown(std::string_view members_json, const IaRef& ref) {
+  std::string md = "# Uploads by " + esc(ref.uploader) + "\n\n";
+  const std::string list = members_md(members_json, ref);
+  md += list.empty() ? "The Internet Archive did not answer the search.\n" : list;
+  md += "\n";
+  md += link("Search on archive.org", "external:" + ia_web_url(ref)) + "\n";
   return md;
 }
 
@@ -583,6 +622,11 @@ std::optional<Document> ia_fetch(std::string_view ref, std::string* err) {
   if (!r) {
     if (err) *err = "Not an Internet Archive ref: " + std::string(ref);
     return std::nullopt;
+  }
+  if (!r->uploader.empty()) {
+    auto members = get(ia_members_url(*r), err);
+    if (!members) return std::nullopt;
+    return parse_document(ia_uploads_markdown(*members, *r), "archive.md");
   }
   auto meta = get(ia_metadata_url(*r), err);
   if (!meta) return std::nullopt;

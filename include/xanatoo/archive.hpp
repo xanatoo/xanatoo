@@ -21,9 +21,12 @@
 
 namespace xanatoo {
 
+// "ia:ID" (item or collection) or "ia:uploader:ADDRESS" (everything one
+// account uploaded; `id` is empty then), both with an optional "?page=N".
 struct IaRef {
-  std::string id;  // item identifier
-  int page = 1;    // member page of a collection
+  std::string id;        // item identifier
+  int page = 1;          // member page of a collection / the uploads
+  std::string uploader;  // the uploader's address (an e-mail address)
 };
 
 std::optional<IaRef> parse_ia_ref(std::string_view ref);
@@ -37,7 +40,8 @@ std::string ia_ref_from_web_url(std::string_view url);
 
 constexpr int kIaPageRows = 50;
 
-// Items listed per member page: the advancedsearch URL for a collection.
+// Items listed per member page: the advancedsearch URL for a collection's
+// members, or an uploader's items.
 std::string ia_members_url(const IaRef& r);
 std::string ia_metadata_url(const IaRef& r);
 
@@ -53,6 +57,10 @@ std::string ia_mediatype(std::string_view metadata_json);
 std::string ia_markdown(std::string_view metadata_json,
                         std::string_view members_json, const IaRef& ref,
                         bool (*playable)(std::string_view) = nullptr);
+
+// Markdown of an uploader's items (`ref.uploader` set): the advancedsearch
+// reply for ia_members_url(ref). Pure.
+std::string ia_uploads_markdown(std::string_view members_json, const IaRef& ref);
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 std::optional<Document> ia_fetch(std::string_view ref, std::string* err = nullptr);

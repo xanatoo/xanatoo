@@ -27,6 +27,23 @@ int main() {
   assert(ia_ref_from_web_url("https://archive.org/search?query=x").empty());
   assert(ia_ref_from_web_url("https://example.com/details/foo").empty());
   assert(ia_web_url({"foo", 1}) == "https://archive.org/details/foo");
+  {
+    const auto u = parse_ia_ref("ia:uploader:a.b+c@x.org?page=2");
+    assert(u && u->uploader == "a.b+c@x.org" && u->page == 2 && u->id.empty());
+    assert(ia_ref_string(*u) == "ia:uploader:a.b+c@x.org?page=2");
+    assert(has(ia_members_url(*u), "q=uploader%3A%22a.b%2Bc%40x.org%22"));
+    assert(ia_web_url(*u) == "https://archive.org/search?query=uploader%3A%22a.b%2Bc%40x.org%22");
+    assert(!parse_ia_ref("ia:uploader:no-at"));
+    assert(!parse_ia_ref("ia:uploader:a b@x"));
+    const char* ups = R"({"response":{"numFound":60,"start":0,"docs":[
+      {"identifier":"one","title":"First","mediatype":"audio"}]}})";
+    const std::string um = ia_uploads_markdown(ups, *u);
+    assert(has(um, "# Uploads by a.b+c@x.org"));
+    assert(has(um, "[First](ia:one) — audio"));
+    assert(has(um, "[Previous page](ia:uploader:a.b+c@x.org)"));
+    assert(!has(um, "Next page"));
+    assert(has(um, "external:https://archive.org/search?query="));
+  }
 
   // An item.
   const char* item = R"({"files":[
@@ -98,7 +115,7 @@ int main() {
    "metadata":{"identifier":"b","title":"B","mediatype":"texts","imagecount":"312",
      "isbn":["0123456789"],"oclc-id":"12345","openlibrary_edition":"OL1M",
      "scanningcenter":"Hong Kong","ppi":"400","access-restricted-item":"true",
-     "addeddate":"2015-06-07 08:09:10"}})";
+     "addeddate":"2015-06-07 08:09:10","uploader":"scan-x@archive.org"}})";
   const std::string sm = ia_markdown(scan, "", {"b", 1});
   assert(has(sm, "## Original files"));
   assert(has(sm, "\n- [b.pdf](https://archive.org/download/b/b.pdf) — Text PDF, 4.0 KB\n"
@@ -111,6 +128,7 @@ int main() {
   assert(has(sm, "[loop.a]") && has(sm, "[loop.b]"));  // a cycle still lists both
   assert(has(sm, "## Other files\n\n- [cover.jpg]"));
   assert(has(sm, "Pages: 312"));
+  assert(has(sm, "Uploader: [scan-x@archive.org](ia:uploader:scan-x@archive.org)"));
   assert(has(sm, "ISBN: 0123456789"));
   assert(has(sm, "[12345](https://search.worldcat.org/title/12345)"));
   assert(has(sm, "[OL1M](https://openlibrary.org/books/OL1M)"));
