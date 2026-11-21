@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Touch: two-finger window resize
+
+- While one finger drags a free floating window by its title, a second
+  finger anywhere turns it into a span: each window edge follows the finger
+  on its side, so spreading grows, pinching shrinks and moving both moves
+  the window (`TouchMode::FloatSpan`; `span_axis` in `touch_span.hpp`,
+  unit-tested, keeps the minimum size and the screen bounds). Lifting the
+  second finger hands the drag back to the title finger; lifting the title
+  finger snaps the window. No docking / tab drop while spanning; docked
+  windows tear off first (drag) before a span applies.
+- Open: not yet tried on a real touchscreen.
+
 ## Status (2026-11-21) — Docks and tile divider: no size cap
 
 - Docked columns / bands were capped at 2/5 of the window (and the tile

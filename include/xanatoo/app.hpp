@@ -479,6 +479,7 @@ struct FloatWindow {
   int resize_start_wx = 0, resize_start_wy = 0;  // window origin then
   float scroll = 0.f;  // panel roles; a document view scrolls its Pane
   bool scroll_dragging = false;
+  bool span = false;  // touch: title finger + a second finger resize it
   float scroll_grab = 0.f;  // pointer y minus thumb top while dragging
 };
 
@@ -608,6 +609,8 @@ enum class TouchMode : uint8_t {
   Image,    // one finger on a single-image gallery view: pan / swipe / tap
   ImagePinch,  // two fingers there: zoom the image
   GutterDrag,  // two fingers either side of a gutter: they drag it along
+  FloatSpan,   // a finger on a window title + a second one: each window
+               // edge follows the finger on its side (resize / move)
   Ignored,  // ImGui's touch or a finished pinch; wait for all fingers up
 };
 
@@ -638,6 +641,8 @@ struct Touch {
   std::optional<ViewAnchor> pinch_anchor;
   // GutterDrag: grabbed gutter point minus the fingers' midpoint.
   float gutter_dx = 0.f, gutter_dy = 0.f;
+  // FloatSpan: both fingers' positions when the second one landed.
+  float span_ax = 0.f, span_ay = 0.f, span_bx = 0.f, span_by = 0.f;
 };
 
 // ---- background page fetches (app_fetch.cpp) ----
@@ -2607,6 +2612,13 @@ float float_max_scroll(App& app, const FloatWindow& w);
 bool float_press(App& app, int x, int y);   // true = click consumed
 bool float_motion(App& app, int x, int y);  // true = drag/resize/scroll active
 void float_release(App& app, int x, int y);
+// Touch: while a free window is dragged by its title, a second finger turns
+// the drag into a two-finger span of app.touch's fingers (false = no such
+// drag). float_span_end with `keep_drag` resumes the title drag under the
+// first finger (the second lifted); otherwise the window snaps into place.
+bool float_span_begin(App& app);
+void float_span_motion(App& app);
+void float_span_end(App& app, bool keep_drag);
 bool float_wheel(App& app, int x, int y, int wheel_y);
 bool float_page_scroll(App& app, int x, int y, bool up);
 // Closes the window that has key focus (float_active), if any.

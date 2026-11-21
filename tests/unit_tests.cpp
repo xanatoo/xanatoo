@@ -16,6 +16,7 @@
 #include "xanatoo/download.hpp"
 #include "xanatoo/table_grid.hpp"
 #include "xanatoo/touch_gutter.hpp"
+#include "xanatoo/touch_span.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/nav_history.hpp"
 #include "xanatoo/history_menu.hpp"
@@ -8729,8 +8730,37 @@ void test_touch_gutter_between() {
   EXPECT(segment_hit_near_middle(5.f, 5.f, 5.f, 5.f, col(5, 6)));
 }
 
+// Title finger + second finger: each window edge follows the finger on its
+// side, within the bounds and the minimum size.
+void test_touch_span_axis() {
+  using xanatoo::span_axis;
+  // a (title) left of b: spreading b by 50 grows the right edge.
+  auto r = span_axis(100, 200, 120.f, 250.f, 120.f, 300.f, 50, 0, 1000);
+  EXPECT(r.lo == 100 && r.len == 250);
+  // a moves left 30: the left edge follows, the right edge stays.
+  r = span_axis(100, 200, 120.f, 250.f, 90.f, 250.f, 50, 0, 1000);
+  EXPECT(r.lo == 70 && r.len == 230);
+  // Both move together: the window moves.
+  r = span_axis(100, 200, 120.f, 250.f, 140.f, 270.f, 50, 0, 1000);
+  EXPECT(r.lo == 120 && r.len == 200);
+  // b left of a: b drives the low edge.
+  r = span_axis(100, 200, 250.f, 120.f, 250.f, 80.f, 50, 0, 1000);
+  EXPECT(r.lo == 60 && r.len == 240);
+  // Pinching below the minimum grows b's edge back.
+  r = span_axis(100, 200, 120.f, 250.f, 120.f, 100.f, 50, 0, 1000);
+  EXPECT(r.lo == 100 && r.len == 50);
+  r = span_axis(100, 200, 250.f, 120.f, 250.f, 300.f, 50, 0, 1000);
+  EXPECT(r.lo == 250 && r.len == 50);
+  // Bounds clamp both edges; the minimum still fits against a bound.
+  r = span_axis(100, 200, 120.f, 250.f, 0.f, 2000.f, 50, 40, 900);
+  EXPECT(r.lo == 40 && r.len == 860);
+  r = span_axis(100, 200, 120.f, 250.f, 1000.f, 1000.f, 50, 0, 900);
+  EXPECT(r.lo == 850 && r.len == 50);
+}
+
 int main() {
   test_touch_gutter_between();
+  test_touch_span_axis();
   test_plain_text_files();
   test_looks_like_binary();
   test_transfer_label();

@@ -13,6 +13,7 @@
 #include "xanatoo/cli.hpp"
 #include "xanatoo/layout.hpp"
 #include "xanatoo/theme.hpp"
+#include "xanatoo/touch_span.hpp"
 
 namespace xanatoo::app {
 
@@ -958,15 +959,76 @@ void float_release(App& app, int mx, int my) {
         dock_window(app, *w, zone, mx, my);
       else
         snap_soft_geom(app, w->x, w->y, w->w, w->h);
-    } else if (w->resize && w->dock == Dock::None) {
+    } else if ((w->resize || w->span) && w->dock == Dock::None) {
       snap_soft_geom(app, w->x, w->y, w->w, w->h);
     }
     w->dragging = false;
+    w->span = false;
     w->resize = 0;
     w->scroll_dragging = false;
   }
   app.tab_drop_preview = false;
   app.dock_preview = Dock::None;
+}
+
+bool float_span_begin(App& app) {
+  Touch& t = app.touch;
+  if (t.count < 2) return false;
+  for (FloatWindow* w : float_stack(app)) {
+    if (!w->dragging || w->dock != Dock::None) continue;
+    w->dragging = false;
+    w->span = true;
+    w->resize_start_wx = w->x;
+    w->resize_start_wy = w->y;
+    w->resize_start_w = w->w;
+    w->resize_start_h = w->h;
+    t.span_ax = t.fingers[0].x;
+    t.span_ay = t.fingers[0].y;
+    t.span_bx = t.fingers[1].x;
+    t.span_by = t.fingers[1].y;
+    app.tab_drop_preview = false;  // no docking / tab drop while spanning
+    app.dock_preview = Dock::None;
+    return true;
+  }
+  return false;
+}
+
+void float_span_motion(App& app) {
+  const Touch& t = app.touch;
+  if (t.count < 2) return;
+  for (FloatWindow* w : float_stack(app)) {
+    if (!w->span) continue;
+    const auto [min_w, min_h] = min_size(*w);
+    const SpanAxis sx =
+        span_axis(w->resize_start_wx, w->resize_start_w, t.span_ax, t.span_bx,
+                  t.fingers[0].x, t.fingers[1].x, min_w, 0, app.win_w);
+    const SpanAxis sy = span_axis(
+        w->resize_start_wy, w->resize_start_h, t.span_ay, t.span_by,
+        t.fingers[0].y, t.fingers[1].y, min_h, static_cast<int>(app.ui_top),
+        std::max(static_cast<int>(app.ui_top) + min_h,
+                 app.win_h - status_bar_h));
+    if (w->role == WindowRole::Help && sx.len != w->w)
+      app.help_needs_layout = true;
+    w->x = sx.lo;
+    w->w = sx.len;
+    w->y = sy.lo;
+    w->h = sy.len;
+    return;
+  }
+}
+
+void float_span_end(App& app, bool keep_drag) {
+  const Touch& t = app.touch;
+  for (FloatWindow* w : float_stack(app)) {
+    if (!w->span) continue;
+    w->span = false;
+    if (keep_drag)  // the title finger carries on moving the window
+      begin_drag(*w, static_cast<int>(t.fingers[0].x),
+                 static_cast<int>(t.fingers[0].y));
+    else
+      snap_soft_geom(app, w->x, w->y, w->w, w->h);
+    return;
+  }
 }
 
 bool float_wheel(App& app, int mx, int my, int wheel_y) {

@@ -11,6 +11,10 @@
 // right on one, two fingers placed either side of a gutter grab it and drag
 // it along with their midpoint. Pinches stay within one page, so a pair of
 // fingers straddling a gutter is never a pinch.
+// Small window frames are fiddly too: while one finger holds a free window's
+// title, a second finger anywhere spans it, each window edge following the
+// finger on its side (spread to grow, pinch to shrink, both to move).
+// Lifting the second finger leaves the title finger dragging again.
 // A finger has no hover: when the last one lifts, pointer_leave clears
 // every hover effect, which a mouse would end by moving away.
 
@@ -256,6 +260,8 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
              t.mode == TouchMode::Pan || t.mode == TouchMode::Image) {
     if (!begin_gutter_drag(app)) begin_pinch(app);
+  } else if (t.mode == TouchMode::Direct && float_span_begin(app)) {
+    t.mode = TouchMode::FloatSpan;
   }
 }
 
@@ -327,6 +333,9 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
       pointer_motion(app, gx, gy, false);
       break;
     }
+    case TouchMode::FloatSpan:
+      float_span_motion(app);
+      break;
     case TouchMode::Idle:
     case TouchMode::Ignored:
       break;
@@ -387,6 +396,15 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
       t.mode = TouchMode::Ignored;
       break;
     }
+    case TouchMode::FloatSpan:
+      if (primary) {  // the title finger let go: the window settles
+        float_span_end(app, false);
+        pointer_left_up(app, xi, yi);
+      } else {  // the title finger alone drags the window on
+        float_span_end(app, true);
+        t.mode = TouchMode::Direct;
+      }
+      break;
     case TouchMode::Pinch:  // the remaining finger does nothing
     case TouchMode::ImagePinch:
       t.mode = TouchMode::Ignored;
