@@ -12,6 +12,7 @@
 // If no system CA store is available, verified connections fail closed.
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,31 @@ struct TlsPeerCertificate {
   std::optional<bool> self_signed;
 };
 
+// A client certificate with its private key, both PEM (Gemini identities).
+struct TlsClientIdentity {
+  std::string cert_pem;
+  std::string key_pem;
+};
+
+// A new self-signed client certificate: EC P-256 key, SHA-256 signature,
+// subject CN = `common_name`, a random serial, valid from now until
+// 9999-12-31 (RFC 5280's "no well-defined expiration"). Gemini servers know
+// a client by the certificate's fingerprint, so it must not expire.
+std::optional<TlsClientIdentity> tls_make_client_identity(
+    const std::string& common_name, std::string* err = nullptr);
+
+// SHA-256 (lowercase hex) of a PEM certificate's DER encoding: the
+// fingerprint a server sees. nullopt when it does not parse.
+std::optional<std::string> tls_certificate_sha256(const std::string& cert_pem);
+
+// Subject, issuer and validity of a PEM certificate.
+std::optional<TlsPeerCertificate> tls_certificate_details(
+    const std::string& cert_pem);
+
+// True when `key_pem` is the private key of `cert_pem` (an import check).
+bool tls_identity_matches(const TlsClientIdentity& identity,
+                          std::string* err = nullptr);
+
 class TlsStream {
  public:
   TlsStream();
@@ -43,6 +69,17 @@ class TlsStream {
   bool connect(int fd, const std::string& host, std::string* err = nullptr,
                bool verify_peer = true);
   bool connected() const;
+
+  // Present this client certificate when the server asks for one. Call
+  // before connect(); it applies to the next handshakes of this stream. A
+  // certificate or key that does not load fails connect().
+  void set_client_identity(TlsClientIdentity identity);
+  // Unverified connections only (verify_peer=false, Gemini): called with the
+  // server's leaf fingerprint during the handshake, before a client
+  // certificate goes out; false aborts the handshake (peer_guard_refused()).
+  // This keeps an identity from reaching a server whose pin changed.
+  void set_peer_guard(std::function<bool(const std::string& sha256)> guard);
+  bool peer_guard_refused() const;
 
   // SHA-256 of the peer's full DER leaf certificate (lowercase hex), after
   // a successful handshake. No certificate or hash error => nullopt.

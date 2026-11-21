@@ -39,7 +39,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 22> panels(App& app) {
+std::array<PanelRef, 23> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -61,6 +61,7 @@ std::array<PanelRef, 22> panels(App& app) {
            {"matrix-explorer", &app.matrix_explorer_win, app.matrix_explorer_open},
            {"nostr-accounts", &app.nostr_accounts_win, app.nostr_accounts_open},
            {"certificates", &app.certs_win, app.certs.open},
+           {"identities", &app.identities_win, app.identities.open},
            {"related-sites", &app.related_win, app.related.open},
            {"hover-help", &app.hover_help_win, app.hover_help.open}}};
 }
@@ -415,6 +416,8 @@ void restore_session(App& app) {
       app.matrix_explorer_open = true;
     if (get("certificates.open") && *get("certificates.open") == "1")
       show_certificates(app);
+    if (get("identities.open") && *get("identities.open") == "1")
+      show_identities(app);
     // "recommendations" is the panel's first name (migration alias).
     for (const char* key : {"related-sites.open", "recommendations.open"})
       if (get(key) && *get(key) == "1") app.related.open = true;

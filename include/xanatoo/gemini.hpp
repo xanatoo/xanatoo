@@ -44,12 +44,19 @@ struct GeminiResponse {
   std::string meta;   // MIME or redirect URL or prompt
   std::string body;
   std::string final_url;  // after limited redirects
+  // The client certificate the final request presented (gemini_identity),
+  // empty when none.
+  std::string identity_sha256;
+  std::string identity_name;
 };
 
 // Fetch over TLS. A first certificate per host:port is trusted and pinned
 // (session-only with --no-save); a changed one is refused before any URL is
 // sent and reported through `changed` (the user decides in the Certificates
-// panel). Follows at most a few 30/31 redirects. On failure, nullopt and err.
+// panel). Each request presents the identity (client certificate) whose
+// scope covers its URL, re-chosen after a redirect; a server whose pin
+// changed never sees it. Follows at most a few 30/31 redirects. On failure,
+// nullopt and err.
 std::optional<GeminiResponse> gemini_fetch(std::string_view url,
                                            std::string* err = nullptr,
                                            GeminiCertificateChange* changed = nullptr,

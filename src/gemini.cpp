@@ -7,6 +7,7 @@
 #include "xanatoo/tls.hpp"
 #include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/gemini_tofu.hpp"
+#include "xanatoo/gemini_identity.hpp"
 #include "xanatoo/paths.hpp"
 
 #include <algorithm>
@@ -169,13 +170,34 @@ std::string resolve_gemini_url(std::string_view base, std::string_view ref) {
 static std::optional<GeminiResponse> gemini_fetch_once(const GeminiUrl& u,
                                                        std::string* err,
                                                        GeminiCertificateChange* changed,
-                                                       GeminiPeer* peer) {
+                                                       GeminiPeer* peer,
+                                                       bool with_identity = true) {
+  const auto identity = with_identity ?
+      gemini_identity_for_url(state_dir(), u.canonical) : std::nullopt;
   int fd = tcp_connect_host(u.host, u.port, err);
   if (fd < 0) return std::nullopt;
   // Gemini commonly uses self-signed certificates. Check the TOFU pin after
   // the handshake but BEFORE sending the URL.
   TlsStream tls;
-  if (!tls.connect(fd, u.host, err, false)) return std::nullopt;
+  if (identity) {
+    tls.set_client_identity({identity->cert_pem, identity->key_pem});
+    // The certificate goes out inside the handshake, before the pin check
+    // below: only a pinned (or first-seen) server certificate may see it.
+    tls.set_peer_guard([&](const std::string& sha256) {
+      GeminiCertificateChange change;
+      GeminiCertificateFirstUse first_use;
+      return gemini_tofu_check(state_dir(), !no_save(), u.host, u.port,
+                               sha256, nullptr, &change, &first_use) ||
+             !first_use.host.empty();
+    });
+  }
+  if (!tls.connect(fd, u.host, err, false)) {
+    // A changed certificate: connect again without the identity, where the
+    // check below refuses it and reports the change.
+    if (identity && tls.peer_guard_refused())
+      return gemini_fetch_once(u, err, changed, peer, false);
+    return std::nullopt;
+  }
   const auto fingerprint = tls.peer_certificate_sha256();
   if (!fingerprint) {
     if (err) *err = "Gemini peer did not provide a usable certificate";
@@ -232,6 +254,10 @@ static std::optional<GeminiResponse> gemini_fetch_once(const GeminiUrl& u,
   std::string header = data.substr(0, line_end);
   GeminiResponse resp;
   resp.final_url = u.canonical;
+  if (identity) {
+    resp.identity_sha256 = identity->sha256;
+    resp.identity_name = identity->name;
+  }
   if (header.size() < 2 ||
       !std::isdigit(static_cast<unsigned char>(header[0])) ||
       !std::isdigit(static_cast<unsigned char>(header[1]))) {

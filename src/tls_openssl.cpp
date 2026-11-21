@@ -3,9 +3,15 @@
 
 #include "xanatoo/tls.hpp"
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
+#include <openssl/bn.h>
 #include <openssl/buffer.h>
+#include <openssl/ec.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -16,7 +22,9 @@
 #include <string>
 #include <cstdlib>
 #include <ctime>
+#include <memory>
 #include <mutex>
+#include <utility>
 
 namespace xanatoo {
 
@@ -73,6 +81,88 @@ std::string certificate_time(const ASN1_TIME* time) {
   return buffer;
 }
 
+TlsPeerCertificate details_of(X509* cert) {
+  TlsPeerCertificate details;
+  details.subject = certificate_name(X509_get_subject_name(cert));
+  details.issuer = certificate_name(X509_get_issuer_name(cert));
+  details.not_before = certificate_time(X509_get0_notBefore(cert));
+  details.not_after = certificate_time(X509_get0_notAfter(cert));
+  details.self_issued = X509_NAME_cmp(X509_get_subject_name(cert),
+                                      X509_get_issuer_name(cert)) == 0;
+  details.self_signed = false;
+  if (details.self_issued) {
+    EVP_PKEY* key = X509_get_pubkey(cert);
+    if (key) {
+      details.self_signed = X509_verify(cert, key) == 1;
+      EVP_PKEY_free(key);
+    } else {
+      details.self_signed.reset();
+    }
+  }
+  return details;
+}
+
+std::optional<std::string> sha256_of(X509* cert) {
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int size = 0;
+  if (X509_digest(cert, EVP_sha256(), digest, &size) != 1 || size != 32)
+    return std::nullopt;
+  static constexpr char hex[] = "0123456789abcdef";
+  std::string result;
+  result.reserve(size * 2);
+  for (unsigned i = 0; i < size; ++i) {
+    result += hex[digest[i] >> 4];
+    result += hex[digest[i] & 15];
+  }
+  return result;
+}
+
+template <typename T, void (*Free)(T*)>
+struct Freer {
+  void operator()(T* p) const { Free(p); }
+};
+using X509Ptr = std::unique_ptr<X509, Freer<X509, X509_free>>;
+using KeyPtr = std::unique_ptr<EVP_PKEY, Freer<EVP_PKEY, EVP_PKEY_free>>;
+using BioPtr = std::unique_ptr<BIO, Freer<BIO, BIO_free_all>>;
+
+X509Ptr read_certificate(const std::string& pem) {
+  BioPtr bio(BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())));
+  if (!bio) return nullptr;
+  return X509Ptr(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+}
+
+KeyPtr read_private_key(const std::string& pem) {
+  BioPtr bio(BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())));
+  if (!bio) return nullptr;
+  return KeyPtr(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+}
+
+std::string drain_errors() {
+  std::string out;
+  unsigned long e;
+  while ((e = ERR_get_error()) != 0) {
+    char buf[256];
+    ERR_error_string_n(e, buf, sizeof(buf));
+    out += "; ";
+    out += buf;
+  }
+  return out;
+}
+
+std::string bio_text(BIO* bio) {
+  BUF_MEM* mem = nullptr;
+  BIO_get_mem_ptr(bio, &mem);
+  return mem && mem->data ? std::string(mem->data, mem->length) : std::string{};
+}
+
+// At most `max` bytes, cut at a UTF-8 character boundary.
+std::string utf8_prefix(const std::string& s, size_t max) {
+  if (s.size() <= max) return s;
+  size_t n = max;
+  while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
+  return s.substr(0, n);
+}
+
 }  // namespace
 
 struct TlsStream::Impl {
@@ -80,7 +170,121 @@ struct TlsStream::Impl {
   SSL* ssl = nullptr;
   int fd = -1;
   std::string last_error;
+  TlsClientIdentity client;
+  std::function<bool(const std::string&)> guard;
+  bool guard_refused = false;
 };
+
+std::optional<TlsClientIdentity> tls_make_client_identity(
+    const std::string& common_name, std::string* err) {
+  init_once();
+  ERR_clear_error();
+  auto fail = [&](const char* what) -> std::optional<TlsClientIdentity> {
+    if (err) *err = what + drain_errors();
+    return std::nullopt;
+  };
+  std::unique_ptr<EVP_PKEY_CTX, Freer<EVP_PKEY_CTX, EVP_PKEY_CTX_free>> gen(
+      EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr));
+  EVP_PKEY* generated = nullptr;
+  if (!gen || EVP_PKEY_keygen_init(gen.get()) != 1 ||
+      EVP_PKEY_CTX_set_ec_paramgen_curve_nid(gen.get(),
+                                             NID_X9_62_prime256v1) != 1 ||
+      EVP_PKEY_keygen(gen.get(), &generated) != 1)
+    return fail("cannot generate an EC P-256 key");
+  KeyPtr key(generated);
+  X509Ptr cert(X509_new());
+  if (!cert || X509_set_version(cert.get(), 2) != 1)
+    return fail("cannot create a certificate");
+  // A random positive 128-bit serial (RFC 5280: unique per issuer).
+  unsigned char serial[16];
+  if (RAND_bytes(serial, sizeof serial) != 1)
+    return fail("no random bytes for the certificate serial");
+  serial[0] = static_cast<unsigned char>((serial[0] & 0x7f) | 0x40);
+  std::unique_ptr<BIGNUM, Freer<BIGNUM, BN_free>> bn(
+      BN_bin2bn(serial, sizeof serial, nullptr));
+  if (!bn || !BN_to_ASN1_INTEGER(bn.get(), X509_get_serialNumber(cert.get())))
+    return fail("cannot set the certificate serial");
+  if (!X509_gmtime_adj(X509_getm_notBefore(cert.get()), 0) ||
+      ASN1_TIME_set_string(X509_getm_notAfter(cert.get()),
+                           "99991231235959Z") != 1)
+    return fail("cannot set the certificate validity");
+  const std::string cn = utf8_prefix(common_name.empty() ? "xanatoo"
+                                                         : common_name, 64);
+  X509_NAME* name = X509_get_subject_name(cert.get());
+  if (X509_NAME_add_entry_by_txt(
+          name, "CN", MBSTRING_UTF8,
+          reinterpret_cast<const unsigned char*>(cn.c_str()), -1, -1, 0) != 1 ||
+      X509_set_issuer_name(cert.get(), name) != 1 ||
+      X509_set_pubkey(cert.get(), key.get()) != 1)
+    return fail("cannot set the certificate name or key");
+  for (auto [nid, value] : {std::pair{NID_basic_constraints, "critical,CA:FALSE"},
+                            std::pair{NID_ext_key_usage, "clientAuth"}}) {
+    X509_EXTENSION* ext = X509V3_EXT_conf_nid(nullptr, nullptr, nid,
+                                              const_cast<char*>(value));
+    const bool added = ext && X509_add_ext(cert.get(), ext, -1) == 1;
+    X509_EXTENSION_free(ext);
+    if (!added) return fail("cannot add a certificate extension");
+  }
+  if (X509_sign(cert.get(), key.get(), EVP_sha256()) <= 0)
+    return fail("cannot sign the certificate");
+  BioPtr cert_out(BIO_new(BIO_s_mem()));
+  BioPtr key_out(BIO_new(BIO_s_mem()));
+  if (!cert_out || !key_out ||
+      PEM_write_bio_X509(cert_out.get(), cert.get()) != 1 ||
+      PEM_write_bio_PrivateKey(key_out.get(), key.get(), nullptr, nullptr, 0,
+                               nullptr, nullptr) != 1)
+    return fail("cannot encode the certificate");
+  return TlsClientIdentity{bio_text(cert_out.get()), bio_text(key_out.get())};
+}
+
+std::optional<std::string> tls_certificate_sha256(const std::string& cert_pem) {
+  init_once();
+  X509Ptr cert = read_certificate(cert_pem);
+  ERR_clear_error();
+  return cert ? sha256_of(cert.get()) : std::nullopt;
+}
+
+std::optional<TlsPeerCertificate> tls_certificate_details(
+    const std::string& cert_pem) {
+  init_once();
+  X509Ptr cert = read_certificate(cert_pem);
+  ERR_clear_error();
+  if (!cert) return std::nullopt;
+  return details_of(cert.get());
+}
+
+bool tls_identity_matches(const TlsClientIdentity& identity, std::string* err) {
+  init_once();
+  X509Ptr cert = read_certificate(identity.cert_pem);
+  KeyPtr key = read_private_key(identity.key_pem);
+  ERR_clear_error();
+  if (!cert) {
+    if (err) *err = "no PEM certificate";
+    return false;
+  }
+  if (!key) {
+    if (err) *err = "no PEM private key (an encrypted key needs its "
+                    "passphrase removed first)";
+    return false;
+  }
+  if (X509_check_private_key(cert.get(), key.get()) != 1) {
+    ERR_clear_error();
+    if (err) *err = "the private key does not belong to the certificate";
+    return false;
+  }
+  return true;
+}
+
+void TlsStream::set_client_identity(TlsClientIdentity identity) {
+  impl_->client = std::move(identity);
+}
+
+void TlsStream::set_peer_guard(
+    std::function<bool(const std::string& sha256)> guard) {
+  impl_->guard = std::move(guard);
+}
+
+bool TlsStream::peer_guard_refused() const { return impl_->guard_refused; }
 
 namespace {
 
@@ -140,6 +344,19 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
     return false;
   }
   SSL_CTX_set_min_proto_version(impl_->ctx, TLS1_2_VERSION);
+  if (!impl_->client.cert_pem.empty()) {
+    // Sent only when the server's handshake asks for a certificate.
+    X509Ptr cert = read_certificate(impl_->client.cert_pem);
+    KeyPtr key = read_private_key(impl_->client.key_pem);
+    if (!cert || !key ||
+        SSL_CTX_use_certificate(impl_->ctx, cert.get()) != 1 ||
+        SSL_CTX_use_PrivateKey(impl_->ctx, key.get()) != 1 ||
+        SSL_CTX_check_private_key(impl_->ctx) != 1) {
+      if (err) *err = "client certificate does not load" + drain_errors();
+      close();
+      return false;
+    }
+  }
   if (verify_peer) {
     if (SSL_CTX_set_default_verify_paths(impl_->ctx) != 1) {
       if (err) *err = "no system TLS trust store";
@@ -158,6 +375,22 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
       return false;
     }
     SSL_CTX_set_verify(impl_->ctx, SSL_VERIFY_PEER, nullptr);
+  } else if (impl_->guard) {
+    // Replaces the chain verification: only the guard decides. It runs on
+    // the server's Certificate message, before the client sends its own.
+    impl_->guard_refused = false;
+    SSL_CTX_set_verify(impl_->ctx, SSL_VERIFY_PEER, nullptr);
+    SSL_CTX_set_cert_verify_callback(
+        impl_->ctx,
+        [](X509_STORE_CTX* store, void* arg) -> int {
+          auto* impl = static_cast<Impl*>(arg);
+          X509* leaf = X509_STORE_CTX_get0_cert(store);
+          const auto sha = leaf ? sha256_of(leaf) : std::nullopt;
+          if (sha && impl->guard(*sha)) return 1;
+          impl->guard_refused = true;
+          return 0;
+        },
+        impl_.get());
   } else {
     SSL_CTX_set_verify(impl_->ctx, SSL_VERIFY_NONE, nullptr);
   }
@@ -221,46 +454,16 @@ bool TlsStream::connected() const { return impl_->ssl != nullptr; }
 
 std::optional<std::string> TlsStream::peer_certificate_sha256() const {
   if (!connected()) return std::nullopt;
-  X509* cert = peer_certificate_owned(impl_->ssl);
+  X509Ptr cert(peer_certificate_owned(impl_->ssl));
   if (!cert) return std::nullopt;
-  unsigned char digest[EVP_MAX_MD_SIZE];
-  unsigned int size = 0;
-  const bool hashed = X509_digest(cert, EVP_sha256(), digest, &size) == 1;
-  X509_free(cert);
-  if (!hashed || size != 32) return std::nullopt;
-  static constexpr char hex[] = "0123456789abcdef";
-  std::string result;
-  result.reserve(size * 2);
-  for (unsigned i = 0; i < size; ++i) {
-    result += hex[digest[i] >> 4];
-    result += hex[digest[i] & 15];
-  }
-  return result;
+  return sha256_of(cert.get());
 }
 
 std::optional<TlsPeerCertificate> TlsStream::peer_certificate_details() const {
   if (!connected()) return std::nullopt;
-  X509* cert = peer_certificate_owned(impl_->ssl);
+  X509Ptr cert(peer_certificate_owned(impl_->ssl));
   if (!cert) return std::nullopt;
-  TlsPeerCertificate details;
-  details.subject = certificate_name(X509_get_subject_name(cert));
-  details.issuer = certificate_name(X509_get_issuer_name(cert));
-  details.not_before = certificate_time(X509_get0_notBefore(cert));
-  details.not_after = certificate_time(X509_get0_notAfter(cert));
-  details.self_issued = X509_NAME_cmp(X509_get_subject_name(cert),
-                                      X509_get_issuer_name(cert)) == 0;
-  details.self_signed = false;
-  if (details.self_issued) {
-    EVP_PKEY* key = X509_get_pubkey(cert);
-    if (key) {
-      details.self_signed = X509_verify(cert, key) == 1;
-      EVP_PKEY_free(key);
-    } else {
-      details.self_signed.reset();
-    }
-  }
-  X509_free(cert);
-  return details;
+  return details_of(cert.get());
 }
 
 bool TlsStream::write_all(const void* data, size_t n) {

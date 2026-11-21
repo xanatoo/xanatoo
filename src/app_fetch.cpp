@@ -91,6 +91,13 @@ void fetch_gemini(const std::string& url, FetchShared& out) {
   if (!peer.host.empty()) out.gemini_peer = std::move(peer);
   if (!resp) return;
   out.final_url = resp->final_url;
+  out.identity_name = resp->identity_name;
+  if (resp->status >= 60 && resp->status <= 62) {
+    out.identity_status = resp->status;
+    out.identity_meta = resp->meta;
+    out.error = "status " + std::to_string(resp->status) + " " + resp->meta;
+    return;
+  }
   if (resp->status == 10 || resp->status == 11) {
     out.input_status = resp->status;
     out.input_meta = resp->meta;
@@ -646,6 +653,24 @@ xanatoo::Document load_error_doc(const FetchJob& job) {
          "This server presented a different certificate than on your earlier "
          "visit, so the request was not sent. Servers renew certificates, but "
          "this can also mean that someone intercepts the connection.\n";
+  } else if (const int st = job.shared->identity_status; st != 0) {
+    // Gemini 60/61/62: the Identity panel (opened by note_gemini_identity)
+    // creates or picks the certificate; then the page reloads.
+    md = st == 60 ? "# This page asks who you are\n\n" :
+         st == 61 ? "# Your identity is not allowed here\n\n" :
+                    "# Your identity was not accepted\n\n";
+    md += "`" + job.url + "`\n\n";
+    md += st == 60 ?
+        "The server wants a client certificate. Gemini sites use one as "
+        "your account: the server knows you by it from then on.\n" :
+        st == 61 ?
+        "The server knows the certificate you sent (" +
+            job.shared->identity_name + ") but does not let it see this "
+            "page.\n" :
+        "The server did not accept the certificate you sent (" +
+            job.shared->identity_name + ").\n";
+    md += "\nPick or create an identity in the Identities panel "
+          "(Panels → Identities); the page reloads with it.\n";
   } else {
     md = "# Could not load page\n\n`" + job.url + "`\n\n" +
          job.shared->error + "\n";
@@ -1208,6 +1233,7 @@ void poll_fetches(App& app) {
         (app.nostr_explorer_open || app.nostr_accounts_open))
       refresh_nostr_catalogue(app);
     note_gemini_peer(app, job);
+    note_gemini_identity(app, job);
     if (job.shared->download && job.shared->download->phase.load() ==
                                     xanatoo::DownloadPhase::Pending)
       job.shared->download->phase.store(xanatoo::DownloadPhase::Skipped);

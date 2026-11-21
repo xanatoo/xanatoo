@@ -261,6 +261,26 @@ read-only service clients. Every client is read-only: never post or log in.
   against saved/session trust and the reload forces a fresh TLS handshake.
   `--no-save` approvals stay in memory. See `docs/TLS.md` and the pure
   `gemini_tofu_tests.cpp` suite; do not bypass this with another fetch path.
+- Identities (client certificates, `gemini_identity.hpp/.cpp`, panel
+  `app_identity.cpp`, `WindowRole::Identities`, `IdentityPanel`): a server
+  knows the client by the certificate's fingerprint, so an identity is an
+  account and its key the password. Store `state_dir()/gemini-identities`
+  (S-expression with PEM cert + key, written 0600 via temp file + rename;
+  `--no-save` keeps changes in a per-process session overlay). Each identity
+  has URL-prefix scopes (`gemini://host[:port]/path`, segment-boundary match,
+  longest wins; one identity per scope, which is how switching works).
+  `gemini_fetch_once` looks the identity up **per request** (so a redirect
+  out of the scope goes without it) and sets `TlsStream::set_client_identity`
+  plus a `set_peer_guard` that runs the TOFU check inside the handshake:
+  a server whose pin changed never receives the certificate (the fetch
+  reconnects without it and reports the change as usual). Status 60/61/62
+  set `FetchShared::identity_status`; `load_error_doc` explains it and
+  `note_gemini_identity` opens the panel on that page (Create for this
+  site / Use on this site / page; no Enter/Esc prompts). Certificates are
+  made by the TLS backend (`tls_make_client_identity`: EC P-256, CN = name,
+  valid to 9999). Tests: `gemini_identity_tests.cpp` (scopes, format,
+  store), `tls_peer_tests.cpp` (the server sees the fingerprint; a refused
+  guard sends nothing). Server certificates stay in the Certificates panel.
 
 ## Gopher (`gopher.hpp`) and Finger (`finger.hpp`)
 

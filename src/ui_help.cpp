@@ -384,6 +384,10 @@ const std::vector<UiHelpTopic> kTopics = {
     {"certificates", "Certificates",
      "Gemini server certificates seen in this session: view, accept a "
      "changed one, or forget a pin."},
+    {"identities", "Identities",
+     "Gemini client certificates. A server knows you by one, like an "
+     "account. Create one, choose which page or site it is used on, switch, "
+     "rename or delete it. Pages that ask for a certificate open this panel."},
     {"style sheets", "Style sheets panel", "Pick the style sheet of the focused page."},
     {"annotations", "Annotations",
      "Notes attached to passages of the document, kept apart from it."},
@@ -579,6 +583,9 @@ const std::vector<UiHelpTopic> kTopics = {
      "Public Matrix rooms of a server; select one to open it."},
     {"@panel:certificates", "Certificates panel",
      "Gemini server certificates: accept a changed one or forget a pin."},
+    {"@panel:identities", "Identities panel",
+     "Gemini client certificates (accounts): create one, use it on this page "
+     "or site, switch, rename or delete it."},
     {"@panel:related-sites", "Related sites panel",
      "Sites similar to the focused page's site. Click to open, middle-click "
      "for a new tab. *Follow page* off keeps the list while you explore."},

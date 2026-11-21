@@ -2,6 +2,27 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Identity panel (Gemini client certificates)
+
+- New Identities panel (Panels → Identities, `app_identity.cpp`): create
+  client certificates (EC P-256, both TLS backends), use one on this page
+  or this whole server, switch (one identity per scope), stop using here,
+  drop a scope, rename, delete (asks again). Server certificates stay in
+  the Certificates panel.
+- Store `state_dir()/gemini-identities` (0600, S-expression with PEMs);
+  `--no-save` keeps identities in memory. The fetch picks the identity per
+  request (also after redirects); a peer guard keeps it from a server whose
+  pin changed.
+- Status 60/61/62 get an explaining page and open the panel on it; the
+  address-bar tooltip names the identity in use.
+- Tests: `gemini_identity_tests` (ctest), client-cert handshakes in
+  `tls_peer_tests`; Mbed TLS checked by a scratch run; panel and 60 flow
+  checked under Xvfb against station.martinrue.com (no account created).
+- Open: import / export of identities (other clients' PEM pairs; the
+  `tls_identity_matches` check exists), passwords / logins of other
+  protocols in the same panel, maybe folding Nostr Accounts into it,
+  an optional passphrase for the store.
+
 ## Status (2026-11-21) — Colour emoji and missing-glyph boxes
 
 - Font fallback now takes colour faces: 💬 and other emoji the body face

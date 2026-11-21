@@ -740,6 +740,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   }
   ui_state.location_icon = address_icon(app, ui_state.doc_label);
   cert_ui_state(app, ui_state);
+  identity_ui_state(app, ui_state);
   related_ui_state(app, ui_state);
   // Imported EPUBs are stored as content.md beside their extracted media.
   // Use the first image in that document as its cover when present.
@@ -1468,6 +1469,23 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::CertSelect:
       app.certs.selected = arg;
+      break;
+    case C::ToggleIdentities:
+      if (app.identities.open)
+        app.identities.open = false;
+      else
+        show_identities(app);
+      break;
+    case C::IdentitySelect:
+    case C::IdentityCreate:
+    case C::IdentityCreateHere:
+    case C::IdentityUseSite:
+    case C::IdentityUsePage:
+    case C::IdentityStopHere:
+    case C::IdentityDropScope:
+    case C::IdentityRename:
+    case C::IdentityDelete:
+      identity_command(app, cmd, arg);
       break;
     case C::ToggleRelatedSites:
       toggle_related_sites(app);

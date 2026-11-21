@@ -27,6 +27,7 @@
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gemini_tofu.hpp"
+#include "xanatoo/gemini_identity.hpp"
 #include "xanatoo/history_trail.hpp"
 #include "xanatoo/images.hpp"
 #include "xanatoo/layout.hpp"
@@ -418,7 +419,8 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, NostrAccounts, LemmyExplorer,
-  Subscriptions, Certificates, RelatedSites, MatrixExplorer, HoverHelp, Media, Document
+  Subscriptions, Certificates, Identities, RelatedSites, MatrixExplorer, HoverHelp, Media,
+  Document
 };
 
 inline UiPanelLayer embedded_panel_layer(WindowRole role) {
@@ -434,6 +436,7 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::NostrAccounts: return UiPanelLayer::NostrAccounts;
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
     case WindowRole::Certificates: return UiPanelLayer::Certificates;
+    case WindowRole::Identities: return UiPanelLayer::Identities;
     case WindowRole::RelatedSites: return UiPanelLayer::RelatedSites;
     case WindowRole::MatrixExplorer: return UiPanelLayer::MatrixExplorer;
     default: return UiPanelLayer::Chrome;
@@ -675,6 +678,11 @@ struct FetchShared {
   std::optional<xanatoo::GeminiCertificateChange> gemini_change;
   // The certificate a Gemini server presented (pinned on first contact).
   std::optional<xanatoo::GeminiPeer> gemini_peer;
+  // Gemini 60/61/62: the page needs a client certificate (identity), the
+  // one sent is not authorised, or not valid; meta = the server's text.
+  int identity_status = 0;
+  std::string identity_meta;
+  std::string identity_name;  // the identity the final request presented
 };
 
 // Remote image downloads (app_images.cpp): URLs ImageCache asked for,
@@ -1055,6 +1063,21 @@ struct CertPanel {
   std::string error;     // last store / action error
 };
 
+// Identity panel (WindowRole::Identities, app_identity.cpp): Gemini client
+// certificates, which servers treat as accounts. Later also logins of other
+// protocols. Server certificates stay in the Certificates panel.
+struct IdentityPanel {
+  bool open = false;
+  bool loaded = false;   // `ids` read from the store
+  std::string selected;  // sha256 of the identity shown in detail
+  std::vector<xanatoo::GeminiIdentity> ids;  // gemini_identities_list
+  std::string error;     // last store / action error
+  // The last page that asked for a certificate (Gemini 60/61/62).
+  std::string request_url;
+  int request_status = 0;
+  std::string request_meta;
+};
+
 // Related Sites panel (app_related.cpp): similar websites of the
 // focused page's site, asked once per domain on a worker thread.
 struct RelatedLoad {
@@ -1223,6 +1246,7 @@ struct App {
   // Gemini certificates met this session, by gemini_cert_key (host:port).
   std::unordered_map<std::string, GeminiSiteCert> gemini_certs;
   CertPanel certs;
+  IdentityPanel identities;
   // Pages opened this session in any view, oldest first (History panel);
   // Back / Forward use each view's own `Pane::nav`.
   std::vector<std::string> visited;
@@ -1414,6 +1438,7 @@ struct App {
   FloatWindow matrix_explorer_win = make_float_panel(WindowRole::MatrixExplorer, 200, 140, 560, 520);
   FloatWindow nostr_accounts_win = make_float_panel(WindowRole::NostrAccounts, 200, 150, 440, 440);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
+  FloatWindow identities_win = make_float_panel(WindowRole::Identities, 180, 140, 520, 480);
   FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);
   // Help panel (Shift+F1): explains the GUI element under the pointer.
   HoverHelp hover_help;
@@ -2142,6 +2167,16 @@ void accept_gemini_cert(App& app, const std::string& key);
 void reject_gemini_cert(App& app, const std::string& key);
 // Remove the pin: the next visit trusts what the server presents then.
 void forget_gemini_cert(App& app, const std::string& key);
+// Identity panel (app_identity.cpp): Gemini client certificates.
+void show_identities(App& app);
+void refresh_identities(App& app);
+// Record a page's request for a certificate (60/61/62); opens the panel.
+void note_gemini_identity(App& app, const FetchJob& job);
+// The identity the focused page's address goes out with, or null.
+const xanatoo::GeminiIdentity* pane_gemini_identity(App& app, int pi);
+void identity_ui_state(App& app, xanatoo::UiState& st);
+// UiCommand::Identity* (arg as documented in ui.hpp).
+void identity_command(App& app, xanatoo::UiCommand cmd, const std::string& arg);
 // A view that switched tabs leaves its running navigation to the tab it
 // started in (a background Tab job); switching back takes it up again.
 // Called by poll_fetches.

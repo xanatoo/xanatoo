@@ -77,6 +77,16 @@ enum class UiCommand {
   CertReject,          // arg = host:port: keep the old pin
   CertForget,          // arg = host:port: remove the pin
   CertSelect,          // arg = host:port: show that row in detail
+  ToggleIdentities,    // Identity panel (Gemini client certificates)
+  IdentitySelect,      // arg = sha256 (empty: none)
+  IdentityCreate,      // arg = name: a new certificate
+  IdentityCreateHere,  // arg = name: new, used on the focused page's site
+  IdentityUseSite,     // arg = sha256: use on the focused page's server
+  IdentityUsePage,     // arg = sha256: use on the focused page (and below)
+  IdentityStopHere,    // no identity for the focused page any more
+  IdentityDropScope,   // arg = sha256 "\n" scope
+  IdentityRename,      // arg = sha256 "\n" new name
+  IdentityDelete,      // arg = sha256 (the panel asked first)
   ToggleRelatedSites, // similar websites of the focused page's site
   RelatedOpen,       // arg = https://domain/: open in the focused view
   RelatedOpenTab,    // arg = https://domain/: open in a new tab
@@ -419,6 +429,26 @@ struct UiState {
   std::string cert_selected;
   std::string cert_error;
   bool cert_no_save = false;
+  // Identity panel: Gemini client certificates.
+  struct IdentityRow {
+    std::string sha256, name, created;
+    std::vector<std::string> scopes;
+    std::string scope_here;  // its scope covering the focused page
+    bool active_here = false;  // the focused page goes out with it
+    bool saved = false;
+  };
+  bool identities_open = false;
+  int identities_x = 0, identities_y = 0, identities_w = 0, identities_h = 0;
+  std::vector<IdentityRow> identity_rows;
+  std::string identity_selected;
+  std::string identity_error;
+  bool identity_no_save = false;
+  // The focused Gemini page (empty otherwise) and its two scopes.
+  std::string identity_page, identity_page_site, identity_page_scope;
+  // That page asked for a certificate (60/61/62) with this text.
+  int identity_request_status = 0;
+  std::string identity_request_meta;
+  std::string identity_active_name;  // identity the page goes out with
   // Related Sites panel: similar websites of the focused page's site.
   struct RelatedRow {
     std::string domain, title, description, category, source;
@@ -897,6 +927,10 @@ private:
   std::string style_editor_loaded_;
   char style_editor_[65536] = {};
   char style_new_name_[81] = {};
+  char identity_new_name_[65] = {};
+  char identity_rename_[65] = {};
+  std::string identity_rename_for_;  // sha256 the rename field holds
+  std::string identity_delete_armed_;  // sha256 whose Delete asks again
   char style_body_font_[128] = {};
   char style_heading_font_[128] = {};
   char style_code_font_[128] = {};

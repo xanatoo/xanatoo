@@ -13,7 +13,7 @@ namespace xanatoo {
 enum class UiPanelLayer { Chrome, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
                           Annotations, Context,
                           NostrExplorer, NostrAccounts, LemmyExplorer, Certificates,
-                          RelatedSites, MatrixExplorer };
+                          Identities, RelatedSites, MatrixExplorer };
 
 // Bit of `layer` in a set of embedded panels (UiState::shaded_panels).
 inline unsigned ui_panel_bit(UiPanelLayer layer) {
@@ -33,6 +33,7 @@ inline const char* ui_panel_root(UiPanelLayer layer) {
     case UiPanelLayer::NostrAccounts: return "##nostr_accounts_body";
     case UiPanelLayer::LemmyExplorer: return "##lemmy_explorer_body";
     case UiPanelLayer::Certificates: return "##certificates_body";
+    case UiPanelLayer::Identities: return "##identities_body";
     case UiPanelLayer::RelatedSites: return "##related_sites_body";
     case UiPanelLayer::MatrixExplorer: return "##matrix_explorer_body";
     case UiPanelLayer::Chrome: return nullptr;
@@ -55,7 +56,7 @@ inline UiPanelLayer ui_panel_layer(std::string_view owner) {
     UiPanelLayer::StyleManager, UiPanelLayer::Annotations, UiPanelLayer::Context,
     UiPanelLayer::NostrExplorer, UiPanelLayer::NostrAccounts,
     UiPanelLayer::LemmyExplorer, UiPanelLayer::Certificates,
-    UiPanelLayer::RelatedSites, UiPanelLayer::MatrixExplorer,
+    UiPanelLayer::Identities, UiPanelLayer::RelatedSites, UiPanelLayer::MatrixExplorer,
   };
   for (const auto layer : panels) {
     const std::string_view prefix(ui_panel_root(layer));

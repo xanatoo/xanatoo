@@ -82,7 +82,7 @@ void test_ui_help(int& passed, int& failed) {
         "@panel:reply", "@panel:annotations", "@panel:revisions",
         "@panel:nostr-explorer", "@panel:nostr-accounts",
         "@panel:lemmy-explorer", "@panel:matrix-explorer",
-        "@panel:certificates", "@panel:related-sites", "@float-title",
+        "@panel:certificates", "@panel:identities", "@panel:related-sites", "@float-title",
         "@doc-window-title", "@float-close", "@float-shade", "@float-max",
         "@float-resize", "@dock-edge", "@dock-split", "@sitemap-page",
         "@outline-focus", "@status-bar", "@tile-divider", "@tile-mode",

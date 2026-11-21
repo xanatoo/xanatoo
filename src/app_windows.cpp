@@ -56,6 +56,7 @@ std::pair<int, int> min_size(const FloatWindow& w) {
       return {340, 260};
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Identities:
     case WindowRole::RelatedSites:
       return {300, 240};
     case WindowRole::Help:
@@ -100,6 +101,7 @@ bool imgui_scrolls(const App& app, const FloatWindow& w) {
     case WindowRole::MatrixExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Identities:
     case WindowRole::RelatedSites:
       return true;
     default:
@@ -189,6 +191,9 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Certificates:
       app.certs.open = false;
+      break;
+    case WindowRole::Identities:
+      app.identities.open = false;
       break;
     case WindowRole::RelatedSites:
       app.related.open = false;
@@ -477,6 +482,7 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
     case WindowRole::MatrixExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Identities:
     case WindowRole::RelatedSites:
       break;  // ImGui supplies controls inside the native dockable panels.
     case WindowRole::Revisions:
@@ -559,6 +565,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.matrix_explorer_open) st.push_back(&app.matrix_explorer_win);
   if (app.nostr_accounts_open) st.push_back(&app.nostr_accounts_win);
   if (app.certs.open) st.push_back(&app.certs_win);
+  if (app.identities.open) st.push_back(&app.identities_win);
   if (app.related.open) st.push_back(&app.related_win);
   if (app.styles_panel_open) st.push_back(&app.styles_win);
   if (app.styles_manager_panel_open) st.push_back(&app.styles_manager_win);
@@ -692,6 +699,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
     case WindowRole::MatrixExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Identities:
     case WindowRole::RelatedSites:
       return window_client_rect(w);
     case WindowRole::Document:
@@ -758,6 +766,7 @@ float float_max_scroll(App& app, const FloatWindow& w) {
     case WindowRole::MatrixExplorer:
     case WindowRole::NostrAccounts:
     case WindowRole::Certificates:
+    case WindowRole::Identities:
     case WindowRole::RelatedSites:
     case WindowRole::Media:
       return 0.f;
@@ -1104,6 +1113,10 @@ void draw_floats(App& app) {
       case WindowRole::Certificates:
         if (draw_floating_frame(app, *w, "Certificates", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Certificates);
+        break;
+      case WindowRole::Identities:
+        if (draw_floating_frame(app, *w, "Identities", float_active(app, *w)))
+          app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Identities);
         break;
       case WindowRole::RelatedSites:
         if (draw_floating_frame(app, *w, "Related Sites", float_active(app, *w)))

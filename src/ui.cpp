@@ -3245,6 +3245,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleSubscriptions;
       if (ImGui::MenuItem("Certificates", nullptr, state.certs_open))
         cmd = UiCommand::ToggleCertificates;
+      if (ImGui::MenuItem("Identities", nullptr, state.identities_open))
+        cmd = UiCommand::ToggleIdentities;
       if (ImGui::MenuItem("Style Sheets", nullptr, state.styles_open))
         cmd = UiCommand::ToggleStylesPanel;
       if (ImGui::MenuItem("Manage Style Sheets", nullptr,
@@ -5766,6 +5768,189 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::PopID();
       } else if (!state.cert_rows.empty()) {
         ImGui::TextDisabled("Select a server to see its certificate.");
+      }
+    }
+    ImGui::End();
+  }
+
+  // ---- Identities: Gemini client certificates (accounts) ----
+  if (state.identities_open &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Identities))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.identities_x + 3),
+                                  float(state.identities_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.identities_w - 6)),
+                                   float(std::max(1, state.identities_h - 6))));
+    if (ImGui::Begin("##identities_body", nullptr, embedded_panel_flags)) {
+      const ImVec4 warn(0.70f, 0.16f, 0.10f, 1.f);
+      const bool on_page = !state.identity_page.empty();
+      auto pick = [&](UiCommand c, std::string arg) {
+        if (cmd != UiCommand::None) return;
+        cmd = c;
+        result.arg = std::move(arg);
+      };
+      if (state.identity_request_status != 0) {
+        ImGui::PushStyleColor(ImGuiCol_Text, warn);
+        ImGui::TextWrapped("%s", state.identity_request_status == 60 ?
+            "This page asks for an identity." :
+            state.identity_request_status == 61 ?
+            "This page does not accept the identity you sent." :
+            "This page did not accept the identity you sent.");
+        ImGui::PopStyleColor();
+        if (!state.identity_request_meta.empty())
+          ImGui::TextWrapped("Server: %s", state.identity_request_meta.c_str());
+      } else {
+        ImGui::TextWrapped("A Gemini identity is a client certificate. A "
+                           "server knows you by it, like an account; it is "
+                           "only sent where you chose to use it.");
+      }
+      if (on_page) {
+        ImGui::TextDisabled("This page: %s",
+                            state.identity_active_name.empty() ?
+                                "no identity" :
+                                state.identity_active_name.c_str());
+        if (!state.identity_active_name.empty()) {
+          same_line_if_fits("Stop using here");
+          if (classic_button("Stop using here"))
+            pick(UiCommand::IdentityStopHere, {});
+          if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("This page and what is below it go out "
+                              "without a certificate.");
+        }
+      }
+      if (state.identity_no_save)
+        ImGui::TextDisabled("--no-save: identities last for this session only.");
+      if (!state.identity_error.empty())
+        ImGui::TextColored(warn, "%s", state.identity_error.c_str());
+
+      // New identity: a name, then create (and on a Gemini page, use it on
+      // the whole server right away).
+      ImGui::Separator();
+      ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x,
+                                       220.f * scale_));
+      ImGui::InputTextWithHint("##identity_new", "Name of a new identity",
+                               identity_new_name_, sizeof identity_new_name_);
+      const bool named = identity_new_name_[0] != '\0';
+      ImGui::BeginDisabled(!named);
+      if (on_page) {
+        same_line_if_fits("Create for this site");
+        if (classic_button("Create for this site")) {
+          pick(UiCommand::IdentityCreateHere, identity_new_name_);
+          identity_new_name_[0] = '\0';
+        }
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip("Make a new certificate and use it on %s",
+                            state.identity_page_site.c_str());
+      }
+      same_line_if_fits("Create");
+      if (classic_button("Create")) {
+        pick(UiCommand::IdentityCreate, identity_new_name_);
+        identity_new_name_[0] = '\0';
+      }
+      ImGui::EndDisabled();
+
+      const UiState::IdentityRow* sel = nullptr;
+      for (const auto& row : state.identity_rows)
+        if (row.sha256 == state.identity_selected) sel = &row;
+      ImGui::Separator();
+      if (state.identity_rows.empty()) {
+        ImGui::TextDisabled("No identities yet.");
+      } else {
+        const float list_h = sel ?
+            std::max(80.f, ImGui::GetContentRegionAvail().y * 0.35f) : 0.f;
+        if (ImGui::BeginChild("##identity_list", ImVec2(0.f, list_h),
+                              ImGuiChildFlags_Borders)) {
+          for (const auto& row : state.identity_rows) {
+            ImGui::PushID(row.sha256.c_str());
+            std::string label = row.name;
+            if (row.active_here) label += "  (this page)";
+            if (!row.saved) label += "  session only";
+            if (ImGui::Selectable(label.c_str(), &row == sel))
+              pick(UiCommand::IdentitySelect,
+                   &row == sel ? std::string{} : row.sha256);
+            ImGui::PopID();
+          }
+        }
+        ImGui::EndChild();
+      }
+      if (sel) {
+        ImGui::PushID(sel->sha256.c_str());
+        if (identity_rename_for_ != sel->sha256) {
+          identity_rename_for_ = sel->sha256;
+          std::snprintf(identity_rename_, sizeof identity_rename_, "%s",
+                        sel->name.c_str());
+          identity_delete_armed_.clear();
+        }
+        ImGui::SetNextItemWidth(std::min(ImGui::GetContentRegionAvail().x,
+                                         220.f * scale_));
+        ImGui::InputText("##identity_rename", identity_rename_,
+                         sizeof identity_rename_);
+        const bool renamed = identity_rename_[0] != '\0' &&
+                             sel->name != identity_rename_;
+        same_line_if_fits("Rename");
+        ImGui::BeginDisabled(!renamed);
+        if (classic_button("Rename"))
+          pick(UiCommand::IdentityRename,
+               sel->sha256 + "\n" + identity_rename_);
+        ImGui::EndDisabled();
+        if (!sel->created.empty())
+          ImGui::TextDisabled("Created %s", sel->created.c_str());
+        if (on_page) {
+          ImGui::BeginDisabled(sel->scope_here == state.identity_page_site);
+          if (classic_button("Use on this site"))
+            pick(UiCommand::IdentityUseSite, sel->sha256);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", state.identity_page_site.c_str());
+          same_line_if_fits("Use on this page");
+          ImGui::BeginDisabled(sel->scope_here == state.identity_page_scope);
+          if (classic_button("Use on this page"))
+            pick(UiCommand::IdentityUsePage, sel->sha256);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s and below",
+                              state.identity_page_scope.c_str());
+        }
+        ImGui::TextDisabled("%s", sel->scopes.empty() ?
+            "Not used anywhere." : "Used on:");
+        for (const auto& scope : sel->scopes) {
+          ImGui::PushID(scope.c_str());
+          if (classic_button("x"))
+            pick(UiCommand::IdentityDropScope, sel->sha256 + "\n" + scope);
+          if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Stop using it here");
+          ImGui::SameLine();
+          ImGui::TextWrapped("%s", scope.c_str());
+          ImGui::PopID();
+        }
+        ImGui::TextDisabled("SHA-256");
+        ImGui::Indent();
+        std::string fp;
+        for (size_t i = 0; i < sel->sha256.size(); i += 8)
+          fp += (i ? " " : "") + sel->sha256.substr(i, 8);
+        ImGui::TextWrapped("%s", fp.c_str());
+        ImGui::Unindent();
+        if (classic_button("Copy fingerprint"))
+          ImGui::SetClipboardText(sel->sha256.c_str());
+        same_line_if_fits("Delete…");
+        if (identity_delete_armed_ != sel->sha256) {
+          if (classic_button("Delete…")) identity_delete_armed_ = sel->sha256;
+        } else {
+          ImGui::PushStyleColor(ImGuiCol_Text, warn);
+          ImGui::TextWrapped("Deleting loses the accounts it is for, for "
+                             "good: no server can link a new identity to "
+                             "them.");
+          ImGui::PopStyleColor();
+          if (classic_button("Delete for good")) {
+            pick(UiCommand::IdentityDelete, sel->sha256);
+            identity_delete_armed_.clear();
+          }
+          ImGui::SameLine();
+          if (classic_button("Keep")) identity_delete_armed_.clear();
+        }
+        ImGui::PopID();
+      } else if (!state.identity_rows.empty()) {
+        ImGui::TextDisabled(on_page ? "Select an identity to use it here." :
+                                      "Select an identity to see it.");
       }
     }
     ImGui::End();

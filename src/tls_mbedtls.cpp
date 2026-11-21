@@ -12,7 +12,11 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/error.h>
+#include <mbedtls/asn1.h>
+#include <mbedtls/ecp.h>
 #include <mbedtls/net_sockets.h>
+#include <mbedtls/oid.h>
+#include <mbedtls/pk.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/version.h>
 #include <mbedtls/x509_crt.h>
@@ -21,6 +25,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <initializer_list>
 #include <string_view>
 #include <sys/socket.h>
@@ -169,6 +175,105 @@ std::string verify_detail(uint32_t flags, const std::string& chain_top) {
   return out;
 }
 
+// A seeded CTR-DRBG for key generation and key parsing outside a stream.
+struct Rng {
+  mbedtls_entropy_context entropy;
+  mbedtls_ctr_drbg_context drbg;
+  bool ok = false;
+  Rng() {
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&drbg);
+    static const char pers[] = "xanatoo-identity";
+    ok = psa_crypto_init() == PSA_SUCCESS &&
+         mbedtls_ctr_drbg_seed(&drbg, mbedtls_entropy_func, &entropy,
+                               reinterpret_cast<const unsigned char*>(pers),
+                               sizeof(pers) - 1) == 0;
+  }
+  ~Rng() {
+    mbedtls_ctr_drbg_free(&drbg);
+    mbedtls_entropy_free(&entropy);
+  }
+  Rng(const Rng&) = delete;
+  Rng& operator=(const Rng&) = delete;
+};
+
+struct Cert {
+  mbedtls_x509_crt crt;
+  Cert() { mbedtls_x509_crt_init(&crt); }
+  ~Cert() { mbedtls_x509_crt_free(&crt); }
+  Cert(const Cert&) = delete;
+  Cert& operator=(const Cert&) = delete;
+  // PEM parsing needs the terminating NUL in the length.
+  bool parse(const std::string& pem) {
+    return mbedtls_x509_crt_parse(
+               &crt, reinterpret_cast<const unsigned char*>(pem.c_str()),
+               pem.size() + 1) == 0;
+  }
+};
+
+struct Key {
+  mbedtls_pk_context pk;
+  Key() { mbedtls_pk_init(&pk); }
+  ~Key() { mbedtls_pk_free(&pk); }
+  Key(const Key&) = delete;
+  Key& operator=(const Key&) = delete;
+  bool parse(const std::string& pem, mbedtls_ctr_drbg_context& drbg) {
+    return mbedtls_pk_parse_key(
+               &pk, reinterpret_cast<const unsigned char*>(pem.c_str()),
+               pem.size() + 1, nullptr, 0, mbedtls_ctr_drbg_random,
+               &drbg) == 0;
+  }
+};
+
+std::optional<std::string> sha256_of(const mbedtls_x509_crt* cert) {
+  if (!cert || !cert->raw.p || !cert->raw.len) return std::nullopt;
+  unsigned char digest[32];
+  size_t size = 0;
+  if (psa_crypto_init() != PSA_SUCCESS ||
+      psa_hash_compute(PSA_ALG_SHA_256, cert->raw.p, cert->raw.len,
+                       digest, sizeof(digest), &size) != PSA_SUCCESS ||
+      size != sizeof(digest)) return std::nullopt;
+  static constexpr char hex[] = "0123456789abcdef";
+  std::string result;
+  result.reserve(size * 2);
+  for (size_t i = 0; i < size; ++i) {
+    result += hex[digest[i] >> 4];
+    result += hex[digest[i] & 15];
+  }
+  return result;
+}
+
+TlsPeerCertificate details_of(const mbedtls_x509_crt* cert) {
+  TlsPeerCertificate details;
+  details.subject = certificate_name(&cert->subject);
+  details.issuer = certificate_name(&cert->issuer);
+  details.not_before = certificate_time(cert->valid_from);
+  details.not_after = certificate_time(cert->valid_to);
+  details.self_issued = !details.subject.empty() &&
+                        details.subject == details.issuer;
+  // The Mbed TLS public certificate API exposes matching names, but that
+  // alone does not prove the self-signature. Report it as unknown rather than
+  // claim the certificate has a valid self-signature without verifying it.
+  return details;
+}
+
+// "CN=…" for mbedtls_x509write_crt_set_subject_name: at most 64 bytes (cut
+// at a UTF-8 boundary), the DN special characters escaped.
+std::string common_name_dn(std::string cn) {
+  if (cn.empty()) cn = "xanatoo";
+  if (cn.size() > 64) {
+    size_t n = 64;
+    while (n > 0 && (static_cast<unsigned char>(cn[n]) & 0xC0) == 0x80) --n;
+    cn.resize(n);
+  }
+  std::string out = "CN=";
+  for (char c : cn) {
+    if (std::strchr(",=+<>#;\\\"", c)) out += '\\';
+    out += c;
+  }
+  return out;
+}
+
 }  // namespace
 
 struct TlsStream::Impl {
@@ -176,12 +281,133 @@ struct TlsStream::Impl {
   mbedtls_ctr_drbg_context drbg;
   mbedtls_ssl_config conf;
   mbedtls_ssl_context ssl;
+  mbedtls_x509_crt own_cert;  // the client identity (live while `live`)
+  mbedtls_pk_context own_key;
   int fd = -1;
   bool live = false;  // contexts initialised (free them in close())
   bool ok = false;    // handshake done
   std::string last_error;
   std::string chain_top;  // issuer of the topmost presented certificate
+  TlsClientIdentity client;
+  std::function<bool(const std::string&)> guard;
+  bool guard_refused = false;
 };
+
+std::optional<TlsClientIdentity> tls_make_client_identity(
+    const std::string& common_name, std::string* err) {
+  auto fail = [&](const char* what, int rc) -> std::optional<TlsClientIdentity> {
+    if (err) *err = std::string(what) + (rc ? ": " + error_text(rc) : "");
+    return std::nullopt;
+  };
+  Rng rng;
+  if (!rng.ok) return fail("TLS RNG seed failed", 0);
+  Key key;
+  int rc = mbedtls_pk_setup(&key.pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
+  if (rc == 0)
+    rc = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, mbedtls_pk_ec(key.pk),
+                             mbedtls_ctr_drbg_random, &rng.drbg);
+  if (rc != 0) return fail("cannot generate an EC P-256 key", rc);
+
+  mbedtls_x509write_cert crt;
+  mbedtls_x509write_crt_init(&crt);
+  struct Done {
+    mbedtls_x509write_cert* c;
+    ~Done() { mbedtls_x509write_crt_free(c); }
+  } done{&crt};
+  mbedtls_x509write_crt_set_version(&crt, MBEDTLS_X509_CRT_VERSION_3);
+  mbedtls_x509write_crt_set_md_alg(&crt, MBEDTLS_MD_SHA256);
+  mbedtls_x509write_crt_set_subject_key(&crt, &key.pk);
+  mbedtls_x509write_crt_set_issuer_key(&crt, &key.pk);
+  const std::string dn = common_name_dn(common_name);
+  if ((rc = mbedtls_x509write_crt_set_subject_name(&crt, dn.c_str())) != 0 ||
+      (rc = mbedtls_x509write_crt_set_issuer_name(&crt, dn.c_str())) != 0)
+    return fail("cannot set the certificate name", rc);
+  unsigned char serial[16];
+  if ((rc = mbedtls_ctr_drbg_random(&rng.drbg, serial, sizeof serial)) != 0)
+    return fail("no random bytes for the certificate serial", rc);
+  serial[0] = static_cast<unsigned char>((serial[0] & 0x7f) | 0x40);
+  if ((rc = mbedtls_x509write_crt_set_serial_raw(&crt, serial,
+                                                 sizeof serial)) != 0)
+    return fail("cannot set the certificate serial", rc);
+  char from[16];
+  const std::time_t now = std::time(nullptr);
+  std::tm utc{};
+  gmtime_r(&now, &utc);
+  std::strftime(from, sizeof from, "%Y%m%d%H%M%S", &utc);
+  if ((rc = mbedtls_x509write_crt_set_validity(&crt, from,
+                                               "99991231235959")) != 0)
+    return fail("cannot set the certificate validity", rc);
+  if ((rc = mbedtls_x509write_crt_set_basic_constraints(&crt, 0, -1)) != 0)
+    return fail("cannot add a certificate extension", rc);
+  mbedtls_asn1_sequence client_auth{};
+  client_auth.buf.tag = MBEDTLS_ASN1_OID;
+  client_auth.buf.p = reinterpret_cast<unsigned char*>(
+      const_cast<char*>(MBEDTLS_OID_CLIENT_AUTH));
+  client_auth.buf.len = MBEDTLS_OID_SIZE(MBEDTLS_OID_CLIENT_AUTH);
+  if ((rc = mbedtls_x509write_crt_set_ext_key_usage(&crt, &client_auth)) != 0)
+    return fail("cannot add a certificate extension", rc);
+  unsigned char buf[4096];
+  if ((rc = mbedtls_x509write_crt_pem(&crt, buf, sizeof buf,
+                                      mbedtls_ctr_drbg_random,
+                                      &rng.drbg)) != 0)
+    return fail("cannot encode the certificate", rc);
+  TlsClientIdentity out;
+  out.cert_pem = reinterpret_cast<const char*>(buf);
+  if ((rc = mbedtls_pk_write_key_pem(&key.pk, buf, sizeof buf)) != 0)
+    return fail("cannot encode the private key", rc);
+  out.key_pem = reinterpret_cast<const char*>(buf);
+  std::memset(buf, 0, sizeof buf);
+  return out;
+}
+
+std::optional<std::string> tls_certificate_sha256(const std::string& cert_pem) {
+  Cert cert;
+  if (!cert.parse(cert_pem)) return std::nullopt;
+  return sha256_of(&cert.crt);
+}
+
+std::optional<TlsPeerCertificate> tls_certificate_details(
+    const std::string& cert_pem) {
+  Cert cert;
+  if (!cert.parse(cert_pem)) return std::nullopt;
+  return details_of(&cert.crt);
+}
+
+bool tls_identity_matches(const TlsClientIdentity& identity, std::string* err) {
+  Rng rng;
+  Cert cert;
+  Key key;
+  if (!rng.ok) {
+    if (err) *err = "TLS RNG seed failed";
+    return false;
+  }
+  if (!cert.parse(identity.cert_pem)) {
+    if (err) *err = "no PEM certificate";
+    return false;
+  }
+  if (!key.parse(identity.key_pem, rng.drbg)) {
+    if (err) *err = "no PEM private key (an encrypted key needs its "
+                    "passphrase removed first)";
+    return false;
+  }
+  if (mbedtls_pk_check_pair(&cert.crt.pk, &key.pk, mbedtls_ctr_drbg_random,
+                            &rng.drbg) != 0) {
+    if (err) *err = "the private key does not belong to the certificate";
+    return false;
+  }
+  return true;
+}
+
+void TlsStream::set_client_identity(TlsClientIdentity identity) {
+  impl_->client = std::move(identity);
+}
+
+void TlsStream::set_peer_guard(
+    std::function<bool(const std::string& sha256)> guard) {
+  impl_->guard = std::move(guard);
+}
+
+bool TlsStream::peer_guard_refused() const { return impl_->guard_refused; }
 
 const std::string& TlsStream::last_error() const { return impl_->last_error; }
 
@@ -216,6 +442,8 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
   mbedtls_ctr_drbg_init(&m.drbg);
   mbedtls_ssl_config_init(&m.conf);
   mbedtls_ssl_init(&m.ssl);
+  mbedtls_x509_crt_init(&m.own_cert);
+  mbedtls_pk_init(&m.own_key);
   m.live = true;
 
   static const char pers[] = "xanatoo-tls";
@@ -248,10 +476,43 @@ bool TlsStream::connect(int fd, const std::string& host, std::string* err,
           return 0;
         },
         &m.chain_top);
+  } else if (m.guard) {
+    // OPTIONAL runs the verify callback on the server's certificate (before
+    // the client sends its own); the callback clears the chain flags, so
+    // only the guard decides. FATAL_ERROR, unlike CERT_VERIFY_FAILED, is not
+    // forgiven by OPTIONAL and aborts the handshake.
+    m.guard_refused = false;
+    mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+    mbedtls_ssl_conf_verify(
+        &m.conf,
+        [](void* ctx, mbedtls_x509_crt* crt, int depth, uint32_t* flags) {
+          *flags = 0;
+          if (depth != 0) return 0;
+          auto& impl = *static_cast<Impl*>(ctx);
+          const auto sha = sha256_of(crt);
+          if (sha && impl.guard(*sha)) return 0;
+          impl.guard_refused = true;
+          return MBEDTLS_ERR_X509_FATAL_ERROR;
+        },
+        &m);
   } else {
     mbedtls_ssl_conf_authmode(&m.conf, MBEDTLS_SSL_VERIFY_NONE);
   }
   mbedtls_ssl_conf_rng(&m.conf, mbedtls_ctr_drbg_random, &m.drbg);
+  if (!m.client.cert_pem.empty()) {
+    // Sent only when the server's handshake asks for a certificate.
+    const std::string& cpem = m.client.cert_pem;
+    const std::string& kpem = m.client.key_pem;
+    rc = mbedtls_x509_crt_parse(
+        &m.own_cert, reinterpret_cast<const unsigned char*>(cpem.c_str()),
+        cpem.size() + 1);
+    if (rc == 0)
+      rc = mbedtls_pk_parse_key(
+          &m.own_key, reinterpret_cast<const unsigned char*>(kpem.c_str()),
+          kpem.size() + 1, nullptr, 0, mbedtls_ctr_drbg_random, &m.drbg);
+    if (rc == 0) rc = mbedtls_ssl_conf_own_cert(&m.conf, &m.own_cert, &m.own_key);
+    if (rc != 0) return fail("client certificate does not load", rc);
+  }
   rc = mbedtls_ssl_setup(&m.ssl, &m.conf);
   if (rc != 0) return fail("TLS setup failed", rc);
   rc = mbedtls_ssl_set_hostname(&m.ssl, host.c_str());  // SNI
@@ -282,38 +543,14 @@ bool TlsStream::connected() const { return impl_->ok; }
 
 std::optional<std::string> TlsStream::peer_certificate_sha256() const {
   if (!connected()) return std::nullopt;
-  const mbedtls_x509_crt* cert = mbedtls_ssl_get_peer_cert(&impl_->ssl);
-  if (!cert || !cert->raw.p || !cert->raw.len) return std::nullopt;
-  unsigned char digest[32];
-  size_t size = 0;
-  if (psa_hash_compute(PSA_ALG_SHA_256, cert->raw.p, cert->raw.len,
-                       digest, sizeof(digest), &size) != PSA_SUCCESS ||
-      size != sizeof(digest)) return std::nullopt;
-  static constexpr char hex[] = "0123456789abcdef";
-  std::string result;
-  result.reserve(size * 2);
-  for (size_t i = 0; i < size; ++i) {
-    result += hex[digest[i] >> 4];
-    result += hex[digest[i] & 15];
-  }
-  return result;
+  return sha256_of(mbedtls_ssl_get_peer_cert(&impl_->ssl));
 }
 
 std::optional<TlsPeerCertificate> TlsStream::peer_certificate_details() const {
   if (!connected()) return std::nullopt;
   const mbedtls_x509_crt* cert = mbedtls_ssl_get_peer_cert(&impl_->ssl);
   if (!cert) return std::nullopt;
-  TlsPeerCertificate details;
-  details.subject = certificate_name(&cert->subject);
-  details.issuer = certificate_name(&cert->issuer);
-  details.not_before = certificate_time(cert->valid_from);
-  details.not_after = certificate_time(cert->valid_to);
-  details.self_issued = !details.subject.empty() &&
-                        details.subject == details.issuer;
-  // The Mbed TLS public certificate API exposes matching names, but that
-  // alone does not prove the self-signature. Report it as unknown rather than
-  // claim the certificate has a valid self-signature without verifying it.
-  return details;
+  return details_of(cert);
 }
 
 bool TlsStream::write_all(const void* data, size_t n) {
@@ -362,6 +599,8 @@ void TlsStream::close() {
   if (m.live) {
     mbedtls_ssl_free(&m.ssl);
     mbedtls_ssl_config_free(&m.conf);
+    mbedtls_pk_free(&m.own_key);
+    mbedtls_x509_crt_free(&m.own_cert);
     mbedtls_ctr_drbg_free(&m.drbg);
     mbedtls_entropy_free(&m.entropy);
   }

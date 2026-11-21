@@ -119,13 +119,36 @@ platform configurations may not expose CA files in a form that the embedded
 Mbed TLS build can read; in that case HTTPS/WSS intentionally refuse to
 connect until the CA loading path is fixed.
 
+## Gemini client certificates (identities)
+
+Gemini servers that need an account answer status 60 and identify the
+client by the SHA-256 fingerprint of a certificate it presents. Xanatoo
+creates these itself (`tls_make_client_identity`: EC P-256 key, self-signed,
+SHA-256 signature, CN = the identity's name, random 128-bit serial, valid
+until 9999-12-31, `CA:FALSE`, extended key usage `clientAuth`) in both
+backends; the private key never leaves the identity store
+(`state_dir()/gemini-identities`, owner-only 0600, created via a temp file).
+
+A certificate is sent only to URLs below the scopes the user chose for it in
+the Identities panel. It goes out inside the TLS handshake, i.e. before the
+TOFU check that normally runs after it. A connection with an identity
+therefore installs a *peer guard* (`TlsStream::set_peer_guard`): the
+server's leaf fingerprint is checked against the pin during the handshake
+(OpenSSL `SSL_CTX_set_cert_verify_callback`; Mbed TLS `VERIFY_OPTIONAL` + a
+verify callback returning `MBEDTLS_ERR_X509_FATAL_ERROR`). A changed
+certificate aborts the handshake before the client's Certificate message;
+the fetch then reconnects without the identity and reports the change as
+any other. A first contact is allowed (TOFU pins it after the handshake).
+
 ## Regression coverage and limitations
 
 `tests/tls_peer_tests.cpp` opens an offline `socketpair(AF_UNIX)` TLS connection to a temporary
 OpenSSL test server with an ephemeral local CA. It checks a trusted matching
 hostname, mismatched hostname, and an untrusted certificate, plus the
 explicit Gemini handshake, fingerprint and certificate metadata, including a
-self-issued leaf signed by a different key (which is not self-signed).
+self-issued leaf signed by a different key (which is not self-signed), and a
+generated client identity that the server receives — or, with a refusing
+peer guard, never receives.
 `tests/gemini_tofu_tests.cpp` tests first-contact challenges, approval before
 pinning, concurrent first-use approvals, listing and forgetting pins, persisted/session-only pins, hostname
 and port separation, structured mismatch reports, explicit replacement

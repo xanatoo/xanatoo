@@ -99,6 +99,61 @@ bool handshake(SSL_CTX* server_ctx, const std::string& host,
   return ok;
 }
 
+// The server asks for a client certificate (any is fine) and reports the
+// fingerprint it received ("" when none).
+struct ClientCertResult {
+  bool connected = false;
+  bool guard_refused = false;
+  std::string server_saw;
+};
+
+ClientCertResult client_cert_handshake(SSL_CTX* server_ctx,
+                                       const xanatoo::TlsClientIdentity& id,
+                                       bool guard_ok) {
+  SSL_CTX_set_verify(server_ctx, SSL_VERIFY_PEER,
+                     [](int, X509_STORE_CTX*) { return 1; });
+  int fds[2];
+  check(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0, "create socketpair");
+  ClientCertResult out;
+  std::thread server([&] {
+    SSL* ssl = SSL_new(server_ctx);
+    if (ssl) {
+      SSL_set_fd(ssl, fds[1]);
+      if (SSL_accept(ssl) == 1) {
+        if (X509* peer = SSL_get1_peer_certificate(ssl)) {
+          unsigned char d[EVP_MAX_MD_SIZE];
+          unsigned int n = 0;
+          X509_digest(peer, EVP_sha256(), d, &n);
+          static constexpr char hex[] = "0123456789abcdef";
+          for (unsigned i = 0; i < n; ++i) {
+            out.server_saw += hex[d[i] >> 4];
+            out.server_saw += hex[d[i] & 15];
+          }
+          X509_free(peer);
+        }
+        // TLS 1.3: the client's certificate arrives after the client
+        // finished; read until it closes so the alert / close is seen.
+        char b;
+        SSL_read(ssl, &b, 1);
+        SSL_shutdown(ssl);
+      }
+      SSL_free(ssl);
+    }
+    ::close(fds[1]);
+  });
+  xanatoo::TlsStream client;
+  client.set_client_identity(id);
+  client.set_peer_guard([&](const std::string&) { return guard_ok; });
+  std::string err;
+  out.connected = client.connect(fds[0], "gemini.example", &err, false);
+  out.guard_refused = client.peer_guard_refused();
+  if (!out.connected) ::shutdown(fds[0], SHUT_RDWR);
+  client.close();
+  server.join();
+  SSL_CTX_set_verify(server_ctx, SSL_VERIFY_NONE, nullptr);
+  return out;
+}
+
 }  // namespace
 
 int main() {
@@ -187,6 +242,29 @@ int main() {
           "Gemini handshake accepts a certificate without CA validation");
     check(details && details->self_issued && details->self_signed == false,
           "matching subject and issuer are not proof of a self-signature");
+    // Gemini identities: a generated client certificate reaches a server
+    // that asks for one, and only when the peer guard accepts the server.
+    std::string gen_err;
+    const auto gemini_id = xanatoo::tls_make_client_identity("Alice", &gen_err);
+    check(gemini_id.has_value(), "generate a client identity");
+    check(xanatoo::tls_identity_matches(*gemini_id), "key belongs to the cert");
+    const auto id_sha = xanatoo::tls_certificate_sha256(gemini_id->cert_pem);
+    check(id_sha && id_sha->size() == 64, "fingerprint of the identity");
+    const auto id_details = xanatoo::tls_certificate_details(gemini_id->cert_pem);
+    check(id_details && id_details->subject.find("CN=Alice") != std::string::npos,
+          "identity's common name is its name");
+    const auto other_id = xanatoo::tls_make_client_identity("Bob");
+    check(other_id && !xanatoo::tls_identity_matches(
+              {gemini_id->cert_pem, other_id->key_pem}),
+          "a foreign key does not match");
+    auto sent = client_cert_handshake(server.get(), *gemini_id, true);
+    check(sent.connected, "handshake with a client certificate");
+    check(sent.server_saw == *id_sha, "server sees the identity's fingerprint");
+    auto refused = client_cert_handshake(server.get(), *gemini_id, false);
+    check(!refused.connected && refused.guard_refused,
+          "a refused server certificate aborts the handshake");
+    check(refused.server_saw.empty(), "a refused server never sees the identity");
+
     if (previous) setenv("SSL_CERT_FILE", previous_file.c_str(), 1);
     else unsetenv("SSL_CERT_FILE");
     std::remove(path);
