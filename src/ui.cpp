@@ -473,7 +473,7 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::RemoveBookmark: return "bookmark";
     case UiCommand::ToggleHistory: return "history";
     case UiCommand::ToggleDownloads: return "downloads";
-    case UiCommand::ToggleCertificates: return "gemini";
+    case UiCommand::ToggleCertificates: return "certificates";
     case UiCommand::ToggleOutline: return "outline";
     case UiCommand::ToggleStructure: return "structure";
     case UiCommand::ToggleDiff: return "diff";
@@ -481,7 +481,24 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::ToggleNative: return "native";
     case UiCommand::ToggleArchive: return "archive";
     case UiCommand::ToggleReader: return "reader";
-    case UiCommand::ToggleHelp: return "help";
+    case UiCommand::ToggleHelp: return "keyboard";
+    case UiCommand::ToggleHoverHelp: return "help";
+    case UiCommand::ToggleBacklinks: return "backlinks";
+    case UiCommand::ToggleSitemap: return "sitemap";
+    case UiCommand::ToggleRelatedSites: return "related";
+    case UiCommand::TogglePage: return "navigation";
+    case UiCommand::ToggleMedia: return "media";
+    case UiCommand::ToggleSubscriptions: return "subscriptions";
+    case UiCommand::ToggleIdentities: return "identities";
+    case UiCommand::ToggleStylesPanel: return "style";
+    case UiCommand::ToggleStyleManagerPanel: return "style-manager";
+    case UiCommand::ToggleAnnotationsPanel: return "annotations";
+    case UiCommand::ToggleContextPanel: return "context";
+    case UiCommand::ToggleRevisionsPanel: return "revisions";
+    case UiCommand::ToggleNostrExplorer: return "site-nostr";
+    case UiCommand::ToggleLemmyExplorer: return "lemmy";
+    case UiCommand::ToggleMatrixExplorer: return "matrix";
+    case UiCommand::ToggleNostrAccounts: return "nostr-accounts";
     case UiCommand::ZoomIn: return "zoomin";
     case UiCommand::ZoomOut: return "zoomout";
     case UiCommand::OpenFormatDoc: return "format";
@@ -568,7 +585,8 @@ void bookmark_menu_level(const UiState& state, const std::string& folder,
 }
 
 bool menu_item_with_icon(const char* label, const char* icon_name,
-                         const char* shortcut, bool selected, bool enabled) {
+                         const char* shortcut, bool selected,
+                         bool enabled = true) {
   auto it = menu_icon_textures.find(icon_name ? icon_name : "");
   if (it == menu_icon_textures.end() || !it->second)
     return ImGui::MenuItem(label, shortcut, selected, enabled);
@@ -712,6 +730,10 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "site-file", "site-folder", "site-about", "site-store", "site-web",
       "site-feed", "site-nostr", "language",
       "format", "insert", "view", "lists",
+      // Panels menu
+      "keyboard", "backlinks", "related", "media", "subscriptions",
+      "certificates", "identities", "style-manager", "annotations",
+      "context", "revisions", "lemmy", "matrix", "nostr-accounts",
   };
 
   // Keep the candidate directories that exist.
@@ -3220,56 +3242,56 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     force_menu("Panels");
     if (bar_menu("Panels")) {
-      if (ImGui::MenuItem("Keyboard Reference", "F1", state.help))
+      if (menu_item_with_icon("Keyboard Reference", "keyboard", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
-      if (ImGui::MenuItem("Help Panel", "Shift+F1", state.hover_help))
+      if (menu_item_with_icon("Help Panel", "help", "Shift+F1", state.hover_help))
         cmd = UiCommand::ToggleHoverHelp;
       ImGui::Separator();
-      if (ImGui::MenuItem("Heading Outline", "Ctrl+Shift+O", state.outline))
+      if (menu_item_with_icon("Heading Outline", "outline", "Ctrl+Shift+O", state.outline))
         cmd = UiCommand::ToggleOutline;
-      if (ImGui::MenuItem("Backlinks", "Ctrl+Alt+B", state.backlinks))
+      if (menu_item_with_icon("Backlinks", "backlinks", "Ctrl+Alt+B", state.backlinks))
         cmd = UiCommand::ToggleBacklinks;
-      if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
+      if (menu_item_with_icon("Site Map", "sitemap", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
-      if (ImGui::MenuItem("Related Sites", nullptr, state.related_open))
+      if (menu_item_with_icon("Related Sites", "related", nullptr, state.related_open))
         cmd = UiCommand::ToggleRelatedSites;
-      if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
+      if (menu_item_with_icon("Page Navigation", "navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
-      if (ImGui::MenuItem("History", "Ctrl+Shift+H", state.history_open))
+      if (menu_item_with_icon("History", "history", "Ctrl+Shift+H", state.history_open))
         cmd = UiCommand::ToggleHistory;
-      if (ImGui::MenuItem("Downloads", nullptr, state.downloads_open))
+      if (menu_item_with_icon("Downloads", "downloads", nullptr, state.downloads_open))
         cmd = UiCommand::ToggleDownloads;
-      if (ImGui::MenuItem("Media", nullptr, state.media_open))
+      if (menu_item_with_icon("Media", "media", nullptr, state.media_open))
         cmd = UiCommand::ToggleMedia;
-      if (ImGui::MenuItem("Subscriptions", nullptr, state.subscriptions_open))
+      if (menu_item_with_icon("Subscriptions", "subscriptions", nullptr, state.subscriptions_open))
         cmd = UiCommand::ToggleSubscriptions;
-      if (ImGui::MenuItem("Certificates", nullptr, state.certs_open))
+      if (menu_item_with_icon("Certificates", "certificates", nullptr, state.certs_open))
         cmd = UiCommand::ToggleCertificates;
-      if (ImGui::MenuItem("Identities", nullptr, state.identities_open))
+      if (menu_item_with_icon("Identities", "identities", nullptr, state.identities_open))
         cmd = UiCommand::ToggleIdentities;
-      if (ImGui::MenuItem("Style Sheets", nullptr, state.styles_open))
+      if (menu_item_with_icon("Style Sheets", "style", nullptr, state.styles_open))
         cmd = UiCommand::ToggleStylesPanel;
-      if (ImGui::MenuItem("Manage Style Sheets", nullptr,
+      if (menu_item_with_icon("Manage Style Sheets", "style-manager", nullptr,
                           state.styles_manager_open))
         cmd = UiCommand::ToggleStyleManagerPanel;
-      if (ImGui::MenuItem("Annotations", nullptr, state.annotations_panel_open))
+      if (menu_item_with_icon("Annotations", "annotations", nullptr, state.annotations_panel_open))
         cmd = UiCommand::ToggleAnnotationsPanel;
-      if (ImGui::MenuItem("Context", nullptr, state.context_open))
+      if (menu_item_with_icon("Context", "context", nullptr, state.context_open))
         cmd = UiCommand::ToggleContextPanel;
-      if (ImGui::MenuItem("Document revisions", nullptr,
+      if (menu_item_with_icon("Document revisions", "revisions", nullptr,
                           state.revisions_panel_open,
                           state.can_show_revisions || state.revisions_panel_open))
         cmd = UiCommand::ToggleRevisionsPanel;
       ImGui::Separator();
-      if (ImGui::MenuItem("Nostr Explorer", nullptr, state.nostr_explorer_open))
+      if (menu_item_with_icon("Nostr Explorer", "site-nostr", nullptr, state.nostr_explorer_open))
         cmd = UiCommand::ToggleNostrExplorer;
-      if (ImGui::MenuItem("Lemmy Explorer", nullptr, state.lemmy_explorer_open,
+      if (menu_item_with_icon("Lemmy Explorer", "lemmy", nullptr, state.lemmy_explorer_open,
                           state.lemmy_supported || state.lemmy_explorer_open))
         cmd = UiCommand::ToggleLemmyExplorer;
-      if (ImGui::MenuItem("Matrix Explorer", nullptr, state.matrix_explorer_open,
+      if (menu_item_with_icon("Matrix Explorer", "matrix", nullptr, state.matrix_explorer_open,
                           state.matrix_supported || state.matrix_explorer_open))
         cmd = UiCommand::ToggleMatrixExplorer;
-      if (ImGui::MenuItem("Nostr Accounts", nullptr,
+      if (menu_item_with_icon("Nostr Accounts", "nostr-accounts", nullptr,
                           state.identities_open &&
                           state.identity_section == IdentitySection::Nostr))
         cmd = UiCommand::ToggleNostrAccounts;
@@ -3289,21 +3311,21 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Next Page in Site", UiCommand::SitemapNext, cmd, true,
                     "Alt+PgDn");
       ImGui::Separator();
-      if (ImGui::MenuItem("Heading Outline", "Ctrl+Shift+O", state.outline))
+      if (menu_item_with_icon("Heading Outline", "outline", "Ctrl+Shift+O", state.outline))
         cmd = UiCommand::ToggleOutline;
       ImGui::TextDisabled("  Ctrl+Alt+O docks outline | body");
-      if (ImGui::MenuItem("Backlinks", "Ctrl+Alt+B", state.backlinks))
+      if (menu_item_with_icon("Backlinks", "backlinks", "Ctrl+Alt+B", state.backlinks))
         cmd = UiCommand::ToggleBacklinks;
-      if (ImGui::MenuItem("Site Map", "Ctrl+Alt+M", state.sitemap))
+      if (menu_item_with_icon("Site Map", "sitemap", "Ctrl+Alt+M", state.sitemap))
         cmd = UiCommand::ToggleSitemap;
-      if (ImGui::MenuItem("Related Sites", nullptr, state.related_open))
+      if (menu_item_with_icon("Related Sites", "related", nullptr, state.related_open))
         cmd = UiCommand::ToggleRelatedSites;
-      if (ImGui::MenuItem("Page Navigation", "Ctrl+Alt+P", state.page_panel))
+      if (menu_item_with_icon("Page Navigation", "navigation", "Ctrl+Alt+P", state.page_panel))
         cmd = UiCommand::TogglePage;
-      if (ImGui::MenuItem("Search Bar", "Ctrl+K", state.searchbar))
+      if (menu_item_with_icon("Search Bar", "find", "Ctrl+K", state.searchbar))
         cmd = state.searchbar ? UiCommand::ToggleSearchBar
                               : UiCommand::FocusSearchBar;
-      if (ImGui::MenuItem("History", "Ctrl+Shift+H", state.history_open))
+      if (menu_item_with_icon("History", "history", "Ctrl+Shift+H", state.history_open))
         cmd = UiCommand::ToggleHistory;
       ImGui::Separator();
       // The status line's sound player (a link to an audio file starts it).

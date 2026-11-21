@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Panels menu icons
+
+- Every Panels menu item (and the panel items repeated in Go) now shows an
+  icon. 14 new SVGs in `icons/svg/` in the toolbar style: keyboard,
+  backlinks, related, media, subscriptions, certificates, identities,
+  style-manager, annotations, context, revisions, plus lemmy / matrix /
+  nostr-accounts tiles matching `site-nostr`.
+- `menu_icon_for` maps the panel toggle commands to them (Keyboard Reference
+  now uses `keyboard`, Certificates `certificates`); `menu_item_with_icon`
+  takes an `enabled` flag. Checked under Xvfb.
+
 ## Status (2026-11-21) — Lemmy client reads PieFed
 
 - Question: `lemmy:piefed.diffrint.org` loaded but `lemmy:piefed.social`
