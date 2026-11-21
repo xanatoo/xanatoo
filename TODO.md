@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Site bars are page navigation
+
+- The "LessWrong: Frontpage · New · Top · Curated · Quick takes" line of
+  every forum client (shared `start_document`) and the Hacker News
+  "Top · New · Best · Ask · Show" line are now `<nav>` regions (Chrome
+  "navigation"): still shown above the text, but taken into View → Page
+  Navigation while it is open (and hidden in reader mode). The panel shows
+  the site name as a group and the current list as a plain row.
+- Unit test on the LessWrong listing; not checked live (needs the network).
+
 ## Status (2026-11-21) — Media panel: hide the controls
 
 - Right-click → Hide Controls, Go → Sound → Hide Player Controls, or H in

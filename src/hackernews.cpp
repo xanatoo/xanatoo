@@ -358,9 +358,12 @@ const char* list_title(const std::string& list) {
   return "Top";
 }
 
-// "Top · New · Best · Ask · Show" header line.
+// "Top · New · Best · Ask · Show" header line, a <nav> region (the Page
+// panel takes it while it is open).
 void append_nav(Document& doc, NodeId root, const std::string& current) {
-  NodeId nav = doc.create(NodeKind::Paragraph, root);
+  NodeId bar = doc.create(NodeKind::Chrome, root);
+  doc.get(bar).summary = "navigation";
+  NodeId nav = doc.create(NodeKind::Paragraph, bar);
   static const char* kLists[][2] = {{"top", "news"},
                                     {"new", "newest"},
                                     {"best", "best"},

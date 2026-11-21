@@ -186,6 +186,12 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   lists it as "Related". Chrome is a native block in Markdown
   (`:::chrome role="…"`), `.sexp` (`(chrome :role "…")`) and XML; Org and
   gemtext flatten it.
+- Native site bars: the forum clients' "Site: a · b" line
+  (`forum::start_document`) and Hacker News' "Top · New · …" line
+  (`append_nav`) are Chrome "navigation" regions, so they move into the Page
+  panel like a web page's `<nav>`. The panel's `collect` keeps the bold
+  spans of a link line: "Site:" becomes a group row, the bold current entry
+  a plain row.
 - Reference marks → footnotes (`html_footnotes.hpp`, last step of
   `parse_html_page`): a link whose text is `[mark]` and whose `#id` names a
   ListItem of a List becomes `FootnoteRef` (key = mark, blanks → `-`); every

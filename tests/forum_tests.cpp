@@ -8,6 +8,7 @@
 #include "xanatoo/forums.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/json_dom.hpp"
+#include "xanatoo/layout.hpp"
 
 #include <cstdio>
 #include <string>
@@ -506,6 +507,13 @@ void test_lesswrong() {
   const std::string lt = all_text(l);
   EXPECT(lt.find("(example.org)") != std::string::npos);
   EXPECT(lt.find("[Question] T") != std::string::npos);
+  // The "LessWrong: Frontpage · New · …" bar is a <nav> region (Page panel).
+  {
+    const Node& bar = l.get(l.get(l.root).children.at(0));
+    EXPECT(bar.kind == NodeKind::Chrome);
+    EXPECT_EQ(bar.summary, "navigation");
+    EXPECT(margin_chrome(l, bar));
+  }
 
   // Search: posts, tags and users of one multi-query reply.
   Json found = parse(R"([{"hits":[{"objectID":"P1","slug":"s","title":"Secrets","url":null,

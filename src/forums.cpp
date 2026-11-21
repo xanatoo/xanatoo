@@ -567,7 +567,10 @@ NodeId start_document(Document& doc, const std::string& title,
   NodeId root = doc.create(NodeKind::Document);
   doc.meta.title = title;
   if (!nav.empty()) {
-    NodeId line = doc.create(NodeKind::Paragraph, root);
+    // A <nav> region: the Page panel takes it while it is open.
+    NodeId bar = doc.create(NodeKind::Chrome, root);
+    doc.get(bar).summary = "navigation";
+    NodeId line = doc.create(NodeKind::Paragraph, bar);
     doc.append_text(line, site + ": ", InlineKind::Strong);
     bool first = true;
     for (const NavItem& item : nav) {

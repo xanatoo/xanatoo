@@ -50,6 +50,20 @@ void collect(const xanatoo::Document& doc, xanatoo::NodeId id, int depth,
       has_link = true;
   if (has_link) {
     for (const xanatoo::InlineSpan& sp : n.spans) {
+      // Bold text between the links: "Site:" names a group, a bare word is
+      // the current page of a "Site: a · b · c" bar.
+      if (sp.kind == xanatoo::InlineKind::Strong) {
+        std::string t = trimmed(sp.text);
+        if (!t.empty() && t.back() == ':') {
+          t.pop_back();
+          t = trimmed(std::move(t));
+          if (!t.empty())
+            rows.push_back({PageRow::Group, depth, std::move(t), {}});
+        } else if (!t.empty()) {
+          rows.push_back({PageRow::Text, depth, std::move(t), {}});
+        }
+        continue;
+      }
       if (sp.kind != xanatoo::InlineKind::Link || sp.href.empty()) continue;
       std::string t = trimmed(sp.text);
       if (t.empty() || t == xanatoo::kInlineImageText) t = sp.href;
