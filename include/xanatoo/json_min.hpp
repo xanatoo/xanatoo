@@ -207,17 +207,32 @@ inline std::string_view json_object_after_key(std::string_view json,
   return {};
 }
 
-// Array of objects after "key": [ {...}, ... ].
+// Array of objects after "key": [ {...}, ... ]. Only an occurrence whose
+// value is an array counts: `"comments": 2` (a count) is skipped for the next
+// "comments" key instead of reading whatever array follows it.
 inline std::vector<std::string> json_object_array_after_key(
     std::string_view json, std::string_view key) {
   std::vector<std::string> out;
   std::string pat = "\"";
   pat += key;
   pat += "\"";
-  size_t p = json.find(pat);
-  if (p == std::string_view::npos) return out;
-  p = json.find('[', p + pat.size());
-  if (p == std::string_view::npos) return out;
+  size_t p = std::string_view::npos;
+  for (size_t from = 0;;) {
+    size_t k = json.find(pat, from);
+    if (k == std::string_view::npos) return out;
+    from = k + pat.size();
+    size_t q = from;
+    while (q < json.size() && std::isspace(static_cast<unsigned char>(json[q])))
+      ++q;
+    if (q >= json.size() || json[q] != ':') continue;
+    ++q;
+    while (q < json.size() && std::isspace(static_cast<unsigned char>(json[q])))
+      ++q;
+    if (q < json.size() && json[q] == '[') {
+      p = q;
+      break;
+    }
+  }
   ++p;
   while (p < json.size()) {
     while (p < json.size() &&

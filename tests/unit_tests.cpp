@@ -2121,6 +2121,16 @@ void test_json_array_and_bool() {
   auto items = json_object_array_after_key(j, "items");
   EXPECT_EQ(items.size(), 3u);
   EXPECT_EQ(json_int_field(items[2], "n"), 3);
+
+  // A scalar under the key (Lemmy's counts.comments) must not pick up the
+  // next unrelated array (moderators); a later array-valued key still counts.
+  const char* lemmy = R"({"post_view":{"counts":{"comments": 2}},)"
+                      R"("moderators":[{"m":1},{"m":2}],"x":"comments"})";
+  EXPECT(json_object_array_after_key(lemmy, "comments").empty());
+  const char* later = R"({"counts":{"comments":2},"comments" : [{"id":9}]})";
+  auto later_arr = json_object_array_after_key(later, "comments");
+  EXPECT_EQ(later_arr.size(), 1u);
+  EXPECT_EQ(json_int_field(later_arr[0], "id"), 9);
 }
 
 }  // namespace
