@@ -83,7 +83,27 @@ bool gutter_at(App& app, int x, int y) {
          dock_edge_at(app, x, y);
 }
 
+// Drop what the first finger's press started (scrollbar, frame, split or
+// selection drag) without the release side effects: no click, no docking
+// or snapping of a dragged window.
+void cancel_press(App& app) {
+  app.dragging_sel = false;
+  app.dragging_scroll = false;
+  app.dragging_split = false;
+  dock_split_release(app);
+  for (FloatWindow* w : float_stack(app)) {
+    w->dragging = false;
+    w->span = false;
+    w->resize = 0;
+    w->scroll_dragging = false;
+  }
+  app.tab_drop_preview = false;
+  app.dock_preview = Dock::None;
+}
+
 // Two fingers either side of a gutter: grab it at the point between them.
+// Whatever the first finger started gives way: it often lands on a pane
+// scrollbar or a panel frame right next to the gutter.
 bool begin_gutter_drag(App& app) {
   Touch& t = app.touch;
   const TouchPoint& a = t.fingers[0];
@@ -97,6 +117,8 @@ bool begin_gutter_drag(App& app) {
                gutter_at(app, x, y);
       });
   if (!g) return false;
+  if (t.mode == TouchMode::Direct || t.mode == TouchMode::Select)
+    cancel_press(app);
   t.flinging = false;
   if (t.mode == TouchMode::Pan) t.velocity = 0.f;
   const float mx = (a.x + b.x) * 0.5f, my = (a.y + b.y) * 0.5f;
@@ -257,11 +279,16 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   if (t.count == 1) {
     app.pointer_away = false;  // ImGui follows this finger again
     begin_gesture(app, x, y);
-  } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
-             t.mode == TouchMode::Pan || t.mode == TouchMode::Image) {
-    if (!begin_gutter_drag(app)) begin_pinch(app);
   } else if (t.mode == TouchMode::Direct && float_span_begin(app)) {
-    t.mode = TouchMode::FloatSpan;
+    t.mode = TouchMode::FloatSpan;  // a free window's title held: span it
+  } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
+             t.mode == TouchMode::Pan || t.mode == TouchMode::Image ||
+             t.mode == TouchMode::Select || t.mode == TouchMode::Direct) {
+    // The gutter comes first, whichever side touched down first and
+    // whatever that finger began; only then a pinch (not for a press).
+    if (!begin_gutter_drag(app) && t.mode != TouchMode::Select &&
+        t.mode != TouchMode::Direct)
+      begin_pinch(app);
   }
 }
 

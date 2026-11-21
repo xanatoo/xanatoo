@@ -56,7 +56,15 @@
   `touch_gutter.hpp`, unit-tested); the tile-mode badge is left out.
 - A single finger on a dock split / edge now drags it too (was tile
   divider only).
-- Open: not yet tried on a real touchscreen.
+- Fixed "works only sometimes": the grab was tried only when the first
+  finger had started a pan / pending tap. A first finger on the left
+  pane's scrollbar (right beside the tile divider) or on a docked panel's
+  frame / scrollbar strip started a Direct press, and one resting 500 ms
+  on text a selection — the second finger then did nothing. Now the
+  gutter test runs for those too (after a FloatSpan check for a held free
+  window title); `cancel_press` drops the first press without release
+  side effects (no click, no docking / snapping).
+- Open: retest on a real touchscreen.
 
 ## Status (2026-11-21) — Identity panel (Gemini client certificates)
 
