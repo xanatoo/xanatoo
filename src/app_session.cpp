@@ -211,7 +211,7 @@ void restore_session(App& app) {
   try {
     for (int i = 0; i < 4; ++i)
       if (const std::string* v = get("dock_w" + std::to_string(i)))
-        app.dock_w[i] = std::clamp(rescale(app, std::stoi(*v)), 60, 4000);
+        app.dock_w[i] = std::clamp(rescale(app, std::stoi(*v)), 60, 1 << 15);
     for (const PanelRef& r : panels(app)) {
       FloatWindow& w = *r.win;
       const std::string n = r.name;
@@ -322,7 +322,7 @@ void restore_session(App& app) {
     if (split && app.buffers.size() > 0) {
       app.split = true;
       if (const std::string* v = get("split_ratio"))
-        app.split_ratio = std::clamp(std::stof(*v), 0.1f, 0.9f);
+        app.split_ratio = std::clamp(std::stof(*v), 0.01f, 0.99f);
       if (const std::string* v = get("tile_axis"))
         app.tile_axis = *v == "rows" ? TileAxis::Rows : TileAxis::Columns;
       if (const std::string* v = get("tile_mode")) {

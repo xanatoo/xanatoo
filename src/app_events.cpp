@@ -1067,6 +1067,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       return;
     }
     if (app.dragging_split && app.split) {
+      int area_len = 1;
       if (app.tile_axis == TileAxis::Rows) {
         const int area_y = static_cast<int>(app.ui_top) +
             dock_band_h(app, Dock::Top);
@@ -1075,6 +1076,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
             tile_gutter_size(app));
         app.split_ratio = (app.mouse_y - static_cast<float>(area_y)) /
                           static_cast<float>(area_h);
+        area_len = area_h;
       } else {
         // Ratio within the pane area (docked columns excluded).
         const int area_x = dock_column_w(app, Dock::Left);
@@ -1082,8 +1084,13 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
             1, app.win_w - area_x - dock_column_w(app, Dock::Right));
         app.split_ratio = (app.mouse_x - static_cast<float>(area_x)) /
                           static_cast<float>(area_w);
+        area_len = area_w;
       }
-      app.split_ratio = std::max(0.15f, std::min(0.85f, app.split_ratio));
+      // Either pane may shrink to a strip that keeps it (and the divider)
+      // reachable; no share-of-area cap.
+      const float room = std::min(
+          0.5f, std::round(64.f * app.ui_scale) / static_cast<float>(area_len));
+      app.split_ratio = std::clamp(app.split_ratio, room, 1.f - room);
       app.needs_layout = true;
       return;
     }

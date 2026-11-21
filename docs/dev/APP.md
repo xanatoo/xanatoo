@@ -203,7 +203,13 @@ Bottom docks are bands between the columns that take height (side by side
 by `dock_seq`; `dock_band_h`, used by `place_centre_rows`). Dock neighbours
 are sized by `FloatWindow::dock_share`, not forced equal; shared separator
 dragging updates only the adjacent pair. The size per
-side is `App::dock_w[4]` (L, R, T, B). A `dock_gap` gutter (scaled,
+side is `App::dock_w[4]` (L, R, T, B), set by gutter drags through
+`dock_resize_side`. There is no share-of-window cap: a column or band grows
+until the panes keep a `64 * ui_scale` px strip (`pane_room`); when both
+opposite sides together do not fit, `column_w` / `band_h` shrink both in
+proportion (a drag first pins the opposite side at its shown size). The
+tile divider likewise keeps each pane at least that strip, not a fixed
+15–85 % ratio. A `dock_gap` gutter (scaled,
 painted by `draw_dock_gutters` with `theme::draw_grip_dots`; docked panels draw no drop shadow) separates neighbouring docked panels and a
 dock from the panes; `dock_column_w` / `dock_band_h` include it, and the
 separator / dock-edge grab zones lie in it (plus two pixels of frame), so

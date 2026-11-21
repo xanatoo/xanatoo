@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Docks and tile divider: no size cap
+
+- Docked columns / bands were capped at 2/5 of the window (and the tile
+  divider at 15–85 %). Now they grow until the panes keep a small strip
+  (`64 * ui_scale` px) so the far gutter stays grabbable; opposite docks
+  that do not fit together shrink in proportion. `dock_resize_side` does
+  the docked-edge drag; session load and `TileTree` accept 1–99 %.
+
 ## Status (2026-11-21) — Touch: two-finger gutter grab
 
 - Gutters are hard to hit with one finger: place one finger on each side

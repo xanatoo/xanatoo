@@ -902,15 +902,12 @@ bool float_motion(App& app, int mx, int my) {
       const int dy = my - w->resize_start_y;
       if (float_docked(*w)) {
         // Column width / band height, shared by every window docked there.
-        if (w->dock == Dock::Top || w->dock == Dock::Bottom) {
-          int& bh = app.dock_w[w->dock == Dock::Bottom ? 3 : 2];
-          const int nh = w->resize_start_h + (w->resize & 8 ? -dy : dy);
-          bh = std::clamp(nh, 80, std::max(80, app.win_h * 2 / 5));
-        } else {
-          int& cw = app.dock_w[w->dock == Dock::Right ? 1 : 0];
-          const int nw = w->resize_start_w + (w->resize & 4 ? -dx : dx);
-          cw = std::clamp(nw, 160, std::max(160, app.win_w * 2 / 5));
-        }
+        if (w->dock == Dock::Top || w->dock == Dock::Bottom)
+          dock_resize_side(app, w->dock,
+                           w->resize_start_h + (w->resize & 8 ? -dy : dy));
+        else
+          dock_resize_side(app, w->dock,
+                           w->resize_start_w + (w->resize & 4 ? -dx : dx));
         app.needs_layout = true;
         place_windows(app);
         return true;

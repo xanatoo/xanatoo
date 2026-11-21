@@ -80,19 +80,23 @@ bool has_column(App& app, Dock side) {
   return false;
 }
 
-// Columns keep at least kMinPaneArea px for the panes between them.
-constexpr int kMinPaneArea = 320;
-
-int column_w(App& app, Dock side) {
-  const Dock other = side == Dock::Left ? Dock::Right : Dock::Left;
-  int limit = app.win_w * 2 / 5;
-  if (has_column(app, other))
-    limit = std::min(limit, (app.win_w - kMinPaneArea) / 2);
-  return std::clamp(app.dock_w[side_index(side)], 160, std::max(160, limit));
+// Docked columns and bands may take the whole window except a strip that
+// keeps the panes (and the far gutter) reachable: no share-of-window cap.
+int pane_room(App& app) {
+  return static_cast<int>(std::lround(64.f * app.ui_scale));
 }
 
-// Bands keep at least kMinPaneRows px for the panes between them.
-constexpr int kMinPaneRows = 160;
+constexpr int kMinColumnW = 160;
+constexpr int kMinBandH = 80;
+
+Dock opposite(Dock side) {
+  switch (side) {
+    case Dock::Left: return Dock::Right;
+    case Dock::Right: return Dock::Left;
+    case Dock::Top: return Dock::Bottom;
+    default: return Dock::Top;
+  }
+}
 
 // Height of a shaded panel: the title strip and the frame line below it.
 int shaded_h() { return dock_title_h + 1; }
@@ -111,16 +115,40 @@ bool all_shaded(App& app, Dock side) {
   return any;
 }
 
+// Size of `side` (column width / band height) out of `room` px shared with
+// the opposite side; `other_fixed` is the opposite side's size when it does
+// not give way (a rolled-up band), else -1. Too big together for the
+// window, both shrink in proportion.
+int fit_side(App& app, Dock side, int room, int min_px, int other_fixed) {
+  const Dock other = opposite(side);
+  const int own = std::max(min_px, app.dock_w[side_index(side)]);
+  int limit = room - dock_gap;
+  if (has_column(app, other)) {
+    limit -= dock_gap;
+    if (other_fixed >= 0) {
+      limit -= other_fixed;
+    } else {
+      const int theirs = std::max(min_px, app.dock_w[side_index(other)]);
+      if (own + theirs > limit)
+        limit = static_cast<int>(static_cast<long long>(limit) * own /
+                                 (own + theirs));
+    }
+  }
+  return std::clamp(own, min_px, std::max(min_px, limit));
+}
+
+int column_w(App& app, Dock side) {
+  return fit_side(app, side, app.win_w - pane_room(app), kMinColumnW, -1);
+}
+
 int band_h(App& app, Dock side) {
   // A band whose panels are all rolled up gives the rest to the panes.
   if (all_shaded(app, side)) return shaded_h();
-  const Dock other = side == Dock::Top ? Dock::Bottom : Dock::Top;
   auto [top, bottom, ch] = soft_client_bounds(app);
   (void)top;
   (void)bottom;
-  int limit = ch * 2 / 5;
-  if (has_column(app, other)) limit = std::min(limit, (ch - kMinPaneRows) / 2);
-  return std::clamp(app.dock_w[side_index(side)], 80, std::max(80, limit));
+  return fit_side(app, side, ch - pane_room(app), kMinBandH,
+                  all_shaded(app, opposite(side)) ? shaded_h() : -1);
 }
 
 // Visible windows docked on `side`: a column top to bottom, a band left to
@@ -155,6 +183,23 @@ void save_free_geom(FloatWindow& w) {
 }
 
 }  // namespace
+
+void dock_resize_side(App& app, Dock side, int px) {
+  if (side != Dock::Left && side != Dock::Right && side != Dock::Top &&
+      side != Dock::Bottom)
+    return;
+  const bool band = is_band(side);
+  // The opposite side keeps the size it shows now, so the dragged one does
+  // not shrink it in proportion.
+  const Dock other = opposite(side);
+  if (has_column(app, other) && !(band && all_shaded(app, other)))
+    app.dock_w[side_index(other)] =
+        band ? band_h(app, other) : column_w(app, other);
+  app.dock_w[side_index(side)] = std::max(band ? kMinBandH : kMinColumnW, px);
+  if (!(band && all_shaded(app, side)))
+    app.dock_w[side_index(side)] =
+        band ? band_h(app, side) : column_w(app, side);
+}
 
 Dock compute_dock_zone(App& app, int mx, int my) {
   auto [top, bottom, ch] = soft_client_bounds(app);

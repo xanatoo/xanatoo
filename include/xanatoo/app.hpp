@@ -2385,6 +2385,9 @@ std::tuple<int, int, int, int> dock_rect(App& app, Dock d);
 int dock_column_w(App& app, Dock side);
 // Height taken from the panes by visible windows docked at Top / Bottom.
 int dock_band_h(App& app, Dock side);
+// Resize the column / band on `side` to `px` (gutter drag): it may grow
+// until the panes keep a small strip; the opposite side stays as shown.
+void dock_resize_side(App& app, Dock side, int px);
 // Paint the gutters around docked panels (before the panels draw).
 void draw_dock_gutters(App& app);
 // The mouse may light native canvas chrome under it: no ImGui window or

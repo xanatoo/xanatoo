@@ -61,7 +61,7 @@ public:
     old.first = first;
     old.second = first + 1;
     old.axis = axis;
-    old.ratio = std::clamp(ratio, 0.05f, 0.95f);
+    old.ratio = std::clamp(ratio, 0.01f, 0.99f);
     return true;
   }
 
@@ -92,7 +92,7 @@ public:
 
   bool set_ratio(int divider, float ratio) {
     if (!valid_divider(divider) || !std::isfinite(ratio)) return false;
-    nodes_[static_cast<size_t>(divider)].ratio = std::clamp(ratio, 0.05f, 0.95f);
+    nodes_[static_cast<size_t>(divider)].ratio = std::clamp(ratio, 0.01f, 0.99f);
     return true;
   }
 
