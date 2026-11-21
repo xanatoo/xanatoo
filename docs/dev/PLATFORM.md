@@ -58,6 +58,12 @@ ports, the SDL3 transition and Android.
   `AMediaExtractor_setDataSource(url)` goes through Java: the worker
   thread attaches via `SDL_AndroidGetJNIEnv()` first (Android 5 crashes
   on a NULL JNIEnv instead of failing).
+- Soft keyboard: `platform_request_keyboard` (SDL_StartTextInput) when an
+  ImGui text field gains focus (`Ui::prepare_render`) **or** a focused one
+  is tapped again — the user may have hidden the keyboard while the field
+  kept focus. SDL 3.4 tracks IME visibility from window insets (API 30+)
+  and re-shows only a keyboard it knows is hidden, so repeat requests are
+  cheap. Caret placement in an editable document requests it too.
 - Test on the device: `adb logcat -s xanatoo` shows std::cout / std::cerr.
 
 ## Website and downloads

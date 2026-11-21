@@ -6335,9 +6335,18 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
 void Ui::prepare_render() {
   if (!ready_) return;
   if (render_prepared_) return;
-  // A text field (URL bar) just took focus: on-screen keyboard (Android).
+  // A text field (URL bar) just took focus, or a focused one was tapped
+  // again: on-screen keyboard (Android). The second case matters after the
+  // user hid the keyboard (Back, the IME's hide key, a swipe) while the field
+  // kept focus — no new focus edge comes then. A click outside an active
+  // InputText clears it during the widget pass, so a click with one still
+  // active landed on it. SDL re-shows only a keyboard it knows is hidden.
   const bool wants_text = ImGui::GetIO().WantTextInput;
-  if (wants_text && !wanted_text_input_) platform_request_keyboard(window_);
+  const ImGuiContext& g = *ImGui::GetCurrentContext();
+  const bool field_tapped = g.ActiveId != 0 && g.InputTextState.ID == g.ActiveId &&
+                            ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+  if ((wants_text && !wanted_text_input_) || field_tapped)
+    platform_request_keyboard(window_);
   wanted_text_input_ = wants_text;
   publish_text_field_selection();
   if (middle_paste_frames_ > 0) --middle_paste_frames_;

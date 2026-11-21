@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Android: keyboard for an already focused URL bar
+
+- Report: the soft keyboard sometimes did not appear when tapping the URL
+  bar. Likely cause: the keyboard was requested only when the ImGui field
+  *gained* focus; after the user hid it (Back / IME hide / swipe) with the
+  URL bar still focused, tapping the bar again gave no new focus edge.
+- Fix: `Ui::prepare_render` also requests it on a click while an InputText
+  is active (a click outside clears the field during the widget pass).
+- Not checked on a device (desktop build only). If it still happens, note
+  the steps: e.g. after rotation, after returning from another app.
+
 ## Status (2026-11-21) — Touch: two-finger window resize
 
 - While one finger drags a free floating window by its title, a second
