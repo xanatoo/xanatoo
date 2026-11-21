@@ -2454,6 +2454,28 @@ void test_style_sheets_shipped() {
   EXPECT(def.metadata.color == builtin.metadata.color);
   EXPECT(def.metadata.has_font == builtin.metadata.has_font);
   EXPECT(def.metadata.font == builtin.metadata.font);
+  EXPECT(def.visited.has_color == builtin.visited.has_color);
+  EXPECT(def.visited.color == builtin.visited.color);
+  {
+    // Visited links: the role's colour for link-coloured glyphs; a later
+    // link colour drops it, and visited links then fade towards the paper.
+    const Rgba link = builtin[InlineKind::Link].color;
+    EXPECT(builtin.visited_link_color(link) == builtin.visited.color);
+    const Rgba meta{100, 100, 100, 255};
+    EXPECT(!(builtin.visited_link_color(meta) == builtin.visited.color));
+    DocStyle dark = builtin_style();
+    apply_style_source(dark, "(page (background \"#000000\"))"
+                             "(role link (color \"#64c8ff\"))");
+    EXPECT(!dark.visited.has_color);
+    EXPECT(dark.visited_link_color(Rgba{100, 200, 255, 255}) ==
+           (Rgba{60, 120, 153, 255}));
+    DocStyle own = builtin_style();
+    apply_style_source(own, "(role link (color \"#64c8ff\"))"
+                            "(role visited-link (color \"#112233\"))");
+    EXPECT(own.visited.has_color &&
+           own.visited.color == (Rgba{0x11, 0x22, 0x33, 255}));
+    EXPECT(own.warnings.empty());
+  }
   DocStyle hn;
   EXPECT(load_style("hackernews", hn));
   EXPECT(hn[BlockRole::Header].font == FontRole::Heading);

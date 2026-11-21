@@ -229,6 +229,15 @@ int64_t latest_visit_of(std::string_view address) {
   return s.row() ? s.int64(0) : 0;
 }
 
+bool page_visited(std::string_view page) {
+  sqlite3* d = statedb_connection();
+  if (!d || page.empty()) return false;
+  sqlite::Stmt s(d, "SELECT 1 FROM visits WHERE page = "
+                    "(SELECT id FROM pages WHERE address = ?) LIMIT 1;",
+                 {page});
+  return s.row();
+}
+
 std::vector<VisitRecord> recent_visits(size_t limit, int64_t before) {
   std::vector<VisitRecord> out;
   sqlite3* d = statedb_connection();
@@ -302,6 +311,7 @@ int64_t store_visit(const VisitRecord&) { return 0; }
 void store_visit_leave(int64_t, int64_t) {}
 size_t remove_visits(const std::vector<int64_t>&) { return 0; }
 int64_t latest_visit_of(std::string_view) { return 0; }
+bool page_visited(std::string_view) { return false; }
 std::vector<VisitRecord> recent_visits(size_t, int64_t) { return {}; }
 bool visit_log_available() { return false; }
 std::vector<VisitRecord> visit_page(size_t, const VisitRecord*,

@@ -72,6 +72,17 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   frame). `ViewSettings::style_colors` / `style_fonts` are global and sit
   on top of pinned sheets; `apply_style_layer` / `UiCommand::
   SelectStyleColors` / `SelectStyleFonts` set them.
+- Visited links are coloured at draw time, not by layout:
+  `update_visited_links` fills `Pane::visited_links.glyphs` (one flag per
+  layout glyph; keyed on layout generation, buffer and `App::visited_gen`,
+  answers cached per href). A link is visited when its target page
+  (`resolve_link` → `page_address` of the base) is in `App::visited` or
+  `page_visited` (visit log). `Renderer::draw` takes the flags and uses
+  `DocStyle::visited_link_color` (`visited-link` role; without a colour,
+  or for links not drawn in the link colour, the colour fades towards the
+  paper). `PaneRaster::visited_version` redraws the cached pane image.
+  `history_changed` / `note_visited_address` / removing a visit bump
+  `visited_gen`.
 
 ## Layout virtualization
 

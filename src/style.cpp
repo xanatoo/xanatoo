@@ -339,11 +339,23 @@ class SheetReader {
     }
     for (const auto& r : kInlineRoles) {
       if (name != r.name) continue;
-      inline_props(f, style_.inl[static_cast<size_t>(r.kind)]);
+      InlineStyle& is = style_.inl[static_cast<size_t>(r.kind)];
+      const bool had = is.has_color;
+      const Rgba before = is.color;
+      inline_props(f, is);
+      // A new link colour drops a visited colour set before it (by a
+      // parent sheet): visited links then fade the new colour instead.
+      if (r.kind == InlineKind::Link &&
+          (is.has_color != had || !(is.color == before)))
+        style_.visited.has_color = false;
       return;
     }
     if (name == "metadata") {
       inline_props(f, style_.metadata);
+      return;
+    }
+    if (name == "visited-link") {
+      inline_props(f, style_.visited);
       return;
     }
     warn("unknown role " + name);
@@ -631,6 +643,8 @@ DocStyle builtin_style() {
     return s.inl[static_cast<size_t>(k)];
   };
   inl(InlineKind::Link) = {true, {30, 90, 180, 255}, {0, 0, 0, 0}, true};
+  s.visited.has_color = true;
+  s.visited.color = {128, 64, 140, 255};
   s.metadata.has_font = true;
   s.metadata.font = FontRole::Small;
   s.metadata.has_color = true;
@@ -811,6 +825,7 @@ void copy_style_group(DocStyle& dst, const DocStyle& src, unsigned groups) {
   };
   for (size_t i = 0; i < kInlineKindCount; ++i) inl(dst.inl[i], src.inl[i]);
   inl(dst.metadata, src.metadata);
+  inl(dst.visited, src.visited);
 }
 
 bool load_style(const StyleChoice& choice, DocStyle& out, std::string* error) {

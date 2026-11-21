@@ -258,6 +258,7 @@ void remove_line(App& app, int line) {
   } else {
     std::erase(app.visited, h.visits[e.first].address);
   }
+  ++app.visited_gen;  // its links may no longer count as visited
   reload(app);
   // The row now at the removed line's place (or the last one).
   const int n = static_cast<int>(h.lines.size());
@@ -301,7 +302,10 @@ void thick_line(App& app, int x0, int y0, int x1, int y1,
 
 }  // namespace
 
-void history_changed(App& app) { app.history.stale = true; }
+void history_changed(App& app) {
+  app.history.stale = true;
+  ++app.visited_gen;  // visited links follow the log
+}
 
 float history_panel_max_scroll(App& app, const FloatWindow& w) {
   auto [cx, cy, cw, ch] = float_client_rect(app, const_cast<FloatWindow&>(w));

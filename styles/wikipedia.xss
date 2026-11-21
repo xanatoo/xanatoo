@@ -44,6 +44,7 @@
   (role message-meta (color "#54595d"))
 
   (role link   (color blue) (underline #f))
+  (role visited-link (color "#795cb2"))
   (role cite   (color "#795cb2") (underline #f))   ; visited-link purple
   (role footnote-ref (color blue))
   (role code   (color "#000000") (background box)))

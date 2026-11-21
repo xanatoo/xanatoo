@@ -166,6 +166,7 @@ namespace {
 
 // The recent addresses (History menu, session) and the URL bar's ring.
 void note_visited_address(App& app, const std::string& url) {
+  ++app.visited_gen;
   if (app.visited.empty() || app.visited.back() != url) {
     app.visited.push_back(url);
     if (static_cast<int>(app.visited.size()) > kMaxNavHistory)
@@ -341,6 +342,78 @@ void update_open_tab_links(App& app, int pi) {
     if (page.empty() || page == own) continue;
     if (std::binary_search(pages.begin(), pages.end(), page))
       ol.spans.push_back(k);
+  }
+}
+
+// The page `href` (as written in view `pi`'s page) leads to was visited:
+// in the visit log, or shown this session (also without a log).
+static bool link_visited(App& app, int pi, const std::string& href) {
+  if (href.empty() || href[0] == '#') return false;
+  const LinkTarget t = resolve_link(app, pi, href);
+  if (t.kind == LinkKind::None || t.kind == LinkKind::Anchor || t.url.empty())
+    return false;
+  const std::string page = page_address(xanatoo::parse_locator(t.url).base);
+  if (page.empty()) return false;
+  // Web pages keep a `#fragment` in the base; a visit of the page counts.
+  const size_t hash = page.find('#');
+  const std::string bare = hash == std::string::npos ? page : page.substr(0, hash);
+  for (const std::string& v : app.visited) {
+    const std::string vp = xanatoo::parse_locator(v).base;
+    if (vp == page || vp == bare) return true;
+  }
+  return xanatoo::page_visited(page) ||
+         (bare != page && xanatoo::page_visited(bare));
+}
+
+void update_visited_links(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  VisitedLinks& vl = p.visited_links;
+  if (vl.valid && vl.layout_gen == p.layout.generation &&
+      vl.visited_gen == app.visited_gen && vl.buf == p.buf &&
+      vl.glyphs.size() == p.layout.glyphs.size())
+    return;
+  if (vl.visited_gen != app.visited_gen || vl.buf != p.buf) vl.by_href.clear();
+  vl.valid = true;
+  vl.layout_gen = p.layout.generation;
+  vl.visited_gen = app.visited_gen;
+  vl.buf = p.buf;
+  std::vector<uint8_t> glyphs(p.layout.glyphs.size(), 0);
+  const xanatoo::Document& d = doc_of(app, p);
+  // Consecutive glyphs of one link share the answer.
+  xanatoo::NodeId last_node = xanatoo::INVALID_NODE;
+  size_t last_span = 0;
+  uint32_t last_auto = 0;
+  uint8_t last = 0;
+  for (size_t gi = 0; gi < p.layout.glyphs.size(); ++gi) {
+    const auto& pg = p.layout.glyphs[gi];
+    if (pg.kind != xanatoo::InlineKind::Link ||
+        pg.node == xanatoo::INVALID_NODE || pg.node >= d.next_id)
+      continue;
+    if (pg.node != last_node || pg.span_index != last_span ||
+        pg.auto_link != last_auto) {
+      last_node = pg.node;
+      last_span = pg.span_index;
+      last_auto = pg.auto_link;
+      last = 0;
+      const std::string* href = nullptr;
+      if (pg.auto_link > 0 && pg.auto_link <= p.layout.auto_links.size()) {
+        href = &p.layout.auto_links[pg.auto_link - 1];
+      } else {
+        const xanatoo::Node& n = d.get(pg.node);
+        if (pg.span_index < n.spans.size()) href = &n.spans[pg.span_index].href;
+      }
+      if (href && !href->empty() && (*href)[0] != '#') {
+        auto it = vl.by_href.find(*href);
+        if (it == vl.by_href.end())
+          it = vl.by_href.emplace(*href, link_visited(app, pi, *href)).first;
+        last = it->second ? 1 : 0;
+      }
+    }
+    glyphs[gi] = last;
+  }
+  if (glyphs != vl.glyphs) {
+    vl.glyphs = std::move(glyphs);
+    ++vl.version;
   }
 }
 

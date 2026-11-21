@@ -41,6 +41,7 @@
   (role footnote    (border "#d8d8cc"))
 
   (role link   (color "#000000") (underline #t))
+  (role visited-link (color "#828282"))
   (role metadata (font small) (color grey))
   (role cite   (color "#000000"))
   (role footnote-ref (color grey))

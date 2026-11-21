@@ -165,6 +165,7 @@ struct PaneRaster {
   float scroll = 0.f;  // integer-valued texture-space scroll
   xanatoo::Selection sel{};
   bool search_tint = false;
+  uint64_t visited_version = 0;  // Pane::visited_links.version
 };
 
 // Notes of the footnote marks visible in a pane, laid out for the strip at
@@ -289,6 +290,23 @@ struct PlayingLinks {
   std::vector<std::pair<xanatoo::NodeId, size_t>> spans;  // node, span index
 };
 
+// Links of the page a view shows whose target page was visited before
+// (update_visited_links), drawn in the style's `visited-link` colour.
+// Keyed on the layout and App::visited_gen; `version` changes with `glyphs`
+// so the pane raster knows to redraw.
+struct VisitedLinks {
+  uint64_t layout_gen = 0;
+  uint64_t visited_gen = 0;
+  bool valid = false;
+  uint64_t version = 0;
+  // Per glyph of the layout: 1 = part of a visited link.
+  std::vector<uint8_t> glyphs;
+  // Answers per href as written, for this buffer and visited_gen (a new
+  // layout band asks again for the same links).
+  BufferId buf = kNoBuffer;
+  std::unordered_map<std::string, bool> by_href;
+};
+
 struct AnnotationMark {
   std::string annotation_id;
   std::string layer_id;
@@ -380,6 +398,7 @@ struct Pane {
   AnnotationMarks annotation_marks;
   OpenTabLinks open_tab_links;
   PlayingLinks playing_links;
+  VisitedLinks visited_links;
   bool section_focus = false;  // Section Focus: the outline picks the cut
   // Reader mode of this view: page chrome (Chrome nodes) hidden. Unset =
   // ViewSettings::reader_mode; kept across navigation. View state, never
@@ -1264,6 +1283,8 @@ struct App {
   // Pages opened this session in any view, oldest first (History panel);
   // Back / Forward use each view's own `Pane::nav`.
   std::vector<std::string> visited;
+  // Bumped whenever a page is visited or visits are removed (visited links).
+  uint64_t visited_gen = 1;
   HistoryPanel history;
   std::vector<xanatoo::Bookmark> bookmarks;
   // Every bookmark folder, empty ones too (xanatoo::bookmark_folder_list).
@@ -1957,6 +1978,9 @@ void update_open_tab_links(App& app, int pi);
 // Recompute Pane::playing_links of view `pi` when its layout or the file in
 // the Media panel changed (none while the player is idle).
 void update_playing_links(App& app, int pi);
+// Recompute Pane::visited_links of view `pi` when its layout or the visit
+// log changed.
+void update_visited_links(App& app, int pi);
 // Back (dir −1) / Forward (+1) in the focused view; false when there is
 // no page that way.
 bool can_nav_step(App& app, int dir);

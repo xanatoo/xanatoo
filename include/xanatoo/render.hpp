@@ -35,8 +35,11 @@ public:
                      float scroll_y, float origin_x);
   // origin_x shifts all content horizontally (for multi-pane views).
   // `sel`: the selection, drawn between the fills and the text.
+  // `visited`: per glyph of `layout`, nonzero = a link to a visited page,
+  // drawn in the style's visited-link colour.
   void draw(const LayoutResult& layout, float scroll_y = 0.f,
-            float origin_x = 0.f, const SelectionWash* sel = nullptr);
+            float origin_x = 0.f, const SelectionWash* sel = nullptr,
+            const std::vector<uint8_t>* visited = nullptr);
   // The style's selection colour.
   Rgba selection_color() const;
   void draw_selection(const std::vector<SelRect>& rects, float origin_x = 0.f);

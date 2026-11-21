@@ -385,6 +385,12 @@ void test_visits() {
   store_visit_leave(v1, 20);
   EXPECT_EQ(latest_visit_of("https://a.example/x"), v1);
   EXPECT_EQ(latest_visit_of("https://nowhere/"), 0);
+  // Visited links ask per page (base): the passage visit counts for /y.
+  EXPECT(page_visited("https://a.example/x"));
+  EXPECT(page_visited("https://a.example/y"));
+  EXPECT(!page_visited("https://a.example/y//id:intro"));
+  EXPECT(!page_visited("https://nowhere/"));
+  EXPECT(!page_visited(""));
   auto rv = recent_visits(10);
   EXPECT_EQ(rv.size(), 2u);
   if (rv.size() == 2) {

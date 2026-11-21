@@ -273,6 +273,13 @@ metadata role's `font` and `color` override the inline-kind and block
 styles; otherwise those existing styles apply. The built-in style gives
 metadata small, muted text.
 
+**Visited links:** `(role visited-link (color "#80408c"))` colours links
+whose page is in the visit log (or was shown this session). Only `color`
+is used. A later `link` colour — in the same sheet or in a sheet that
+inherits it — drops the visited colour; links then fade their own colour
+two fifths of the way towards the paper, so a dark sheet that only sets
+its `link` accent still gets a matching visited shade.
+
 **Time is semantic, not a visual role.** An inline span can carry a separate
 ISO 8601 `datetime` value, regardless of its visible text, link target or
 style. HTML `<time datetime="2026-11-04T10:30:00Z">Wednesday</time>` is

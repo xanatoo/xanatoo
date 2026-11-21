@@ -4458,7 +4458,10 @@ static void draw_pane_layer(App& app, int i, const SDL_Rect& area, float ox,
                      ? xanatoo::Rgba{230, 190, 70, 150}
                      : app.renderer.selection_color();
   }
-  app.renderer.draw(pane.layout, scroll, ox, &wash);
+  const auto& visited = pane.visited_links.glyphs;
+  app.renderer.draw(pane.layout, scroll, ox, &wash,
+                    visited.size() == pane.layout.glyphs.size() ? &visited
+                                                                : nullptr);
 }
 
 void release_raster(PaneRaster& r) {
@@ -4506,7 +4509,9 @@ static bool update_pane_raster(App& app, int i, int w, int h, float scroll) {
   const xanatoo::Selection sel = pane.sel.empty() ? xanatoo::Selection{}
                                                   : pane.sel;
   const bool tint = !sel.empty() && prompt_is_search(app) && i == app.focus;
-  const bool same_content = r.valid &&
+  update_visited_links(app, i);
+  const uint64_t visited = pane.visited_links.version;
+  const bool same_content = r.valid && r.visited_version == visited &&
                             r.layout_gen == pane.layout.generation &&
                             r.sel.anchor == sel.anchor &&
                             r.sel.focus == sel.focus && r.search_tint == tint;
@@ -4540,6 +4545,7 @@ static bool update_pane_raster(App& app, int i, int w, int h, float scroll) {
   r.scroll = scroll;
   r.sel = sel;
   r.search_tint = tint;
+  r.visited_version = visited;
   return true;
 }
 
@@ -4576,6 +4582,7 @@ void draw_pane(App& app, int i) {
     xanatoo::sdl::copy(app.sdl, pane.raster.tex[pane.raster.cur], nullptr, &clip);
     xanatoo::sdl::set_clip_rect(app.sdl, &clip);
   } else {
+    update_visited_links(app, i);
     draw_pane_layer(app, i, clip, static_cast<float>(pane.x), draw_scroll);
   }
   draw_page_tiles(app, i, clip, draw_scroll);

@@ -72,6 +72,9 @@
   ;; Inline roles.
   (role metadata (font small) (color "#6a6862"))  ; hostnames, points, discussion
   (role link   (color "#1e5ab4") (underline #t))
+  ;; Links to pages visited before. After `link`: a later link colour drops
+  ;; it, and without one visited links fade the link colour towards the paper.
+  (role visited-link (color "#80408c"))
   (role cite   (color "#5a328c") (underline #t))
   (role footnote-ref (color "#1e5ab4"))
   (role code   (color "#82371e") (background (rgba 245 235 220 200)))

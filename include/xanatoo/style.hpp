@@ -155,6 +155,9 @@ struct DocStyle {
   BlockStyle block[kBlockRoleCount];
   InlineStyle inl[kInlineKindCount];
   InlineStyle metadata;  // semantic inline role, can also apply to links
+  // Links whose page was visited before (`visited-link`). Without a colour
+  // the link colour is faded towards the paper (visited_link_color).
+  InlineStyle visited;
   // One part per sheet that contributes to the variant (see StyleVariant).
   std::map<std::string, std::vector<StyleVariant>> variants;
   // Sheets that lent the colour / font group (StyleChoice); empty = the
@@ -179,6 +182,19 @@ struct DocStyle {
     if (is.has_color) return is.color;
     const BlockStyle& bs = (*this)[r];
     return bs.has_color ? bs.color : ink;
+  }
+  // Glyph colour of a visited link that would otherwise be drawn `link`.
+  // A link in another colour than the link role's (metadata, a role
+  // context) keeps its hue and only fades.
+  Rgba visited_link_color(Rgba link) const {
+    const InlineStyle& ls = inl[static_cast<size_t>(InlineKind::Link)];
+    if (visited.has_color && (!ls.has_color || link == ls.color))
+      return visited.color;
+    auto mix = [](uint8_t a, uint8_t b) {
+      return static_cast<uint8_t>((a * 3 + b * 2) / 5);
+    };
+    return {mix(link.r, paper.r), mix(link.g, paper.g), mix(link.b, paper.b),
+            link.a};
   }
 };
 

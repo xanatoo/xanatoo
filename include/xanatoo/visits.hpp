@@ -84,6 +84,9 @@ int64_t store_visit(const VisitRecord& v);
 void store_visit_leave(int64_t id, int64_t time);
 // Latest visit of the page `address` (exact address), 0 when none.
 int64_t latest_visit_of(std::string_view address);
+// True when a visit of the page `page` (a locator base, as the pages table
+// keys it) is in the log: visited links (docs/STYLESHEETS.md).
+bool page_visited(std::string_view page);
 // Deletes the visits `ids` (in order); visits reached from one of them
 // take its source, so trails stay connected. Returns how many went.
 size_t remove_visits(const std::vector<int64_t>& ids);

@@ -106,7 +106,8 @@ void Renderer::draw_backdrop(const LayoutResult& layout, const SDL_Rect& area,
 }
 
 void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
-                    const SelectionWash* sel) {
+                    const SelectionWash* sel,
+                    const std::vector<uint8_t>* visited) {
   const DocStyle& st = style_ ? *style_ : fallback_style();
   // Cull against the active SDL clip rect (pane / soft-window client area).
   SDL_Rect clip{};
@@ -393,13 +394,18 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
     if (pg.kind == InlineKind::Math && pg.codepoint == kInlineImageCp) continue;
     Font& font = fonts_.pick(pg.font);
     const Glyph& g = font.glyph(pg.codepoint);
+    const bool was_visited = visited && pg.kind == InlineKind::Link &&
+                             i < visited->size() && (*visited)[i];
+    const Rgba color =
+        was_visited ? layout.style_for(pg.node, st).visited_link_color(pg.color)
+                    : pg.color;
 
     if (g.texture) {
       // pg.x is the phase-0 bitmap's left edge; draw from the pen.
       SDL_Rect dst;
       const Glyph& rg =
           font.raster(pg.codepoint, pg.x + origin_x - g.bearing_x,
-                      light_text(pg.color), &dst.x);
+                      light_text(color), &dst.x);
       dst.y = px(pg.y - rg.bearing_y - scroll_y);
       dst.w = rg.width;
       dst.h = rg.height;
@@ -407,9 +413,8 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
         if (rg.color)  // emoji keep their own colours
           SDL_SetTextureColorMod(rg.texture, 255, 255, 255);
         else
-          SDL_SetTextureColorMod(rg.texture, pg.color.r, pg.color.g,
-                                 pg.color.b);
-        SDL_SetTextureAlphaMod(rg.texture, pg.color.a);
+          SDL_SetTextureColorMod(rg.texture, color.r, color.g, color.b);
+        SDL_SetTextureAlphaMod(rg.texture, color.a);
         xanatoo::sdl::copy(sdl_, rg.texture, nullptr, &dst);
       }
     }
@@ -435,7 +440,7 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
       if (!visible(ux, px(pg.y - g.bearing_y - scroll_y), uw,
                    g.height + 4))
         continue;
-      SDL_SetRenderDrawColor(sdl_, pg.color.r, pg.color.g, pg.color.b, 255);
+      SDL_SetRenderDrawColor(sdl_, color.r, color.g, color.b, 255);
       if (underline) {
         const int uy = px(pg.y + 2.f - scroll_y);
         xanatoo::sdl::draw_line(sdl_, ux, uy, ux + uw, uy);

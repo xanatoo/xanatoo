@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Visited links in their own colour
+
+- Links whose page was visited (visit log, or this session's pages also
+  with `--no-save`) are drawn in the new `visited-link` style role:
+  `#80408c` in the built-in / default sheet, the sites' own shades in
+  wikipedia and hackernews. Sheets that set their own `link` colour (night,
+  blue-hour, …) and no `visited-link` fade the link colour 40 % towards
+  the paper. Done at draw time (`update_visited_links`, per-glyph flags),
+  so no relayout when a visit is recorded. Checked under Xvfb.
+- Open: links in hover help, the footnote strip and the context window
+  are not marked; links handed to another program are not visits, so
+  they never turn visited.
+
 ## Status (2026-11-21) — Panels menu icons
 
 - Every Panels menu item (and the panel items repeated in Go) now shows an
