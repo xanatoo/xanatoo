@@ -33,7 +33,9 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
   width × height and track number + title (not repeated on a derivative with
   its original's title). PDFs / EPUBs / images route through the usual
   download / viewer handling.
-- Reviews (`reviews` in the metadata reply): stars, title, reviewer, date, body.
+- Reviews (`reviews` in the metadata reply): stars, title, reviewer, date, body
+  (plain text, not HTML: blank lines split paragraphs, single newlines stay
+  line breaks; `text_md`).
 - Movies, audio and etree items get "▶ Play" (the first file this build plays,
   `is_playable_url` passed into `ia_markdown`; opens the Media panel) and a
   "Watch / listen with mpv" link (`external:mpv:URL`).

@@ -186,6 +186,35 @@ std::string description_md(std::string_view html) {
   return out;
 }
 
+// Plain text (reviews) → Markdown: blank lines end paragraphs, single
+// newlines stay line breaks ("  \n"), every line escaped on its own.
+std::string text_md(std::string_view text) {
+  std::string out, para;
+  auto flush = [&] {
+    if (!para.empty()) out += para + "\n\n";
+    para.clear();
+  };
+  size_t i = 0;
+  while (i <= text.size()) {
+    const size_t e = text.find('\n', i);
+    const std::string t = one_line(text.substr(i, e == std::string_view::npos ? e : e - i));
+    if (t.empty()) {
+      flush();
+    } else {
+      std::string l = esc(t);
+      if (l[0] == '|' || l[0] == '!') l.insert(0, 1, '\\');  // table row / image
+      size_t d = 0;                                          // "1. " list item
+      while (d < l.size() && l[d] >= '0' && l[d] <= '9') ++d;
+      if (d > 0 && d < l.size() && (l[d] == '.' || l[d] == ')')) l.insert(d, 1, '\\');
+      para += (para.empty() ? "" : "  \n") + l;
+    }
+    if (e == std::string_view::npos) break;
+    i = e + 1;
+  }
+  flush();
+  return out;
+}
+
 bool playable_format(std::string_view f) {
   return f == "MPEG4" || f == "h.264" || f == "h.264 IA" || f == "512Kb MPEG4" ||
          f == "Ogg Video" || f == "Matroska" || f == "VBR MP3" || f == "MP3" ||
@@ -514,7 +543,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
           return v.empty() ? std::string() : one_line(v[0]);
         };
         const std::string title = rv("reviewtitle"), who = rv("reviewer"),
-                          when = rv("reviewdate"), body = rv("reviewbody");
+                          when = rv("reviewdate");
         const long long stars = std::clamp(json_number(json_get(r, "stars")), 0LL, 5LL);
         std::string head;
         if (stars > 0) {
@@ -526,7 +555,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
         if (!when.empty()) by += (by.empty() ? "" : ", ") + esc(when.substr(0, 10));
         if (!by.empty()) head += (head.empty() ? "" : " — ") + by;
         if (!head.empty()) md += head + "\n\n";
-        if (!body.empty()) md += description_md(body);
+        if (const auto b = values(json_get(r, "reviewbody")); !b.empty()) md += text_md(b[0]);
       }
     }
   }

@@ -94,7 +94,7 @@ int main() {
     {"name":"cover.jpg","format":"JPEG","source":"metadata"}],
    "item_size":3145728,"files_count":9,"item_last_updated":1700000000,
    "reviews":[{"reviewtitle":"Great","reviewer":"ann","reviewdate":"2020-01-02 03:04:05",
-               "stars":"4","reviewbody":"Worth *reading*."}],
+               "stars":"4","reviewbody":"Worth *reading*.\nTwice.\n\n1. Get it\n| no table"}],
    "metadata":{"identifier":"b","title":"B","mediatype":"texts","imagecount":"312",
      "isbn":["0123456789"],"oclc-id":"12345","openlibrary_edition":"OL1M",
      "scanningcenter":"Hong Kong","ppi":"400","access-restricted-item":"true",
@@ -119,7 +119,8 @@ int main() {
   assert(has(sm, "Added: 2015-06-07\n"));
   assert(has(sm, "Updated: 2023-11-14"));
   assert(has(sm, "Size: 3.0 MB in 9 files"));
-  assert(has(sm, "## Reviews\n\n★★★★☆ **Great** — ann, 2020-01-02\n\nWorth \\*reading\\*."));
+  assert(has(sm, "## Reviews\n\n★★★★☆ **Great** — ann, 2020-01-02\n\n"
+                 "Worth \\*reading\\*.  \nTwice.\n\n1\\. Get it  \n\\| no table\n\n"));
   // Replies without `source` keep one plain list.
   assert(has(md, "## Original files") && !has(ia_markdown(movie, "", {"m", 1}), "## Files"));
   const char* bare = R"({"files":[{"name":"a.txt"}],"metadata":{"identifier":"z","mediatype":"texts"}})";
