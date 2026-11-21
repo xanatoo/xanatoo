@@ -99,10 +99,13 @@ std::vector<LemmyDirectoryEntry> lemmy_discover_payload(
   std::vector<LemmyDirectoryEntry> entries;
   entries.push_back(instance_entry(host));
   auto person = [&](std::string_view object, int64_t count = 0) {
-    const std::string name = handle(json_str_field(object, "name"),
-                                     json_str_field(object, "actor_id"), host);
+    std::string login = json_str_field(object, "name");
+    if (login.empty()) login = json_str_field(object, "user_name");  // PieFed
+    const std::string name =
+        handle(login, json_str_field(object, "actor_id"), host);
     if (name.empty()) return;
     std::string title = clean_text(json_str_field(object, "display_name"), 240);
+    if (title.empty()) title = clean_text(json_str_field(object, "title"), 240);
     if (title.empty()) title = name;
     entries.push_back({LemmyEntryKind::Person, host, name, title,
                        "lemmy:" + host + "/u/" + name, count});
@@ -120,7 +123,9 @@ std::vector<LemmyDirectoryEntry> lemmy_discover_payload(
     const std::string_view post = json_object_after_key(view, "post");
     const std::string_view post_data = post.empty() ? view : post;
     const int64_t id = json_int_field(post_data, "id");
-    const std::string title = clean_text(json_str_field(post_data, "name"), 240);
+    std::string title = clean_text(json_str_field(post_data, "name"), 240);
+    if (title.empty())  // PieFed spells the post title "title"
+      title = clean_text(json_str_field(post_data, "title"), 240);
     const std::string_view counts = json_object_after_key(view, "counts");
     if (id > 0 && !title.empty()) {
       const std::string id_text = std::to_string(id);

@@ -965,6 +965,48 @@ void test_lemmy_quote_links() {
   EXPECT(doc.get(links[0].quote.anchor.node).kind == NodeKind::BlockQuote);
 }
 
+// PieFed's /api/alpha/ payloads: post "title", creator "user_name",
+// comment "body" where Lemmy v3 has "name" / "name" / "content".
+void test_lemmy_piefed_payload() {
+  using namespace xanatoo;
+  EXPECT(is_lemmy_url("https://piefed.social/api/alpha/post/list?limit=5"));
+  EXPECT_EQ(lemmy_alpha_api_url("https://piefed.social/api/v3/post?id=3"),
+            "https://piefed.social/api/alpha/post?id=3");
+  EXPECT_EQ(lemmy_alpha_api_url("https://x.example/c/foo"),
+            "https://x.example/c/foo");
+  const std::string post = R"({"community_view":{},"post_view":{"post":{
+    "id":3,"title":"Hello PieFed","body":"Text",
+    "ap_id":"https://piefed.social/post/3",
+    "published":"2026-01-15T12:34:56.789Z"},
+    "creator":{"user_name":"rimu","title":"Rimu",
+               "actor_id":"https://piefed.social/u/rimu"},
+    "community":{"name":"piefed_meta","title":"PieFed Meta",
+                 "actor_id":"https://piefed.social/c/piefed_meta"},
+    "counts":{"score":5,"comments":1}}})";
+  const std::string comments = R"({"comments":[{"comment":{"id":9,
+    "post_id":3,"body":"Nice reply","path":"0.9",
+    "published":"2026-01-15T13:00:00Z"},
+    "creator":{"user_name":"bob","actor_id":"https://piefed.social/u/bob"},
+    "counts":{"score":1}}]})";
+  const Document doc =
+      lemmy_post_document(post, comments, "https://piefed.social");
+  std::vector<const Node*> msgs;
+  for (const Node& n : doc.nodes)
+    if (n.kind == NodeKind::Message) msgs.push_back(&n);
+  EXPECT(msgs.size() == 2);
+  if (msgs.size() != 2) return;
+  EXPECT(msgs[0]->src == "rimu");
+  EXPECT(msgs[1]->src == "bob");
+  bool title = false, reply = false;
+  for (const Node& n : doc.nodes)
+    for (const InlineSpan& sp : n.spans) {
+      if (sp.text.find("Hello PieFed") != std::string::npos) title = true;
+      if (sp.text.find("Nice reply") != std::string::npos) reply = true;
+    }
+  EXPECT(title || doc.meta.title == "Hello PieFed");
+  EXPECT(reply);
+}
+
 void test_lemmy_post_markup() {
   using namespace xanatoo;
   const std::string post = R"({"post_view":{"post":{"id":7,"name":"Hello",
@@ -8810,6 +8852,7 @@ int main() {
   test_lemmy_quote_links();
   test_lemmy_urls();
   test_lemmy_post_markup();
+  test_lemmy_piefed_payload();
   test_matrix_refs();
   test_matrix_documents();
   test_gemini_urls();

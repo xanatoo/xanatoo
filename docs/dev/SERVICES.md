@@ -163,6 +163,16 @@ read-only service clients. Every client is read-only: never post or log in.
   account is necessary. Only valid ASCII hostnames are stored.
 - API v3 is the existing network client's protocol; Lemmy 1.0 introduced API
   v4 with different endpoints. v4-only servers require a later client update.
+- **PieFed** (`piefed.social`, …) has no `/api/v3`; it serves a
+  Lemmy-shaped API under `/api/alpha/` (`post/list`, `post`, `comment/list`,
+  `user`, `community/list`, `federated_instances`). `lemmy_fetch` retries a
+  404 at `lemmy_alpha_api_url` and then fetches comments under the same
+  prefix. Field aliases: post `title` (Lemmy `name`), creator `user_name`
+  plus display `title` (Lemmy `name` / `display_name`), comment `body`
+  (Lemmy `content`); `parse_post_view` / `parse_comment_view` and
+  `lemmy_discovery.cpp` read either spelling. Other hard-coded `/api/v3`
+  callers rely on the 404 fallback. (`piefed.diffrint.org` is a Lemmy
+  server despite its name.)
 - Optional UA override: `XANATOO_LEMMY_USER_AGENT`.
 
 ## Matrix

@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-21) — Lemmy client reads PieFed
+
+- Question: `lemmy:piefed.diffrint.org` loaded but `lemmy:piefed.social`
+  did not. The first is a Lemmy 0.19 server (nodeinfo); real PieFed has no
+  `/api/v3` (404) but a Lemmy-shaped `/api/alpha/`.
+- `lemmy_fetch` retries a 404 under `/api/alpha/`; post/comment/person
+  parsing accepts PieFed's `title` / `user_name` / `body` spellings.
+  Unit tests for both; checked under Xvfb (piefed.social front page).
+- `examples/services/lemmy.md` gained a PieFed section (six instances,
+  verified via `/nodeinfo/2.1` and `/api/alpha/post/list`).
+- Open: Lemmy Explorer's own instance probes still start at `/api/v3`
+  (they fall back too); PieFed peers are not tagged as PieFed in the list.
+
 ## Status (2026-11-21) — Android: keyboard for an already focused URL bar
 
 - Report: the soft keyboard sometimes did not appear when tapping the URL

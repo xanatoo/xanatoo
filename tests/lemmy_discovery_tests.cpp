@@ -60,4 +60,17 @@ int main() {
   }
   assert(linked && allowed && !blocked);
   assert(lemmy_discover_payload("localhost", response).empty());
+
+  // PieFed (/api/alpha/) spells post titles "title", logins "user_name".
+  constexpr std::string_view piefed = R"({"posts":[{"post":{"id":7,
+    "title":"PieFed post"},"creator":{"user_name":"rimu","title":"Rimu",
+    "actor_id":"https://piefed.social/u/rimu"},"counts":{"score":3}}]})";
+  bool post = false, person = false;
+  for (const auto& e : lemmy_discover_payload("piefed.social", piefed)) {
+    if (e.kind == LemmyEntryKind::Post && e.title == "PieFed post") post = true;
+    if (e.kind == LemmyEntryKind::Person && e.name == "rimu" &&
+        e.title == "Rimu")
+      person = true;
+  }
+  assert(post && person);
 }

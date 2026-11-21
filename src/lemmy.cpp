@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
-// Read-only Lemmy client via HTTP API v3 (JSON).
+// Read-only Lemmy client via HTTP API v3 (JSON). PieFed servers speak a
+// Lemmy-shaped API under /api/alpha/ instead; see lemmy_fetch.
 // Maps posts/comments into Thread + Message document nodes.
 
 #include "xanatoo/lemmy.hpp"
@@ -52,6 +53,7 @@ bool path_looks_lemmy(std::string_view path) {
   if (low.rfind("/post/", 0) == 0 || low.find("/post/") != std::string::npos)
     return true;
   if (low.find("/api/v3/") != std::string::npos) return true;
+  if (low.find("/api/alpha/") != std::string::npos) return true;  // PieFed
   // /u/name is used by many non-Lemmy sites. Explicit lemmy: refs can open
   // profiles, but don't convert arbitrary web profile URLs into Lemmy refs.
   return false;
@@ -71,6 +73,13 @@ bool is_lemmy_url(std::string_view s) {
   if (slash == std::string_view::npos) return false;
   std::string_view path = rest.substr(slash);
   return path_looks_lemmy(path);
+}
+
+std::string lemmy_alpha_api_url(std::string_view url) {
+  std::string out(url);
+  size_t p = out.find("/api/v3/");
+  if (p != std::string::npos) out.replace(p, 8, "/api/alpha/");
+  return out;
 }
 
 namespace {
@@ -114,11 +123,13 @@ LemmyPost parse_post_view(std::string_view view_json) {
   if (post.empty()) post = view_json;
   p.id = json_int_field(post, "id");
   p.title = json_str_field(post, "name");
+  if (p.title.empty()) p.title = json_str_field(post, "title");  // PieFed
   p.body = json_str_field(post, "body");
   p.url = json_str_field(post, "url");
   p.ap_id = json_str_field(post, "ap_id");
   p.published = json_str_field(post, "published");
   p.author = json_str_field(creator, "name");
+  if (p.author.empty()) p.author = json_str_field(creator, "user_name");
   p.author_actor = json_str_field(creator, "actor_id");
   p.community = json_str_field(community, "name");
   if (p.community.empty()) p.community = json_str_field(community, "title");
@@ -138,8 +149,10 @@ LemmyPost parse_comment_view(std::string_view view_json) {
   p.id = json_int_field(comment, "id");
   p.source_post_id = json_int_field(comment, "post_id");
   p.body = json_str_field(comment, "content");
+  if (p.body.empty()) p.body = json_str_field(comment, "body");  // PieFed
   p.published = json_str_field(comment, "published");
   p.author = json_str_field(creator, "name");
+  if (p.author.empty()) p.author = json_str_field(creator, "user_name");
   p.author_actor = json_str_field(creator, "actor_id");
   p.score = json_int_field(counts, "score");
   // Lemmy path: "0.<id>" (top-level) or "0.<parent>.….<id>" (nested).
@@ -380,7 +393,7 @@ struct ParsedUrl {
   std::string community;    // from /c/name
   std::string person;       // from /u/name[@remote.host]
   int64_t post_id = 0;      // from /post/id
-  std::string api_path;     // if already /api/v3/...
+  std::string api_path;     // if already /api/v3/... or /api/alpha/...
   bool front_page = false;  // "/" alone: the instance's post listing
   std::string listing_type; // ?listingType=All|Local|Subscribed (Lemmy UI)
 };
@@ -412,7 +425,8 @@ ParsedUrl parse_lemmy_url(std::string_view s) {
   }
 
   std::string low = ascii_lower(path);
-  if (low.find("/api/v3/") != std::string::npos) {
+  if (low.find("/api/v3/") != std::string::npos ||
+      low.find("/api/alpha/") != std::string::npos) {
     out.api_path = path + query;
     return out;
   }
@@ -487,36 +501,55 @@ std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
     if (!pu.listing_type.empty()) api_url += "&type_=" + pu.listing_type;
   }
 
-  std::string current = api_url;
-  std::optional<HttpResult> resp;
-  for (int hop = 0; hop < 4; ++hop) {
-    std::cerr << "Lemmy: GET " << current << "\n";
-    std::string req_err;
-    resp = https_get(current, lemmy_user_agent(), &req_err);
-    if (!resp) {
-      if (err) *err = req_err.empty() ? "request failed" : req_err;
-      return std::nullopt;
-    }
-    if (resp->status >= 300 && resp->status < 400 && !resp->location.empty()) {
-      std::string loc = resp->location;
-      if (loc.rfind("http", 0) != 0) {
-        if (!loc.empty() && loc[0] == '/')
-          loc = pu.origin + loc;
-        else
-          loc = pu.origin + "/" + loc;
+  auto get_following = [&](std::string current,
+                           std::string* req_err) -> std::optional<HttpResult> {
+    std::optional<HttpResult> r;
+    for (int hop = 0; hop < 4; ++hop) {
+      std::cerr << "Lemmy: GET " << current << "\n";
+      r = https_get(current, lemmy_user_agent(), req_err);
+      if (!r) return r;
+      if (r->status >= 300 && r->status < 400 && !r->location.empty()) {
+        std::string loc = r->location;
+        if (loc.rfind("http", 0) != 0) {
+          if (!loc.empty() && loc[0] == '/')
+            loc = pu.origin + loc;
+          else
+            loc = pu.origin + "/" + loc;
+        }
+        current = loc;
+        continue;
       }
-      current = loc;
-      continue;
+      break;
     }
-    break;
+    return r;
+  };
+
+  std::string req_err;
+  std::optional<HttpResult> resp = get_following(api_url, &req_err);
+  // PieFed has no /api/v3; it serves the Lemmy-shaped API under /api/alpha.
+  std::string api_prefix = "/api/v3/";
+  if (resp && resp->status == 404) {
+    std::string alt = lemmy_alpha_api_url(api_url);
+    if (alt != api_url) {
+      std::string alt_err;
+      auto alt_resp = get_following(alt, &alt_err);
+      if (alt_resp && alt_resp->status == 200) {
+        resp = std::move(alt_resp);
+        api_prefix = "/api/alpha/";
+      }
+    }
+  } else if (ascii_lower(api_url).find("/api/alpha/") != std::string::npos) {
+    api_prefix = "/api/alpha/";
+  }
+  if (!resp) {
+    if (err) *err = req_err.empty() ? "request failed" : req_err;
+    return std::nullopt;
   }
 
-  if (!resp || resp->status != 200) {
+  if (resp->status != 200) {
     if (err)
-      *err = http_status_error(resp ? resp->status : 0) +
-             (resp && resp->status == 403
-                  ? " (instance blocked this client)"
-                  : "");
+      *err = http_status_error(resp->status) +
+             (resp->status == 403 ? " (instance blocked this client)" : "");
     return std::nullopt;
   }
 
@@ -630,7 +663,7 @@ std::optional<Document> lemmy_fetch(std::string_view url_in, std::string* err) {
     // listing type (often Local), which drops comments from federated users
     // and can return an empty list for a post showing "24 comments".
     std::string curl =
-        pu.origin + "/api/v3/comment/list?post_id=" +
+        pu.origin + api_prefix + "comment/list?post_id=" +
         std::to_string(need_comments_for) +
         "&limit=80&max_depth=8&sort=Hot&type_=All";
     std::cerr << "Lemmy: GET " << curl << "\n";
