@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace xanatoo {
 
@@ -171,8 +172,12 @@ void add_story_link(Document& doc, NodeId para, const std::string& text,
 
 const Json* list_field(const Json& obj,
                        std::initializer_list<std::string_view> names) {
-  const Json* a = first(obj, names);
-  return a && a->type == Json::Type::Array ? a : nullptr;
+  // An earlier candidate may be a metadata object (e.g. `media`) while
+  // another key (`attachments`) contains the actual array. Check each type.
+  for (std::string_view name : names)
+    if (const Json* value = object(obj, name);
+        value && value->type == Json::Type::Array) return value;
+  return nullptr;
 }
 
 // Some MCP tools put their data under `data`; static Digg exports use
@@ -213,18 +218,25 @@ StoryImage image_record(const Json& value, bool video = false, bool nested = fal
   }
   if (value.type != Json::Type::Object) return out;
   const std::string media_type = text_field(value, {"type", "mediaType", "kind"});
-  video = video || media_type == "video" || media_type == "audio";
+  const std::string mime = text_field(value, {"mimeType", "mime_type", "contentType"});
+  video = video || media_type == "video" || media_type == "audio" ||
+      media_type == "file" || starts_with_ci(media_type, "video/") ||
+      starts_with_ci(media_type, "audio/") || starts_with_ci(mime, "video/") ||
+      starts_with_ci(mime, "audio/");
+  // A video poster is an image; the video's own `src` or `url` isn't.
   out.thumbnail = media_string(value, {"thumbnailUrl", "thumbnail_url",
-      "previewUrl", "preview_url", "imageUrl", "image_url", "src"});
+      "posterUrl", "poster_url", "previewImageUrl", "preview_image_url",
+      "imageUrl", "image_url"});
   if (out.thumbnail.empty() && !video)
-    out.thumbnail = media_string(value, {"url", "secureUrl"});
+    out.thumbnail = media_string(value, {"previewUrl", "preview_url", "src",
+                                   "url", "secureUrl"});
   out.full = media_string(value, {"fullsize", "fullsizeUrl", "originalUrl",
                                   "original_url", "fullUrl"});
   out.alt = text_field(value, {"alt", "altText", "description", "caption"});
   out.credit = text_field(value, {"credit", "attribution", "sourceName"});
   // A nested image/thumbnail record is common for featured video cards.
   if (out.thumbnail.empty() && !nested) {
-    for (std::string_view key : {"thumbnail", "preview", "image"}) {
+    for (std::string_view key : {"thumbnail", "poster", "preview", "image"}) {
       if (const Json* nested = object(value, key)) {
         StoryImage child = image_record(*nested, false, true);
         if (!child.thumbnail.empty()) {
@@ -254,7 +266,9 @@ StoryImage story_image(const Json& post) {
                                  "image_url", "heroImageUrl", "coverImageUrl",
                                  "featuredImageUrl", "previewImageUrl",
                                  "thumbnail", "heroImage", "featuredImage",
-                                 "coverImage", "previewImage", "image"}) {
+                                 "coverImage", "previewImage", "image",
+                                 "poster", "posterUrl", "poster_url",
+                                 "ogImage", "openGraphImage"}) {
       if (const Json* value = object(*scope, key)) {
         StoryImage img = image_record(*value);
         if (!img.thumbnail.empty()) {
@@ -266,7 +280,7 @@ StoryImage story_image(const Json& post) {
     }
     // An explicit media array may hold video items. For videos, use only a
     // supplied poster/thumbnail, never the media item's playback URL.
-    if (const Json* items = list_field(*scope, {"media", "mediaItems", "attachments"})) {
+    if (const Json* items = list_field(*scope, {"media", "mediaItems", "attachments", "images"})) {
       for (const Json& item : items->items) {
         if (item.type != Json::Type::Object) continue;
         const std::string type = text_field(item, {"type", "mediaType", "kind"});
@@ -275,6 +289,35 @@ StoryImage story_image(const Json& post) {
         if (!img.thumbnail.empty()) return img;
       }
     }
+  }
+  return {};
+}
+
+// The MCP detail format does not guarantee a dedicated post image. A Source
+// can still carry its own explicit thumbnail/poster metadata. Reuse only that
+// declared media: do not fetch thumbnails from arbitrary publisher URLs or
+// infer an image from the article's URL. Retain the publisher as attribution.
+// Keep the scan bounded; a post may have hundreds of Sources.
+StoryImage source_preview_image(const Json& data, const Json& post) {
+  const Json* sources = list_field(post, {"sources"});
+  if ((!sources || sources->items.empty()) && &post != &data)
+    sources = list_field(data, {"sources"});
+  if (!sources) return {};
+  const size_t limit = std::min(sources->items.size(), size_t{24});
+  for (size_t i = 0; i < limit; ++i) {
+    const Json& source = sources->items[i];
+    if (source.type != Json::Type::Object) continue;
+    StoryImage image = story_image(source);
+    if (image.thumbnail.empty()) continue;
+    if (image.credit.empty()) {
+      image.credit = text_field(source, {"publisher", "siteName", "domain", "authorName"});
+      if (image.credit.empty()) {
+        const Json* author = object(source, "author");
+        if (author && author->type == Json::Type::Object)
+          image.credit = text_field(*author, {"displayName", "name"});
+      }
+    }
+    return image;
   }
   return {};
 }
@@ -492,7 +535,9 @@ void add_story(Document& doc, NodeId thread, const Json& story,
   if (title.empty()) return;
   NodeId art = doc.create(NodeKind::Article, thread);
   doc.get(art).label = text_field(story, {"id", "shortId", "clusterUrlId"});
-  add_story_image(doc, art, story_image(story), title, true);
+  StoryImage preview = story_image(story);
+  if (preview.thumbnail.empty()) preview = source_preview_image(story, story);
+  add_story_image(doc, art, std::move(preview), title, true);
   const std::string ref = native_post(story);
   const std::string web = post_web(story);
   NodeId heading = doc.create(NodeKind::Paragraph, art);
@@ -522,6 +567,47 @@ void add_story(Document& doc, NodeId thread, const Json& story,
   }
 }
 
+// An attributed Source may include media that the reader cannot play inline.
+// Preserve explicit playback/image links beside its citation, instead of
+// silently dropping the attachment or creating a large media gallery.
+struct SourceMediaLink { std::string label, url; };
+
+std::vector<SourceMediaLink> source_media_links(const Json& source) {
+  std::vector<SourceMediaLink> out;
+  constexpr size_t kMaxLinks = 4;
+  auto add = [&](const Json& item) {
+    if (out.size() >= kMaxLinks || item.type != Json::Type::Object) return;
+    const std::string type = ascii_lower(text_field(item, {"type", "mediaType", "kind"}));
+    const std::string mime = ascii_lower(text_field(item, {"mimeType", "mime_type", "contentType"}));
+    const bool video = type == "video" || starts_with(type, "video/") || starts_with(mime, "video/");
+    const bool audio = type == "audio" || starts_with(type, "audio/") || starts_with(mime, "audio/");
+    const bool image = type == "image" || type == "photo" || starts_with(type, "image/") || starts_with(mime, "image/");
+    std::string url, label;
+    if (video || audio) {
+      url = media_string(item, {"playbackUrl", "playback_url", "mediaUrl", "media_url", "src", "url"});
+      label = video ? "Video" : "Audio";
+    } else if (image) {
+      StoryImage im = image_record(item);
+      url = !im.full.empty() ? std::move(im.full) : std::move(im.thumbnail);
+      label = "Image";
+    }
+    if (!web_url(url)) return;
+    for (const SourceMediaLink& previous : out)
+      if (previous.url == url) return;
+    out.push_back({std::move(label), std::move(url)});
+  };
+  if (const Json* media = object(source, "media")) {
+    if (media->type == Json::Type::Object) add(*media);
+    else if (media->type == Json::Type::Array)
+      for (const Json& item : media->items) add(item);
+  }
+  for (std::string_view key : {"attachments", "mediaItems", "images"}) {
+    if (const Json* array = list_field(source, {key}))
+      for (const Json& item : array->items) add(item);
+  }
+  return out;
+}
+
 // Source entries are citations, not a second news feed with giant headlines.
 // Keep the attribution under the link and the publisher's excerpt separate
 // from Digg's own editorial summary above.
@@ -541,8 +627,9 @@ void add_source(Document& doc, NodeId section, const Json& source, size_t index)
   }
   const std::string outlet = text_field(source, {"domain", "publisher", "siteName"});
   const std::string excerpt = text_field(source, {"excerpt", "text", "description"});
+  const std::vector<SourceMediaLink> media = source_media_links(source);
   if (title.empty() && author.empty() && outlet.empty() && excerpt.empty() &&
-      !web_url(href)) return;
+      !web_url(href) && media.empty()) return;
 
   NodeId art = doc.create(NodeKind::Article, section);
   doc.get(art).label = "source-" + std::to_string(index + 1);
@@ -555,7 +642,7 @@ void add_source(Document& doc, NodeId section, const Json& source, size_t index)
   const bool x_post = type == "x" || type == "tweet";
   const bool has_outlet = !outlet.empty() && outlet != name && outlet != author;
   const bool has_author = !author.empty() && author != name;
-  if (x_post || has_outlet || has_author ||
+  if (x_post || has_outlet || has_author || !media.empty() ||
       first(source, {"publishedAt", "createdAt", "firstSourceAt",
                      "firstSourceTime", "earliestSourceAt", "earliestSourceTime"})) {
     NodeId cap = doc.create(NodeKind::Caption, art);
@@ -569,6 +656,11 @@ void add_source(Document& doc, NodeId section, const Json& source, size_t index)
       add_meta(doc, cap, "by " + author);
     }
     add_date(doc, cap, source);
+    for (const SourceMediaLink& item : media) {
+      if (item.url == href) continue;
+      add_sep(doc, cap);
+      add_link(doc, cap, item.label, item.url, InlineRole::Metadata);
+    }
   }
   if (!excerpt.empty() && excerpt != title && excerpt != name)
     append_plain(doc, art, excerpt);
@@ -987,6 +1079,7 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
   // Prefer the post image, falling back to outer MCP metadata when needed.
   StoryImage featured = story_image(*post);
   if (featured.thumbnail.empty() && post != &data) featured = story_image(data);
+  if (featured.thumbnail.empty()) featured = source_preview_image(data, *post);
   add_story_image(doc, art, std::move(featured), title, false);
   const Json* blocks = editorial_blocks(*post);
   if (!blocks && post != &data) blocks = editorial_blocks(data);

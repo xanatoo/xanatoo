@@ -284,6 +284,100 @@ void media_and_metadata() {
   CHECK(images == 2);
   CHECK(hero_links == 1);
 
+  // Sources can carry an explicit image even if the enclosing Digg post
+  // has no hero/thumbnail field. Keep the source credited; never turn the
+  // source's web/video URL into an image by guessing.
+  Document source_feed = digg_list_document(parse(R"JSON({"posts":[
+    {"title":"Source thumbnail", "sources":[
+      {"url":"https://publisher.example/one", "publisher":"The Publisher",
+       "media":{"type":"image","url":"https://cdn.example/one.jpg",
+                "alt":"View from the event"}}]},
+    {"title":"Video without a poster", "sources":[
+      {"media":{"type":"video", "src":"https://cdn.example/play.mp4",
+                "url":"https://cdn.example/play2.mp4"}}]},
+    {"title":"Video with a poster", "sources":[
+      {"media":{"type":"video", "src":"https://cdn.example/watch.mp4",
+                "poster":{"url":"https://cdn.example/still.jpg", "alt":"Video poster"}}}]},
+    {"title":"Image from attachments", "sources":[
+      {"media":{"type":"video/mp4","url":"https://cdn.example/video.mp4"},
+       "attachments":[{"type":"image","url":"https://cdn.example/frame.jpg"}]}]}
+  ]})JSON"), address("digg:"));
+  int source_pics = 0;
+  for (const Node& n : source_feed.nodes) {
+    if (n.kind != NodeKind::Image) continue;
+    ++source_pics;
+    CHECK(n.float_side == "right");
+    CHECK(n.src == "https://cdn.example/one.jpg" ||
+          n.src == "https://cdn.example/still.jpg" ||
+          n.src == "https://cdn.example/frame.jpg");
+    if (n.src.ends_with("one.jpg")) CHECK(n.alt == "View from the event");
+    if (n.src.ends_with("still.jpg")) CHECK(n.alt == "Video poster");
+  }
+  CHECK(source_pics == 3);
+
+  // A detail page must use the same media fallback and attribute the image
+  // to its publisher. If its own image exists, that takes precedence.
+  Document source_post = digg_post_document(parse(R"JSON({
+    "post":{"title":"Story without hero", "summary":"A concise Digg overview",
+            "sources":[]},
+    "sources":[
+      {"url":"https://publisher.example/a", "publisher":"Example News",
+       "thumbnail":{"url":"https://cdn.example/source.jpg",
+                    "originalUrl":"https://cdn.example/large.jpg",
+                    "altText":"Source photo"}}
+    ]
+  })JSON"), address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  int source_heroes = 0;
+  for (const Node& n : source_post.nodes) {
+    if (n.kind != NodeKind::Image) continue;
+    ++source_heroes;
+    CHECK(n.src == "https://cdn.example/source.jpg");
+    CHECK(n.alt == "Source photo");
+    CHECK(n.float_side.empty());
+  }
+  CHECK(source_heroes == 1);
+  CHECK(says(source_post, "Image: Example News"));
+  CHECK(link(source_post, "https://cdn.example/large.jpg"));
+
+  // Other Source media remain accessible as quiet links, not giant
+  // duplicate cards or silently discarded playback URLs.
+  Document source_media = digg_post_document(parse(R"JSON({
+    "title":"Multimedia coverage", "sources":[
+      {"title":"Source with clips", "url":"https://publisher.example/story",
+       "media":{"type":"video", "url":"https://cdn.example/clip.mp4"},
+       "attachments":[
+         {"type":"image", "url":"https://cdn.example/photo.jpg"},
+         {"type":"audio", "url":"https://cdn.example/interview.mp3"},
+         {"type":"video", "url":"javascript:alert(1)"}]}
+    ]
+  })JSON"), address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  CHECK(link(source_media, "https://cdn.example/clip.mp4"));
+  CHECK(link(source_media, "https://cdn.example/photo.jpg"));
+  CHECK(link(source_media, "https://cdn.example/interview.mp3"));
+  CHECK(says(source_media, "Video"));
+  CHECK(says(source_media, "Audio"));
+  CHECK(!link(source_media, "javascript:alert(1)"));
+  int media_links = 0;
+  for (const Node& n : source_media.nodes) {
+    for (const InlineSpan& sp : n.spans) {
+      if (sp.href == "https://cdn.example/clip.mp4" ||
+          sp.href == "https://cdn.example/photo.jpg" ||
+          sp.href == "https://cdn.example/interview.mp3") {
+        CHECK(sp.role == InlineRole::Metadata);
+        ++media_links;
+      }
+    }
+  }
+  CHECK(media_links == 3);
+
+  // An explicit MIME-typed video URL is not a thumbnail, even when a
+  // producer puts it in a generic `media` record.
+  Document no_video_image = digg_post_document(parse(R"JSON({
+    "title":"Only a video", "media":{"mimeType":"video/mp4",
+      "url":"https://cdn.example/movie.mp4", "src":"https://cdn.example/movie.mp4"}
+  })JSON"), address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  for (const Node& n : no_video_image.nodes) CHECK(n.kind != NodeKind::Image);
+
   // Missing metadata must not produce empty placeholder sections or images.
   Document sparse = digg_post_document(parse(R"({"title":"Empty", "summary":"Only text"})"),
       address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));

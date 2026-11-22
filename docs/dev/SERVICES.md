@@ -543,6 +543,14 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   links to an original image. A media item's video URL is never used as an
   image URL; only explicit poster/thumbnail fields qualify. Image records
   may be missing from MCP even when Digg's HTML page contains an image.
+  If a post has no image but one of its first 24 attributed Sources contains
+  an explicit image or video poster, the reader uses that as its feed
+  thumbnail / post image, retaining source attribution. The lookup stops at
+  supplied metadata: it does not scrape third-party pages for OpenGraph tags.
+  Video and audio playback URLs are never mistaken for image URLs; Source
+  citations expose up to four explicitly supplied image, video, or audio
+  attachment links in their quiet metadata row rather than opening a large
+  media gallery. Missing/unusable URL fields remain absent, not fabricated.
   The public `llms.txt` does **not** guarantee images in the Feed/Post tools.
 - Fields that the old renderer silently dropped are now mapped **when
   present**: `distinctSourceAuthorCount`, aggregated source engagement

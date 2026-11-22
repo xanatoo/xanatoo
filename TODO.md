@@ -5448,3 +5448,23 @@ copy and sparse payloads. The app still cannot retrieve comments when MCP
 does not supply a discussion array; contributor avatars and web-only article
 content remain outside the native reader. Live API verification and visual
 SDL/Nix review still required on a networked machine.
+
+## Digg source-media fallback and citation links (2026-11-22)
+
+Continue from bundle 298; no pagination or favicon work. Reviewed Digg's
+published `llms.txt` and MCP connection guide. The public read-only MCP
+contract does not promise media fields or native comments. Added fallback
+from post-level images to explicit image/poster metadata on attributed
+Sources (up to the first 24 supplied Source records), preserving image alt
+text and publisher credit; feed thumbnails use the existing right-float image
+node, while post images use the existing article image node. Source citations
+now expose explicitly supplied image/video/audio links as compact metadata
+instead of silently dropping attachments. Fixed the Digg field selector:
+`list_field` must keep looking when the first named key is not an array
+(`media` object coexisting with `attachments` array). Hardened video/MIME
+handling so playback URL is never used as a thumbnail. No new UI systems or
+C++ classes. Expanded offline synthetic-response fixtures cover source
+attribution, nested posters, simultaneous media/attachments, source-only
+image fields, media links, invalid URLs and video-only payloads. Live MCP
+schema and full SDL visual review remain unverified in this environment.
+Web handover bundle 299 supersedes 298; reserve 300 next.
