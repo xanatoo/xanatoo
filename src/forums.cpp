@@ -154,7 +154,7 @@ bool digg_uuid(std::string_view id) {
 
 bool valid_digg_ref(const ForumRef& r) {
   if (r.page != 1 || !r.fragment.empty()) return false;
-  if (r.path == "search") return !r.query.empty() && r.cursor.empty();
+  if (r.path == "search") return !r.query.empty();
   if (!r.query.empty()) return false;
   if (starts_with(r.path, "post/"))
     return digg_uuid(std::string_view(r.path).substr(5)) && r.cursor.empty();

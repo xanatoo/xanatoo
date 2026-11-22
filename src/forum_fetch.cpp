@@ -442,8 +442,7 @@ std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err) {
   }
   if (ref.path == "search") {
     auto reply = digg_mcp_call("digg_search_posts",
-                                "{\"query\":" + json_quote(ref.query) +
-                                ",\"limit\":30}", err);
+                                digg_search_arguments(ref), err);
     if (!reply) return std::nullopt;
     return digg_list_document(*reply, ref);
   }

@@ -95,6 +95,87 @@ void feed_arguments() {
   CHECK(json_string(json_path(more, "cursor")) == "a/b=c");
 }
 
+void search_arguments() {
+  CHECK(address("digg:search?query=moon&cursor=a%2Fb%3Dc").cursor == "a%2Fb%3Dc");
+  const Json args = parse(digg_search_arguments(address(
+      "digg:search?query=moon+landing&cursor=a%2Fb%3Dc")));
+  CHECK(json_string(json_path(args, "query")) == "moon landing");
+  CHECK(json_string(json_path(args, "cursor")) == "a/b=c");
+  CHECK(json_number(json_path(args, "limit")) == 30);
+  CHECK(!json_path(parse(digg_search_arguments(address("digg:search?query=test"))),
+                   "cursor"));
+}
+
+void polished_layout() {
+  Document home = digg_list_document(parse(R"({"posts":[]})"), address("digg:"));
+  CHECK(link(home, "digg:all/top"));
+  CHECK(!link(home, "digg:all/trending"));  // Home defaults to Trending
+  Document topic = digg_list_document(parse(R"({"posts":[]})"), address("digg:science"));
+  CHECK(link(topic, "digg:science/trending"));
+  CHECK(!link(topic, "digg:science/top"));  // Topic defaults to Top
+  CHECK(link(topic, "digg:science/hot"));
+  CHECK(link(topic, "digg:science/best"));
+  Document all_top = digg_list_document(parse(R"({"posts":[]})"),
+      address("digg:all/top"));
+  CHECK(!link(all_top, "digg:"));  // All is the selected topic
+  CHECK(!link(all_top, "digg:all/top"));
+
+  const ForumRef post = address("digg:post/01234567-89ab-cdef-0123-456789abcdef");
+  Document doc = digg_post_document(parse(R"JSON({
+    "post":{"title":"Grouped coverage", "id":"01234567-89ab-cdef-0123-456789abcdef",
+            "url":"https://digg.com/science/a8bx21dc", "topic":"science",
+            "diggScore":42, "sourceCount":5, "distinctSourceAuthorCount":2,
+            "publishedAt":"2026-11-20T11:00:00Z",
+            "updatedAt":"2026-11-22T13:00:00Z", "summary":"Digg editorial summary"},
+    "sources":[
+       {"title":"First publisher", "url":"https://first.example/one", "domain":"first.example",
+        "author":"Reporter One", "type":"web", "publishedAt":"2026-11-20T12:00:00Z",
+        "excerpt":"An excerpt unique to the first publisher"},
+       {"author":{"displayName":"Researcher"}, "url":"https://x.com/researcher/status/123", "type":"x",
+        "text":"First-hand commentary from X"},
+       {"title":"Unsafe link", "url":"javascript:alert(1)", "excerpt":"Still plain text"}
+    ], "nextSourceOffset":3, "totalSources":5
+  })JSON"), post);
+  CHECK(says(doc, "Digg Score 42"));
+  CHECK(says(doc, "2 source authors"));
+  CHECK(says(doc, "Updated 2026-11-22"));
+  CHECK(link(doc, "digg:science"));
+  CHECK(says(doc, "Sources (5)"));
+  CHECK(link(doc, "https://first.example/one"));
+  CHECK(link(doc, "https://x.com/researcher/status/123"));
+  CHECK(says(doc, "Researcher"));
+  CHECK(!link(doc, "javascript:alert(1)"));
+  CHECK(says(doc, "by Reporter One"));
+  CHECK(says(doc, "X post"));
+  CHECK(says(doc, "See all sources on Digg"));
+  CHECK(link(doc, "https://digg.com/science/a8bx21dc"));
+  // The page title is shown by the Thread, not repeated in an Article.
+  int title_lines = 0, source_articles = 0, excerpts_in_sources = 0;
+  for (const Node& n : doc.nodes) {
+    if (n.kind == NodeKind::Header)
+      for (const InlineSpan& sp : n.spans)
+        if (sp.text == "Grouped coverage") ++title_lines;
+    if (n.kind == NodeKind::Article && n.label.find("source-") == 0)
+      ++source_articles;
+    if (n.kind == NodeKind::Paragraph &&
+        doc.get(n.parent).kind == NodeKind::Article &&
+        doc.get(n.parent).label.find("source-") == 0)
+      for (const InlineSpan& sp : n.spans)
+        if (sp.text.find("excerpt unique") != std::string::npos ||
+            sp.text.find("First-hand commentary") != std::string::npos)
+          ++excerpts_in_sources;
+  }
+  CHECK(title_lines == 1);
+  CHECK(source_articles == 3);
+  CHECK(excerpts_in_sources == 2);
+
+  // A publisher address in `post.url` must not be mislabelled a Digg page.
+  Document misleading = digg_post_document(parse(R"({"title":"External link",
+    "url":"https://publisher.example/important", "summary":"Summary"})"), post);
+  CHECK(!link(misleading, "https://publisher.example/important"));
+  CHECK(!says(misleading, "View on Digg"));
+}
+
 void mcp_transport() {
   constexpr std::string_view sample = R"({"jsonrpc":"2.0","id":1,
     "result":{"structuredContent":{"posts":[{"title":"A sample"}]}}})";
@@ -249,12 +330,12 @@ void lists_and_posts() {
   CHECK(link(doc, "digg:science?cursor=abc%2F123%3D"));
   CHECK(says(doc, "Successful test flight"));
   CHECK(says(doc, "3 sources"));
-  CHECK(says(doc, "45 points"));
+  CHECK(says(doc, "Digg Score 45"));
   CHECK(link(doc, "https://digg.com/tech/efgh5678"));
 
   Document search = digg_list_document(payload, address("digg:search?query=flight"));
   CHECK(search.meta.title.find("flight") != std::string::npos);
-  CHECK(!link(search, "digg:search?query=flight&cursor=abc%2F123%3D"));
+  CHECK(link(search, "digg:search?query=flight&cursor=abc%2F123%3D"));
   // Published static JSON feeds use "clusters", not "posts".
   Document clusters = digg_list_document(parse(R"({"clusters":[{"title":"Short story",
      "clusterUrlId":"abcdef12","topic":"ai"}]})"), address("digg:ai"));
@@ -281,6 +362,8 @@ void lists_and_posts() {
 int main() {
   refs();
   feed_arguments();
+  search_arguments();
+  polished_layout();
   mcp_transport();
   mcp_owned_result_regression();
   lists_and_posts();

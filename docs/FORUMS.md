@@ -40,7 +40,7 @@ recorded replies.
 | `digg:TOPIC` | AI, technology, gaming, entertainment, world-business, science or sports |
 | `digg:TOPIC/top` / `digg:TOPIC/newest` | select a feed view; `trending`, `best`, `hot` are also supported |
 | `digg:all/top` | a feed view across all topics |
-| `digg:search?query=WORDS` | published Digg stories found by keyword/semantic search |
+| `digg:search?query=WORDS[&cursor=C]` | recent Digg stories found by keyword/semantic search; nextCursor pages |
 | `digg:post/UUID` | Digg post summary and its attributed X/web sources (UUID from a feed/search) |
 
 The 4chan prefix is `fourchan:` because a URI scheme must start with a
@@ -112,9 +112,11 @@ The official `https://digg.com/mcp` Streamable HTTP endpoint offers
 anonymous, read-only tools. xanatoo currently uses `digg_get_feed`,
 `digg_search_posts`, and `digg_get_post`, sending JSON-RPC `tools/call` requests directly
 (accepting JSON or SSE), without an API key or browser, and renders the
-structured response as native articles. Feed results carry an opaque
-`nextCursor` to fetch more stories, which may expire; search covers only
-recent published stories, not the whole historic archive. `digg_get_post`
+structured response as native articles. Feed and search results carry an
+opaque `nextCursor` to fetch more stories, which may expire; search covers
+published posts from the last 90 days, not the whole historic archive.
+The Home feed defaults to Trending, topic feeds to Top for today; the
+native view row also offers Best, Hot and Newest. `digg_get_post`
 uses a UUID (not the short ID in a Digg web page URL), and its sources
 link to the original articles or X posts. The current implementation shows
 the first source page only; remaining sources can be read on Digg’s site.
@@ -125,14 +127,24 @@ Technology listings (the latter is **not** rank-ordered). There is no
 published public write/authentication interface for making Diggs or
 posting comments. Digg web **topic** URLs are convertible to native
 refs; post web URLs cannot be converted to an MCP UUID, so they remain
-ordinary web pages. See https://digg.com/llms.txt and
-https://digg.com/mcp/connect for the published interfaces.
+ordinary web pages. The native layout uses one story headline, an attributed
+Digg Score / source / topic / date line, the Digg introduction, TLDR and any
+longer Digg overview, then a Sources section. Each linked source is a distinct
+Article with author, outlet, publication time and excerpt grouped together;
+source excerpts are never promoted into Digg copy. When the MCP response
+indicates more source pages, the post offers a link to Digg for the rest.
+Topic navigation and view selection are separate rows. Search has its own
+cursor pagination and no fabricated numbered pages. See
+https://digg.com/llms.txt and https://digg.com/mcp/connect for the
+published interfaces.
 
 The parser / MCP envelope tests are offline (`xanatoo_digg_tests`), including
 full 20-story feeds and a regression for use-after-free when unwrapping an
 MCP `result` nested inside its owning JSON object. The regression triggers
 AddressSanitizer on the old implementation and passes on the corrected one.
-The transport has not yet been live-tested against Digg from this environment.
+The transport has not been live-tested against Digg in this development
+environment. The offline fixtures cover known field variants and semantic
+Document structure, but are not live MCP response captures.
 
 ## Not done
 

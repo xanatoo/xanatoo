@@ -152,7 +152,10 @@ std::string post_topic(const Json& post);
 
 std::string post_web(const Json& post) {
   const std::string url = text_field(post, {"url", "postUrl", "permalink"});
-  if (web_url(url)) return url;
+  // A link labelled "on Digg" must really resolve to Digg, never a
+  // publisher URL accidentally supplied in a feed's `url` field.
+  if (starts_with_ci(url, "https://digg.com/") ||
+      starts_with_ci(url, "https://www.digg.com/")) return url;
   // Published static JSON cluster feeds may carry the short URL id but
   // no absolute page URL. Only use documented topic slugs and safe ids.
   const std::string id = text_field(post, {"clusterUrlId", "shortId", "urlId"});
@@ -174,66 +177,98 @@ std::string post_topic(const Json& post) {
   return json_string(t);
 }
 
+// Digg's public Topics and feed sorts are a small table, not UI-specific
+// branches or a second state model. Keep navigation and labels in one place.
+struct LabelRef { std::string_view name, slug; };
+constexpr LabelRef kTopics[] = {
+    {"All", "all"}, {"AI", "ai"}, {"Technology", "tech"},
+    {"Gaming", "gaming"}, {"Entertainment", "entertainment"},
+    {"World & Business", "world-business"}, {"Science", "science"},
+    {"Sports", "sports"},
+};
+constexpr LabelRef kViews[] = {
+    {"Trending", "trending"}, {"Top", "top"}, {"Best", "best"},
+    {"Hot", "hot"}, {"Newest", "newest"},
+};
+
 std::string topic_name(std::string_view slug) {
-  if (slug == "ai") return "AI";
-  if (slug == "tech") return "Technology";
-  if (slug == "world-business") return "World & Business";
-  if (slug == "gaming") return "Gaming";
-  if (slug == "entertainment") return "Entertainment";
-  if (slug == "science") return "Science";
-  if (slug == "sports") return "Sports";
+  for (const LabelRef& topic : kTopics)
+    if (topic.slug == slug) return std::string(topic.name);
   return "All topics";
 }
 
-std::string digg_ref(std::string path) {
-  return "digg:" + path;
-}
+std::string digg_ref(std::string path) { return "digg:" + path; }
 
 std::vector<NavItem> nav_for(const ForumRef& ref) {
   const std::string topic = ref.path.substr(0, ref.path.find('/'));
-  const bool home = ref.path.empty() || ref.path == "search" ||
-                    starts_with(ref.path, "post/");
-  std::vector<NavItem> nav = {
-      {"All", "digg:", ref.path.empty()},
-      {"AI", "digg:ai", !home && topic == "ai"},
-      {"Tech", "digg:tech", !home && topic == "tech"},
-      {"Gaming", "digg:gaming", !home && topic == "gaming"},
-      {"Entertainment", "digg:entertainment", !home && topic == "entertainment"},
-      {"World", "digg:world-business", !home && topic == "world-business"},
-      {"Science", "digg:science", !home && topic == "science"},
-      {"Sports", "digg:sports", !home && topic == "sports"},
-  };
-  if (ref.path != "search" && !starts_with(ref.path, "post/")) {
-    const std::string base = topic.empty() ? "all/" : topic + "/";
-    const std::string_view v = ref.path.find('/') == std::string::npos
-                                   ? std::string_view{} :
-                                   std::string_view(ref.path).substr(ref.path.find('/') + 1);
-    nav.push_back({"Trending", digg_ref(base + "trending"), v.empty() || v == "trending"});
-    nav.push_back({"Top", digg_ref(base + "top"), v == "top"});
-    nav.push_back({"Newest", digg_ref(base + "newest"), v == "newest"});
+  std::vector<NavItem> nav;
+  for (const LabelRef& item : kTopics) {
+    // The Home feed is `digg:`, not `digg:all`.
+    const std::string target = item.slug == "all" ? "digg:" :
+                               digg_ref(std::string(item.slug));
+    nav.push_back({std::string(item.name), target,
+                   item.slug == "all" ? (ref.path.empty() || topic == "all") :
+                                        topic == item.slug});
   }
   return nav;
 }
 
-void add_date(Document& doc, NodeId caption, const Json& obj) {
-  const std::string instant = text_field(obj, {"publishedAt", "createdAt",
-                                                  "firstSourceAt", "firstSourceTime"});
-  if (instant.empty()) return;
-  add_sep(doc, caption);
-  InlineSpan s;
-  s.role = InlineRole::Metadata;
-  s.text = short_time(instant);
-  s.datetime = instant;
-  doc.get(caption).spans.push_back(std::move(s));
+// A separate navigation row keeps eight topics and five view options from
+// becoming one long, hard-to-scan line. The Topic page defaults to Top,
+// whereas Home defaults to Trending (as specified by the MCP feed tool).
+void add_view_nav(Document& doc, NodeId thread, const ForumRef& ref) {
+  if (ref.path == "search" || starts_with(ref.path, "post/")) return;
+  const size_t slash = ref.path.find('/');
+  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
+  const std::string view = slash == std::string::npos ?
+      (topic == "all" ? "trending" : "top") : ref.path.substr(slash + 1);
+  NodeId nav = doc.create(NodeKind::Chrome, thread);
+  doc.get(nav).summary = "navigation";
+  NodeId line = doc.create(NodeKind::Paragraph, nav);
+  add_text(doc, line, "View: ", InlineKind::Strong);
+  for (const LabelRef& item : kViews) {
+    if (item.slug != kViews[0].slug) add_meta(doc, line, " · ");
+    if (item.slug == view) add_text(doc, line, std::string(item.name), InlineKind::Strong);
+    else add_link(doc, line, std::string(item.name),
+                  digg_ref(topic + "/" + std::string(item.slug)));
+  }
 }
 
-void add_stats(Document& doc, NodeId caption, const Json& post) {
-  const Json* score = first(post, {"diggScore", "score"});
-  if (score) add_meta(doc, caption, count(json_number(score), "point", "points"));
-  const Json* sources = first(post, {"sourceCount", "sourcesCount"});
-  if (sources) {
+void add_timestamp(Document& doc, NodeId caption, const std::string& instant,
+                   std::string_view prefix = {}) {
+  if (instant.empty()) return;
+  add_sep(doc, caption);
+  InlineSpan span;
+  span.role = InlineRole::Metadata;
+  span.text = std::string(prefix) + short_time(instant);
+  span.datetime = instant;
+  doc.get(caption).spans.push_back(std::move(span));
+}
+
+void add_date(Document& doc, NodeId caption, const Json& obj) {
+  add_timestamp(doc, caption, text_field(obj,
+      {"publishedAt", "createdAt", "firstSourceAt", "firstSourceTime",
+       "earliestSourceAt", "earliestSourceTime"}));
+}
+
+void add_stats(Document& doc, NodeId caption, const Json& post,
+               bool detail = false) {
+  if (const Json* score = first(post, {"diggScore", "score"}))
+    add_meta(doc, caption, "Digg Score " + std::to_string(json_number(score)));
+  if (const Json* sources = first(post, {"sourceCount", "sourcesCount"})) {
     add_sep(doc, caption);
     add_meta(doc, caption, count(json_number(sources), "source", "sources"));
+  }
+  if (const Json* authors = first(post,
+          {"distinctSourceAuthors", "distinctSourceAuthorCount", "sourceAuthorCount"})) {
+    const bool numeric = authors->type == Json::Type::Number ||
+                         authors->type == Json::Type::String;
+    if (numeric || authors->type == Json::Type::Array) {
+      const long long n = authors->type == Json::Type::Array ?
+          static_cast<long long>(authors->items.size()) : json_number(authors);
+      add_sep(doc, caption);
+      add_meta(doc, caption, count(n, "source author", "source authors"));
+    }
   }
   const std::string topic = post_topic(post);
   if (!topic.empty()) {
@@ -241,8 +276,16 @@ void add_stats(Document& doc, NodeId caption, const Json& post) {
     add_link(doc, caption, topic_name(topic), digg_ref(topic), InlineRole::Metadata);
   }
   add_date(doc, caption, post);
+  if (detail) {
+    const std::string updated = text_field(post, {"updatedAt", "lastUpdatedAt"});
+    const std::string published = text_field(post, {"publishedAt", "createdAt"});
+    if (!updated.empty() && updated != published)
+      add_timestamp(doc, caption, updated, "Updated ");
+  }
 }
 
+// The feed is a scan-friendly list of summaries, not a repetition of the
+// complete post. Full Digg copy and attributed sources belong on post pages.
 void add_story(Document& doc, NodeId thread, const Json& story) {
   const std::string title = text_field(story, {"title", "headline", "label"});
   if (title.empty()) return;
@@ -260,10 +303,59 @@ void add_story(Document& doc, NodeId thread, const Json& story) {
     add_sep(doc, cap);
     add_link(doc, cap, "Digg page", web, InlineRole::Metadata);
   }
-  const std::string intro = post_intro(story);
   const std::string summary = post_summary(story);
-  if (!intro.empty()) append_plain(doc, art, intro);
-  if (!summary.empty() && summary != intro) append_plain(doc, art, summary);
+  const std::string intro = post_intro(story);
+  if (!summary.empty()) append_plain(doc, art, summary);
+  else if (!intro.empty()) append_plain(doc, art, intro);
+}
+
+// Keep each attributed source's title, attribution, date and excerpt inside
+// one Article. Previously excerpts were appended directly to the post, making
+// them look like Digg's own text and separating them from their publishers.
+void add_source(Document& doc, NodeId section, const Json& source, size_t index) {
+  const std::string href = text_field(source, {"url", "sourceUrl", "xUrl"});
+  const std::string title = text_field(source, {"title", "headline"});
+  std::string author = text_field(source,
+      {"authorName", "author", "displayName", "username", "handle"});
+  // Some source records attribute an X post to a nested account record.
+  if (author.empty()) {
+    for (std::string_view key : {"author", "account"}) {
+      const Json* person = object(source, key);
+      if (person && person->type == Json::Type::Object) {
+        author = text_field(*person, {"displayName", "name", "username", "handle"});
+        if (!author.empty()) break;
+      }
+    }
+  }
+  const std::string outlet = text_field(source, {"domain", "publisher", "siteName"});
+  const std::string excerpt = text_field(source, {"excerpt", "text", "description"});
+  if (title.empty() && author.empty() && outlet.empty() && excerpt.empty() &&
+      !web_url(href)) return;
+
+  NodeId art = doc.create(NodeKind::Article, section);
+  doc.get(art).label = "source-" + std::to_string(index + 1);
+  NodeId heading = doc.create(NodeKind::Header, art);
+  const std::string name = !title.empty() ? title : !author.empty() ? author :
+                           !outlet.empty() ? outlet : web_url(href) ? href : "Source";
+  if (web_url(href)) add_link(doc, heading, name, href);
+  else add_text(doc, heading, name, InlineKind::Strong);
+
+  NodeId cap = doc.create(NodeKind::Caption, art);
+  const std::string type = text_field(source, {"type", "sourceType"});
+  if (type == "x" || type == "tweet") add_meta(doc, cap, "X post");
+  else if (type == "web" || type == "article") add_meta(doc, cap, "Article");
+  if (!author.empty() && author != name) {
+    add_sep(doc, cap);
+    add_meta(doc, cap, "by " + author);
+  }
+  if (!outlet.empty() && outlet != name && outlet != author) {
+    add_sep(doc, cap);
+    add_meta(doc, cap, outlet);
+  }
+  add_date(doc, cap, source);
+  // The source text is an excerpt, never the full third-party article.
+  if (!excerpt.empty() && excerpt != title && excerpt != name)
+    append_plain(doc, art, excerpt);
 }
 
 // May be an unwrapped JSON-RPC result, a complete MCP reply, or a content
@@ -355,26 +447,47 @@ std::string digg_feed_arguments(const ForumRef& ref) {
   return args + "}";
 }
 
+// Search uses its own result window; forward opaque cursors only for
+// another page of the same query. The MCP search tool caps limit at 50.
+std::string digg_search_arguments(const ForumRef& ref) {
+  std::string args = "{\"query\":" + json_quote(ref.query) + ",\"limit\":30";
+  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
+  return args + "}";
+}
+
 Document digg_list_document(const Json& reply, const ForumRef& ref) {
   const Json& data = content(reply);
   const Json* posts = data.type == Json::Type::Array ? &data :
       list_field(data, {"posts", "results", "items", "clusters"});
-  std::string title = ref.path == "search" ? "Search: " + ref.query :
-                      "Digg — " + topic_name(ref.path.substr(0, ref.path.find('/')));
+  const bool search = ref.path == "search";
+  const std::string topic = ref.path.substr(0, ref.path.find('/'));
+  const size_t slash = ref.path.find('/');
+  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
+  std::string title = search ? "Search Digg: " + ref.query :
+      "Digg — " + topic_name(topic);
+  if (!search && !view.empty()) {
+    for (const LabelRef& item : kViews)
+      if (view == item.slug) { title += " · " + std::string(item.name); break; }
+  }
   Document doc;
-  NodeId thread = start_document(doc, title, "Digg", nav_for(ref), "digg");
+  NodeId thread = start_document(doc, title, "Digg", nav_for(ref), "");
+  doc.get(thread).label.clear();
+  if (!search) add_view_nav(doc, thread, ref);
   if (posts) {
     for (const Json& post : posts->items) add_story(doc, thread, post);
   }
   if (!posts || posts->items.empty())
-    add_note(doc, doc.root, "No published posts were returned.");
-  // Digg feed cursors are opaque and expire; never infer an integer page.
+    add_note(doc, thread, search ? "No recent Digg posts matched this search." :
+                                      "No published posts were returned.");
+  // Both the Feed and Search tools return opaque nextCursor values. Never
+  // pretend a cursor is an integer page, nor construct an old-page link.
   const std::string cursor = text_field(data, {"nextCursor"});
-  if (!cursor.empty() && ref.path != "search" && cursor.size() < 512) {
+  if (!cursor.empty() && cursor.size() < 512) {
     ForumRef next = ref;
     next.cursor = url_encode(cursor);
     NodeId nav = doc.create(NodeKind::Paragraph, doc.root);
-    add_link(doc, nav, "More →", forum_ref_string(next));
+    add_link(doc, nav, search ? "More search results →" : "More stories →",
+             forum_ref_string(next));
   }
   add_web_link(doc, doc.root, ref);
   return doc;
@@ -385,61 +498,71 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
   const Json* post = object(data, "post");
   if (!post || post->type != Json::Type::Object) post = &data;
   const std::string title = text_field(*post, {"title", "headline", "label"});
+  const std::string url = post_web(*post);
   Document doc;
   NodeId thread = start_document(doc, title.empty() ? "Digg post" : title,
-                                 "Digg", nav_for(ref), "digg");
-  MsgHead head;
-  head.label = ref.path.substr(5);  // UUID
-  head.author = "Digg";
-  head.iso = text_field(*post, {"publishedAt", "createdAt"});
-  head.score = count(count_field(*post, {"diggScore", "score"}), "point", "points");
-  NodeId msg = add_message(doc, thread, head);
-  if (!title.empty()) add_text(doc, doc.create(NodeKind::Header, msg), title,
-                               InlineKind::Strong);
-  // Digg publishes its own headline, teaser, TLDR and sometimes a longer
-  // editorial passage. Sources are separate external publications, not the
-  // body of this Digg post. Keep both without showing duplicate copy.
+                                 "Digg", nav_for(ref), "");
+  doc.get(thread).label.clear();
+  doc.meta.author = "Digg";
+  // The thread supplies the only visible headline; do not repeat it as a
+  // second Header in the article. Link it to Digg when a permalink exists.
+  if (!url.empty()) {
+    NodeId heading = thread_title(doc, thread);
+    if (heading != INVALID_NODE) {
+      doc.get(heading).spans.clear();
+      add_link(doc, heading, title.empty() ? "Digg post" : title, url);
+    }
+  }
+  NodeId art = doc.create(NodeKind::Article, thread);
+  doc.get(art).label = "digg-post";
+  NodeId cap = doc.create(NodeKind::Caption, art);
+  add_stats(doc, cap, *post, true);
+  if (!url.empty()) {
+    add_sep(doc, cap);
+    add_link(doc, cap, "View on Digg", url, InlineRole::Metadata);
+  }
+
+  // Digg publishes editorial copy and attributable outside sources, not
+  // the full articles. Keep these distinct in the semantic document tree.
   std::string intro = post_intro(*post);
   std::string summary = post_summary(*post);
   std::string body = post_body(*post);
-  // The MCP detail envelope may keep editorial copy beside `post` rather
-  // than inside it. Do not traverse into its `sources` array.
   if (post != &data) {
     if (intro.empty()) intro = post_intro(data);
     if (summary.empty()) summary = post_summary(data);
     if (body.empty()) body = post_body(data);
   }
-  add_copy_section(doc, msg, {}, intro);
-  add_copy_section(doc, msg, "TLDR", summary, intro);
-  add_copy_section(doc, msg, "Story", body, intro, summary);
+  add_copy_section(doc, art, {}, intro);
+  add_copy_section(doc, art, "TLDR", summary, intro);
+  add_copy_section(doc, art, "Digg overview", body, intro, summary);
   if (intro.empty() && summary.empty() && body.empty())
-    add_note(doc, msg, "Digg did not include a summary for this post. "
-                       "Read the source links below for the original coverage.");
-  const std::string url = post_web(*post);
-  if (!url.empty()) {
-    NodeId link = doc.create(NodeKind::Paragraph, msg);
-    add_link(doc, link, "Open original Digg post", url);
-  }
+    add_note(doc, art, "Digg did not include a summary for this post. "
+                       "Read the attributed sources below for coverage.");
+
   const Json* sources = list_field(data, {"sources"});
   if (!sources) sources = list_field(*post, {"sources"});
+  const Json* source_total = first(data, {"sourceCount", "totalSources"});
+  if (!source_total) source_total = first(*post, {"sourceCount", "totalSources"});
+  const long long total = source_total ? json_number(source_total) :
+      (sources ? static_cast<long long>(sources->items.size()) : 0);
+  NodeId section = doc.create(NodeKind::Section, art);
+  doc.get(section).label = "sources";
+  const std::string heading = total > 0 ? "Sources (" + std::to_string(total) + ")" :
+                                "Sources";
+  add_text(doc, doc.create(NodeKind::Header, section), heading, InlineKind::Strong);
   if (sources && !sources->items.empty()) {
-    add_text(doc, doc.create(NodeKind::Header, msg), "Sources", InlineKind::Strong);
-    for (const Json& source : sources->items) {
-      const std::string href = text_field(source, {"url", "sourceUrl", "xUrl"});
-      const std::string name = text_field(source, {"title", "author", "displayName", "domain"});
-      NodeId para = doc.create(NodeKind::Paragraph, msg);
-      if (web_url(href)) add_link(doc, para, name.empty() ? href : name, href);
-      else if (!name.empty()) add_text(doc, para, name, InlineKind::Strong);
-      else continue;
-      add_date(doc, para, source);
-      const std::string excerpt = text_field(source, {"excerpt", "text", "description"});
-      if (!excerpt.empty()) append_plain(doc, msg, excerpt);
-    }
+    for (size_t i = 0; i < sources->items.size(); ++i)
+      add_source(doc, section, sources->items[i], i);
+  } else {
+    add_note(doc, section, "No source excerpts were returned.");
   }
-  const long long total = count_field(data, {"sourceCount", "totalSources"});
   const long long next = count_field(data, {"nextSourceOffset"});
-  if (next > 0 && (total == 0 || next < total))
-    add_note(doc, doc.root, "More sources are available on the Digg website.");
+  if (next > 0 && (total == 0 || next < total)) {
+    NodeId para = doc.create(NodeKind::Paragraph, section);
+    add_meta(doc, para, "Digg returned only the first source page. ");
+    if (!url.empty()) add_link(doc, para, "See all sources on Digg", url);
+    else add_meta(doc, para, "Additional sources are available on the Digg website.");
+  }
   return doc;
 }
 

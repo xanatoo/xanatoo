@@ -5376,3 +5376,23 @@ nested, array-of-paragraph, envelope and absent-copy variants. Release,
 ASan and UBSan standalone Digg tests passed locally. No live MCP response or
 full Nix application build was possible in the sandbox (no network or Nix).
 Bundle 294 supersedes 293; reserve 295 next.
+
+## Digg native page polish (2026-11-22)
+
+Re-read Digg `https://digg.com/llms.txt` and published MCP tool descriptions:
+Digg posts are summaries of events with attributed X/web Sources, not mirrors
+of publishers' full text. Home defaults to Trending; topics to Top, with
+Best/Hot/Newest available. Search uses an opaque `nextCursor` and only covers
+recent posts (90 days), while post sources have `nextSourceOffset` and may be
+partial. Align the native renderer with those semantics: compact one-summary
+feed entries, distinct topic/view nav rows, proper default selection, Digg
+Score / source counts / update times when present, one article headline,
+separate Digg editorial text and grouped source title/author/outlet/date/
+excerpt Article nodes, explicit web link for additional sources. Accept search
+cursor pages without inventing numbered pages; keep the request arguments
+small and tested. Restrict "View on Digg" links to actual digg.com URLs.
+The offline structural, search, pagination and sanitizer regressions validate
+these shapes; there is still no direct network access or Nix available in the
+Web container, so full live API and Nix app tests remain for local follow-up.
+Favicon handling is deliberately unchanged. Cumulative handover 295
+supersedes 294; reserve 296 next.

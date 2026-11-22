@@ -528,8 +528,17 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   is supplied. Following a Source URL uses Xanаtoo's normal web reading path.
   Do not treat a source excerpt as Digg's editorial text or pick one source as
   the canonical original article.
+- Native Digg pages use two separate navigation rows (topics and views)
+  with the documented Home Trending / Topic Top defaults. Feed summaries
+  remain compact. Post pages render one headline and a metadata row, Digg
+  editorial copy, then individually grouped source entries (title/link,
+  attribution, date, excerpt); never show the excerpt as the post's body.
+  The source-page continuation is linked to Digg when the MCP returns
+  `nextSourceOffset` (the request argument for fetching further source
+  pages has not been validated here). Search now uses `nextCursor` with the
+  original query; the read-only MCP search covers the most recent 90 days.
 - `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
-  pagination, full 20-item feeds, post copy variants, posts and sources without a network or SDL
-  dependency. The MCP envelope must be read through pointers to its nested
+  feed and search cursor pagination, 20-item feeds, post copy variants and
+  semantic source grouping without network or SDL dependencies. The MCP envelope must be read through pointers to its nested
   `result`: assigning that child JSON back onto its owning `Json` object
   corrupts memory (ASan heap-use-after-free regression, fixed in bundle 293).
