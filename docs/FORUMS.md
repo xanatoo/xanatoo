@@ -125,7 +125,10 @@ If MCP is unavailable, the documented `ai-clusters-ranked.json` and
 `tech/clusters.json` JSON feeds provide a limited fallback for AI and
 Technology listings (the latter is **not** rank-ordered). There is no
 published public write/authentication interface for making Diggs or
-posting comments. Digg web **topic** URLs are convertible to native
+posting comments. Native Digg comments cannot be fetched through a documented
+comment API; a post response containing an explicit comment array is rendered
+as a native discussion, otherwise the Comments section links back to Digg.
+Aggregated X reply counts are not Digg comment counts. Digg web **topic** URLs are convertible to native
 refs; post web URLs cannot be converted to an MCP UUID, so they remain
 ordinary web pages. The native feed is a compact reading list: one bold, body-sized link and a
 short preview for each story, followed by subdued score/source/date metadata.

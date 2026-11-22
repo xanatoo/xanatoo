@@ -423,6 +423,102 @@ void add_source(Document& doc, NodeId section, const Json& source, size_t index)
     append_plain(doc, art, excerpt);
 }
 
+// Digg's documented public MCP tools do not expose a separate comment
+// endpoint. Some post payloads may include discussion records. Render only
+// explicit comment arrays; never interpret aggregated X reply counts or
+// attributed Sources as native Digg comments.
+const Json* digg_comments(const Json& data, const Json& post) {
+  const Json* discussion = object(data, "discussion");
+  const Json* post_discussion = object(post, "discussion");
+  for (const Json* scope : {&data, &post, discussion, post_discussion}) {
+    if (!scope || scope->type != Json::Type::Object) continue;
+    const Json* list = object(*scope, "comments");
+    if (!list) continue;
+    if (list->type == Json::Type::Array) return list;
+    if (list->type == Json::Type::Object)
+      if (const Json* items = list_field(*list, {"items", "nodes", "results"}))
+        return items;
+  }
+  return nullptr;
+}
+
+std::string comment_author(const Json& comment) {
+  if (std::string name = text_field(comment, {"authorName", "username", "displayName"});
+      !name.empty()) return name;
+  for (std::string_view name : {"author", "user", "account"}) {
+    const Json* person = object(comment, name);
+    if (!person) continue;
+    if (person->type == Json::Type::String) return person->s;
+    if (person->type == Json::Type::Object)
+      if (std::string label = text_field(*person, {"displayName", "name", "username", "handle"});
+          !label.empty()) return label;
+  }
+  return {};
+}
+
+// Bounded DFS keeps replies in source order, lets the existing Message
+// layout indent children and avoids recursion on a malformed response.
+void add_comments(Document& doc, NodeId article, const Json& data,
+                  const Json& post, const std::string& post_url) {
+  NodeId section = doc.create(NodeKind::Section, article);
+  doc.get(section).label = "comments";
+  NodeId heading = doc.create(NodeKind::Header, section);
+  add_text(doc, heading, "Comments", InlineKind::Strong);
+
+  const Json* comments = digg_comments(data, post);
+  if (comments) {
+    struct Entry { const Json* json; std::string parent; unsigned depth; };
+    std::vector<Entry> stack;
+    for (auto it = comments->items.rbegin(); it != comments->items.rend(); ++it)
+      stack.push_back({&*it, {}, 0});
+    size_t emitted = 0;
+    constexpr size_t kMaxComments = 500;
+    constexpr unsigned kMaxDepth = 32;
+    while (!stack.empty() && emitted < kMaxComments) {
+      Entry current = std::move(stack.back());
+      stack.pop_back();
+      const Json& c = *current.json;
+      if (c.type != Json::Type::Object) continue;
+      const std::string body = text_field(c, {"body", "text", "bodyText", "markdown"});
+      std::string content = body.empty() ? copy_text(object(c, "content")) : body;
+      const Json* deleted = first(c, {"deleted", "isDeleted"});
+      const bool gone = deleted && deleted->type == Json::Type::Bool && deleted->b;
+      if (content.empty() && !gone) continue;
+      ++emitted;
+      MsgHead head;
+      head.label = text_field(c, {"id", "commentId", "_id"});
+      if (head.label.empty()) head.label = "digg-comment-" + std::to_string(emitted);
+      head.author = gone ? "[deleted]" : comment_author(c);
+      if (head.author.empty()) head.author = "[unknown author]";
+      head.iso = text_field(c, {"createdAt", "publishedAt", "postedAt"});
+      head.reply_to = text_field(c, {"parentId", "parentCommentId"});
+      if (head.reply_to.empty()) head.reply_to = current.parent;
+      head.indent = !head.reply_to.empty();
+      if (const Json* likes = first(c, {"score", "likeCount", "likes"}); likes &&
+          likes->type == Json::Type::Number)
+        head.score = count(json_number(likes), "point", "points");
+      NodeId message = add_message(doc, section, head);
+      if (gone) add_note(doc, message, "[deleted]");
+      else append_plain(doc, message, content);
+      if (current.depth >= kMaxDepth) continue;
+      if (const Json* replies = list_field(c, {"replies", "children"})) {
+        for (auto it = replies->items.rbegin(); it != replies->items.rend(); ++it)
+          stack.push_back({&*it, head.label, current.depth + 1});
+      }
+    }
+    if (emitted == 0)
+      add_note(doc, section, "No Digg comments were included in this response.");
+    if (!stack.empty())
+      add_note(doc, section, "More comments were omitted from this view.");
+  } else {
+    add_note(doc, section, "Digg's public post API did not include a comment thread.");
+  }
+  if (!post_url.empty()) {
+    NodeId line = doc.create(NodeKind::Paragraph, section);
+    add_link(doc, line, "Read or join the discussion on Digg", post_url);
+  }
+}
+
 // May be an unwrapped JSON-RPC result, a complete MCP reply, or a content
 // text block containing a serialized JSON object.
 std::optional<Json> parse_object_json(std::string_view text) {
@@ -564,7 +660,8 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
   const Json* post = object(data, "post");
   if (!post || post->type != Json::Type::Object) post = &data;
   const std::string title = text_field(*post, {"title", "headline", "label"});
-  const std::string url = post_web(*post);
+  std::string url = post_web(*post);
+  if (url.empty() && post != &data) url = post_web(data);
   Document doc;
   NodeId thread = start_document(doc, title.empty() ? "Digg post" : title,
                                  "Digg", nav_for(ref), "");
@@ -605,6 +702,8 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
     if (body.empty()) body = post_body(data);
   }
   add_editorial_copy(doc, art, intro, summary, body);
+
+  add_comments(doc, art, data, *post, url);
 
   const Json* sources = list_field(data, {"sources"});
   if (!sources) sources = list_field(*post, {"sources"});

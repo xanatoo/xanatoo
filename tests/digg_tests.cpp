@@ -206,7 +206,7 @@ void polished_layout() {
           ++source_links_on_paragraphs;
     }
   }
-  CHECK(major_headers == 2);  // post headline + Sources
+  CHECK(major_headers == 3);  // post headline + Comments + Sources
   CHECK(source_links_on_paragraphs == 2);
 
   // A publisher address in `post.url` must not be mislabelled a Digg page.
@@ -214,6 +214,62 @@ void polished_layout() {
     "url":"https://publisher.example/important", "summary":"Summary"})"), post);
   CHECK(!link(misleading, "https://publisher.example/important"));
   CHECK(!says(misleading, "View on Digg"));
+}
+
+void comments_document() {
+  const ForumRef post = address("digg:post/01234567-89ab-cdef-0123-456789abcdef");
+  // A post payload with native comments should produce separate Message
+  // nodes, not re-label third-party Sources as Digg comments.
+  Document doc = digg_post_document(parse(R"JSON({
+    "post":{"title":"Discussion", "url":"https://digg.com/ai/abc12345",
+            "commentCount":999, "summary":"Editorial text"},
+    "discussion":{"comments":[
+      {"id":"one","body":"A native comment", "author":{"displayName":"Reader"},
+       "createdAt":"2026-11-22T12:00:00Z", "likeCount":3,
+       "replies":[{"id":"two","text":"A nested reply", "user":{"username":"Reply user"}}]},
+      {"id":"gone", "deleted":true, "replies":[]}
+    ]},
+    "sources":[{"title":"External post", "url":"https://x.com/test",
+                "text":"External conversation is not a Digg comment"}]
+  })JSON"), post);
+  CHECK(says(doc, "A native comment"));
+  CHECK(says(doc, "A nested reply"));
+  CHECK(says(doc, "Reader"));
+  CHECK(says(doc, "Reply user"));
+  CHECK(says(doc, "[deleted]"));
+  CHECK(link(doc, "https://digg.com/ai/abc12345"));
+  int messages = 0, nested = 0;
+  for (const Node& n : doc.nodes) {
+    if (n.kind == NodeKind::Message) {
+      ++messages;
+      if (n.label == "two" && n.alt == "one") ++nested;
+    }
+  }
+  CHECK(messages == 3);
+  CHECK(nested == 1);
+
+  // Source engagement is NOT a native Digg comment count. Without an
+  // explicit comment list there must be a candid note and external link.
+  Document no_comments = digg_post_document(parse(R"JSON({
+    "title":"Digg article", "url":"https://digg.com/tech/abc12345",
+    "commentCount":543, "sources":[{"text":"X replies"}]
+  })JSON"), post);
+  CHECK(says(no_comments, "did not include a comment thread"));
+  CHECK(says(no_comments, "Read or join the discussion"));
+  CHECK(!says(no_comments, "543 comments"));
+  for (const Node& n : no_comments.nodes) CHECK(n.kind != NodeKind::Message);
+
+  // The URL may be carried by the envelope rather than `post`.
+  Document outer_url = digg_post_document(parse(R"JSON({
+    "post":{"title":"Brief"}, "url":"https://digg.com/tech/abcdef12"
+  })JSON"), post);
+  CHECK(link(outer_url, "https://digg.com/tech/abcdef12"));
+
+  Document empty = digg_post_document(parse(R"JSON({
+    "title":"Empty discussion", "comments":[]
+  })JSON"), post);
+  CHECK(says(empty, "No Digg comments were included"));
+  CHECK(!says(empty, "did not include a comment thread"));
 }
 
 void mcp_transport() {
@@ -445,6 +501,7 @@ int main() {
   feed_arguments();
   search_arguments();
   polished_layout();
+  comments_document();
   mcp_transport();
   mcp_owned_result_regression();
   lists_and_posts();

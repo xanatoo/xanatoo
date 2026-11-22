@@ -528,6 +528,15 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   is supplied. Following a Source URL uses Xanаtoo's normal web reading path.
   Do not treat a source excerpt as Digg's editorial text or pick one source as
   the canonical original article.
+- The documented read-only Digg MCP tools currently offer **no separate
+  comments request**. Native post pages now include a Comments section: if
+  explicit comment arrays are present in a post response they render as
+  Message nodes with nested replies, otherwise the page says the API did not
+  include a thread and links to the Digg story to read/join its discussion.
+  Digg aggregated social-media reaction/comment counts must **not** be used
+  as native Digg comment totals. The comment record shapes are covered by
+  offline tests only; no live MCP response containing native comments has
+  been verified.
 - Native page hierarchy is deliberately compact: the page has one title;
   topic and sort links share a navigation-Chrome region (also available in
   the Page panel); each feed entry is a bold, body-sized linked title, a

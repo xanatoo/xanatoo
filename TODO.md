@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Digg comment section (bundle 297)
+
+- Native `digg:post/UUID` pages now always distinguish Comments from Sources.
+  The documented public MCP server has no separate comment-fetch tool; an
+  embedded `comments` array, if present, becomes Message nodes/replies.
+  Without comment records, the page explicitly says they were not returned
+  and offers a direct Digg discussion link when the canonical URL is known.
+- Aggregated X/source comment counts never masquerade as native Digg
+  comments. Pure mapper tests cover embedded threads, nested replies, and
+  absent data; no live Digg comment payload was available for validation.
+- No pagination work, and favicon behavior unchanged.
+
 ## Status (2026-11-22) — Find bar at the page, find bugs
 
 - Ctrl+F / Ctrl+H open a bar at the bottom of the focused view (tile or
