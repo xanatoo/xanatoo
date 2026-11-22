@@ -53,9 +53,6 @@ std::optional<Caret> hit_test(const LayoutResult& layout,
 std::optional<Caret> nearest_caret(const LayoutResult& layout, float x,
                                    float y);
 
-// Hit-test for stretchtext toggle boxes.
-std::optional<NodeId> hit_test_stretch(const LayoutResult& layout,
-                                       float sx, float sy, float scroll_y);
 
 // Compute the on-screen position of a caret for drawing.
 CaretScreenPos caret_screen_pos(const LayoutResult& layout,
@@ -222,7 +219,8 @@ bool outdent_list_item(Document& doc, Caret& caret);
 void delete_selection(Document& doc, Selection& sel);
 
 // Plain-text extraction of the current selection (single-node for now).
-std::string selected_text(const Document& doc, const Selection& sel);
+std::string selected_text(const Document& doc, const Selection& sel,
+                          const std::vector<NodeId>& skip = {});
 
 // Concatenate all text of a node (for paste targets / fallbacks).
 std::string node_text(const Document& doc, NodeId id);
@@ -276,15 +274,18 @@ void select_all(Document& doc, Selection& sel);
 // Expand selection to the word under the focus caret.
 void select_word_at(Document& doc, Selection& sel);
 
+// `skip`: subtrees left out (hidden_stretch_blocks, fold.hpp).
 std::optional<Caret> find_next(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len);
+                               const Caret& from, size_t& match_len,
+                               const std::vector<NodeId>& skip = {});
 // The first `max` matches of find_next from the document start, in order,
 // without overlaps: one pass over the text (find_next rescans per call).
 std::vector<Caret> find_all(const Document& doc, const std::string& query,
-                            size_t max);
+                            size_t max, const std::vector<NodeId>& skip = {});
 // Case-insensitive search starting before `from` (wraps around).
 std::optional<Caret> find_prev(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len);
+                               const Caret& from, size_t& match_len,
+                               const std::vector<NodeId>& skip = {});
 // Replace every case-insensitive match of `query` with `replacement`.
 // Returns the number of substitutions performed.
 size_t replace_all(Document& doc, const std::string& query,

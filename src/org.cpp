@@ -1019,6 +1019,7 @@ void ser_node_org(const Document& doc, NodeId id, std::string& out,
     }
 
     case NodeKind::Stretch:
+    case NodeKind::Summary:
     case NodeKind::Columns:
     case NodeKind::Column:
     case NodeKind::Note:

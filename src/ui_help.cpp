@@ -635,7 +635,10 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@image-handle", "Image resize handle",
      "Drag the corner to resize the image (edit mode)."},
     {"@stretch", "Stretchtext",
-     "Click the marker to expand or collapse the hidden passage."},
+     "Click the marker to expand or collapse the hidden passage. Where a "
+     "summary stands for a longer text, **Full Text** replaces it with the "
+     "text and **Summary** brings it back; **Ctrl+Shift+F** does the same at "
+     "the caret, **View → Summaries** for the whole page."},
     {"@list-fold", "List fold marker",
      "Folds the list inside this item to one line, or expands it again (▸ "
      "with the number of hidden items). Right-click a list for **Fold All** "

@@ -475,7 +475,7 @@ void refresh_views_of_buf(App& app, BufferId bi, int except, bool top) {
   DocBuffer* b = find_buf(app, bi);
   if (!b) return;
   ++b->doc_gen;
-  if (top) b->list_folds.clear();  // keyed by the old document's nodes
+  if (top) b->folds.clear();  // keyed by the old document's nodes
   for (int pi : live_views(app)) {
     Pane& v = app.panes[pi];
     if (pi == except || v.buf != bi) continue;

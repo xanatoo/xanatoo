@@ -55,7 +55,7 @@
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/office_import.hpp"
 #include "xanatoo/layout.hpp"
-#include "xanatoo/list_fold.hpp"
+#include "xanatoo/fold.hpp"
 #include "xanatoo/math.hpp"
 #include "xanatoo/paginate.hpp"
 #include "xanatoo/font.hpp"
@@ -6249,6 +6249,7 @@ void test_tour_example() {
         NodeKind::List, NodeKind::BlockQuote, NodeKind::HorizontalRule,
         NodeKind::DefList, NodeKind::Note, NodeKind::CodeBlock,
         NodeKind::Table, NodeKind::Aside, NodeKind::Stretch,
+        NodeKind::Summary,
         NodeKind::Columns, NodeKind::Figure, NodeKind::Collection,
         NodeKind::Transclude, NodeKind::Thread, NodeKind::Message,
         NodeKind::Footnote, NodeKind::Biblio, NodeKind::BiblioEntry}) {
@@ -6581,6 +6582,68 @@ void test_parse_feeds() {
       }
     } else {
       EXPECT(false);
+    }
+  }
+
+  // An entry with a summary and a clearly longer full text is stretchtext,
+  // summary first; the lead picture floats in it, "read more" is dropped.
+  const std::string longer(300, 'x');
+  auto both = parse_feed(
+      "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" "
+      "xmlns:content=\"http://purl.org/rss/1.0/modules/content/\"><channel>"
+      "<title>T</title>"
+      "<item><title>Cut</title><description><![CDATA[<div>"
+      "<img src=\"https://t.example/a.jpg?w=800\"/></div>A summary of some "
+      "length, cut <a href=\"https://t.example/1\">&#8230;read more</a>"
+      "<p>The post <a href=\"x\">Cut</a> appeared first on T.</p>]]>"
+      "</description><content:encoded><![CDATA[<div>"
+      "<img src=\"https://t.example/a.jpg?w=800\"/></div><p>Full " + longer +
+      "</p>]]></content:encoded>"
+      "<media:thumbnail url=\"https://t.example/a.jpg\"/>"
+      "<enclosure url=\"https://t.example/a.mp3\" type=\"audio/mpeg\"/></item>"
+      "<item><title>Whole</title><description>All of the text there is, really."
+      "</description><content:encoded><![CDATA[<p>All of the text there is, "
+      "really. Nearly.</p>]]></content:encoded></item>"
+      "<item><title>Thumb</title><description>A whole sentence as the "
+      "summary. [&#8230;]</description><content:encoded><![CDATA[<p>" + longer +
+      "</p>]]></content:encoded>"
+      "<media:thumbnail url=\"https://t.example/c.jpg\"/></item>"
+      "</channel></rss>",
+      "https://t.example/feed");
+  EXPECT(both.has_value());
+  if (both) {
+    const auto arts = articles(*both);
+    EXPECT_EQ(arts.size(), 3u);
+    if (arts.size() == 3) {
+      const auto& e1 = both->get(arts[0]).children;
+      EXPECT_EQ(e1.size(), 3u);  // title, stretch, enclosure
+      const Node& st = both->get(e1.at(1));
+      EXPECT(st.kind == NodeKind::Stretch);
+      EXPECT(!st.expanded);
+      const NodeId sum = stretch_summary(*both, st.id);
+      EXPECT(sum != INVALID_NODE);
+      if (sum != INVALID_NODE) {
+        const auto& kids = both->get(sum).children;
+        EXPECT_EQ(kids.size(), 2u);  // picture, text
+        EXPECT(both->get(kids.at(0)).kind == NodeKind::Image);
+        EXPECT_EQ(both->get(kids.at(0)).float_side, "left");
+        EXPECT_EQ(plain_text(*both, kids.at(1)),
+                  "A summary of some length, cut…");
+      }
+      EXPECT_EQ(st.children.size(), 3u);  // summary, picture, text
+      EXPECT(both->get(e1.at(2)).kind == NodeKind::Paragraph);
+      EXPECT_EQ(both->get(arts[1]).children.size(), 2u);  // title, full text
+      const Node& t3 = both->get(both->get(arts[2]).children.at(1));
+      const NodeId sum3 = stretch_summary(*both, t3.id);
+      EXPECT(sum3 != INVALID_NODE);
+      if (sum3 != INVALID_NODE) {
+        const auto& kids = both->get(sum3).children;
+        EXPECT_EQ(kids.size(), 2u);
+        EXPECT_EQ(both->get(kids.at(0)).src, "https://t.example/c.jpg");
+        EXPECT_EQ(plain_text(*both, kids.at(1)),
+                  "A whole sentence as the summary.");
+      }
+      EXPECT_EQ(t3.children.size(), 3u);  // summary, thumbnail, text
     }
   }
 
@@ -8443,7 +8506,7 @@ static void test_long_ordered_list_markers() {
   EXPECT_EQ(checked, 120);
 }
 
-// List items hosting a list fold (list_fold.hpp): marker, cue, click area,
+// List items hosting a list fold (fold.hpp): marker, cue, click area,
 // overrides on top of the markup.
 static void test_list_folding() {
   using namespace xanatoo;
@@ -8472,11 +8535,11 @@ static void test_list_folding() {
   EXPECT_EQ(foldable_list_items(doc, doc.root).size(), size_t{3});
   EXPECT(has_foldable_list_items(doc, doc.root));
   EXPECT(!has_foldable_list_items(doc, plain));
-  EXPECT_EQ(folded_list_ancestor(doc, hidden, nullptr), shut);
-  EXPECT_EQ(folded_list_ancestor(doc, shut, nullptr), INVALID_NODE);
-  ListFolds folds{{host, true}, {shut, false}};
-  EXPECT_EQ(folded_list_ancestor(doc, deep, &folds), host);
-  EXPECT_EQ(folded_list_ancestor(doc, hidden, &folds), INVALID_NODE);
+  EXPECT_EQ(fold_hiding(doc, hidden, nullptr), shut);
+  EXPECT_EQ(fold_hiding(doc, shut, nullptr), INVALID_NODE);
+  Folds folds{{host, true}, {shut, false}};
+  EXPECT_EQ(fold_hiding(doc, deep, &folds), host);
+  EXPECT_EQ(fold_hiding(doc, hidden, &folds), INVALID_NODE);
 
   // Markup round trips.
   const std::string md = serialize_markup(doc);
@@ -8514,15 +8577,15 @@ static void test_list_folding() {
   EXPECT_EQ(count(r, shut, 0x25B8), size_t{1});
   EXPECT(count(r, deep, 0) > 0);
   EXPECT_EQ(count(r, hidden, 0), size_t{0});
-  EXPECT_EQ(r.list_folds.size(), size_t{4});  // host, b, shut + its cue
-  for (const auto& box : r.list_folds) {
-    const auto hit = hit_test_list_fold(r, box.x + 1.f, box.y + 1.f - 5.f, 5.f);
+  EXPECT_EQ(r.fold_marks.size(), size_t{4});  // host, b, shut + its cue
+  for (const auto& box : r.fold_marks) {
+    const auto hit = hit_test_fold(r, box.x + 1.f, box.y + 1.f - 5.f, 5.f);
     EXPECT(hit && *hit == box.node);
   }
-  EXPECT(!hit_test_list_fold(r, 700.f, r.list_folds[0].y + 1.f, 0.f));
+  EXPECT(!hit_test_fold(r, 700.f, r.fold_marks[0].y + 1.f, 0.f));
   const float open_h = r.content_height;
 
-  engine.set_list_folds(&folds);
+  engine.set_folds(&folds);
   r = engine.layout(doc, 800.f);
   EXPECT_EQ(count(r, host, 0x25B8), size_t{1});
   EXPECT_EQ(count(r, b, 0), size_t{0});
@@ -8531,7 +8594,7 @@ static void test_list_folding() {
   // The cue is decoration: no glyph of the item past its own spans.
   for (const auto& g : r.glyphs)
     if (g.node == host) EXPECT_EQ(g.span_index, size_t{0});
-  engine.set_list_folds(nullptr);
+  engine.set_folds(nullptr);
 
   // Numbered / task items keep their marker; all texts stay in one column.
   Document num = parse_document("1. one\n   - x\n2. two\n", "t.md");
@@ -8545,7 +8608,135 @@ static void test_list_folding() {
     return -1.f;
   };
   EXPECT(std::abs(text_x(one, 'o') - text_x(two, 't')) < 2.f);
-  EXPECT_EQ(r.list_folds.size(), size_t{1});
+  EXPECT_EQ(r.fold_marks.size(), size_t{1});
+}
+
+// Two-body stretchtext: a Summary child stands for the full text.
+static void test_two_body_stretch() {
+  using namespace xanatoo;
+  const std::string md =
+      "Before.\n\n:::stretch\n:::summary\nBrief *needle*.\n:::\n\nFull needle one.\n\n"
+      "Last para.\n:::\n\n:::stretch summary=\"Classic\"\nHidden needle.\n"
+      ":::\n";
+  Document doc = parse_document(md, "t.md");
+  auto find = [](const Document& d, const std::string& text) {
+    for (const Node& n : d.nodes)
+      if (n.kind == NodeKind::Paragraph && !n.spans.empty() &&
+          starts_with(n.spans[0].text, text))
+        return n.id;
+    return INVALID_NODE;
+  };
+  const NodeId brief = find(doc, "Brief"), full = find(doc, "Full"),
+               last = find(doc, "Last"), hidden = find(doc, "Hidden");
+  const NodeId st = doc.get(full).parent, classic = doc.get(hidden).parent;
+  const NodeId sum = doc.get(brief).parent;
+  EXPECT(doc.get(sum).kind == NodeKind::Summary);
+  EXPECT_EQ(doc.get(sum).parent, st);
+  EXPECT_EQ(stretch_summary(doc, st), sum);
+  EXPECT_EQ(stretch_summary(doc, classic), INVALID_NODE);
+  EXPECT_EQ(stretches(doc, doc.root, true).size(), size_t{1});
+  EXPECT_EQ(stretches(doc, doc.root, false).size(), size_t{2});
+  EXPECT(has_two_body_stretch(doc, doc.root));
+  EXPECT(!has_two_body_stretch(doc, classic));
+
+  // Every format keeps both bodies.
+  for (const char* name : {"t.md", "t.sexp", "t.xml"}) {
+    const Document d = parse_document(serialize_document(doc, name), name);
+    const NodeId b = find(d, "Brief"), f = find(d, "Full");
+    EXPECT(b != INVALID_NODE && f != INVALID_NODE);
+    if (b == INVALID_NODE || f == INVALID_NODE) continue;
+    EXPECT(d.get(d.get(b).parent).kind == NodeKind::Summary);
+    EXPECT_EQ(d.get(d.get(b).parent).parent, d.get(f).parent);
+    EXPECT(!d.get(d.get(f).parent).expanded);
+  }
+
+  // What is out of sight, by the markup and by an override.
+  const Folds open{{st, false}};
+  EXPECT_EQ(fold_hiding(doc, full, nullptr), st);
+  EXPECT_EQ(fold_hiding(doc, brief, nullptr), INVALID_NODE);
+  EXPECT_EQ(fold_hiding(doc, full, &open), INVALID_NODE);
+  EXPECT_EQ(fold_hiding(doc, brief, &open), st);
+  EXPECT_EQ(fold_hiding(doc, hidden, nullptr), classic);
+  EXPECT_EQ(stretch_first_text(doc, st, true), brief);
+  EXPECT_EQ(stretch_first_text(doc, st, false), full);
+
+  // Find skips the summary of a text that is shown, not folded full text.
+  EXPECT_EQ(find_all(doc, "needle", 10).size(), size_t{3});
+  EXPECT_EQ(
+      find_all(doc, "needle", 10, hidden_stretch_blocks(doc, &open, true)).size(),
+      size_t{2});
+  EXPECT_EQ(find_all(doc, "needle", 10,
+                     hidden_stretch_blocks(doc, nullptr, true)).size(),
+            size_t{3});
+  // Copied text has what is shown.
+  Selection all;
+  all.anchor = {find(doc, "Before"), 0, 0};
+  all.focus = {last, 0, 5};
+  const std::string shown =
+      selected_text(doc, all, hidden_stretch_blocks(doc, nullptr, false));
+  EXPECT(shown.find("Brief") != std::string::npos);
+  EXPECT(shown.find("Full") == std::string::npos);
+  const std::string opened =
+      selected_text(doc, all, hidden_stretch_blocks(doc, &open, false));
+  EXPECT(opened.find("Brief") == std::string::npos);
+  EXPECT(opened.find("Full needle one.") != std::string::npos);
+
+  // Backspace does not merge the full text into the summary.
+  {
+    Document d = doc;
+    Caret c{full, 0, 0};
+    delete_backward(d, c);
+    EXPECT_EQ(plain_text(d, brief), "Brief needle.");
+    EXPECT_EQ(plain_text(d, full), "Full needle one.");
+  }
+  // Unwrapping keeps both as plain blocks.
+  {
+    Document d = doc;
+    EXPECT(unwrap_stretch(d, st).has_value());
+    EXPECT_EQ(d.get(brief).parent, d.root);
+    EXPECT_EQ(d.get(full).parent, d.root);
+  }
+
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_two_body_stretch (no font)\n");
+    return;
+  }
+  LayoutEngine engine(fonts);
+  auto count = [](const LayoutResult& r, NodeId node, uint32_t cp) {
+    size_t n = 0;
+    for (const auto& g : r.glyphs)
+      if (g.node == node && (cp == 0 || g.codepoint == cp)) ++n;
+    return n;
+  };
+  auto marks = [&](const LayoutResult& r, NodeId node) {
+    size_t n = 0;
+    for (const auto& b : r.fold_marks) n += b.node == node;
+    return n;
+  };
+  LayoutResult r = engine.layout(doc, 800.f);
+  EXPECT(count(r, brief, 0) > 0);
+  EXPECT_EQ(count(r, full, 0), size_t{0});
+  EXPECT_EQ(count(r, INVALID_NODE, 0x25B8), size_t{1});  // cue in the text
+  EXPECT_EQ(count(r, classic, 0x25B8), size_t{1});
+  EXPECT_EQ(marks(r, st), size_t{1});
+  // The cue is decoration: no glyph of the paragraph past its own spans.
+  for (const auto& g : r.glyphs)
+    if (g.node == brief) EXPECT(g.span_index < doc.get(brief).spans.size());
+
+  engine.set_folds(&open);
+  r = engine.layout(doc, 800.f);
+  EXPECT_EQ(count(r, brief, 0), size_t{0});
+  EXPECT(count(r, full, 0) > 0);
+  EXPECT(count(r, last, 0) > 0);
+  EXPECT_EQ(count(r, INVALID_NODE, 0x25B4), size_t{2});  // above and below
+  EXPECT_EQ(marks(r, st), size_t{2});
+  for (const auto& box : r.fold_marks) {
+    const auto hit = hit_test_fold(r, box.x + 1.f, box.y + 1.f, 0.f);
+    EXPECT(hit && *hit == box.node);
+  }
+  engine.set_folds(nullptr);
 }
 
 // Footnote keys past "99." hang the bodies further instead of running
@@ -9040,6 +9231,7 @@ int main() {
   test_parse_feeds();
   test_long_ordered_list_markers();
   test_list_folding();
+  test_two_body_stretch();
   test_long_footnote_keys();
   test_thread_titles();
   test_page_links();

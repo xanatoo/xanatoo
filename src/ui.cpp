@@ -3146,6 +3146,17 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Reader Mode", "F9", state.reader,
                           state.has_chrome || state.reader))
         cmd = UiCommand::ToggleReader;
+      if (ImGui::BeginMenu("Summaries", state.has_summaries)) {
+        if (ImGui::MenuItem("All Full Texts")) {
+          cmd = UiCommand::StretchFold;
+          result.arg = "full";
+        }
+        if (ImGui::MenuItem("All Summaries")) {
+          cmd = UiCommand::StretchFold;
+          result.arg = "summaries";
+        }
+        ImGui::EndMenu();
+      }
       if (ImGui::BeginMenu("View Source")) {
         if (ImGui::MenuItem("Rendered Document", nullptr,
                             state.source_mode.empty()))
@@ -3734,6 +3745,19 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (state.list_fold == 3) item("Expand List Item", "toggle");
       item("Fold All", "fold-all");
       item("Expand All", "expand-all");
+      ImGui::Separator();
+    }
+    if (state.stretch_fold != 0) {
+      auto item = [&](const char* label, const char* a) {
+        if (ImGui::MenuItem(label)) {
+          cmd = UiCommand::StretchFold;
+          result.arg = a;
+        }
+      };
+      item(state.stretch_fold == 2 ? "Show Full Text" : "Show Summary",
+           "toggle");
+      item("All Full Texts", "full");
+      item("All Summaries", "summaries");
       ImGui::Separator();
     }
     if (state.collection) {

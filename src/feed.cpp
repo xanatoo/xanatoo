@@ -354,6 +354,7 @@ std::string rss_author(std::string a) {
 struct Entry {
   std::string title, link, author, date;
   const XmlNode* body = nullptr;
+  const XmlNode* summary = nullptr;  // shorter text besides `body`
   bool body_html = false;  // untyped body is HTML (RSS) rather than text
   std::vector<const XmlNode*> enclosures;  // RSS <enclosure> / Atom rel=enclosure
   // Media RSS (<media:group>, YouTube): thumbnail, statistics, rating.
@@ -445,7 +446,8 @@ void read_atom(const XmlTree& t, std::string_view src, const XmlNode& feed,
     en.date = child_text(t, *e, "published");
     if (en.date.empty()) en.date = child_text(t, *e, "updated");
     en.body = child(t, *e, "content");
-    if (!en.body) en.body = child(t, *e, "summary");
+    if (const XmlNode* sum = child(t, *e, "summary"))
+      (en.body ? en.summary : en.body) = sum;
     if (!en.body)  // YouTube: <media:group><media:description>
       if (const XmlNode* g = child(t, *e, "media:group"))
         en.body = child(t, *g, "media:description");
@@ -477,7 +479,9 @@ void read_rss(const XmlTree& t, const XmlNode& channel,
     en.date = child_text(t, *it, "pubdate");
     if (en.date.empty()) en.date = child_text(t, *it, "dc:date");
     en.body = child(t, *it, "content:encoded");
-    if (!en.body || trimmed(en.body->text).empty()) en.body = child(t, *it, "description");
+    const XmlNode* desc = child(t, *it, "description");
+    if (!en.body || trimmed(en.body->text).empty()) en.body = desc;
+    else en.summary = desc;
     en.body_html = true;
     en.enclosures = children(t, *it, "enclosure");
     read_media(t, *it, en);
@@ -544,12 +548,144 @@ bool shows_image(const Document& doc, NodeId first_new, const std::string& url) 
   return false;
 }
 
-// Thumbnail, statistics, body and enclosures of an entry. The thumbnail is
-// left out when the body shows the same image.
+// Text of a feed element for comparing lengths.
+std::string content_plain(std::string_view src, const XmlNode& n,
+                          bool default_html) {
+  if (!html_attr(n.attrs, "src").empty()) return {};
+  const std::string type = ascii_lower(html_attr(n.attrs, "type"));
+  if (type == "xhtml") return html_to_plain(inner_markup(src, n));
+  if (type == "html" || type == "text/html" || (type.empty() && default_html))
+    return html_to_plain(n.text);
+  return trimmed(n.text);
+}
+
+// Whether the summary is worth its own state: a real text, clearly shorter
+// than the full one (feeds often repeat the body in the description).
+bool summarizes(const Entry& e, std::string_view src) {
+  if (!e.summary || !e.body) return false;
+  constexpr size_t kMinSummary = 20, kMinSaved = 200;
+  auto length = [&](const XmlNode& n) {
+    const std::string text = content_plain(src, n, e.body_html);
+    return static_cast<size_t>(std::count_if(
+        text.begin(), text.end(),
+        [](unsigned char c) { return (c & 0xC0) != 0x80; }));
+  };
+  const size_t brief = length(*e.summary), full = length(*e.body);
+  return brief >= kMinSummary && full >= brief + kMinSaved;
+}
+
+// "…read more", "Continue reading →", "[…]": the way a blog's excerpt ends.
+bool is_read_more(std::string_view text) {
+  std::string low = ascii_lower(text);
+  for (std::string_view mark : {"…", "→", "»", "›", "&hellip;", "[", "]", "(",
+                                ")", ".", ":", ">", "\xC2\xA0"})
+    for (size_t at; (at = low.find(mark)) != std::string::npos;)
+      low.replace(at, mark.size(), " ");
+  low = trimmed(low);
+  if (low.empty()) return true;
+  for (std::string_view start :
+       {"read more", "read the rest", "read the full", "read full",
+        "continue reading", "more", "weiterlesen", "lire la suite"})
+    if (low == start || (start != "more" && starts_with(low, start)))
+      return true;
+  return false;
+}
+
+// Drop the excerpt's own link to the full text and WordPress' "The post …
+// appeared first on …"; the fold marker takes their place. A cut sentence
+// ends in "…".
+void trim_summary(Document& doc, NodeId summary) {
+  auto last = [&]() -> Node* {
+    auto& kids = doc.get(summary).children;
+    if (kids.empty()) return nullptr;
+    Node& n = doc.get(kids.back());
+    return n.kind == NodeKind::Paragraph ? &n : nullptr;
+  };
+  if (Node* p = last()) {
+    const std::string text = plain_text(doc, p->id);
+    if (starts_with(text, "The post ") &&
+        text.find(" appeared first on ") != std::string::npos)
+      doc.get(summary).children.pop_back();
+  }
+  Node* p = last();
+  if (!p) return;
+  auto rtrim = [](std::string& t) {
+    for (;;) {
+      if (!t.empty() && std::isspace(static_cast<unsigned char>(t.back())))
+        t.pop_back();
+      else if (ends_with(t, "\xC2\xA0"))
+        t.resize(t.size() - 2);
+      else
+        return;
+    }
+  };
+  bool cut = false;
+  while (!p->spans.empty()) {
+    InlineSpan& s = p->spans.back();
+    rtrim(s.text);
+    if (s.kind == InlineKind::Image || s.kind == InlineKind::Math) break;
+    const bool more = s.kind == InlineKind::Link && is_read_more(s.text);
+    if (!more && !s.text.empty() && !(cut && is_read_more(s.text))) break;
+    cut = cut || more;
+    p->spans.pop_back();
+  }
+  if (p->spans.empty()) {
+    doc.get(summary).children.pop_back();
+    return;
+  }
+  InlineSpan& s = p->spans.back();
+  if (s.kind == InlineKind::Image || s.kind == InlineKind::Math) return;
+  // "[…]" / "[...]": the same cut in brackets.
+  for (std::string_view tail : {"[…]", "[...]"})
+    if (ends_with(s.text, tail)) {
+      s.text.resize(s.text.size() - tail.size());
+      rtrim(s.text);
+      cut = true;
+      break;
+    }
+  for (std::string_view end : {".", "!", "?", "…", "\"", "”", ")", ":"})
+    if (ends_with(s.text, end)) return;
+  if (!cut || s.text.empty()) return;
+  if (s.kind == InlineKind::Text) {
+    s.text += "…";
+  } else {
+    InlineSpan dots;
+    dots.text = "…";
+    p->spans.push_back(std::move(dots));
+  }
+}
+
+// The picture a block consists of, "" for anything else.
+std::string sole_image(const Node& n) {
+  if (n.kind == NodeKind::Image) return n.src;
+  if (n.kind != NodeKind::Paragraph) return {};
+  std::string src;
+  for (const InlineSpan& s : n.spans) {
+    if (s.kind == InlineKind::Image && src.empty()) src = s.src;
+    else if (!trimmed(s.text).empty()) return {};
+  }
+  return src;
+}
+
+void insert_thumb(Document& doc, NodeId parent, size_t at, std::string src) {
+  const NodeId im = doc.create(NodeKind::Image);
+  Node& n = doc.get(im);
+  n.parent = parent;
+  n.src = std::move(src);
+  n.float_side = "left";  // text and stats run beside it
+  auto& kids = doc.get(parent).children;
+  kids.insert(kids.begin() + static_cast<std::ptrdiff_t>(at), im);
+}
+
+// Thumbnail, statistics, body and enclosures of an entry. An entry with a
+// summary besides its full text is stretchtext showing the summary first.
+// The thumbnail is left out where the text shows the same image.
 void append_entry_body(Document& doc, NodeId parent, const Entry& e,
                        std::string_view src, const std::string& url) {
-  const size_t thumb_at = doc.get(parent).children.size();
-  const NodeId first_new = doc.next_id;
+  const std::string base = e.link.empty() ? url : e.link;
+  const std::string thumb =
+      e.thumb.empty() ? std::string{} : resolve_url(url, e.thumb);
+  size_t thumb_at = doc.get(parent).children.size();
   if (std::string stats = media_stats_line(e); !stats.empty()) {
     NodeId sp = doc.create(NodeKind::Paragraph, parent);
     InlineSpan ss;
@@ -557,23 +693,32 @@ void append_entry_body(Document& doc, NodeId parent, const Entry& e,
     ss.role = InlineRole::Metadata;
     doc.get(sp).spans.push_back(std::move(ss));
   }
+  NodeId body = parent;
+  if (summarizes(e, src)) {
+    body = doc.create(NodeKind::Stretch, parent);
+    doc.get(body).expanded = false;
+    const NodeId sum = doc.create(NodeKind::Summary, body);
+    const NodeId first_new = doc.next_id;
+    append_content(doc, sum, src, *e.summary, base, e.body_html);
+    demote_headings(doc, first_new, 3);
+    trim_summary(doc, sum);
+    // The lead picture is the summary's thumbnail, whatever its size.
+    std::string lead;
+    if (auto& kids = doc.get(sum).children; !kids.empty())
+      if (lead = sole_image(doc.get(kids.front())); !lead.empty())
+        kids.erase(kids.begin());
+    if (lead.empty() && !thumb.empty() && !shows_image(doc, first_new, thumb))
+      lead = thumb;
+    if (!lead.empty()) insert_thumb(doc, sum, 0, std::move(lead));
+    thumb_at = doc.get(body).children.size();
+  }
+  const NodeId first_new = doc.next_id;
   if (e.body) {
-    const std::string base = e.link.empty() ? url : e.link;
-    append_content(doc, parent, src, *e.body, base, e.body_html);
+    append_content(doc, body, src, *e.body, base, e.body_html);
     demote_headings(doc, first_new, 3);
   }
-  if (!e.thumb.empty()) {
-    std::string thumb = resolve_url(url, e.thumb);
-    if (!shows_image(doc, first_new, thumb)) {
-      const NodeId im = doc.create(NodeKind::Image);
-      Node& n = doc.get(im);
-      n.parent = parent;
-      n.src = std::move(thumb);
-      n.float_side = "left";  // text and stats run beside it
-      auto& kids = doc.get(parent).children;
-      kids.insert(kids.begin() + static_cast<std::ptrdiff_t>(thumb_at), im);
-    }
-  }
+  if (!thumb.empty() && !shows_image(doc, first_new, thumb))
+    insert_thumb(doc, body, thumb_at, thumb);
   for (const XmlNode* enc : e.enclosures) {
     std::string href = html_attr(enc->attrs, "url");
     if (href.empty()) href = html_attr(enc->attrs, "href");

@@ -47,6 +47,8 @@ enum class NodeKind : uint8_t {
   Chrome,          // web page chrome (nav, aside, footer, …); reader mode hides it
   Aside,           // text box beside the flow (HTML <aside>, sidebar, pull quote)
   Page,            // fixed-layout page (PDF / DjVu / comic), drawn from tiles
+  Summary,  // first child of a Stretch: the blocks shown instead of the rest
+            // while it is folded
 };
 
 enum class InlineKind : uint8_t {
@@ -143,7 +145,7 @@ struct Node {
   std::string alt;                // image alt text
   std::string src;                // image path
   bool expanded = true;           // for Stretch
-  std::string summary;            // stretchtext collapsed label
+  std::string summary;            // stretchtext label (collapsed line)
   std::string float_side;        // image, figure or table: "left", "right", or flow
   // Table: placement of a table narrower than the column ("left", "center",
   //        "right"; empty = the style sheet's `table` align).

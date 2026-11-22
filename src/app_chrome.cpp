@@ -482,13 +482,21 @@ StatusLine compute_status(App& app) {
       label = "Image — drag corner handle to resize · scale saved in markup";
     tone = StatusTone::Info;
   } else if (app.hover.stretch != xanatoo::INVALID_NODE) {
-    bool expanded = false;
-    if (app.hover.stretch_pane >= 0 && app.hover.stretch_pane < 2) {
-      auto& sd = doc_of(app, app.panes[app.hover.stretch_pane]);
-      expanded = sd.get(app.hover.stretch).expanded;
+    bool folded = true, two_body = false;
+    if (app.hover.stretch_pane >= 0) {
+      Pane& hp = app.panes[app.hover.stretch_pane];
+      const auto& sd = doc_of(app, hp);
+      folded = xanatoo::stretch_folded(sd, app.hover.stretch,
+                                       &buf(app, hp.buf).folds);
+      two_body = xanatoo::stretch_summary(sd, app.hover.stretch) !=
+                 xanatoo::INVALID_NODE;
     }
-    label = expanded ? "Stretchtext — click ▾ to collapse"
-                     : "Stretchtext — click ▸ to expand";
+    if (two_body)
+      label = folded ? "Summary — click for the full text"
+                     : "Full text — click to go back to the summary";
+    else
+      label = folded ? "Stretchtext — click ▸ to expand"
+                     : "Stretchtext — click ▾ to collapse";
     tone = StatusTone::Info;
   } else if (app.hover.list_fold != xanatoo::INVALID_NODE) {
     const bool folded =
@@ -496,7 +504,7 @@ StatusLine compute_status(App& app) {
         xanatoo::list_item_folded(
             doc_of(app, app.panes[app.hover.list_fold_pane]),
             app.hover.list_fold,
-            &buf(app, app.panes[app.hover.list_fold_pane].buf).list_folds);
+            &buf(app, app.panes[app.hover.list_fold_pane].buf).folds);
     label = folded ? "List — click ▸ to expand" : "List — click ▾ to fold";
     tone = StatusTone::Info;
   } else if (!app.hover.href.empty()) {
@@ -602,7 +610,7 @@ StatusLine compute_status(App& app) {
         sc.sel.focus == fp.sel.focus) {
       st.stats = sc.text;
     } else if (!fp.sel.empty()) {
-      const std::string t = xanatoo::selected_text(doc_of(app, fp), fp.sel);
+      const std::string t = copied_text(app, fp);
       size_t words = 0, chars = 0;
       bool in_word = false;
       for (unsigned char c : t) {

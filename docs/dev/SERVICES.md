@@ -92,7 +92,12 @@ read-only service clients. Every client is read-only: never post or log in.
   title linked to the entry, `(untitled)` when missing; `Caption` = author
   · date), like the HN / StackExchange lists, so the Heading Outline lists
   the entries. The entry's own `<h1>`… are demoted so the shallowest is
-  level 3 (`demote_headings`). Feeds without any titles (micro-blogs) stay
+  level 3 (`demote_headings`). An entry with a summary (RSS `description`
+  next to `content:encoded`, Atom `summary` next to `content`) of at least
+  20 characters and a full text at least 200 longer (`summarizes`) is a
+  collapsed two-body `Stretch`: the summary has its lead picture (else the
+  `media:thumbnail`) floated left and loses the "…read more" link and
+  WordPress' "The post … appeared first on …" (`trim_summary`). Feeds without any titles (micro-blogs) stay
   a `Thread` of `Message` cards with a Permalink. RFC 4685 threading
   (`thr:in-reply-to`) is not read.
 - `is_feed_url`: `feed:` prefix (HTML pages autodiscover via

@@ -281,7 +281,8 @@ enum class UiCommand {
   TogglePagedDefault, // Preferences: paged reading for new views
   PageColumns,        // arg: "0" (fit the width) … "3" columns per spread
   CollectionView,  // arg: layout / size / sort / "view" for the collection
-  ListFold,  // arg: "toggle" / "fold-all" / "expand-all" (list_target)
+  ListFold,  // arg: "toggle" / "fold-all" / "expand-all" (fold_target)
+  StretchFold,  // arg: "toggle" (fold_target) / "summaries" / "full"
   ToggleHelp,
   ToggleHoverHelp,  // Help panel: explains the element under the pointer
   ToggleVirtualKeyboard,  // F3 / View — on-screen keyboard
@@ -621,6 +622,9 @@ struct UiState {
   // Right-click in a list that folds: 0 no, 1 on an item without a list of
   // its own, 2 on an expanded item, 3 on a folded one.
   int list_fold = 0;
+  // Right-click in two-body stretchtext: 0 no, 1 full text, 2 summary shown.
+  int stretch_fold = 0;
+  bool has_summaries = false;  // the page has two-body stretchtext
   bool collection = false;
   int collection_layout = 0;
   int collection_sort = 0;

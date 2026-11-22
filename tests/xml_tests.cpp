@@ -177,7 +177,7 @@ void test_all_blocks() {
       NodeKind::Biblio, NodeKind::BiblioEntry, NodeKind::Table,
       NodeKind::TableRow, NodeKind::TableCell, NodeKind::Thread,
       NodeKind::Message, NodeKind::Footnote, NodeKind::Collection,
-      NodeKind::Chrome, NodeKind::Aside};
+      NodeKind::Chrome, NodeKind::Aside, NodeKind::Summary};
   for (size_t i = 0; i < kinds.size(); ++i) {
     const NodeId id = a.create(kinds[i], root);
     Node& n = a.get(id);

@@ -14,7 +14,7 @@ fields whose meaning depends on `kind`, documented only in a comment block:
 | `level` | legacy Heading depth; List ordered flag; TableCell header flag |
 | `src` | Image path; CodeBlock language; Note kind; Message author; Header TODO keyword |
 | `alt` | Image alt text; Message in-reply-to id or `about:#anchor` |
-| `summary` | Stretch collapsed label; Transclude `:excerpt`; Thread subject; Message date |
+| `summary` | Stretch label; Transclude `:excerpt`; Thread subject; Message date |
 | `label` | link anchor (`#label`); Thread id; Message-id; BiblioEntry key |
 | `tags` | org tags (Header) |
 | `expanded`, `display_scale` | Stretch / Image only, but carried by every node |

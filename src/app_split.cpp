@@ -82,7 +82,7 @@ BufferId scratch_buffer(App& app, xanatoo::Document doc,
     pv.scratch = add_buffer(app, xanatoo::parse_document("", {}), {});
   DocBuffer& b = buf(app, pv.scratch);
   b.doc = std::move(doc);
-  b.list_folds.clear();
+  b.folds.clear();
   b.path = label;
   b.content_path = derived_content_path(label);
   b.dirty = false;

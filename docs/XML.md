@@ -48,7 +48,7 @@ error view in the app instead of an editable replacement for the source.
 | --- | --- |
 | Document and grouping | `doc`, `article`, `section`, `h`, `h1`…`h6`, `chrome`, `aside` |
 | Paragraphs and lists | `p`, `ul`, `ol`, `li`, `quote`, `hr`, `codeblock`, `note` |
-| Media and layout | `image`, `figure`, `caption`, `stretch`, `columns`, `column`, `include`, `collection` |
+| Media and layout | `image`, `figure`, `caption`, `stretch`, `summary` (in `stretch`: shown while collapsed, instead of the rest), `columns`, `column`, `include`, `collection` |
 | Definitions and references | `deflist`, `term`, `def`, `biblio`, `ref`, `footnote` |
 | Tables | `table`, `tr`, `th`, `td` |
 | Discussion | `thread`, `message` |

@@ -299,15 +299,8 @@ void click_help(App& app, FloatWindow& w, int mx, int my) {
   const float lx = static_cast<float>(mx - cx);
   const float ly = static_cast<float>(my - cy);
   if (lx < 0 || ly < 0 || lx > cw || ly > ch) return;
-  if (auto sid = xanatoo::hit_test_stretch(app.help_layout, lx, ly, w.scroll)) {
-    if (app.help_doc.get(*sid).kind == xanatoo::NodeKind::Stretch) {
-      app.help_doc.get(*sid).expanded = !app.help_doc.get(*sid).expanded;
-      app.help_needs_layout = true;
-      return;
-    }
-  }
   if (auto item =
-          xanatoo::hit_test_list_fold(app.help_layout, lx, ly, w.scroll)) {
+          xanatoo::hit_test_fold(app.help_layout, lx, ly, w.scroll)) {
     app.help_doc.get(*item).expanded = !app.help_doc.get(*item).expanded;
     app.help_needs_layout = true;
     return;
@@ -366,17 +359,7 @@ void press_context(App& app, int mx, int my) {
   if (app.click_new_tab) return;  // middle-click: links only
   const float scroll = app.context_win.scroll;
   if (!shift)
-    if (auto sid = xanatoo::hit_test_stretch(app.context_layout, lx, ly, scroll)) {
-      xanatoo::Node& n = app.context_doc.get(*sid);
-      if (n.kind == xanatoo::NodeKind::Stretch) {
-        n.expanded = !n.expanded;
-        app.context_needs_layout = true;
-        app.context_sel = {};
-        return;
-      }
-    }
-  if (!shift)
-    if (auto item = xanatoo::hit_test_list_fold(app.context_layout, lx, ly,
+    if (auto item = xanatoo::hit_test_fold(app.context_layout, lx, ly,
                                                 scroll)) {
       xanatoo::Node& n = app.context_doc.get(*item);
       n.expanded = !n.expanded;

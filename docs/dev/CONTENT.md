@@ -127,17 +127,30 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - View fold state will live outside the document (future SQLite); do not rely
   on dirtying `.md`/`.org` for collapse alone.
 - Structure highlight shows `headerN` for header depth.
-- List folding (`list_fold.hpp`, pure): every ListItem hosting a non-empty
-  List folds. State is `DocBuffer::list_folds` (item → folded) over the
+- Folding (`fold.hpp`, pure): list items and stretchtext. Every ListItem
+  hosting a non-empty List folds. State is `DocBuffer::folds` (node →
+  folded) over the
   markup default `Node::expanded` (`- [+] text` above a nested list,
   `(li :expanded #f …)`, XML `expanded="false"`); it is cleared when the
   buffer gets a new document (`refresh_views_of_buf` with `top`), never
   dirties it and is not saved. Pane layouts set it on the engine
-  (`ListFoldScope`); help / context / hover layouts use the markup only.
+  (`FoldScope`); help / context / hover layouts use the markup only.
   Bullets become ▾ / ▸, numbered and task items get the triangle before
   the text (`ListSlot::fold_column`); a folded item ends in "… N items".
-  Click areas: `LayoutResult::list_folds` / `hit_test_list_fold`. Jumps,
-  search and Tab-indent call `reveal_in_lists`.
+  Click areas: `LayoutResult::fold_marks` / `hit_test_fold`. Jumps,
+  search and Tab-indent call `reveal_folds`.
+- Stretchtext (`NodeKind::Stretch`) uses the same map. Classic: the label
+  (`Node::summary`) stays above the children. Two-body: a `Summary` child
+  (`:::summary`, `(summary …)`, `<summary>`; `stretch_summary`) is shown
+  while folded and the other children replace it. Cues: "▸ Full Text" at
+  the end of the summary's last paragraph (`FoldCue`), "▴ Summary" above
+  and below the full text; they are decoration (no node, `fold_marks` only).
+  While reading, toggling is view state; in edit mode it changes
+  `expanded` like any edit (`apply_folds`).
+- Hidden halves: `fold_hiding` / `reveal_folds` open whatever hides a
+  target; find skips only the summary of a text already shown
+  (`find_skips`), copying and the selection count skip whatever is
+  hidden (`copied_text`); the page's word count has both bodies. Page-wide: `set_stretch_folds` (View → Summaries).
 - View-local fold: `folded_sections` set passed into layout; Section/
   Article show header only when folded. Outline twisties / ←→ / Ctrl+Shift+F.
 

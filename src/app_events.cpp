@@ -491,7 +491,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       return;
     }
     app.collection_target = xanatoo::INVALID_NODE;
-    app.list_target = xanatoo::INVALID_NODE;
+    app.fold_target = xanatoo::INVALID_NODE;
     // Collection card: open the fullscreen viewer at that image.
     if (click_collection_card(app, app.focus, lx, my)) return;
 
@@ -566,20 +566,10 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       if (app.dragging_block) return;
     }
 
-    if (auto sid = xanatoo::hit_test_stretch(p.layout, lx, my, p.scroll_y)) {
-      xanatoo::NodeId id = *sid;
-      if (doc_of(app, p).get(id).kind == xanatoo::NodeKind::Stretch) {
-        edit(app);
-        doc_of(app, p).get(id).expanded = !doc_of(app, p).get(id).expanded;
-        app.needs_layout = true;
-        return;
-      }
-    }
-
-    // Fold marker of a list item: view state, also on read-only pages.
-    if (auto item =
-            xanatoo::hit_test_list_fold(p.layout, lx, my, p.scroll_y)) {
-      toggle_list_fold(app, app.focus, *item);
+    // Fold marker of a list item or stretch; also on read-only pages.
+    if (auto id = xanatoo::hit_test_fold(p.layout, lx, my, p.scroll_y)) {
+      toggle_fold(app, app.focus, *id);
+      app.hover = Hover{};  // the marker has moved away from the pointer
       reset_blink(app);
       return;
     }
@@ -909,7 +899,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         app.collection_target = xanatoo::INVALID_NODE;
       else
         note_collection_target(app, app.focus, lx, my);
-      app.list_target = xanatoo::INVALID_NODE;
+      app.fold_target = xanatoo::INVALID_NODE;
       // "Open Article / Section / Block": the blocks around the pointer, from
       // the grip's block or the innermost box under it outwards.
       app.context_blocks.clear();
@@ -934,7 +924,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         if (start != xanatoo::INVALID_NODE && start < d.next_id &&
             d.get(start).id == start)
           app.context_blocks = xanatoo::cut_blocks(d, start);
-        if (start != xanatoo::INVALID_NODE) app.list_target = start;
+        if (start != xanatoo::INVALID_NODE) app.fold_target = start;
       }
       app.ui.open_context_menu(static_cast<float>(rx),
                                static_cast<float>(ry));
@@ -1300,25 +1290,18 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
         }
       }
 
-      // Stretch marker (collapsed line or expanded header)
+      // Fold marker of a list item or stretch
       if (!app.hover.col_gap && !in_strip &&
           app.hover.image == xanatoo::INVALID_NODE) {
-        if (auto sid =
-                xanatoo::hit_test_stretch(hp.layout, lx, my, hp.scroll_y)) {
-          if (hd.get(*sid).kind == xanatoo::NodeKind::Stretch) {
-            app.hover.stretch = *sid;
+        if (auto id =
+                xanatoo::hit_test_fold(hp.layout, lx, my, hp.scroll_y)) {
+          if (hd.get(*id).kind == xanatoo::NodeKind::Stretch) {
+            app.hover.stretch = *id;
             app.hover.stretch_pane = hover_pane;
+          } else {
+            app.hover.list_fold = *id;
+            app.hover.list_fold_pane = hover_pane;
           }
-        }
-      }
-
-      // Fold marker of a list item
-      if (!app.hover.col_gap && !in_strip &&
-          app.hover.image == xanatoo::INVALID_NODE) {
-        if (auto item = xanatoo::hit_test_list_fold(hp.layout, lx, my,
-                                                    hp.scroll_y)) {
-          app.hover.list_fold = *item;
-          app.hover.list_fold_pane = hover_pane;
         }
       }
 
@@ -1463,8 +1446,9 @@ static void on_textinput(App& app, SDL_Event& ev, bool imgui_mouse,
     size_t mlen = 0;
     xanatoo::Caret from = p.sel.focus;
     if (from.char_index > 0) from.char_index -= 1;
-    if (auto hit = xanatoo::find_next(doc_of(app, p), pr.text, from, mlen)) {
-      reveal_chrome(app, p, hit->node);
+    if (auto hit = xanatoo::find_next(doc_of(app, p), pr.text, from, mlen,
+                                      find_skips(app, p))) {
+      reveal_hit(app, p, hit->node);
       p.sel.anchor = *hit;
       p.sel.focus = *hit;
       xanatoo::advance_caret(doc_of(app, p), p.sel.focus, mlen);
@@ -2546,11 +2530,13 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         const bool backward = shift || (xanatoo::sdl::keymod(ev) & KMOD_SHIFT) != 0;
         auto hit = backward
                        ? xanatoo::find_prev(doc_of(app, pp), app.prompt.text,
-                                            pp.sel.focus, mlen)
+                                            pp.sel.focus, mlen,
+                                            find_skips(app, pp))
                        : xanatoo::find_next(doc_of(app, pp), app.prompt.text,
-                                            pp.sel.focus, mlen);
+                                            pp.sel.focus, mlen,
+                                            find_skips(app, pp));
         if (hit) {
-          reveal_chrome(app, pp, hit->node);
+          reveal_hit(app, pp, hit->node);
           pp.sel.anchor = *hit;
           pp.sel.focus = *hit;
           xanatoo::advance_caret(doc_of(app, pp), pp.sel.focus, mlen);
@@ -2596,7 +2582,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
                           : xanatoo::indent_list_item(d, p.sel.focus);
           if (ok) {
             p.sel.anchor = p.sel.focus;
-            reveal_in_lists(app, p, p.sel.focus.node);
+            reveal_folds(app, p, p.sel.focus.node);
             app.needs_layout = true;
             reset_blink(app);
           }
@@ -3052,12 +3038,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         break;
       }
       if (ctrl && shift) {
-        // Collapse all stretch nodes
-        edit(app);
-        for (auto& node : d.nodes) {
-          if (node.kind == xanatoo::NodeKind::Stretch) node.expanded = false;
-        }
-        app.needs_layout = true;
+        collapse_or_expand_all(app, false);
       }
       break;
 
@@ -3074,12 +3055,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         break;
       }
       if (ctrl && shift) {
-        // Expand all stretch nodes
-        edit(app);
-        for (auto& node : d.nodes) {
-          if (node.kind == xanatoo::NodeKind::Stretch) node.expanded = true;
-        }
-        app.needs_layout = true;
+        collapse_or_expand_all(app, true);
       }
       break;
 

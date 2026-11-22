@@ -203,7 +203,7 @@ add_executable(xanatoo
   src/math_font.cpp
   src/document.cpp
   src/layout.cpp
-  src/list_fold.cpp
+  src/fold.cpp
   src/render.cpp
   src/parse.cpp
   src/xml.cpp
@@ -834,7 +834,7 @@ add_executable(xanatoo_tests
   src/view_settings.cpp
   src/style.cpp
   src/layout.cpp
-  src/list_fold.cpp
+  src/fold.cpp
   src/font.cpp
   src/math_parse.cpp
   src/math_layout.cpp

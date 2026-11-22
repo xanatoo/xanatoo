@@ -113,6 +113,9 @@ Export via *File → Export as S-expression…* or *Export as Markdown…*.
 - **Drag image corner** — Resize image
 - **Ctrl++** / **Ctrl+-** — Zoom text (also Ctrl+wheel, keeping the text under the pointer in place)
 - **Click ▸/▾** — Expand / collapse stretchtext
+- **Click ▸ Full Text / ▴ Summary** — Where a summary stands for a longer text
+  (feed entries), show the one or the other; **Ctrl+Shift+F** does it at the
+  caret, **View → Summaries** or right-click for the whole page
 - **Click ▸/▾** on a list item — Expand / fold the list inside it
   (`- [+] item` starts folded); right-click a list for Fold All / Expand All,
   **Ctrl+Shift+F** folds the item at the caret
@@ -120,6 +123,9 @@ Export via *File → Export as S-expression…* or *Export as Markdown…*.
 :::stretch summary="About stretchtext"
 Stretchtext collapses a passage behind a one-line summary. Click the marker to
 expand or collapse. Use **Ctrl+E** to wrap the current block.
+
+With a `:::summary` … `:::` block inside `:::stretch`, those blocks are shown
+while it is collapsed, and the rest replaces them when expanded.
 :::
 
 ## Concepts
@@ -179,7 +185,7 @@ default for views not switched themselves. See `docs/PAGED.md`.
   Shift+arrows still select)
 - **Home** / **End** — top / bottom of the page
 - **Space** or **Enter** — expand/collapse stretch or follow link under caret
-- **Ctrl+[** / **Ctrl+]** — collapse / expand all stretches and lists
+- **Ctrl+[** / **Ctrl+]** — collapse / expand all stretches and lists (summaries / full texts)
 - **F2** — toggle editing (only on editable local documents)
 - **F8** — paged reading (ebook style pages instead of scrolling)
 - **F9** — reader mode (hide navigation, sidebars and footers of web pages)

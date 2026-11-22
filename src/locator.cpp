@@ -526,6 +526,7 @@ std::string_view block_kind_name(NodeKind kind) {
     case NodeKind::ListItem: return "List Item";
     case NodeKind::Image: return "Image";
     case NodeKind::Stretch: return "Stretchtext";
+    case NodeKind::Summary: return "Summary";
     case NodeKind::BlockQuote: return "Quote";
     case NodeKind::HorizontalRule: return "Rule";
     case NodeKind::Transclude: return "Embed";

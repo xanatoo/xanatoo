@@ -2,6 +2,30 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Two-body stretchtext, feeds open as summaries
+
+- A `Stretch` may have a `Summary` child (`:::summary`, `(summary …)`,
+  `<summary>`): its blocks are shown while collapsed and the rest replaces
+  them. Cues "▸ Full Text" / "▴ Summary"; Ctrl+Shift+F at the caret, View →
+  Summaries and the context menu for the page. Classic one-label stretches
+  look as before.
+- Stretches share the per-buffer fold state of lists (`list_fold.*` is now
+  `fold.*`). While reading, toggling one no longer dirties the page; in edit
+  mode it still changes `expanded`. Jumps and search open what hides their
+  target.
+- Feed entries with both a summary and a clearly longer full text open as
+  the summary, with the picture floated. Unit tests; hackaday.com/blog/feed/
+  checked under Xvfb.
+- Open: no Edit command makes a summary from a block yet (write the markup);
+  fold states are not kept across reloads; Org / Gemtext exports write both
+  bodies one after the other; the page's word count has both. Details:
+  `docs/dev/CONTENT.md`.
+- Found on the way, not fixed (older): Enter in the find prompt falls
+  through to the document and replaces the match with a line break, also on
+  read-only pages (`commit_prompt`, `PromptKind::Search`); find-as-you-type
+  restarts near the end of the last match, so each further letter can skip
+  the match being typed (`on_textinput`).
+
 ## Status (2026-11-22) — Feeds: no second copy of the lead image
 
 - Report: hackaday.com/blog/feed/ shows each image twice. Not description +
@@ -9,15 +33,6 @@
   floated above a body that starts with the same file (`?w=800`). It is now
   left out when the body shows that image in another size (`image_identity`
   in `feed.cpp`). Unit test; checked under Xvfb.
-- Open, idea (not decided): when an entry has both `description` / `summary`
-  and a longer full text, show the summary and *replace* it with the full
-  text on click. Today's `Stretch` cannot: its `summary` is a plain string
-  that stays above the children, and its state is content (`expanded`), not
-  view state. Would need a Stretch with summary blocks (text, links, image)
-  besides the body, fold state per buffer like `list_folds`, page-wide
-  Summaries / Full Text, and jumps / search unfolding. Feeds would use it
-  with the floated thumbnail in the summary; drop WordPress' "…read more"
-  tail, and skip it when the summary is (nearly) the whole text.
 
 ## Status (2026-11-22) — `ia:` descriptions keep their formatting
 

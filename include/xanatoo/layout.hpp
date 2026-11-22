@@ -143,8 +143,8 @@ struct LayoutResult {
   std::vector<LayoutBox> boxes;
   std::vector<PositionedImage> images;
   std::vector<PositionedMath> maths;
-  // Click areas of list fold markers (list_fold.hpp); node = the ListItem.
-  std::vector<LayoutBox> list_folds;
+  // Click areas of fold markers (fold.hpp); node = the ListItem / Stretch.
+  std::vector<LayoutBox> fold_marks;
   // Vertical bars for block quotes (content coordinates).
   std::vector<LayoutBox> quote_bars;
   // Vertical bars for notes (distinct colour from quotes).
@@ -313,10 +313,10 @@ public:
       const std::unordered_map<NodeId, CollectionView>* views) {
     collection_views_ = views;
   }
-  // Fold state of nested lists (list_fold.hpp; nullptr / missing entry = the
-  // item's markup). Must outlive layout() calls.
-  void set_list_folds(const std::unordered_map<NodeId, bool>* folds) {
-    list_folds_ = folds;
+  // Fold state of lists and stretchtext (fold.hpp; nullptr / missing entry =
+  // the node's markup). Must outlive layout() calls.
+  void set_folds(const std::unordered_map<NodeId, bool>* folds) {
+    folds_ = folds;
   }
   const DocStyle& style() const { return *style_; }
   // Reader mode for the next layout() calls: Chrome nodes are left out and a
@@ -352,7 +352,15 @@ private:
   const DocStyle* style_;
   size_t active_style_index_ = 0;
   const std::unordered_map<NodeId, CollectionView>* collection_views_ = nullptr;
-  const std::unordered_map<NodeId, bool>* list_folds_ = nullptr;
+  const std::unordered_map<NodeId, bool>* folds_ = nullptr;
+  // The paragraph that ends a folded stretch's summary: gets the cue of
+  // `fold` after its text (layout_stretch).
+  struct FoldCue {
+    NodeId block = INVALID_NODE;
+    NodeId fold = INVALID_NODE;
+    std::string text;
+  };
+  FoldCue cue_;
 
   std::string image_base_;
   LayoutViewport viewport_;
@@ -517,6 +525,19 @@ private:
   // Paragraph in the role's font.
   void layout_role_text(const Document& doc, const Node& node, BlockRole role,
                         float x, float& y, float max_width, LayoutResult& out);
+  // layout_role_text with `cue` after the node's own text: decoration in the
+  // link colour that folds / unfolds `fold` (LayoutResult::fold_marks).
+  void layout_cued_text(const Document& doc, const Node& node, BlockRole role,
+                        float x, float& y, float max_width,
+                        const std::string& cue, NodeId fold,
+                        LayoutResult& out);
+  // A whole line that folds / unfolds the stretch ("▸ label"); its glyphs
+  // belong to `glyph_node`.
+  void layout_fold_line(const Document& doc, const Node& stretch,
+                        const std::string& text, NodeId glyph_node, float x,
+                        float& y, float max_width, LayoutResult& out);
+  void layout_stretch(const Document& doc, const Node& node, float x, float& y,
+                      float max_width, LayoutResult& out);
   // Background band / underline of a title laid out from `top` to `bottom`,
   // when the role sets those colours.
   void add_role_band(BlockRole role, NodeId id, float x, float top,

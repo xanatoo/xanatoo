@@ -155,64 +155,118 @@ void reload_folds_for_focused(App& app) {
   if (app.outline_mode) refresh_outline(app);
 }
 
+namespace {
+void keep_view(App& app, Pane& p);
+}  // namespace
+
 static void keep_carets_visible(App& app, Pane& v) {
   const auto& d = doc_of(app, v);
-  const auto& folds = buf(app, v.buf).list_folds;
+  const auto& folds = buf(app, v.buf).folds;
   for (xanatoo::Caret* c : {&v.sel.focus, &v.sel.anchor}) {
-    for (auto id = xanatoo::folded_list_ancestor(d, c->node, &folds);
-         id != xanatoo::INVALID_NODE;
-         id = xanatoo::folded_list_ancestor(d, id, &folds))
-      *c = {id, 0, 0};
+    // Innermost first: an outer fold moves the caret on.
+    for (auto id = xanatoo::fold_hiding(d, c->node, &folds);
+         id != xanatoo::INVALID_NODE; id = xanatoo::fold_hiding(d, id, &folds)) {
+      if (d.get(id).kind == xanatoo::NodeKind::ListItem) {
+        *c = {id, 0, 0};
+        continue;
+      }
+      // A stretch: what it shows instead. A classic one has no text left, the
+      // caret comes back with it.
+      const auto text = xanatoo::stretch_first_text(
+          d, id, xanatoo::stretch_folded(d, id, &folds));
+      if (text != xanatoo::INVALID_NODE) *c = {text, 0, 0};
+    }
   }
 }
 
-void set_list_fold(App& app, int pi, xanatoo::NodeId item, bool folded) {
-  const BufferId bi = app.panes[pi].buf;
-  const auto& d = doc_of(app, app.panes[pi]);
-  if (!xanatoo::list_item_foldable(d, item)) return;
-  buf(app, bi).list_folds[item] = folded;
+// Set the state of `ids` in view `pi`'s buffer. View state; only while
+// editing does a stretch's state belong to the document (`:expanded`).
+static void apply_folds(App& app, int pi, const std::vector<xanatoo::NodeId>& ids,
+                        bool folded) {
+  Pane& p = app.panes[pi];
+  auto& d = doc_of(app, p);
+  const bool author = pi == app.focus && !browsing(app);
+  bool edited = false;
+  for (xanatoo::NodeId id : ids) {
+    const bool stretch = d.get(id).kind == xanatoo::NodeKind::Stretch;
+    if (author && stretch) {
+      if (d.get(id).expanded == folded) {
+        if (!edited) edit(app);
+        edited = true;
+        d.get(id).expanded = !folded;
+      }
+      buf(app, p.buf).folds.erase(id);
+    } else {
+      buf(app, p.buf).folds[id] = folded;
+    }
+  }
   for (int vi : live_views(app)) {
     Pane& v = app.panes[vi];
-    if (v.buf != bi) continue;
-    invalidate_height_around(app, v, item);
-    // A caret in the list going out of sight moves to the item.
-    if (folded) keep_carets_visible(app, v);
+    if (v.buf != p.buf) continue;
+    for (xanatoo::NodeId id : ids) invalidate_height_around(app, v, id);
+    // A caret in the text going out of sight moves to what stays.
+    keep_carets_visible(app, v);
   }
   app.needs_layout = true;
 }
 
-void toggle_list_fold(App& app, int pi, xanatoo::NodeId item) {
+void set_fold(App& app, int pi, xanatoo::NodeId id, bool folded) {
   Pane& p = app.panes[pi];
-  const bool folded =
-      xanatoo::list_item_folded(doc_of(app, p), item, &buf(app, p.buf).list_folds);
-  set_list_fold(app, pi, item, !folded);
+  const auto& d = doc_of(app, p);
+  const bool stretch =
+      id < d.next_id && d.get(id).kind == xanatoo::NodeKind::Stretch;
+  if (!stretch && !xanatoo::list_item_foldable(d, id)) return;
+  if (stretch) {
+    // Folding from the cue below a long text goes back to its summary; what
+    // is above the stretch does not move.
+    for (const auto& box : p.layout.boxes) {
+      if (box.node != id || !folded) continue;
+      if (p.pages.on) {
+        if (box.y < p.scroll_y)
+          page_goto_spread(app, p, spread_at(p, box.y));
+      } else {
+        p.scroll_y = std::max(0.f, std::min(p.scroll_y, box.y - 40.f));
+        p.view_anchor.reset();
+      }
+      break;
+    }
+    for (int vi : live_views(app))
+      if (vi != pi && app.panes[vi].buf == p.buf) keep_view(app, app.panes[vi]);
+  }
+  apply_folds(app, pi, {id}, folded);
+}
+
+void toggle_fold(App& app, int pi, xanatoo::NodeId id) {
+  Pane& p = app.panes[pi];
+  set_fold(app, pi, id,
+           !xanatoo::node_folded(doc_of(app, p), id, &buf(app, p.buf).folds));
 }
 
 void set_list_folds(App& app, int pi, xanatoo::NodeId node, bool folded) {
-  Pane& p = app.panes[pi];
-  const auto& d = doc_of(app, p);
+  const auto& d = doc_of(app, app.panes[pi]);
   const auto items =
       xanatoo::foldable_list_items(d, xanatoo::outermost_list(d, node));
   if (items.empty()) return;
   keep_views(app);
-  for (xanatoo::NodeId item : items) buf(app, p.buf).list_folds[item] = folded;
-  for (int vi : live_views(app)) {
-    Pane& v = app.panes[vi];
-    if (v.buf != p.buf) continue;
-    v.height_cache.clear();
-    if (folded) keep_carets_visible(app, v);
-  }
-  app.needs_layout = true;
+  apply_folds(app, pi, items, folded);
 }
 
-bool reveal_in_lists(App& app, Pane& p, xanatoo::NodeId node) {
+void set_stretch_folds(App& app, int pi, bool folded) {
+  const auto& d = doc_of(app, app.panes[pi]);
+  const auto ids = xanatoo::stretches(d, d.root, true);
+  if (ids.empty()) return;
+  keep_views(app);
+  apply_folds(app, pi, ids, folded);
+}
+
+bool reveal_folds(App& app, Pane& p, xanatoo::NodeId node) {
   const auto& d = doc_of(app, p);
-  auto& folds = buf(app, p.buf).list_folds;
+  auto& folds = buf(app, p.buf).folds;
   bool any = false;
-  for (auto id = xanatoo::folded_list_ancestor(d, node, &folds);
+  for (auto id = xanatoo::fold_hiding(d, node, &folds);
        id != xanatoo::INVALID_NODE;
-       id = xanatoo::folded_list_ancestor(d, id, &folds)) {
-    folds[id] = false;
+       id = xanatoo::fold_hiding(d, node, &folds)) {
+    folds[id] = !xanatoo::node_folded(d, id, &folds);
     any = true;
     for (int vi : live_views(app))
       if (app.panes[vi].buf == p.buf)
@@ -222,28 +276,69 @@ bool reveal_in_lists(App& app, Pane& p, xanatoo::NodeId node) {
   return any;
 }
 
+void reveal_hit(App& app, Pane& p, xanatoo::NodeId node) {
+  reveal_chrome(app, p, node);
+  if (reveal_folds(app, p, node)) force_full_pane_layout(app, p);
+}
+
+std::vector<xanatoo::NodeId> find_skips(App& app, Pane& p) {
+  return xanatoo::hidden_stretch_blocks(doc_of(app, p),
+                                        &buf(app, p.buf).folds, true);
+}
+
+std::string copied_text(App& app, Pane& p) {
+  const auto& d = doc_of(app, p);
+  if (p.sel.empty()) return {};
+  return xanatoo::selected_text(
+      d, p.sel,
+      xanatoo::hidden_stretch_blocks(d, &buf(app, p.buf).folds, false));
+}
+
 xanatoo::NodeId current_list_target(App& app) {
   const auto& d = doc_of(app, focused_pane(app));
-  const xanatoo::NodeId item = xanatoo::enclosing_list_item(d, app.list_target);
+  const xanatoo::NodeId item = xanatoo::enclosing_list_item(d, app.fold_target);
   if (item == xanatoo::INVALID_NODE ||
       !xanatoo::has_foldable_list_items(d, xanatoo::outermost_list(d, item)))
     return xanatoo::INVALID_NODE;
   return item;
 }
 
+xanatoo::NodeId current_stretch_target(App& app) {
+  const auto& d = doc_of(app, focused_pane(app));
+  for (xanatoo::NodeId id = app.fold_target;
+       id != xanatoo::INVALID_NODE && id < d.next_id; id = d.get(id).parent)
+    if (xanatoo::stretch_summary(d, id) != xanatoo::INVALID_NODE) return id;
+  return xanatoo::INVALID_NODE;
+}
+
+static void toggle_stretch(App& app, xanatoo::NodeId id) {
+  toggle_fold(app, app.focus, id);
+  Pane& p = focused_pane(app);
+  const auto& d = doc_of(app, p);
+  const bool folded = xanatoo::stretch_folded(d, id, &buf(app, p.buf).folds);
+  if (xanatoo::stretch_summary(d, id) != xanatoo::INVALID_NODE)
+    flash_status(app, folded ? "Summary" : "Full text");
+  else
+    flash_status(app, folded ? "Collapsed" : "Expanded");
+}
+
 void toggle_fold_at_caret(App& app) {
   auto& d = doc_of(app, focused_pane(app));
   xanatoo::NodeId id = focused_pane(app).sel.focus.node;
   if (xanatoo::list_item_foldable(d, id)) {
-    toggle_list_fold(app, app.focus, id);
+    toggle_fold(app, app.focus, id);
     flash_status(app, xanatoo::list_item_folded(
-                          d, id, &buf(app, focused_pane(app).buf).list_folds)
+                          d, id, &buf(app, focused_pane(app).buf).folds)
                           ? "List item folded"
                           : "List item expanded");
     return;
   }
   while (id != xanatoo::INVALID_NODE && id < d.next_id) {
     const auto& n = d.get(id);
+    if (n.kind == xanatoo::NodeKind::Stretch) {
+      toggle_stretch(app, id);
+      return;
+    }
     if (n.kind == xanatoo::NodeKind::Section ||
         n.kind == xanatoo::NodeKind::Article) {
       toggle_section_fold(app, id);
@@ -310,7 +405,7 @@ void reveal_chrome(App& app, Pane& p, xanatoo::NodeId target) {
 void expand_ancestors_for_node(App& app, xanatoo::NodeId target) {
   if (target == xanatoo::INVALID_NODE) return;
   reveal_chrome(app, focused_pane(app), target);
-  reveal_in_lists(app, focused_pane(app), target);
+  reveal_folds(app, focused_pane(app), target);
   const auto& d = doc_of(app, focused_pane(app));
   bool any = false;
   std::string doc_key = path_of(app, focused_pane(app));
@@ -483,15 +578,15 @@ void keep_views(App& app) {
   for (int pi : live_views(app)) keep_view(app, app.panes[pi]);
 }
 
-// The buffer's list folds, for layouts of that buffer only.
-struct ListFoldScope {
+// The buffer's folds, for layouts of that buffer only.
+struct FoldScope {
   App& app;
-  ListFoldScope(App& a, const Pane& p) : app(a) {
-    app.layout_engine.set_list_folds(&buf(app, p.buf).list_folds);
+  FoldScope(App& a, const Pane& p) : app(a) {
+    app.layout_engine.set_folds(&buf(app, p.buf).folds);
   }
-  ~ListFoldScope() { app.layout_engine.set_list_folds(nullptr); }
-  ListFoldScope(const ListFoldScope&) = delete;
-  ListFoldScope& operator=(const ListFoldScope&) = delete;
+  ~FoldScope() { app.layout_engine.set_folds(nullptr); }
+  FoldScope(const FoldScope&) = delete;
+  FoldScope& operator=(const FoldScope&) = delete;
 };
 
 void layout_panes(App& app) {
@@ -534,7 +629,7 @@ void layout_panes(App& app) {
       const GalleryStyleScope gallery_look(app, pane);
       const float layout_w = static_cast<float>(
           std::max(40, (pane.w - sb_gutter(pane)) / columns));
-      const ListFoldScope list_folds(app, pane);
+      const FoldScope folds(app, pane);
       pane.layout = app.layout_engine.layout(
           doc_of(app, pane), layout_w, base_of(app, pane), vp, hints,
           &app.folded_sections, pane_cut(app, pane));
@@ -618,7 +713,7 @@ void force_full_pane_layout(App& app, Pane& p) {
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.anchor);
     const GalleryStyleScope gallery_look(app, p);
-    const ListFoldScope list_folds(app, p);
+    const FoldScope folds(app, p);
     p.layout = app.layout_engine.layout(
         doc_of(app, p), static_cast<float>(std::max(40, p.w - sb_gutter(p))),
         base_of(app, p), {}, nullptr, &app.folded_sections,
@@ -911,30 +1006,26 @@ void nav_header(App& app, bool prev) {
 
 bool toggle_stretch_at_caret(App& app) {
   Pane& p = focused_pane(app);
-  auto& d = doc_of(app, p);
-  for (xanatoo::NodeId id = p.sel.focus.node; id != xanatoo::INVALID_NODE;
-       id = d.get(id).parent) {
+  const auto& d = doc_of(app, p);
+  for (xanatoo::NodeId id = p.sel.focus.node;
+       id != xanatoo::INVALID_NODE && id < d.next_id; id = d.get(id).parent) {
     if (d.get(id).kind == xanatoo::NodeKind::Stretch) {
-      d.get(id).expanded = !d.get(id).expanded;
-      app.needs_layout = true;
-      flash_status(app, d.get(id).expanded ? "Expanded" : "Collapsed");
+      toggle_stretch(app, id);
       return true;
     }
   }
-  // Also toggle Stretch under the caret's layout box.
+  // Also the innermost stretch (its box comes first) at the caret's height.
   auto cpos = xanatoo::caret_screen_pos(
       p.layout, p.sel.focus, p.scroll_y,
       static_cast<float>(app.fonts.regular.line_height()));
   if (cpos.valid) {
     for (const auto& box : p.layout.boxes) {
-      if (box.node == xanatoo::INVALID_NODE) continue;
+      if (box.node == xanatoo::INVALID_NODE || box.node >= d.next_id) continue;
       if (d.get(box.node).kind != xanatoo::NodeKind::Stretch) continue;
       if (cpos.y + p.scroll_y < box.y ||
           cpos.y + p.scroll_y > box.y + box.height)
         continue;
-      d.get(box.node).expanded = !d.get(box.node).expanded;
-      app.needs_layout = true;
-      flash_status(app, d.get(box.node).expanded ? "Expanded" : "Collapsed");
+      toggle_stretch(app, box.node);
       return true;
     }
   }
@@ -942,16 +1033,14 @@ bool toggle_stretch_at_caret(App& app) {
 }
 
 void collapse_or_expand_all(App& app, bool expand) {
-  auto& d = doc_of(app, focused_pane(app));
-  for (auto& node : d.nodes) {
-    if (node.kind == xanatoo::NodeKind::Stretch) node.expanded = expand;
-  }
   Pane& p = focused_pane(app);
+  const auto& d = doc_of(app, p);
+  std::vector<xanatoo::NodeId> ids = xanatoo::stretches(d, d.root, false);
   for (xanatoo::NodeId item : xanatoo::foldable_list_items(d, d.root))
-    buf(app, p.buf).list_folds[item] = !expand;
-  if (!expand) keep_carets_visible(app, p);
+    ids.push_back(item);
+  keep_views(app);
+  apply_folds(app, app.focus, ids, !expand);
   drop_height_hints_for_buf(app, p.buf);
-  app.needs_layout = true;
   flash_status(app, expand ? "Expanded all" : "Collapsed all");
 }
 

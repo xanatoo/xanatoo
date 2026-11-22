@@ -31,7 +31,7 @@
 #include "xanatoo/history_trail.hpp"
 #include "xanatoo/images.hpp"
 #include "xanatoo/layout.hpp"
-#include "xanatoo/list_fold.hpp"
+#include "xanatoo/fold.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/minibuffer.hpp"
 #include "xanatoo/nav_history.hpp"
@@ -114,11 +114,20 @@ struct QuoteLinks {
   std::vector<xanatoo::QuoteLink> links;
 };
 
+// Identifies a buffer's document as of its last change.
+struct SummaryScan {
+  BufferId buf = kNoBuffer;
+  const xanatoo::Document* doc = nullptr;
+  uint64_t doc_gen = 0;
+  size_t nodes = 0;
+  bool operator==(const SummaryScan&) const = default;
+};
+
 struct DocBuffer {
   BufferId id = kNoBuffer;
   xanatoo::Document doc;
-  // Lists the reader folded / unfolded (list_fold.hpp); gone with `doc`.
-  xanatoo::ListFolds list_folds;
+  // Lists and stretches the reader folded / unfolded (fold.hpp); gone with `doc`.
+  xanatoo::Folds folds;
   // Bumped when `doc` changes (note_edit, refresh_views_of_buf); derived
   // per-document data compares it.
   uint64_t doc_gen = 0;
@@ -578,7 +587,7 @@ struct Hover {
   bool link_in_footnotes = false;
   xanatoo::NodeId stretch = xanatoo::INVALID_NODE;
   int stretch_pane = -1;
-  xanatoo::NodeId list_fold = xanatoo::INVALID_NODE;  // fold marker's item
+  xanatoo::NodeId list_fold = xanatoo::INVALID_NODE;  // fold marker's list item
   int list_fold_pane = -1;
   xanatoo::NodeId image = xanatoo::INVALID_NODE;
   int image_pane = -1;
@@ -1418,8 +1427,11 @@ struct App {
   std::unordered_map<xanatoo::NodeId, xanatoo::CollectionView> collection_views;
   // Collection the last right-click hit (context menu target).
   xanatoo::NodeId collection_target = xanatoo::INVALID_NODE;
-  // List item the last right-click hit (context menu's Fold / Expand).
-  xanatoo::NodeId list_target = xanatoo::INVALID_NODE;
+  // Block the last right-click hit (context menu's Fold / Expand).
+  xanatoo::NodeId fold_target = xanatoo::INVALID_NODE;
+  // Document state `has_summaries` was found for.
+  SummaryScan summary_scan;
+  bool has_summaries = false;  // the focused page has two-body stretchtext
   std::string last_fold_doc_key;
   bool diff_mode = false;
   std::vector<xanatoo::NodeId> diff_marks[2];
@@ -1739,17 +1751,28 @@ void toggle_section_focus_mode(App& app);
 void reload_folds_for_focused(App& app);
 // The section, or a nested list's item right at the caret.
 void toggle_fold_at_caret(App& app);
-// Fold / expand a list item of view `pi`'s page (list_fold.hpp), in every
-// view of the buffer; view state, never an edit.
-void set_list_fold(App& app, int pi, xanatoo::NodeId item, bool folded);
-void toggle_list_fold(App& app, int pi, xanatoo::NodeId item);
+// Fold / expand a list item or stretch of view `pi`'s page (fold.hpp), in
+// every view of the buffer. View state; only in edit mode is a stretch's
+// state part of the document.
+void set_fold(App& app, int pi, xanatoo::NodeId id, bool folded);
+void toggle_fold(App& app, int pi, xanatoo::NodeId id);
 // All items of the outermost list around `node`.
 void set_list_folds(App& app, int pi, xanatoo::NodeId node, bool folded);
-// Expand folded list items hiding `node`; false when none did.
-bool reveal_in_lists(App& app, Pane& p, xanatoo::NodeId node);
+// All two-body stretchtext of the page: summaries or full texts.
+void set_stretch_folds(App& app, int pi, bool folded);
+// Switch the folds hiding `node`; false when none did.
+bool reveal_folds(App& app, Pane& p, xanatoo::NodeId node);
+// The page chrome and folds hiding a search hit.
+void reveal_hit(App& app, Pane& p, xanatoo::NodeId node);
+// Text find leaves alone: summaries of texts shown in full.
+std::vector<xanatoo::NodeId> find_skips(App& app, Pane& p);
+// The selection without the hidden half of two-body stretchtext.
+std::string copied_text(App& app, Pane& p);
 // The context menu's list item in the focused view, if it still is one in
 // a list that can be folded.
 xanatoo::NodeId current_list_target(App& app);
+// Its two-body stretch.
+xanatoo::NodeId current_stretch_target(App& app);
 void refresh_diff(App& app);
 void expand_ancestors_for_node(App& app, xanatoo::NodeId target);
 // Reader mode (Pane::reader): whether the view hides the page chrome, and

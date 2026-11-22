@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/layout.hpp"
-#include "xanatoo/list_fold.hpp"
+#include "xanatoo/fold.hpp"
 #include "xanatoo/autolink.hpp"
 #include "xanatoo/math_font.hpp"
 #include "xanatoo/images.hpp"
@@ -275,7 +275,7 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
   for (size_t i = first_image; i < out.images.size(); ++i)
     if (out.images[i].auto_link != 0) out.images[i].auto_link += link_base;
   add(out.maths, in.maths);
-  add(out.list_folds, in.list_folds);
+  add(out.fold_marks, in.fold_marks);
   add(out.quote_bars, in.quote_bars);
   add(out.note_bars, in.note_bars);
   add(out.message_bars, in.message_bars);
@@ -1495,42 +1495,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       break;
     }
 
-    case NodeKind::Stretch: {
-      if (!node.expanded) {
-        // Collapsed: show summary as a single interactive line
-        Node fake = node;
-        fake.kind = NodeKind::Paragraph;
-        fake.spans.clear();
-        InlineSpan s;
-        s.kind = InlineKind::Link;  // visual cue
-        s.text = node.summary.empty() ? "▸ …" : ("▸ " + node.summary);
-        fake.spans.push_back(std::move(s));
-        float start_y = y;
-        // `fake` is a copy of the node: its glyphs already carry `id`.
-        layout_paragraph(doc, fake, x, y, max_width, out, FontRole::Body);
-        y += 10.f;
-        out.boxes.push_back({id, x, start_y, max_width, y - start_y});
-      } else {
-        // Expanded: optional summary header + children
-        if (!node.summary.empty()) {
-          Node fake = node;
-          fake.kind = NodeKind::Paragraph;
-          fake.spans.clear();
-          InlineSpan s;
-          s.kind = InlineKind::Link;
-          s.text = "▾ " + node.summary;
-          fake.spans.push_back(std::move(s));
-          float start_y = y;
-          layout_paragraph(doc, fake, x, y, max_width, out, FontRole::Body);
-          out.boxes.push_back({id, x, start_y, max_width, y - start_y});
-        }
-        for (NodeId child : node.children) {
-          layout_node(doc, child, x + 12.f, y, max_width - 12.f, out);
-        }
-        y += 6.f;
-      }
+    case NodeKind::Stretch:
+      layout_stretch(doc, node, x, y, max_width, out);
       break;
-    }
+
+    case NodeKind::Summary:
+      layout_children_sequential(doc, node.children, x, y, max_width, out);
+      break;
 
     case NodeKind::Heading: {
       FontRole role = (node.level <= 2) ? FontRole::Heading : FontRole::Body;
@@ -1671,7 +1642,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
     case NodeKind::Paragraph: {
       float start_y = y;
       y += before(BlockRole::Paragraph);
-      layout_role_text(doc, node, BlockRole::Paragraph, x, y, max_width, out);
+      if (cue_.block == id)
+        layout_cued_text(doc, node, BlockRole::Paragraph, x, y, max_width,
+                         (node.spans.empty() ? "" : " ") + cue_.text,
+                         cue_.fold, out);
+      else
+        layout_role_text(doc, node, BlockRole::Paragraph, x, y, max_width,
+                         out);
       y += after(BlockRole::Paragraph);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
@@ -2369,7 +2346,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       const float bullet_slot = indent(BlockRole::ListItem);
       const ListSlot shared = list_slot(doc, node);
       const bool foldable = list_item_foldable(doc, id);
-      const bool folded = list_item_folded(doc, id, list_folds_);
+      const bool folded = list_item_folded(doc, id, folds_);
       const char* triangle = folded ? "▸" : "▾";
       // Marker: task checkbox, ordered "N.", or unordered "•" (a fold
       // triangle when the item hosts a list)
@@ -2433,7 +2410,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       }
       const float line_h = static_cast<float>(marker_font.line_height());
       if (foldable && !shared.fold_column)
-        out.list_folds.push_back({id, x, start_y, slot, line_h});
+        out.fold_marks.push_back({id, x, start_y, slot, line_h});
       if (shared.fold_column) {
         // The triangle sits between the number / task box and the text, past
         // the task box's click column.
@@ -2447,7 +2424,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         if (foldable) {
           emit(triangle, tri_x, INVALID_NODE, fold_color);
           const float left = node.label.empty() ? x : tri_x - gap * 0.5f;
-          out.list_folds.push_back(
+          out.fold_marks.push_back(
               {id, left, start_y, x + slot - left, line_h});
         }
       }
@@ -2458,40 +2435,13 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         text_w = max_width - 16.f;
       }
       if (folded) {
-        // A cue after the text says how much is hidden; decoration like a
-        // Header's tags, so caret and edits stay on the item's own text.
-        const size_t glyph0 = out.glyphs.size();
-        const size_t cue = node.spans.size();
+        // A cue after the text says how much is hidden.
         const size_t hidden = list_item_descendants(doc, id);
-        Node vis = node;
-        InlineSpan sp;
-        sp.text = (node.spans.empty() ? "… " : " … ") +
-                  std::to_string(hidden) + (hidden == 1 ? " item" : " items");
-        vis.spans.push_back(std::move(sp));
-        layout_role_text(doc, vis, BlockRole::ListItem, text_x, y, text_w, out);
-        LayoutBox line;
-        line.node = id;
-        auto flush = [&] {
-          if (line.width > 0.f) out.list_folds.push_back(line);
-          line = {};
-          line.node = id;
-        };
-        float line_base = 0.f;
-        for (size_t gi = glyph0; gi < out.glyphs.size(); ++gi) {
-          PositionedGlyph& g = out.glyphs[gi];
-          if (g.node != id || g.span_index != cue) continue;
-          g.node = INVALID_NODE;
-          g.color = fold_color;
-          if (line.width > 0.f && std::abs(g.y - line_base) > 0.5f) flush();
-          if (line.width <= 0.f) {
-            line_base = g.y;
-            line.x = g.x;
-            line.y = g.y - static_cast<float>(marker_font.ascender());
-            line.height = line_h;
-          }
-          line.width = std::max(line.width, g.x + g.advance - line.x);
-        }
-        flush();
+        layout_cued_text(doc, node, BlockRole::ListItem, text_x, y, text_w,
+                         (node.spans.empty() ? "… " : " … ") +
+                             std::to_string(hidden) +
+                             (hidden == 1 ? " item" : " items"),
+                         id, out);
       } else {
         layout_role_text(doc, node, BlockRole::ListItem, text_x, y, text_w,
                          out);
@@ -3152,6 +3102,143 @@ void LayoutEngine::layout_role_text(const Document& doc, const Node& node,
                                     BlockRole role, float x, float& y,
                                     float max_width, LayoutResult& out) {
   layout_paragraph(doc, node, x, y, max_width, out, (*style_)[role].font, role);
+}
+
+void LayoutEngine::layout_cued_text(const Document& doc, const Node& node,
+                                    BlockRole role, float x, float& y,
+                                    float max_width, const std::string& cue,
+                                    NodeId fold, LayoutResult& out) {
+  // Decoration like a Header's tags: caret and edits stay on the node's own
+  // text.
+  const size_t glyph0 = out.glyphs.size();
+  const size_t cue_span = node.spans.size();
+  Node vis = node;
+  InlineSpan sp;
+  sp.text = cue;
+  vis.spans.push_back(std::move(sp));
+  layout_role_text(doc, vis, role, x, y, max_width, out);
+  const Rgba color = style_->text_color(role, InlineKind::Link);
+  Font& font = fonts_.pick((*style_)[role].font);
+  LayoutBox line;
+  line.node = fold;
+  auto flush = [&] {
+    if (line.width > 0.f) out.fold_marks.push_back(line);
+    line = {};
+    line.node = fold;
+  };
+  float line_base = 0.f;
+  for (size_t gi = glyph0; gi < out.glyphs.size(); ++gi) {
+    PositionedGlyph& g = out.glyphs[gi];
+    if (g.node != node.id || g.span_index != cue_span) continue;
+    g.node = INVALID_NODE;
+    g.color = color;
+    if (line.width > 0.f && std::abs(g.y - line_base) > 0.5f) flush();
+    if (line.width <= 0.f) {
+      line_base = g.y;
+      line.x = g.x;
+      line.y = g.y - static_cast<float>(font.ascender());
+      line.height = static_cast<float>(font.line_height());
+    }
+    line.width = std::max(line.width, g.x + g.advance - line.x);
+  }
+  flush();
+}
+
+void LayoutEngine::layout_fold_line(const Document& doc, const Node& stretch,
+                                    const std::string& text, NodeId glyph_node,
+                                    float x, float& y, float max_width,
+                                    LayoutResult& out) {
+  const size_t glyph0 = out.glyphs.size();
+  Node fake = stretch;  // its glyphs carry the stretch's id
+  fake.kind = NodeKind::Paragraph;
+  fake.spans.clear();
+  InlineSpan s;
+  // The stretch's own line looks like a link; a cue takes just the colour,
+  // as in layout_cued_text.
+  const bool cue = glyph_node == INVALID_NODE;
+  s.kind = cue ? InlineKind::Text : InlineKind::Link;
+  s.text = text;
+  fake.spans.push_back(std::move(s));
+  const float top = y;
+  layout_role_text(doc, fake, BlockRole::Paragraph, x, y, max_width, out);
+  float band_x = x, band_w = max_width;
+  float_band(top, y, band_x, band_w);
+  // A cue takes just its text; the stretch's own line its whole width.
+  if (cue) {
+    const Rgba color =
+        style_->text_color(BlockRole::Paragraph, InlineKind::Link);
+    float right = band_x;
+    for (size_t gi = glyph0; gi < out.glyphs.size(); ++gi) {
+      PositionedGlyph& g = out.glyphs[gi];
+      g.node = INVALID_NODE;
+      g.color = color;
+      right = std::max(right, g.x + g.advance);
+    }
+    band_w = right - band_x;
+  }
+  if (band_w > 0.f)
+    out.fold_marks.push_back({stretch.id, band_x, top, band_w, y - top});
+}
+
+void LayoutEngine::layout_stretch(const Document& doc, const Node& node,
+                                  float x, float& y, float max_width,
+                                  LayoutResult& out) {
+  const DocStyle& st = *style_;
+  const float em = static_cast<float>(fonts_.regular.pixel_size());
+  const float gap = st[BlockRole::Paragraph].space_after.px(
+      em, options_.px_scale);
+  const NodeId id = node.id;
+  const NodeId summary = stretch_summary(doc, id);
+  const bool folded = stretch_folded(doc, id, folds_);
+  const float start_y = y;
+  const size_t first_float = floats_.size();
+  const std::string label =
+      (folded ? "▸ " : "▾ ") + (node.summary.empty() ? "…" : node.summary);
+  std::vector<NodeId> body;
+  for (NodeId c : node.children)
+    if (c != summary) body.push_back(c);
+
+  if (summary == INVALID_NODE) {
+    // Classic stretchtext: the label stands for the text.
+    if (folded || !node.summary.empty()) {
+      layout_fold_line(doc, node, label, id, x, y, max_width, out);
+      if (folded) y += gap;
+    }
+    if (!folded) {
+      const float inset = 0.75f * em;
+      layout_children_sequential(doc, body, x + inset, y, max_width - inset,
+                                 out);
+    }
+  } else if (folded) {
+    if (!node.summary.empty())
+      layout_fold_line(doc, node, label, id, x, y, max_width, out);
+    const std::vector<NodeId> blocks = doc.get(summary).children;
+    const std::string cue = "▸ Full Text";
+    const NodeId last = blocks.empty() ? INVALID_NODE : blocks.back();
+    const bool in_text = last != INVALID_NODE &&
+                         doc.get(last).kind == NodeKind::Paragraph;
+    const FoldCue outer = cue_;
+    cue_ = in_text ? FoldCue{last, id, cue} : FoldCue{};
+    layout_children_sequential(doc, blocks, x, y, max_width, out);
+    cue_ = outer;
+    if (!in_text) {
+      layout_fold_line(doc, node, cue, INVALID_NODE, x, y, max_width, out);
+      y += gap;
+    }
+    contain_floats(first_float, y);
+  } else {
+    const std::string cue = "▴ Summary";
+    layout_fold_line(doc, node, node.summary.empty() ? cue : label,
+                     node.summary.empty() ? INVALID_NODE : id, x, y, max_width,
+                     out);
+    y += gap;
+    layout_children_sequential(doc, body, x, y, max_width, out);
+    contain_floats(first_float, y);
+    layout_fold_line(doc, node, cue, INVALID_NODE, x, y, max_width, out);
+    y += gap;
+  }
+  // The whole extent, so the box also stands for the block's height.
+  out.boxes.push_back({id, x, start_y, max_width, y - start_y});
 }
 
 void LayoutEngine::add_role_band(BlockRole role, NodeId id, float x,

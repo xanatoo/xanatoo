@@ -191,6 +191,7 @@ const char* block_tag(const Node& n) {
     case NodeKind::Chrome: return "chrome";
     case NodeKind::Aside: return "aside";
     case NodeKind::Page: return "page";
+    case NodeKind::Summary: return "summary";
   }
   throw std::invalid_argument("XML export: unknown node kind");
 }
@@ -220,7 +221,8 @@ bool block_kind(std::string_view s, NodeKind& kind, int& level) {
       {"th", NodeKind::TableCell}, {"thread", NodeKind::Thread},
       {"message", NodeKind::Message}, {"footnote", NodeKind::Footnote},
       {"collection", NodeKind::Collection}, {"chrome", NodeKind::Chrome},
-      {"aside", NodeKind::Aside}, {"page", NodeKind::Page}};
+      {"aside", NodeKind::Aside}, {"page", NodeKind::Page},
+      {"summary", NodeKind::Summary}};
   for (auto [name, value] : names) {
     if (name != s) continue;
     kind = value;

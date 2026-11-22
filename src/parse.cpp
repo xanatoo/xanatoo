@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/parse.hpp"
-#include "xanatoo/list_fold.hpp"
+#include "xanatoo/fold.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/org.hpp"
 #include "xanatoo/sexpr.hpp"
@@ -805,6 +805,14 @@ Document parse_markup(std::string_view source) {
         }
       }
       doc.get(n).expanded = false; // start collapsed — classic stretchtext
+      push_fence(n);
+      ++i;
+      continue;
+    }
+    // :::summary — in a :::stretch: the blocks shown while it is collapsed
+    if (trimmed == ":::summary" || starts_with(trimmed, ":::summary ")) {
+      NodeId n = doc.create(NodeKind::Summary, current_parent());
+      read_fence_style(doc, n, trimmed);
       push_fence(n);
       ++i;
       continue;
@@ -2382,6 +2390,17 @@ case NodeKind::Table: {
       break;
     }
 
+    case NodeKind::Summary: {
+      out += pad;
+      out += ":::summary";
+      out += style_attr;
+      out += "\n";
+      for (NodeId c : node.children) serialize_node(doc, c, out, indent);
+      out += pad;
+      out += ":::\n\n";
+      break;
+    }
+
     case NodeKind::Stretch: {
       out += pad;
       out += ":::stretch";
@@ -3304,6 +3323,11 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
     return;
   }
 
+  if (tag == "summary") {
+    parse_sexpr_children(doc, doc.create(NodeKind::Summary, parent), e.kids, 1);
+    return;
+  }
+
   if (tag == "columns") {
     NodeId n = doc.create(NodeKind::Columns, parent);
     parse_sexpr_children(doc, n, e.kids, 1);
@@ -3855,6 +3879,15 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
         out += " :href ";
         escape_sexpr_string(*href, out);
       }
+      out += ")";
+      break;
+    }
+
+    case NodeKind::Summary: {
+      out += pad;
+      out += "(summary";
+      emit_node_id(node, out);
+      serialize_sexpr_children(doc, node, out, indent + 2);
       out += ")";
       break;
     }

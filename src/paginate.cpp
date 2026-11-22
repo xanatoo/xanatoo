@@ -282,7 +282,7 @@ private:
       out.maths.push_back(std::move(n));
     }
     split(in_.boxes, out.boxes);
-    split(in_.list_folds, out.list_folds);
+    split(in_.fold_marks, out.fold_marks);
     split(in_.quote_bars, out.quote_bars);
     split(in_.note_bars, out.note_bars);
     split(in_.message_bars, out.message_bars);

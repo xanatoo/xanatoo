@@ -17,8 +17,10 @@ namespace xanatoo {
 //   *emphasis*  **strong**
 //   [link text](#target) or [link text](url)
 //   :::stretch summary="..." ... :::
+//     (a :::summary ... ::: in it is shown instead of the rest while
+//     collapsed)
 //   - item  (nested by indentation; "- [ ] " / "- [x] " task items;
-//     "- [+] " an item folded by default, see list_fold.hpp)
+//     "- [+] " an item folded by default, see fold.hpp)
 //   :::columns / :::column  (containers)
 //   :::include #Anchor | path.md#Anchor
 //   ![alt](src)
@@ -41,6 +43,9 @@ std::string serialize_markup(const Document& doc);
 //        (code "x") " " (a "#anchor" "link"))
 //     (stretch :summary "What?" :expanded #f
 //       (p "body"))
+//     (stretch :expanded #f
+//       (summary (p "brief"))   ; shown instead of the rest while collapsed
+//       (p "full text"))
 //     (columns
 //       (column :weight 1.5 (p "left"))
 //       (column (p "right")))

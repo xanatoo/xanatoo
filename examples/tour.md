@@ -168,6 +168,18 @@ document holds both. Expanding is a view choice and is not saved as an
 edit.
 :::
 
+:::stretch
+:::summary
+A passage can also have a whole summary of its own, which the full text
+replaces instead of standing below it.
+:::
+
+A passage can also have a whole summary of its own: any blocks, with links
+and pictures. Only one of the two is shown at a time. Feeds use this for
+entries that come with both an excerpt and the article; **View → Summaries**
+switches all of them.
+:::
+
 ## Columns
 
 :::columns

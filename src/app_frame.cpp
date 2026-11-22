@@ -487,9 +487,26 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.list_fold =
         !xanatoo::list_item_foldable(ld, item) ? 1
         : xanatoo::list_item_folded(
-              ld, item, &buf(app, focused_pane(app).buf).list_folds)
+              ld, item, &buf(app, focused_pane(app).buf).folds)
             ? 3
             : 2;
+  }
+  {
+    // Two-body stretchtext on the page: looked up once per document state.
+    Pane& fp = focused_pane(app);
+    const auto& sd = doc_of(app, fp);
+    const DocBuffer* sb = find_buf(app, fp.buf);
+    const SummaryScan now{fp.buf, &sd, sb ? sb->doc_gen : 0, sd.nodes.size()};
+    if (app.summary_scan != now) {
+      app.summary_scan = now;
+      app.has_summaries = xanatoo::has_two_body_stretch(sd, sd.root);
+    }
+    ui_state.has_summaries = app.has_summaries;
+    ui_state.stretch_fold = 0;
+    if (const auto id = current_stretch_target(app);
+        id != xanatoo::INVALID_NODE)
+      ui_state.stretch_fold =
+          xanatoo::stretch_folded(sd, id, &buf(app, fp.buf).folds) ? 2 : 1;
   }
   ui_state.can_nav_forward = can_nav_step(app, 1);
   ui_state.history_open = app.history_panel_open;
@@ -1023,11 +1040,19 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       const xanatoo::NodeId item = current_list_target(app);
       if (item == xanatoo::INVALID_NODE) break;
       if (arg == "toggle")
-        toggle_list_fold(app, app.focus, item);
+        toggle_fold(app, app.focus, item);
       else
         set_list_folds(app, app.focus, item, arg == "fold-all");
       break;
     }
+    case C::StretchFold:
+      if (arg == "toggle") {
+        const xanatoo::NodeId id = current_stretch_target(app);
+        if (id != xanatoo::INVALID_NODE) toggle_fold(app, app.focus, id);
+      } else {
+        set_stretch_folds(app, app.focus, arg == "summaries");
+      }
+      break;
     case C::ToggleNative: {
       // Explicit only: web pages never switch to the native form on their
       // own, and native refs are never rerouted from https:// URLs.
@@ -2066,7 +2091,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         if (!text.empty()) SDL_SetClipboardText(text.c_str());
         break;
       }
-      std::string text = xanatoo::selected_text(d, p.sel);
+      std::string text = copied_text(app, p);
       if (!text.empty()) SDL_SetClipboardText(text.c_str());
       break;
     }
@@ -2412,7 +2437,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       edit(app);
       if (xanatoo::indent_list_item(d, p.sel.focus)) {
         p.sel.anchor = p.sel.focus;
-        reveal_in_lists(app, p, p.sel.focus.node);
+        reveal_folds(app, p, p.sel.focus.node);
         app.needs_layout = true;
       }
       break;
@@ -2420,7 +2445,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       edit(app);
       if (xanatoo::outdent_list_item(d, p.sel.focus)) {
         p.sel.anchor = p.sel.focus;
-        reveal_in_lists(app, p, p.sel.focus.node);
+        reveal_folds(app, p, p.sel.focus.node);
         app.needs_layout = true;
       }
       break;
@@ -3605,43 +3630,20 @@ static void draw_pane_overlays(App& app, int i) {
             xanatoo::sdl::draw_line(app.sdl, x + 1, uy + 1, x + w - 2, uy + 1);
           });
     }
-    // List fold marker wash
-    if (app.hover.list_fold_pane == i &&
-        app.hover.list_fold != xanatoo::INVALID_NODE) {
+    // Fold marker wash (list item, stretch)
+    {
+      const xanatoo::NodeId hot =
+          app.hover.list_fold_pane == i ? app.hover.list_fold
+          : app.hover.stretch_pane == i ? app.hover.stretch
+                                        : xanatoo::INVALID_NODE;
       SDL_SetRenderDrawColor(app.sdl, 40, 130, 90, 50);
-      for (const auto& box : pane.layout.list_folds) {
-        if (box.node != app.hover.list_fold) continue;
+      for (const auto& box : pane.layout.fold_marks) {
+        if (hot == xanatoo::INVALID_NODE || box.node != hot) continue;
         SDL_Rect r{pane.x + static_cast<int>(box.x) - 2,
                    static_cast<int>(box.y - pane.scroll_y + py),
-                   static_cast<int>(box.width), static_cast<int>(box.height)};
+                   static_cast<int>(box.width) + 4,
+                   static_cast<int>(box.height)};
         xanatoo::sdl::fill_rect(app.sdl, &r);
-      }
-    }
-    // Stretch marker wash
-    if (app.hover.stretch_pane == i &&
-        app.hover.stretch != xanatoo::INVALID_NODE) {
-      for (const auto& box : pane.layout.boxes) {
-        if (box.node != app.hover.stretch) continue;
-        // Only the header line for expanded stretches is interactive;
-        // wash the first line-height of the box when expanded.
-        float h = box.height;
-        auto& hdoc = buf(app, pane.buf).doc;
-        if (app.hover.stretch == xanatoo::INVALID_NODE ||
-            app.hover.stretch >= hdoc.next_id ||
-            static_cast<size_t>(app.hover.stretch - 1) >= hdoc.nodes.size())
-          break;
-        auto& sn = hdoc.get(app.hover.stretch);
-        if (sn.expanded &&
-            h > static_cast<float>(app.fonts.regular.line_height()) + 8.f)
-          h = static_cast<float>(app.fonts.regular.line_height()) + 6.f;
-        SDL_SetRenderDrawColor(app.sdl, 40, 130, 90, 50);
-        SDL_Rect r{pane.x + static_cast<int>(box.x),
-                   static_cast<int>(box.y - pane.scroll_y + py),
-                   static_cast<int>(box.width), static_cast<int>(h)};
-        xanatoo::sdl::fill_rect(app.sdl, &r);
-        SDL_SetRenderDrawColor(app.sdl, 30, 120, 80, 200);
-        xanatoo::sdl::draw_rect(app.sdl, &r);
-        break;
       }
     }
     // Image outline + emphasized resize handle
@@ -3838,6 +3840,8 @@ static void draw_pane_overlays(App& app, int i) {
           return "def";
         case K::Stretch:
           return "stretch";
+        case K::Summary:
+          return "summary";
         case K::Columns:
           return "columns";
         case K::Column:
@@ -3951,6 +3955,7 @@ static void draw_pane_overlays(App& app, int i) {
           b = 160;
           break;
         case xanatoo::NodeKind::Stretch:
+        case xanatoo::NodeKind::Summary:
           r = 180;
           g = 80;
           b = 120;
@@ -4432,7 +4437,8 @@ static void draw_pane_scrollbar(App& app, int i) {
         st.buf = pane.buf;
         st.doc_gen = gen;
         st.nodes = sd.nodes.size();
-        st.hits = xanatoo::find_all(sd, app.prompt.text, 48);
+        st.hits = xanatoo::find_all(sd, app.prompt.text, 48,
+                                    find_skips(app, pane));
       }
       for (const xanatoo::Caret& hit : st.hits) {
         auto cpos = xanatoo::caret_screen_pos(
@@ -5297,7 +5303,17 @@ void draw_hover_tooltip(App& app) {
     if (!prompt) {
       if (app.hover.stretch != xanatoo::INVALID_NODE ||
           app.hover.list_fold != xanatoo::INVALID_NODE) {
+        const int hp = app.hover.stretch_pane;
+        const xanatoo::NodeId sid = app.hover.stretch;
         tip = "Click to expand / collapse";
+        if (sid != xanatoo::INVALID_NODE && hp >= 0) {
+          const auto& hd = doc_of(app, app.panes[hp]);
+          if (xanatoo::stretch_summary(hd, sid) != xanatoo::INVALID_NODE)
+            tip = xanatoo::stretch_folded(
+                      hd, sid, &buf(app, app.panes[hp].buf).folds)
+                      ? "Click to show the full text"
+                      : "Click to go back to the summary";
+        }
       } else if (!app.hover.datetime.empty()) {
         tip = xanatoo::timestamp_hover_text(
             app.hover.datetime, static_cast<int64_t>(std::time(nullptr)));
@@ -5506,7 +5522,7 @@ static void publish_primary_selection(App& app) {
   const bool same_view = last.pane == app.focus && last.buf == p.buf;
   last = {app.focus, p.buf, p.sel};
   if (!user || !same_view || p.sel.empty() || !find_buf(app, p.buf)) return;
-  const std::string text = xanatoo::selected_text(doc_of(app, p), p.sel);
+  const std::string text = copied_text(app, p);
   if (!text.empty()) xanatoo::sdl::set_primary_selection(text);
 }
 

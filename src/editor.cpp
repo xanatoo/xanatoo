@@ -187,20 +187,6 @@ std::optional<Caret> nearest_caret(const LayoutResult& layout, float x,
   return best;
 }
 
-std::optional<NodeId> hit_test_stretch(const LayoutResult& layout,
-                                       float sx, float sy, float scroll_y) {
-  for (const auto& box : layout.boxes) {
-    // Stretch boxes are marked by the layout engine via a convention:
-    // we store stretch node ids in boxes; caller checks node kind.
-    float by = box.y - scroll_y;
-    if (sx >= box.x && sx <= box.x + box.width &&
-        sy >= by && sy <= by + box.height) {
-      return box.node;
-    }
-  }
-  return std::nullopt;
-}
-
 CaretScreenPos caret_screen_pos(const LayoutResult& layout,
                                 const Caret& caret,
                                 float scroll_y,
@@ -553,6 +539,12 @@ void insert_text(Document& doc, Caret& caret, const std::string& utf8) {
 
 static void renumber_ordered_list(Document& doc, NodeId list_id);
 
+static NodeId enclosing_summary(const Document& doc, NodeId id) {
+  while (id != INVALID_NODE && doc.get(id).kind != NodeKind::Summary)
+    id = doc.get(id).parent;
+  return id;
+}
+
 void delete_backward(Document& doc, Caret& caret) {
   if (caret.node == INVALID_NODE) return;
   redirect_transclude_caret(doc, caret);
@@ -568,6 +560,9 @@ void delete_backward(Document& doc, Caret& caret) {
     auto it = std::find(nodes.begin(), nodes.end(), cur_id);
     if (it == nodes.begin() || it == nodes.end()) return;
     NodeId prev_id = *(it - 1);
+    // A stretch's summary and its full text stay apart.
+    if (enclosing_summary(doc, prev_id) != enclosing_summary(doc, cur_id))
+      return;
     Node& prev = doc.get(prev_id);
     Node& cur = doc.get(cur_id);
 
@@ -1727,7 +1722,17 @@ std::optional<NodeId> unwrap_stretch(Document& doc, NodeId block_or_stretch) {
   if (it == parent.children.end()) return std::nullopt;
   size_t idx = static_cast<size_t>(it - parent.children.begin());
 
-  std::vector<NodeId> kids = stretch.children;
+  // A summary becomes ordinary blocks before the full text.
+  std::vector<NodeId> kids;
+  for (NodeId cid : stretch.children) {
+    if (doc.get(cid).kind != NodeKind::Summary) {
+      kids.push_back(cid);
+      continue;
+    }
+    const std::vector<NodeId> blocks = doc.get(cid).children;
+    doc.get(cid).children.clear();
+    kids.insert(kids.end(), blocks.begin(), blocks.end());
+  }
   stretch.children.clear();
   // Remove stretch from parent
   parent.children.erase(parent.children.begin() + static_cast<std::ptrdiff_t>(idx));
@@ -3347,7 +3352,23 @@ static std::string slice_node_text(const Node& n, size_t from_span, size_t from_
   return out;
 }
 
-std::string selected_text(const Document& doc, const Selection& sel) {
+// Text nodes of the document outside the subtrees `skip`.
+static std::vector<NodeId> text_nodes_except(const Document& doc,
+                                             const std::vector<NodeId>& skip) {
+  std::vector<NodeId> nodes;
+  collect_text_nodes(doc, doc.root, nodes);
+  if (skip.empty()) return nodes;
+  const std::unordered_set<NodeId> out_of_sight(skip.begin(), skip.end());
+  std::erase_if(nodes, [&](NodeId id) {
+    for (; id != INVALID_NODE && id < doc.next_id; id = doc.get(id).parent)
+      if (out_of_sight.count(id)) return true;
+    return false;
+  });
+  return nodes;
+}
+
+std::string selected_text(const Document& doc, const Selection& sel,
+                          const std::vector<NodeId>& skip) {
   if (sel.empty()) return {};
   Caret a = sel.anchor;
   Caret b = sel.focus;
@@ -3358,8 +3379,16 @@ std::string selected_text(const Document& doc, const Selection& sel) {
                            b.span_index, b.char_index);
   }
 
+  // The ends count even when they are out of sight themselves.
   std::vector<NodeId> nodes;
   if (doc.root != INVALID_NODE) collect_text_nodes(doc, doc.root, nodes);
+  if (!skip.empty()) {
+    const std::vector<NodeId> seen = text_nodes_except(doc, skip);
+    const std::unordered_set<NodeId> keep(seen.begin(), seen.end());
+    std::erase_if(nodes, [&](NodeId id) {
+      return id != a.node && id != b.node && !keep.count(id);
+    });
+  }
   auto rank = [&](NodeId id) -> size_t {
     auto it = std::find(nodes.begin(), nodes.end(), id);
     return it == nodes.end() ? nodes.size() : static_cast<size_t>(it - nodes.begin());
@@ -3400,15 +3429,15 @@ std::string selected_text(const Document& doc, const Selection& sel) {
 
 
 std::optional<Caret> find_next(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len) {
+                               const Caret& from, size_t& match_len,
+                               const std::vector<NodeId>& skip) {
   match_len = 0;
   if (query.empty() || doc.root == INVALID_NODE) return std::nullopt;
 
   // Lowercase query for case-insensitive ASCII search
   std::string q = ascii_lower(query);
 
-  std::vector<NodeId> nodes;
-  collect_text_nodes(doc, doc.root, nodes);
+  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
   if (nodes.empty()) return std::nullopt;
 
   auto node_rank = [&](NodeId id) -> size_t {
@@ -3481,12 +3510,11 @@ std::optional<Caret> find_next(const Document& doc, const std::string& query,
 }
 
 std::vector<Caret> find_all(const Document& doc, const std::string& query,
-                            size_t max) {
+                            size_t max, const std::vector<NodeId>& skip) {
   std::vector<Caret> out;
   if (query.empty() || max == 0 || doc.root == INVALID_NODE) return out;
   const std::string q = ascii_lower(query);
-  std::vector<NodeId> nodes;
-  collect_text_nodes(doc, doc.root, nodes);
+  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
   struct Map { size_t span; size_t ch; };
   std::string lower;
   std::vector<Map> map;
@@ -3519,14 +3547,14 @@ std::vector<Caret> find_all(const Document& doc, const std::string& query,
 }
 
 std::optional<Caret> find_prev(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len) {
+                               const Caret& from, size_t& match_len,
+                               const std::vector<NodeId>& skip) {
   match_len = 0;
   if (query.empty() || doc.root == INVALID_NODE) return std::nullopt;
 
   std::string q = ascii_lower(query);
 
-  std::vector<NodeId> nodes;
-  collect_text_nodes(doc, doc.root, nodes);
+  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
   if (nodes.empty()) return std::nullopt;
 
   auto node_rank = [&](NodeId id) -> size_t {
