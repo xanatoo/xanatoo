@@ -127,6 +127,17 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - View fold state will live outside the document (future SQLite); do not rely
   on dirtying `.md`/`.org` for collapse alone.
 - Structure highlight shows `headerN` for header depth.
+- List folding (`list_fold.hpp`, pure): every ListItem hosting a non-empty
+  List folds. State is `DocBuffer::list_folds` (item → folded) over the
+  markup default `Node::expanded` (`- [+] text` above a nested list,
+  `(li :expanded #f …)`, XML `expanded="false"`); it is cleared when the
+  buffer gets a new document (`refresh_views_of_buf` with `top`), never
+  dirties it and is not saved. Pane layouts set it on the engine
+  (`ListFoldScope`); help / context / hover layouts use the markup only.
+  Bullets become ▾ / ▸, numbered and task items get the triangle before
+  the text (`ListSlot::fold_column`); a folded item ends in "… N items".
+  Click areas: `LayoutResult::list_folds` / `hit_test_list_fold`. Jumps,
+  search and Tab-indent call `reveal_in_lists`.
 - View-local fold: `folded_sections` set passed into layout; Section/
   Article show header only when folded. Outline twisties / ←→ / Ctrl+Shift+F.
 

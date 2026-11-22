@@ -88,6 +88,7 @@ void test_ui_help(int& passed, int& failed) {
         "@outline-focus", "@status-bar", "@tile-divider", "@tile-mode",
         "@tile-diff-track", "@scrollbar", "@document", "@document-edit",
         "@link", "@image", "@image-card", "@image-handle", "@stretch",
+        "@list-fold",
         "@task", "@grip", "@col-gap", "@transclude", "@bookmark-mark",
         "@quote-arrow", "@annotation-tab", "@reader-notice", "@gallery",
         "@gallery-image", "@gallery-prev", "@gallery-next", "@gallery-up",

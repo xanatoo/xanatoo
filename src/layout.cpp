@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/layout.hpp"
+#include "xanatoo/list_fold.hpp"
 #include "xanatoo/autolink.hpp"
 #include "xanatoo/math_font.hpp"
 #include "xanatoo/images.hpp"
@@ -152,9 +153,33 @@ static uint32_t superscript_digit(uint32_t cp) {
 
 // Message in-reply-to label → node id (rebuilt each layout).
 thread_local std::unordered_map<std::string, NodeId> g_msg_label_map;
-// List → widest ordered marker number among its items (rebuilt each layout),
-// so a list past "99." widens its marker slot for every item alike.
-thread_local std::unordered_map<NodeId, int> g_list_max_number;
+// What a list's items share (rebuilt each layout), so their texts line up:
+// the widest ordered marker number (a list past "99." widens its slot), and
+// whether fold triangles need room beside a number or task box.
+struct ListSlot {
+  int max_number = 0;
+  bool fold_column = false;
+};
+thread_local std::unordered_map<NodeId, ListSlot> g_list_slots;
+
+static ListSlot list_slot(const Document& doc, const Node& item) {
+  if (item.parent == INVALID_NODE) return {item.level, false};
+  auto it = g_list_slots.find(item.parent);
+  if (it == g_list_slots.end()) {
+    ListSlot s;
+    bool marked = false, foldable = false;
+    for (NodeId sib : doc.get(item.parent).children) {
+      const Node& sn = doc.get(sib);
+      if (sn.kind != NodeKind::ListItem) continue;
+      s.max_number = std::max(s.max_number, sn.level);
+      marked = marked || sn.level > 0 || !sn.label.empty();
+      foldable = foldable || list_item_foldable(doc, sib);
+    }
+    s.fold_column = marked && foldable;
+    it = g_list_slots.emplace(item.parent, s).first;
+  }
+  return it->second;
+}
 // Parent → widest footnote key ("97.") among its Footnote children, in
 // pixels of the footnote font (rebuilt each layout), so long note runs
 // hang their bodies past the widest key.
@@ -250,6 +275,7 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
   for (size_t i = first_image; i < out.images.size(); ++i)
     if (out.images[i].auto_link != 0) out.images[i].auto_link += link_base;
   add(out.maths, in.maths);
+  add(out.list_folds, in.list_folds);
   add(out.quote_bars, in.quote_bars);
   add(out.note_bars, in.note_bars);
   add(out.message_bars, in.message_bars);
@@ -859,7 +885,7 @@ LayoutResult LayoutEngine::layout(
   result.glyphs.reserve(glyph_budget);
   result.boxes.reserve(doc.nodes.size());
   g_msg_label_map.clear();
-  g_list_max_number.clear();
+  g_list_slots.clear();
   g_footnote_key_w.clear();
   for (const auto& n : doc.nodes) {
     if (n.kind == NodeKind::Message && !n.label.empty())
@@ -2341,54 +2367,63 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       y += before(BlockRole::ListItem);
       float start_y = y;
       const float bullet_slot = indent(BlockRole::ListItem);
-      // Marker: task checkbox, ordered "N.", or unordered "•"
+      const ListSlot shared = list_slot(doc, node);
+      const bool foldable = list_item_foldable(doc, id);
+      const bool folded = list_item_folded(doc, id, list_folds_);
+      const char* triangle = folded ? "▸" : "▾";
+      // Marker: task checkbox, ordered "N.", or unordered "•" (a fold
+      // triangle when the item hosts a list)
       std::string marker;
+      bool marker_folds = false;
       if (node.label == "task-done")
         marker = "☑";
       else if (node.label == "task")
         marker = "☐";
       else if (node.level > 0)
         marker = std::to_string(node.level) + ".";
-      else
+      else if (foldable && !shared.fold_column) {
+        marker = triangle;
+        marker_folds = true;
+      } else {
         marker = "•";
-      std::vector<uint32_t> m_cps;
-      decode_utf8(marker, m_cps);
-      float mx = x;
+      }
+      // Fold triangles and cues look like Stretch markers: link colour.
+      const Rgba fold_color =
+          st.text_color(BlockRole::ListItem, InlineKind::Link);
       Font& marker_font = fonts_.pick(FontRole::Body);
       float baseline = y + static_cast<float>(marker_font.ascender());
-      for (uint32_t cp : m_cps) {
-        const Glyph& g = marker_font.glyph(cp);
-        PositionedGlyph pg;
-        pg.codepoint = cp;
-        pg.x = mx + static_cast<float>(g.bearing_x);
-        pg.y = baseline;
-        pg.node = id;
-        pg.span_index = 0;
-        pg.char_index = 0;
-        pg.kind = InlineKind::Text;
-        pg.font = FontRole::Body;
-        pg.color = st.text_color(BlockRole::ListItem, InlineKind::Text);
-        pg.advance = mx + g.advance_px() - pg.x;
-        out.glyphs.push_back(pg);
-        mx += g.advance_px();
-      }
+      auto emit = [&](const std::string& text, float mx, NodeId owner,
+                      const Rgba& color) {
+        std::vector<uint32_t> m_cps;
+        decode_utf8(text, m_cps);
+        for (uint32_t cp : m_cps) {
+          const Glyph& g = marker_font.glyph(cp);
+          PositionedGlyph pg;
+          pg.codepoint = cp;
+          pg.x = mx + static_cast<float>(g.bearing_x);
+          pg.y = baseline;
+          pg.node = owner;
+          pg.span_index = 0;
+          pg.char_index = 0;
+          pg.kind = InlineKind::Text;
+          pg.font = FontRole::Body;
+          pg.color = color;
+          pg.advance = mx + g.advance_px() - pg.x;
+          out.glyphs.push_back(pg);
+          mx += g.advance_px();
+        }
+        return mx;
+      };
+      const float marker_end =
+          emit(marker, x, id,
+               marker_folds
+                   ? fold_color
+                   : st.text_color(BlockRole::ListItem, InlineKind::Text));
       // Long ordered lists: grow the slot so "100." etc. never run into
       // the text; sized by the list's widest number so items stay aligned.
       float slot = bullet_slot;
       if (node.level > 0) {
-        int widest = node.level;
-        if (node.parent != INVALID_NODE) {
-          auto it = g_list_max_number.find(node.parent);
-          if (it == g_list_max_number.end()) {
-            int w = 0;
-            for (NodeId sib : doc.get(node.parent).children) {
-              const Node& sn = doc.get(sib);
-              if (sn.kind == NodeKind::ListItem) w = std::max(w, sn.level);
-            }
-            it = g_list_max_number.emplace(node.parent, w).first;
-          }
-          widest = std::max(widest, it->second);
-        }
+        const int widest = std::max(node.level, shared.max_number);
         float wide = 0.f;
         // Measure with '0's: the widest digit in most faces.
         for (char c : std::to_string(widest) + ".")
@@ -2396,15 +2431,74 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         const float gap = marker_font.glyph(' ').advance_px();
         slot = std::max(slot, wide + gap);
       }
+      const float line_h = static_cast<float>(marker_font.line_height());
+      if (foldable && !shared.fold_column)
+        out.list_folds.push_back({id, x, start_y, slot, line_h});
+      if (shared.fold_column) {
+        // The triangle sits between the number / task box and the text, past
+        // the task box's click column.
+        const float gap = marker_font.glyph(' ').advance_px();
+        const float tri_x =
+            x + std::max({slot, marker_end - x + gap, kTaskColumn});
+        const float tri_w =
+            std::max(marker_font.glyph(0x25B8).advance_px(),
+                     marker_font.glyph(0x25BE).advance_px()) + gap;
+        slot = tri_x + tri_w - x;
+        if (foldable) {
+          emit(triangle, tri_x, INVALID_NODE, fold_color);
+          const float left = node.label.empty() ? x : tri_x - gap * 0.5f;
+          out.list_folds.push_back(
+              {id, left, start_y, x + slot - left, line_h});
+        }
+      }
       float text_x = x + slot;
       float text_w = max_width - slot;
       if (text_w < 40.f) {
         text_x = x + 16.f;
         text_w = max_width - 16.f;
       }
-      layout_role_text(doc, node, BlockRole::ListItem, text_x, y, text_w, out);
+      if (folded) {
+        // A cue after the text says how much is hidden; decoration like a
+        // Header's tags, so caret and edits stay on the item's own text.
+        const size_t glyph0 = out.glyphs.size();
+        const size_t cue = node.spans.size();
+        const size_t hidden = list_item_descendants(doc, id);
+        Node vis = node;
+        InlineSpan sp;
+        sp.text = (node.spans.empty() ? "… " : " … ") +
+                  std::to_string(hidden) + (hidden == 1 ? " item" : " items");
+        vis.spans.push_back(std::move(sp));
+        layout_role_text(doc, vis, BlockRole::ListItem, text_x, y, text_w, out);
+        LayoutBox line;
+        line.node = id;
+        auto flush = [&] {
+          if (line.width > 0.f) out.list_folds.push_back(line);
+          line = {};
+          line.node = id;
+        };
+        float line_base = 0.f;
+        for (size_t gi = glyph0; gi < out.glyphs.size(); ++gi) {
+          PositionedGlyph& g = out.glyphs[gi];
+          if (g.node != id || g.span_index != cue) continue;
+          g.node = INVALID_NODE;
+          g.color = fold_color;
+          if (line.width > 0.f && std::abs(g.y - line_base) > 0.5f) flush();
+          if (line.width <= 0.f) {
+            line_base = g.y;
+            line.x = g.x;
+            line.y = g.y - static_cast<float>(marker_font.ascender());
+            line.height = line_h;
+          }
+          line.width = std::max(line.width, g.x + g.advance - line.x);
+        }
+        flush();
+      } else {
+        layout_role_text(doc, node, BlockRole::ListItem, text_x, y, text_w,
+                         out);
+      }
       // Nested lists under this item
       for (NodeId child : node.children) {
+        if (folded) break;
         if (doc.get(child).kind == NodeKind::List) {
           layout_node(doc, child, x + slot, y, max_width - slot, out);
         }

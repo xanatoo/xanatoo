@@ -1630,6 +1630,7 @@ bool indent_list_item(Document& doc, Caret& caret) {
   list.children.erase(it);
   item.parent = nested;
   doc.get(nested).children.push_back(caret.node);
+  doc.get(prev_id).expanded = true;  // the moved item stays in sight
 
   // Renumber both lists
   renumber_ordered_list(doc, list_id);

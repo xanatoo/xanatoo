@@ -17,6 +17,8 @@ namespace xanatoo {
 //   *emphasis*  **strong**
 //   [link text](#target) or [link text](url)
 //   :::stretch summary="..." ... :::
+//   - item  (nested by indentation; "- [ ] " / "- [x] " task items;
+//     "- [+] " an item folded by default, see list_fold.hpp)
 //   :::columns / :::column  (containers)
 //   :::include #Anchor | path.md#Anchor
 //   ![alt](src)
@@ -46,6 +48,7 @@ std::string serialize_markup(const Document& doc);
 //     (include "#Heading")
 //     (include "other.md#Section")
 //     (ul (li "bullet") (li "parent" (ul (li "nested"))))
+//     (ul (li :expanded #f "folded" (ul (li "nested"))))
 //     (ol (li 1 "one") (li 2 "two"))
 //     (quote "quoted")
 //     (hr))

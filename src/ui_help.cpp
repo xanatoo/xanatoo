@@ -253,6 +253,12 @@ const std::vector<UiHelpTopic> kTopics = {
      "Removes the stretchtext around the blocks. **Ctrl+Shift+U**."},
     {"edit stretch summary", "Edit stretch summary",
      "Changes the one-line summary of the stretchtext. **Ctrl+Shift+E**."},
+    {"fold list item|expand list item", "Fold list item",
+     "Hides or shows the list inside this item. Only the view changes, not "
+     "the document."},
+    {"fold all|expand all", "Fold / expand all",
+     "Folds or expands every item of this list that holds a list of its "
+     "own."},
     {"unwrap section/article", "Unwrap section / article",
      "Removes the section or article container; its blocks stay."},
     {"promote section", "Promote section", "Moves the section one level up the tree."},
@@ -630,6 +636,10 @@ const std::vector<UiHelpTopic> kTopics = {
      "Drag the corner to resize the image (edit mode)."},
     {"@stretch", "Stretchtext",
      "Click the marker to expand or collapse the hidden passage."},
+    {"@list-fold", "List fold marker",
+     "Folds the list inside this item to one line, or expands it again (▸ "
+     "with the number of hidden items). Right-click a list for **Fold All** "
+     "and **Expand All**; **Ctrl+Shift+F** folds the item at the caret."},
     {"@task", "Task check box", "Click to tick or untick the task."},
     {"@grip", "Block grip",
      "Drag the block to move it among its siblings or into another "

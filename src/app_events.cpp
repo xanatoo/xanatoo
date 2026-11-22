@@ -491,6 +491,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       return;
     }
     app.collection_target = xanatoo::INVALID_NODE;
+    app.list_target = xanatoo::INVALID_NODE;
     // Collection card: open the fullscreen viewer at that image.
     if (click_collection_card(app, app.focus, lx, my)) return;
 
@@ -575,6 +576,14 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       }
     }
 
+    // Fold marker of a list item: view state, also on read-only pages.
+    if (auto item =
+            xanatoo::hit_test_list_fold(p.layout, lx, my, p.scroll_y)) {
+      toggle_list_fold(app, app.focus, *item);
+      reset_blink(app);
+      return;
+    }
+
     // Reader mode notice: "… hidden · Show all".
     if (on_chrome_notice(p, lx, my)) {
       set_reader(app, p, false);
@@ -595,7 +604,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       float adj_y = my + p.scroll_y;
       for (const auto& box : p.layout.boxes) {
         if (adj_y < box.y || adj_y > box.y + box.height) continue;
-        if (lx < box.x || lx > box.x + 26.f) continue;
+        if (lx < box.x || lx > box.x + xanatoo::kTaskColumn) continue;
         auto& bn = doc_of(app, p).get(box.node);
         if (bn.kind != xanatoo::NodeKind::ListItem) continue;
         // Ordered items keep numbers unless already a task.
@@ -900,6 +909,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         app.collection_target = xanatoo::INVALID_NODE;
       else
         note_collection_target(app, app.focus, lx, my);
+      app.list_target = xanatoo::INVALID_NODE;
       // "Open Article / Section / Block": the blocks around the pointer, from
       // the grip's block or the innermost box under it outwards.
       app.context_blocks.clear();
@@ -924,6 +934,7 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         if (start != xanatoo::INVALID_NODE && start < d.next_id &&
             d.get(start).id == start)
           app.context_blocks = xanatoo::cut_blocks(d, start);
+        if (start != xanatoo::INVALID_NODE) app.list_target = start;
       }
       app.ui.open_context_menu(static_cast<float>(rx),
                                static_cast<float>(ry));
@@ -1183,6 +1194,8 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
       app.hover.link_pane = -1;
       app.hover.stretch = xanatoo::INVALID_NODE;
       app.hover.stretch_pane = -1;
+      app.hover.list_fold = xanatoo::INVALID_NODE;
+      app.hover.list_fold_pane = -1;
       app.hover.image = xanatoo::INVALID_NODE;
       app.hover.image_pane = -1;
       app.hover.image_handle = false;
@@ -1299,6 +1312,16 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
         }
       }
 
+      // Fold marker of a list item
+      if (!app.hover.col_gap && !in_strip &&
+          app.hover.image == xanatoo::INVALID_NODE) {
+        if (auto item = xanatoo::hit_test_list_fold(hp.layout, lx, my,
+                                                    hp.scroll_y)) {
+          app.hover.list_fold = *item;
+          app.hover.list_fold_pane = hover_pane;
+        }
+      }
+
       // Links / cites (skip stretch-marker glyphs — those are stretch)
       if (in_strip) {
         if (auto hit = footnote_overlay_link(app, hover_pane, lx, my);
@@ -1316,6 +1339,7 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
         }
       } else if (!app.hover.col_gap &&
                  app.hover.stretch == xanatoo::INVALID_NODE &&
+                 app.hover.list_fold == xanatoo::INVALID_NODE &&
                  app.hover.image == xanatoo::INVALID_NODE) {
         if (auto hit =
                 xanatoo::hit_test_link_ex(hd, hp.layout, lx, my, hp.scroll_y)) {
@@ -1344,12 +1368,13 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
 
       // Task checkbox column (left ~26px of a ListItem)
       if (!in_strip && !app.hover.col_gap && app.hover.stretch == xanatoo::INVALID_NODE &&
+          app.hover.list_fold == xanatoo::INVALID_NODE &&
           app.hover.image == xanatoo::INVALID_NODE &&
           app.hover.link_node == xanatoo::INVALID_NODE) {
         float adj_y = my + hp.scroll_y;
         for (const auto& box : hp.layout.boxes) {
           if (adj_y < box.y || adj_y > box.y + box.height) continue;
-          if (lx < box.x || lx > box.x + 26.f) continue;
+          if (lx < box.x || lx > box.x + xanatoo::kTaskColumn) continue;
           const auto& bn = hd.get(box.node);
           if (bn.kind != xanatoo::NodeKind::ListItem) continue;
           if (bn.level > 0 && bn.label != "task" && bn.label != "task-done")
@@ -2571,6 +2596,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
                           : xanatoo::indent_list_item(d, p.sel.focus);
           if (ok) {
             p.sel.anchor = p.sel.focus;
+            reveal_in_lists(app, p, p.sel.focus.node);
             app.needs_layout = true;
             reset_blink(app);
           }

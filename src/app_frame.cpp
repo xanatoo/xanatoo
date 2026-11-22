@@ -479,6 +479,17 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.collection_sort = static_cast<int>(v.sort);
     ui_state.collection_thumb = v.thumb_px;
   }
+  ui_state.list_fold = 0;
+  if (const auto item = current_list_target(app);
+      item != xanatoo::INVALID_NODE) {
+    const auto& ld = doc_of(app, focused_pane(app));
+    ui_state.list_fold =
+        !xanatoo::list_item_foldable(ld, item) ? 1
+        : xanatoo::list_item_folded(
+              ld, item, &buf(app, focused_pane(app).buf).list_folds)
+            ? 3
+            : 2;
+  }
   ui_state.can_nav_forward = can_nav_step(app, 1);
   ui_state.history_open = app.history_panel_open;
   ui_state.recent_visited.clear();
@@ -1007,6 +1018,15 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::CollectionView:
       collection_command(app, arg);
       break;
+    case C::ListFold: {
+      const xanatoo::NodeId item = current_list_target(app);
+      if (item == xanatoo::INVALID_NODE) break;
+      if (arg == "toggle")
+        toggle_list_fold(app, app.focus, item);
+      else
+        set_list_folds(app, app.focus, item, arg == "fold-all");
+      break;
+    }
     case C::ToggleNative: {
       // Explicit only: web pages never switch to the native form on their
       // own, and native refs are never rerouted from https:// URLs.
@@ -2381,6 +2401,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       edit(app);
       if (xanatoo::indent_list_item(d, p.sel.focus)) {
         p.sel.anchor = p.sel.focus;
+        reveal_in_lists(app, p, p.sel.focus.node);
         app.needs_layout = true;
       }
       break;
@@ -2388,6 +2409,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       edit(app);
       if (xanatoo::outdent_list_item(d, p.sel.focus)) {
         p.sel.anchor = p.sel.focus;
+        reveal_in_lists(app, p, p.sel.focus.node);
         app.needs_layout = true;
       }
       break;
@@ -3571,6 +3593,18 @@ static void draw_pane_overlays(App& app, int i) {
             xanatoo::sdl::draw_line(app.sdl, x + 1, uy, x + w - 2, uy);
             xanatoo::sdl::draw_line(app.sdl, x + 1, uy + 1, x + w - 2, uy + 1);
           });
+    }
+    // List fold marker wash
+    if (app.hover.list_fold_pane == i &&
+        app.hover.list_fold != xanatoo::INVALID_NODE) {
+      SDL_SetRenderDrawColor(app.sdl, 40, 130, 90, 50);
+      for (const auto& box : pane.layout.list_folds) {
+        if (box.node != app.hover.list_fold) continue;
+        SDL_Rect r{pane.x + static_cast<int>(box.x) - 2,
+                   static_cast<int>(box.y - pane.scroll_y + py),
+                   static_cast<int>(box.width), static_cast<int>(box.height)};
+        xanatoo::sdl::fill_rect(app.sdl, &r);
+      }
     }
     // Stretch marker wash
     if (app.hover.stretch_pane == i &&
@@ -5250,7 +5284,8 @@ void draw_hover_tooltip(App& app) {
     const bool prompt = prompt_active(app) || app.help_mode;
     std::string tip;
     if (!prompt) {
-      if (app.hover.stretch != xanatoo::INVALID_NODE) {
+      if (app.hover.stretch != xanatoo::INVALID_NODE ||
+          app.hover.list_fold != xanatoo::INVALID_NODE) {
         tip = "Click to expand / collapse";
       } else if (!app.hover.datetime.empty()) {
         tip = xanatoo::timestamp_hover_text(
@@ -5325,7 +5360,8 @@ void draw_hover_tooltip(App& app) {
       SDL_Rect box{bx, by, box_w, box_h};
       xanatoo::sdl::fill_rect(app.sdl, &box);
       // Accent by kind
-      if (app.hover.stretch != xanatoo::INVALID_NODE)
+      if (app.hover.stretch != xanatoo::INVALID_NODE ||
+          app.hover.list_fold != xanatoo::INVALID_NODE)
         SDL_SetRenderDrawColor(app.sdl, 40, 140, 90, 255);
       else if (app.hover.col_gap || app.hover.image_handle)
         SDL_SetRenderDrawColor(app.sdl, 40, 100, 180, 255);
@@ -5423,6 +5459,7 @@ void present_frame(App& app) {
       } else if (!app.hover.href.empty() || !app.hover.bookmark.empty() ||
                  !app.hover.annotation.empty() || app.hover.quote >= 0 ||
                  app.hover.stretch != xanatoo::INVALID_NODE ||
+                 app.hover.list_fold != xanatoo::INVALID_NODE ||
                  app.hover.image != xanatoo::INVALID_NODE ||
                  app.hover.task != xanatoo::INVALID_NODE || app.hover.chrome_notice ||
                  app.hover.transclude != xanatoo::INVALID_NODE) {

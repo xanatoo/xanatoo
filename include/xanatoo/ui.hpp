@@ -280,6 +280,7 @@ enum class UiCommand {
   TogglePagedDefault, // Preferences: paged reading for new views
   PageColumns,        // arg: "0" (fit the width) … "3" columns per spread
   CollectionView,  // arg: layout / size / sort / "view" for the collection
+  ListFold,  // arg: "toggle" / "fold-all" / "expand-all" (list_target)
   ToggleHelp,
   ToggleHoverHelp,  // Help panel: explains the element under the pointer
   ToggleVirtualKeyboard,  // F3 / View — on-screen keyboard
@@ -613,6 +614,9 @@ struct UiState {
   // Collection menus (layout 0 grid, 1 list, 2 full; sort 0 doc, 1 name,
   // 2 name reversed; card size in px).
   std::vector<UiService> services;
+  // Right-click in a list that folds: 0 no, 1 on an item without a list of
+  // its own, 2 on an expanded item, 3 on a folded one.
+  int list_fold = 0;
   bool collection = false;
   int collection_layout = 0;
   int collection_sort = 0;

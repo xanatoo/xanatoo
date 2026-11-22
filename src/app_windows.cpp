@@ -306,6 +306,12 @@ void click_help(App& app, FloatWindow& w, int mx, int my) {
       return;
     }
   }
+  if (auto item =
+          xanatoo::hit_test_list_fold(app.help_layout, lx, ly, w.scroll)) {
+    app.help_doc.get(*item).expanded = !app.help_doc.get(*item).expanded;
+    app.help_needs_layout = true;
+    return;
+  }
   if (auto href = xanatoo::hit_test_link(app.help_doc, app.help_layout, lx, ly,
                                          w.scroll)) {
     if (!href->empty() && (*href)[0] == '#') {
@@ -368,6 +374,15 @@ void press_context(App& app, int mx, int my) {
         app.context_sel = {};
         return;
       }
+    }
+  if (!shift)
+    if (auto item = xanatoo::hit_test_list_fold(app.context_layout, lx, ly,
+                                                scroll)) {
+      xanatoo::Node& n = app.context_doc.get(*item);
+      n.expanded = !n.expanded;
+      app.context_needs_layout = true;
+      app.context_sel = {};
+      return;
     }
   const auto c = context_caret(app, lx, ly);
   if (!c) {

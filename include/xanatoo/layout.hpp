@@ -46,6 +46,9 @@ struct SkippedLine {
   float y = 0.f;  // baseline
 };
 
+// Width of a list item's marker column that ticks its task box (px).
+inline constexpr float kTaskColumn = 26.f;
+
 struct LayoutBox {
   NodeId node = INVALID_NODE;
   float x = 0.f;
@@ -140,6 +143,8 @@ struct LayoutResult {
   std::vector<LayoutBox> boxes;
   std::vector<PositionedImage> images;
   std::vector<PositionedMath> maths;
+  // Click areas of list fold markers (list_fold.hpp); node = the ListItem.
+  std::vector<LayoutBox> list_folds;
   // Vertical bars for block quotes (content coordinates).
   std::vector<LayoutBox> quote_bars;
   // Vertical bars for notes (distinct colour from quotes).
@@ -308,6 +313,11 @@ public:
       const std::unordered_map<NodeId, CollectionView>* views) {
     collection_views_ = views;
   }
+  // Fold state of nested lists (list_fold.hpp; nullptr / missing entry = the
+  // item's markup). Must outlive layout() calls.
+  void set_list_folds(const std::unordered_map<NodeId, bool>* folds) {
+    list_folds_ = folds;
+  }
   const DocStyle& style() const { return *style_; }
   // Reader mode for the next layout() calls: Chrome nodes are left out and a
   // notice at the top says what was hidden (LayoutResult::chrome_notice).
@@ -342,6 +352,7 @@ private:
   const DocStyle* style_;
   size_t active_style_index_ = 0;
   const std::unordered_map<NodeId, CollectionView>* collection_views_ = nullptr;
+  const std::unordered_map<NodeId, bool>* list_folds_ = nullptr;
 
   std::string image_base_;
   LayoutViewport viewport_;

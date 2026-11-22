@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/parse.hpp"
+#include "xanatoo/list_fold.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/org.hpp"
 #include "xanatoo/sexpr.hpp"
@@ -1445,6 +1446,20 @@ Document parse_markup(std::string_view source) {
             joined += ctrim;
             ++next;
           }
+          // "- [+] text" (also "- [ ] [+] text") above a nested list: folded
+          // until opened. Without one it is plain text.
+          if (starts_with(body, "[+] ") && next < lines.size() &&
+              !lines[next].blank) {
+            const std::string_view nt = lines[next].text;
+            const size_t nl = std::min(nt.find_first_not_of(" \t"), nt.size());
+            int dummy = 0;
+            if (static_cast<int>(nl) > ind &&
+                list_marker_len(nt.substr(nl), &dummy) > 0) {
+              doc.get(item).expanded = false;
+              body.remove_prefix(4);
+              if (!joined.empty()) joined.erase(0, 4);
+            }
+          }
           parse_inlines(doc.get(item), joined.empty() ? body : std::string_view(joined));
           i = next;
         }
@@ -2327,6 +2342,7 @@ case NodeKind::Table: {
       if (node.label == "task" || node.label == "task-done") {
         out += (node.label == "task-done") ? "[x] " : "[ ] ";
       }
+      if (!node.expanded && list_item_foldable(doc, id)) out += "[+] ";
       serialize_inlines(node, out);
       out += "\n";
       // Nested lists under this item
@@ -3343,6 +3359,8 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
             if (j + 1 < item.kids.size()) ++j;
             continue;
           }
+          if (key == ":expanded" && j + 1 < item.kids.size())
+            doc.get(li).expanded = sexpr_bool(item.kids[j + 1], true);
           if (j + 1 < item.kids.size()) ++j;  // skip other kwargs (:id …)
           continue;
         }
@@ -3934,6 +3952,7 @@ void serialize_sexpr_node(const Document& doc, NodeId id, std::string& out,
         out += " :task #t";
       else if (node.label == "task-done")
         out += " :done #t";
+      if (!node.expanded) out += " :expanded #f";
       serialize_sexpr_inlines(node, out);
       for (NodeId c : node.children) {
         if (doc.get(c).kind == NodeKind::List) {

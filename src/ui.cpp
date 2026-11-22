@@ -3720,6 +3720,19 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       ImGui::Separator();
     }
+    if (state.list_fold != 0) {
+      auto item = [&](const char* label, const char* a) {
+        if (ImGui::MenuItem(label)) {
+          cmd = UiCommand::ListFold;
+          result.arg = a;
+        }
+      };
+      if (state.list_fold == 2) item("Fold List Item", "toggle");
+      if (state.list_fold == 3) item("Expand List Item", "toggle");
+      item("Fold All", "fold-all");
+      item("Expand All", "expand-all");
+      ImGui::Separator();
+    }
     if (state.collection) {
       if (ImGui::BeginMenu("Collection")) {
         menu_collection_items(state, cmd, result.arg);

@@ -490,6 +490,15 @@ StatusLine compute_status(App& app) {
     label = expanded ? "Stretchtext — click ▾ to collapse"
                      : "Stretchtext — click ▸ to expand";
     tone = StatusTone::Info;
+  } else if (app.hover.list_fold != xanatoo::INVALID_NODE) {
+    const bool folded =
+        app.hover.list_fold_pane >= 0 &&
+        xanatoo::list_item_folded(
+            doc_of(app, app.panes[app.hover.list_fold_pane]),
+            app.hover.list_fold,
+            &buf(app, app.panes[app.hover.list_fold_pane].buf).list_folds);
+    label = folded ? "List — click ▸ to expand" : "List — click ▾ to fold";
+    tone = StatusTone::Info;
   } else if (!app.hover.href.empty()) {
     if (app.hover.is_cite)
       label = "Cite: ";

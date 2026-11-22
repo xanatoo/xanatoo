@@ -86,6 +86,7 @@ std::string pane_key(App& app, int pi, int mx, int my) {
   if (h.chrome_notice) return "@reader-notice";
   if (h.task != xanatoo::INVALID_NODE) return "@task";
   if (h.stretch != xanatoo::INVALID_NODE) return "@stretch";
+  if (h.list_fold != xanatoo::INVALID_NODE) return "@list-fold";
   if (h.image != xanatoo::INVALID_NODE)
     return h.image_card ? "@image-card" : "@image";
   if (!h.href.empty()) return "@link";

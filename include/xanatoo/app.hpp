@@ -31,6 +31,7 @@
 #include "xanatoo/history_trail.hpp"
 #include "xanatoo/images.hpp"
 #include "xanatoo/layout.hpp"
+#include "xanatoo/list_fold.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/minibuffer.hpp"
 #include "xanatoo/nav_history.hpp"
@@ -116,6 +117,8 @@ struct QuoteLinks {
 struct DocBuffer {
   BufferId id = kNoBuffer;
   xanatoo::Document doc;
+  // Lists the reader folded / unfolded (list_fold.hpp); gone with `doc`.
+  xanatoo::ListFolds list_folds;
   // Bumped when `doc` changes (note_edit, refresh_views_of_buf); derived
   // per-document data compares it.
   uint64_t doc_gen = 0;
@@ -575,6 +578,8 @@ struct Hover {
   bool link_in_footnotes = false;
   xanatoo::NodeId stretch = xanatoo::INVALID_NODE;
   int stretch_pane = -1;
+  xanatoo::NodeId list_fold = xanatoo::INVALID_NODE;  // fold marker's item
+  int list_fold_pane = -1;
   xanatoo::NodeId image = xanatoo::INVALID_NODE;
   int image_pane = -1;
   bool image_handle = false;
@@ -1413,6 +1418,8 @@ struct App {
   std::unordered_map<xanatoo::NodeId, xanatoo::CollectionView> collection_views;
   // Collection the last right-click hit (context menu target).
   xanatoo::NodeId collection_target = xanatoo::INVALID_NODE;
+  // List item the last right-click hit (context menu's Fold / Expand).
+  xanatoo::NodeId list_target = xanatoo::INVALID_NODE;
   std::string last_fold_doc_key;
   bool diff_mode = false;
   std::vector<xanatoo::NodeId> diff_marks[2];
@@ -1730,7 +1737,19 @@ void drop_height_hints_for_buf(App& app, BufferId bi);
 void toggle_section_fold(App& app, xanatoo::NodeId section);
 void toggle_section_focus_mode(App& app);
 void reload_folds_for_focused(App& app);
+// The section, or a nested list's item right at the caret.
 void toggle_fold_at_caret(App& app);
+// Fold / expand a list item of view `pi`'s page (list_fold.hpp), in every
+// view of the buffer; view state, never an edit.
+void set_list_fold(App& app, int pi, xanatoo::NodeId item, bool folded);
+void toggle_list_fold(App& app, int pi, xanatoo::NodeId item);
+// All items of the outermost list around `node`.
+void set_list_folds(App& app, int pi, xanatoo::NodeId node, bool folded);
+// Expand folded list items hiding `node`; false when none did.
+bool reveal_in_lists(App& app, Pane& p, xanatoo::NodeId node);
+// The context menu's list item in the focused view, if it still is one in
+// a list that can be folded.
+xanatoo::NodeId current_list_target(App& app);
 void refresh_diff(App& app);
 void expand_ancestors_for_node(App& app, xanatoo::NodeId target);
 // Reader mode (Pane::reader): whether the view hides the page chrome, and

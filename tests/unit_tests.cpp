@@ -55,6 +55,7 @@
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/office_import.hpp"
 #include "xanatoo/layout.hpp"
+#include "xanatoo/list_fold.hpp"
 #include "xanatoo/math.hpp"
 #include "xanatoo/paginate.hpp"
 #include "xanatoo/font.hpp"
@@ -8381,6 +8382,111 @@ static void test_long_ordered_list_markers() {
   EXPECT_EQ(checked, 120);
 }
 
+// List items hosting a list fold (list_fold.hpp): marker, cue, click area,
+// overrides on top of the markup.
+static void test_list_folding() {
+  using namespace xanatoo;
+  Document doc = parse_document(
+      "- plain\n- host\n  - a\n  - b\n    - deep\n- [+] shut\n  - hidden\n"
+      "- [+] no list\n",
+      "t.md");
+  auto find = [](const Document& d, const std::string& text) {
+    for (const Node& n : d.nodes)
+      if (n.kind == NodeKind::ListItem && !n.spans.empty() &&
+          n.spans[0].text == text)
+        return n.id;
+    return INVALID_NODE;
+  };
+  const NodeId plain = find(doc, "plain"), host = find(doc, "host"),
+               b = find(doc, "b"), deep = find(doc, "deep"),
+               shut = find(doc, "shut"), hidden = find(doc, "hidden");
+  EXPECT(find(doc, "[+] no list") != INVALID_NODE);
+  EXPECT(shut != INVALID_NODE);
+  EXPECT(!list_item_foldable(doc, plain));
+  EXPECT(list_item_foldable(doc, host));
+  EXPECT(!list_item_folded(doc, host, nullptr));
+  EXPECT(list_item_folded(doc, shut, nullptr));
+  EXPECT_EQ(list_item_descendants(doc, host), size_t{3});
+  EXPECT_EQ(outermost_list(doc, deep), doc.get(plain).parent);
+  EXPECT_EQ(foldable_list_items(doc, doc.root).size(), size_t{3});
+  EXPECT(has_foldable_list_items(doc, doc.root));
+  EXPECT(!has_foldable_list_items(doc, plain));
+  EXPECT_EQ(folded_list_ancestor(doc, hidden, nullptr), shut);
+  EXPECT_EQ(folded_list_ancestor(doc, shut, nullptr), INVALID_NODE);
+  ListFolds folds{{host, true}, {shut, false}};
+  EXPECT_EQ(folded_list_ancestor(doc, deep, &folds), host);
+  EXPECT_EQ(folded_list_ancestor(doc, hidden, &folds), INVALID_NODE);
+
+  // Markup round trips.
+  const std::string md = serialize_markup(doc);
+  EXPECT(md.find("- [+] shut\n") != std::string::npos);
+  EXPECT(md.find("- host\n") != std::string::npos);
+  Document d2 = parse_document(md, "t.md");
+  EXPECT(!d2.get(find(d2, "shut")).expanded);
+  Document d3 = parse_document("(doc (ul (li :task #t :expanded #f \"x\" "
+                               "(ul (li \"y\")))))", "t.sexp");
+  EXPECT(!d3.get(find(d3, "x")).expanded);
+  EXPECT(d3.get(find(d3, "x")).label == "task");
+  const std::string sx = serialize_document(d3, "t.sexp");
+  EXPECT(sx.find(":expanded #f") != std::string::npos);
+  Document d4 = parse_document(serialize_markup(d3), "t.md");
+  EXPECT(!d4.get(find(d4, "x")).expanded);
+  EXPECT(d4.get(find(d4, "x")).label == "task");
+  Document d5 = parse_document("- [+] long\n  text\n  - y\n", "t.md");
+  EXPECT(!d5.get(find(d5, "long text")).expanded);
+
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_list_folding (no font)\n");
+    return;
+  }
+  LayoutEngine engine(fonts);
+  auto count = [](const LayoutResult& r, NodeId n, uint32_t cp) {
+    size_t c = 0;
+    for (const auto& g : r.glyphs) c += g.node == n && (!cp || g.codepoint == cp);
+    return c;
+  };
+  LayoutResult r = engine.layout(doc, 800.f);
+  EXPECT_EQ(count(r, plain, 0x2022), size_t{1});
+  EXPECT_EQ(count(r, host, 0x25BE), size_t{1});
+  EXPECT_EQ(count(r, shut, 0x25B8), size_t{1});
+  EXPECT(count(r, deep, 0) > 0);
+  EXPECT_EQ(count(r, hidden, 0), size_t{0});
+  EXPECT_EQ(r.list_folds.size(), size_t{4});  // host, b, shut + its cue
+  for (const auto& box : r.list_folds) {
+    const auto hit = hit_test_list_fold(r, box.x + 1.f, box.y + 1.f - 5.f, 5.f);
+    EXPECT(hit && *hit == box.node);
+  }
+  EXPECT(!hit_test_list_fold(r, 700.f, r.list_folds[0].y + 1.f, 0.f));
+  const float open_h = r.content_height;
+
+  engine.set_list_folds(&folds);
+  r = engine.layout(doc, 800.f);
+  EXPECT_EQ(count(r, host, 0x25B8), size_t{1});
+  EXPECT_EQ(count(r, b, 0), size_t{0});
+  EXPECT(count(r, hidden, 0) > 0);
+  EXPECT(r.content_height < open_h);
+  // The cue is decoration: no glyph of the item past its own spans.
+  for (const auto& g : r.glyphs)
+    if (g.node == host) EXPECT_EQ(g.span_index, size_t{0});
+  engine.set_list_folds(nullptr);
+
+  // Numbered / task items keep their marker; all texts stay in one column.
+  Document num = parse_document("1. one\n   - x\n2. two\n", "t.md");
+  r = engine.layout(num, 800.f);
+  const NodeId one = find(num, "one"), two = find(num, "two");
+  EXPECT_EQ(count(r, one, '1'), size_t{1});
+  EXPECT_EQ(count(r, INVALID_NODE, 0x25BE), size_t{1});
+  auto text_x = [&](NodeId n, uint32_t cp) {
+    for (const auto& g : r.glyphs)
+      if (g.node == n && g.codepoint == cp) return g.x;
+    return -1.f;
+  };
+  EXPECT(std::abs(text_x(one, 'o') - text_x(two, 't')) < 2.f);
+  EXPECT_EQ(r.list_folds.size(), size_t{1});
+}
+
 // Footnote keys past "99." hang the bodies further instead of running
 // into them; every note of the run keeps the same body column.
 static void test_long_footnote_keys() {
@@ -8872,6 +8978,7 @@ int main() {
   test_feed_urls();
   test_parse_feeds();
   test_long_ordered_list_markers();
+  test_list_folding();
   test_long_footnote_keys();
   test_thread_titles();
   test_page_links();

@@ -155,9 +155,93 @@ void reload_folds_for_focused(App& app) {
   if (app.outline_mode) refresh_outline(app);
 }
 
+static void keep_carets_visible(App& app, Pane& v) {
+  const auto& d = doc_of(app, v);
+  const auto& folds = buf(app, v.buf).list_folds;
+  for (xanatoo::Caret* c : {&v.sel.focus, &v.sel.anchor}) {
+    for (auto id = xanatoo::folded_list_ancestor(d, c->node, &folds);
+         id != xanatoo::INVALID_NODE;
+         id = xanatoo::folded_list_ancestor(d, id, &folds))
+      *c = {id, 0, 0};
+  }
+}
+
+void set_list_fold(App& app, int pi, xanatoo::NodeId item, bool folded) {
+  const BufferId bi = app.panes[pi].buf;
+  const auto& d = doc_of(app, app.panes[pi]);
+  if (!xanatoo::list_item_foldable(d, item)) return;
+  buf(app, bi).list_folds[item] = folded;
+  for (int vi : live_views(app)) {
+    Pane& v = app.panes[vi];
+    if (v.buf != bi) continue;
+    invalidate_height_around(app, v, item);
+    // A caret in the list going out of sight moves to the item.
+    if (folded) keep_carets_visible(app, v);
+  }
+  app.needs_layout = true;
+}
+
+void toggle_list_fold(App& app, int pi, xanatoo::NodeId item) {
+  Pane& p = app.panes[pi];
+  const bool folded =
+      xanatoo::list_item_folded(doc_of(app, p), item, &buf(app, p.buf).list_folds);
+  set_list_fold(app, pi, item, !folded);
+}
+
+void set_list_folds(App& app, int pi, xanatoo::NodeId node, bool folded) {
+  Pane& p = app.panes[pi];
+  const auto& d = doc_of(app, p);
+  const auto items =
+      xanatoo::foldable_list_items(d, xanatoo::outermost_list(d, node));
+  if (items.empty()) return;
+  keep_views(app);
+  for (xanatoo::NodeId item : items) buf(app, p.buf).list_folds[item] = folded;
+  for (int vi : live_views(app)) {
+    Pane& v = app.panes[vi];
+    if (v.buf != p.buf) continue;
+    v.height_cache.clear();
+    if (folded) keep_carets_visible(app, v);
+  }
+  app.needs_layout = true;
+}
+
+bool reveal_in_lists(App& app, Pane& p, xanatoo::NodeId node) {
+  const auto& d = doc_of(app, p);
+  auto& folds = buf(app, p.buf).list_folds;
+  bool any = false;
+  for (auto id = xanatoo::folded_list_ancestor(d, node, &folds);
+       id != xanatoo::INVALID_NODE;
+       id = xanatoo::folded_list_ancestor(d, id, &folds)) {
+    folds[id] = false;
+    any = true;
+    for (int vi : live_views(app))
+      if (app.panes[vi].buf == p.buf)
+        invalidate_height_around(app, app.panes[vi], id);
+  }
+  if (any) app.needs_layout = true;
+  return any;
+}
+
+xanatoo::NodeId current_list_target(App& app) {
+  const auto& d = doc_of(app, focused_pane(app));
+  const xanatoo::NodeId item = xanatoo::enclosing_list_item(d, app.list_target);
+  if (item == xanatoo::INVALID_NODE ||
+      !xanatoo::has_foldable_list_items(d, xanatoo::outermost_list(d, item)))
+    return xanatoo::INVALID_NODE;
+  return item;
+}
+
 void toggle_fold_at_caret(App& app) {
   auto& d = doc_of(app, focused_pane(app));
   xanatoo::NodeId id = focused_pane(app).sel.focus.node;
+  if (xanatoo::list_item_foldable(d, id)) {
+    toggle_list_fold(app, app.focus, id);
+    flash_status(app, xanatoo::list_item_folded(
+                          d, id, &buf(app, focused_pane(app).buf).list_folds)
+                          ? "List item folded"
+                          : "List item expanded");
+    return;
+  }
   while (id != xanatoo::INVALID_NODE && id < d.next_id) {
     const auto& n = d.get(id);
     if (n.kind == xanatoo::NodeKind::Section ||
@@ -226,6 +310,7 @@ void reveal_chrome(App& app, Pane& p, xanatoo::NodeId target) {
 void expand_ancestors_for_node(App& app, xanatoo::NodeId target) {
   if (target == xanatoo::INVALID_NODE) return;
   reveal_chrome(app, focused_pane(app), target);
+  reveal_in_lists(app, focused_pane(app), target);
   const auto& d = doc_of(app, focused_pane(app));
   bool any = false;
   std::string doc_key = path_of(app, focused_pane(app));
@@ -398,6 +483,17 @@ void keep_views(App& app) {
   for (int pi : live_views(app)) keep_view(app, app.panes[pi]);
 }
 
+// The buffer's list folds, for layouts of that buffer only.
+struct ListFoldScope {
+  App& app;
+  ListFoldScope(App& a, const Pane& p) : app(a) {
+    app.layout_engine.set_list_folds(&buf(app, p.buf).list_folds);
+  }
+  ~ListFoldScope() { app.layout_engine.set_list_folds(nullptr); }
+  ListFoldScope(const ListFoldScope&) = delete;
+  ListFoldScope& operator=(const ListFoldScope&) = delete;
+};
+
 void layout_panes(App& app) {
   // Window views take their rects from the window placement.
   place_windows(app);
@@ -438,6 +534,7 @@ void layout_panes(App& app) {
       const GalleryStyleScope gallery_look(app, pane);
       const float layout_w = static_cast<float>(
           std::max(40, (pane.w - sb_gutter(pane)) / columns));
+      const ListFoldScope list_folds(app, pane);
       pane.layout = app.layout_engine.layout(
           doc_of(app, pane), layout_w, base_of(app, pane), vp, hints,
           &app.folded_sections, pane_cut(app, pane));
@@ -521,6 +618,7 @@ void force_full_pane_layout(App& app, Pane& p) {
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
     xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.anchor);
     const GalleryStyleScope gallery_look(app, p);
+    const ListFoldScope list_folds(app, p);
     p.layout = app.layout_engine.layout(
         doc_of(app, p), static_cast<float>(std::max(40, p.w - sb_gutter(p))),
         base_of(app, p), {}, nullptr, &app.folded_sections,
@@ -848,6 +946,11 @@ void collapse_or_expand_all(App& app, bool expand) {
   for (auto& node : d.nodes) {
     if (node.kind == xanatoo::NodeKind::Stretch) node.expanded = expand;
   }
+  Pane& p = focused_pane(app);
+  for (xanatoo::NodeId item : xanatoo::foldable_list_items(d, d.root))
+    buf(app, p.buf).list_folds[item] = !expand;
+  if (!expand) keep_carets_visible(app, p);
+  drop_height_hints_for_buf(app, p.buf);
   app.needs_layout = true;
   flash_status(app, expand ? "Expanded all" : "Collapsed all");
 }

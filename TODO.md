@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Foldable lists
+
+- Every list item with a list inside it folds (no markup or style sheet
+  property needed): ▾ / ▸ in the link colour instead of the bullet (beside
+  the number or task box), and a folded item ends in "… N items". Click
+  either; right-click has Fold / Expand List Item, Fold All, Expand All
+  (the whole outermost list); Ctrl+Shift+F folds the item at the caret,
+  Ctrl+[ / Ctrl+] include lists. Works on read-only pages, never dirties.
+- Folded by default: `- [+] text` (only above a nested list, plain text
+  otherwise), `(li :expanded #f …)`, XML `expanded="false"`. Jumps and
+  search unfold what hides their target.
+- Open: folds are not kept across reloads / sessions; `ia:` file lists
+  start expanded. Checked under Xvfb. Details: `docs/dev/CONTENT.md`.
+
 ## Status (2026-11-21) — Visited links in their own colour
 
 - Links whose page was visited (visit log, or this session's pages also
