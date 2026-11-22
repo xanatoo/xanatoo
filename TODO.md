@@ -5320,5 +5320,8 @@ Services menu, About, unified Digg search (`dg`) and documentation updated.
 `xanatoo_digg_tests` runs
 without SDL/TLS; live Digg network tests remain pending (network inaccessible
 in this development environment). Cumulative Web handover bundle 290
-includes this change from the original history; reserve bundle 291 for the
-next Web handover.
+includes this change from the original history. A live `digg:` request exposed
+an MCP validation error: `digg_get_feed` rejects `limit: 30` (maximum 20).
+Fixed by constructing the feed arguments in a tested pure helper with a
+20-item limit (search remains at 30, within its documented 50-item maximum).
+Reserve bundle 291 for this Web handover, then 292 for the next.

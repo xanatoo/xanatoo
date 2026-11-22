@@ -80,6 +80,21 @@ void refs() {
   CHECK(forum_ref_string(cursor) == "digg:ai?cursor=a%2Fb%3Dc");
 }
 
+void feed_arguments() {
+  // Live API contract: digg_get_feed.limit must not exceed 20.
+  const Json home = parse(digg_feed_arguments(address("digg:")));
+  CHECK(json_string(json_path(home, "topic")) == "all");
+  CHECK(json_number(json_path(home, "limit")) == 20);
+  CHECK(!json_path(home, "view"));
+  CHECK(!json_path(home, "cursor"));
+
+  const Json more = parse(digg_feed_arguments(address("digg:science/newest?cursor=a%2Fb%3Dc")));
+  CHECK(json_string(json_path(more, "topic")) == "science");
+  CHECK(json_number(json_path(more, "limit")) == 20);
+  CHECK(json_string(json_path(more, "view")) == "newest");
+  CHECK(json_string(json_path(more, "cursor")) == "a/b=c");
+}
+
 void mcp_transport() {
   constexpr std::string_view sample = R"({"jsonrpc":"2.0","id":1,
     "result":{"structuredContent":{"posts":[{"title":"A sample"}]}}})";
@@ -147,6 +162,7 @@ void lists_and_posts() {
 
 int main() {
   refs();
+  feed_arguments();
   mcp_transport();
   lists_and_posts();
 }

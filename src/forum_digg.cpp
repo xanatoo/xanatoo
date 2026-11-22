@@ -6,6 +6,7 @@
 // An MCP tool result may have structuredContent or JSON text content.
 
 #include "forum_common.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
@@ -253,6 +254,20 @@ std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err) {
   if (last) return unwrap(std::move(*last), err);
   if (err) *err = "Digg MCP returned neither JSON nor a JSON SSE event";
   return std::nullopt;
+}
+
+std::string digg_feed_arguments(const ForumRef& ref) {
+  // Digg's digg_get_feed tool rejects values above 20 (MCP schema).
+  constexpr int kFeedLimit = 20;
+  const size_t slash = ref.path.find('/');
+  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
+  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
+  std::string args = "{\"topic\":" + json_quote(topic) +
+                     ",\"limit\":" + std::to_string(kFeedLimit);
+  if (!view.empty()) args += ",\"view\":" + json_quote(view);
+  // Refs contain URL-escaped cursors; the MCP tool needs their raw values.
+  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
+  return args + "}";
 }
 
 Document digg_list_document(const Json& reply, const ForumRef& ref) {

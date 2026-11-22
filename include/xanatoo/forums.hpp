@@ -95,6 +95,8 @@ Document flarum_discussion_document(const Json& discussion, const Json& posts,
                                     const ForumRef& ref);
 // Digg public MCP tools: structured results, no account or write operations.
 // The MCP transport envelope (JSON or SSE) is decoded by digg_mcp_decode.
+// Construct feed tool arguments separately so offline tests cover API limits.
+std::string digg_feed_arguments(const ForumRef& ref);
 std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err = nullptr);
 Document digg_list_document(const Json& reply, const ForumRef& ref);
 Document digg_post_document(const Json& reply, const ForumRef& ref);

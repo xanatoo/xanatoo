@@ -512,7 +512,9 @@ Edit → Credentials…); they are read on the main thread when a load starts.
 - `src/forum_digg.cpp` handles pure JSON/SSE-MCP decoding and Document
   conversion. The API call is in `src/forum_fetch.cpp`, using verified
   HTTPS POST to the official `digg_get_feed`, `digg_search_posts` and
-  `digg_get_post` tools. Only anonymous, read-only tools; no login.
+  `digg_get_post` tools. Feed requests use `limit: 20` (the MCP
+  `digg_get_feed` maximum); search requests can request up to 50. Only
+  anonymous, read-only tools; no login.
 - If the MCP endpoint is unavailable, `tech/clusters.json` and
   `ai-clusters-ranked.json` are the published limited feed fallback.
 - Digg's *topic* web URL can toggle to native view, but a story URL only

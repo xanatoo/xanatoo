@@ -450,12 +450,7 @@ std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err) {
   const size_t slash = ref.path.find('/');
   const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
   const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
-  std::string args = "{\"topic\":" + json_quote(topic) + ",\"limit\":30";
-  if (!view.empty()) args += ",\"view\":" + json_quote(view);
-  // Ref cursors are URL-escaped to keep '/' and '&' out of addresses.
-  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
-  args += "}";
-  auto reply = digg_mcp_call("digg_get_feed", args, err);
+  auto reply = digg_mcp_call("digg_get_feed", digg_feed_arguments(ref), err);
   if (!reply && ref.cursor.empty() && (topic == "ai" || topic == "tech") &&
       (view.empty() || view == "trending" || view == "top")) {
     // Published, keyless feeds as a fallback when MCP is unavailable. Tech
