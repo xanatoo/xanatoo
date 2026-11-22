@@ -96,6 +96,13 @@ std::shared_ptr<thumtoo::Client> page_client() {
   } catch (const std::exception& ex) {
     std::cerr << "pages: thumtoo cache " << root.string() << ": " << ex.what()
               << "\n";
+    g_client.reset();
+    g_client_failed = true;
+  } catch (...) {
+    // Some decoder libraries throw exceptions outside std::exception.
+    std::cerr << "pages: thumtoo cache " << root.string()
+              << ": unknown decoder exception\n";
+    g_client.reset();
     g_client_failed = true;
   }
   return g_client;
@@ -115,77 +122,87 @@ std::optional<FixedLayoutSource> read_fixed_layout(const std::string& path,
     if (error) *error = std::move(why);
     return std::nullopt;
   };
-  std::error_code ec;
-  const fs::path abs = fs::absolute(path, ec).lexically_normal();
-  if (ec || !fs::is_regular_file(abs, ec)) return fail("no such file: " + path);
-  const std::shared_ptr<thumtoo::Client> client = page_client();
-  if (!client) return fail("no thumtoo cache directory");
+  // Decoder failures are data errors, not reasons to terminate the reader.
+  // DjVuLibre in particular can throw a non-std C++ exception.
+  try {
+    std::error_code ec;
+    const fs::path abs = fs::absolute(path, ec).lexically_normal();
+    if (ec || !fs::is_regular_file(abs, ec)) return fail("no such file: " + path);
+    const std::shared_ptr<thumtoo::Client> client = page_client();
+    if (!client) return fail("no thumtoo cache directory");
 
-  std::vector<std::string> uris = thumtoo::expand_media_uris(abs, kMaxPages);
-  if (uris.empty()) return fail("thumtoo finds no pages in " + abs.string());
+    std::vector<std::string> uris = thumtoo::expand_media_uris(abs, kMaxPages);
+    if (uris.empty()) return fail("thumtoo finds no pages in " + abs.string());
 
-  FixedLayoutSource src;
-  src.title = abs.filename().string();
-  const bool archive = thumtoo::is_archive_uri(uris.front());
-  std::vector<std::string> labels(uris.size());
-  if (archive) {
-    // Archive order is whatever the packer did; readers expect name order.
-    std::vector<std::pair<std::string, std::string>> members;  // member, uri
-    for (std::string& u : uris) {
-      auto parsed = thumtoo::parse_archive_uri(u);
-      members.emplace_back(parsed ? parsed->member_path : u, std::move(u));
-    }
-    std::stable_sort(members.begin(), members.end(),
-                     [](const auto& a, const auto& b) {
-                       return natural_less(a.first, b.first);
-                     });
-    for (size_t i = 0; i < members.size(); ++i) {
-      uris[i] = std::move(members[i].second);
-      labels[i] = fs::path(members[i].first).filename().string();
-    }
-    // One bulk pass: thumtoo extracts a solid archive once, not per member.
-    auto probes = std::make_shared<Probes>();
-    const size_t asked = client->prepare_paths(
-        {abs}, [probes](std::string, thumtoo::SizeReply) {
-          std::lock_guard<std::mutex> lock(probes->mutex);
-          ++probes->answered;
-          probes->cv.notify_all();
-        });
-    std::unique_lock<std::mutex> lock(probes->mutex);
-    probes->cv.wait_for(lock, kProbeTimeout,
-                        [&] { return probes->answered >= asked; });
-  } else {
-    if (thumtoo::Client::is_pdf_path(abs)) client->ensure_pdf_page_sizes(abs);
-    for (size_t i = 0; i < labels.size(); ++i) labels[i] = std::to_string(i + 1);
-  }
-  // Whatever the bulk paths left out (size caps, DjVu) is probed one by one.
-  if (!probe_sizes(*client, uris))
-    std::cerr << "pages: size probes of " << abs.string() << " timed out\n";
-
-  src.pages.reserve(uris.size());
-  for (size_t i = 0; i < uris.size(); ++i) {
-    FixedPage page;
-    page.uri = uris[i];
-    page.label = labels[i];
-    if (auto size = client->get_size(page.uri);
-        size && size->width > 0 && size->height > 0) {
-      page.width = size->width;
-      page.height = size->height;
+    FixedLayoutSource src;
+    src.title = abs.filename().string();
+    const bool archive = thumtoo::is_archive_uri(uris.front());
+    std::vector<std::string> labels(uris.size());
+    if (archive) {
+      // Archive order is whatever the packer did; readers expect name order.
+      std::vector<std::pair<std::string, std::string>> members;  // member, uri
+      for (std::string& u : uris) {
+        auto parsed = thumtoo::parse_archive_uri(u);
+        members.emplace_back(parsed ? parsed->member_path : u, std::move(u));
+      }
+      std::stable_sort(members.begin(), members.end(),
+                       [](const auto& a, const auto& b) {
+                         return natural_less(a.first, b.first);
+                       });
+      for (size_t i = 0; i < members.size(); ++i) {
+        uris[i] = std::move(members[i].second);
+        labels[i] = fs::path(members[i].first).filename().string();
+      }
+      // One bulk pass: thumtoo extracts a solid archive once, not per member.
+      auto probes = std::make_shared<Probes>();
+      const size_t asked = client->prepare_paths(
+          {abs}, [probes](std::string, thumtoo::SizeReply) {
+            std::lock_guard<std::mutex> lock(probes->mutex);
+            ++probes->answered;
+            probes->cv.notify_all();
+          });
+      std::unique_lock<std::mutex> lock(probes->mutex);
+      probes->cv.wait_for(lock, kProbeTimeout,
+                          [&] { return probes->answered >= asked; });
     } else {
-      page.error = "thumtoo has no size for it";
+      if (thumtoo::Client::is_pdf_path(abs)) client->ensure_pdf_page_sizes(abs);
+      for (size_t i = 0; i < labels.size(); ++i) labels[i] = std::to_string(i + 1);
     }
-    src.pages.push_back(std::move(page));
-  }
+    // Whatever the bulk paths left out (size caps, DjVu) is probed one by one.
+    if (!probe_sizes(*client, uris))
+      std::cerr << "pages: size probes of " << abs.string() << " timed out\n";
 
-  if (!archive) {
-    if (auto outline = client->ensure_document_outline(uris.front())) {
-      for (const thumtoo::OutlineItem& item : outline->items)
-        src.outline.push_back({item.level, item.title, item.page_1based});
+    src.pages.reserve(uris.size());
+    for (size_t i = 0; i < uris.size(); ++i) {
+      FixedPage page;
+      page.uri = uris[i];
+      page.label = labels[i];
+      if (auto size = client->get_size(page.uri);
+          size && size->width > 0 && size->height > 0) {
+        page.width = size->width;
+        page.height = size->height;
+      } else {
+        page.error = "thumtoo has no size for it";
+      }
+      src.pages.push_back(std::move(page));
     }
+
+    if (!archive) {
+      if (auto outline = client->ensure_document_outline(uris.front())) {
+        for (const thumtoo::OutlineItem& item : outline->items)
+          src.outline.push_back({item.level, item.title, item.page_1based});
+      }
+    }
+    std::cerr << "pages: " << abs.string() << ": " << src.pages.size()
+              << " pages, " << src.outline.size() << " outline entries\n";
+    return src;
+  } catch (const std::exception& ex) {
+    std::cerr << "pages: " << path << ": " << ex.what() << "\n";
+    return fail("Cannot read document: " + std::string(ex.what()));
+  } catch (...) {
+    std::cerr << "pages: " << path << ": unknown decoder exception\n";
+    return fail("Cannot read document: decoder failed");
   }
-  std::cerr << "pages: " << abs.string() << ": " << src.pages.size()
-            << " pages, " << src.outline.size() << " outline entries\n";
-  return src;
 }
 
 }  // namespace xanatoo

@@ -531,6 +531,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   are durable thumtoo tiles (JPEG, WebP with alpha) of the coarse scales
   only, composed by `get_pixels_from_tiles`; the cache is
   `$XDG_CACHE_HOME/thumtoo`, shared with galapix / biltoo.
+- The thumtoo boundary treats decoder exceptions (including non-`std::exception`
+  exceptions from DjVuLibre) as failed page reads / thumbnails. Its callbacks
+  publish an empty `DecodedImage` so failed thumbnails cannot remain pending.
 - Without it (unit tests) stb_image decodes (PNG / JPEG / GIF / BMP) and
   thumbnails are BMPs under `cache_dir()/thumbs/`.
 

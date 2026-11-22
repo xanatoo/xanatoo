@@ -209,7 +209,14 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
     bool page = false;
     {
       xanatoo::TransferMeterScope scope(meter.get());
-      ok = download_image(url, page);
+      try {
+        ok = download_image(url, page);
+      } catch (const std::exception& ex) {
+        std::cerr << "image: " << url << ": " << ex.what() << "\n";
+      } catch (...) {
+        // A decoder error must not escape this detached worker thread.
+        std::cerr << "image: " << url << ": unexpected decoder exception\n";
+      }
     }
     std::lock_guard<std::mutex> lock(sh->mutex);
     sh->active.erase(url);

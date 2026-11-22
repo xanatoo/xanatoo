@@ -109,11 +109,17 @@ struct ImageBackend {
     for (const Waiter& wt : waiters) {
       DecodedImage d;
       d.key = wt.key;
-      if (auto px = client->get_pixels_from_tiles(uri, wt.edge)) {
-        if (VipsImage* img = vips_image_new_from_buffer(
-                px->bytes.data(), px->bytes.size(), nullptr, nullptr)) {
-          if (!vips_to_rgba(img, d.rgba, d.w, d.h)) d.rgba.clear();
+      try {
+        if (auto px = client->get_pixels_from_tiles(uri, wt.edge)) {
+          if (VipsImage* img = vips_image_new_from_buffer(
+                  px->bytes.data(), px->bytes.size(), nullptr, nullptr)) {
+            if (!vips_to_rgba(img, d.rgba, d.w, d.h)) d.rgba.clear();
+          }
         }
+      } catch (...) {
+        // A decoder failure invalidates this thumbnail, not the app or its
+        // other waiting images. Some decoders throw non-std exceptions.
+        d.rgba.clear();
       }
       if (d.rgba.empty()) std::cerr << "thumbnail: cannot load " << uri << "\n";
       out.push_back(std::move(d));
@@ -157,14 +163,17 @@ std::shared_ptr<ImageBackend> image_backend_open() {
   auto b = std::make_shared<ImageBackend>();
   try {
     b->client = thumtoo::Client::open(root, {}, kWorkers);
+    if (!b->client) return nullptr;
+    thumtoo::image_library_init();
+    return b;
   } catch (const std::exception& ex) {
     std::cerr << "thumtoo cache " << root.string() << ": " << ex.what()
               << " (images without it)\n";
-    return nullptr;
+  } catch (...) {
+    std::cerr << "thumtoo cache " << root.string()
+              << ": unexpected decoder exception (images without it)\n";
   }
-  if (!b->client) return nullptr;
-  thumtoo::image_library_init();
-  return b;
+  return nullptr;
 }
 
 bool image_backend_decode(const std::string& path, long long max_pixels,
@@ -189,17 +198,41 @@ bool image_backend_decode(const std::string& path, long long max_pixels,
 
 void image_backend_request_thumb(ImageBackend& b, const std::string& key,
                                  const std::string& path, int edge) {
-  const std::string uri = thumtoo::file_uri_from_path(fs::absolute(path));
-  {
+  std::string uri;
+  try {
+    uri = thumtoo::file_uri_from_path(fs::absolute(path));
+    {
+      std::lock_guard<std::mutex> lock(b.mutex);
+      auto [it, fresh] = b.inflight.try_emplace(uri);
+      it->second.push_back({key, std::min(edge, kMaxThumbEdge)});
+      if (!fresh) return;  // that file's pyramid is already on its way
+    }
+    ImageBackend* bp = &b;
+    b.client->request_size(uri, [bp](std::string u, thumtoo::SizeReply r) {
+      try {
+        bp->on_size(u, r);
+      } catch (...) {
+        bp->finish(u);  // complete as failed rather than wait indefinitely
+      }
+    });
+  } catch (...) {
+    // A request can fail before it reaches the client's queue. Retire all
+    // waiters explicitly, including when URI construction itself failed.
     std::lock_guard<std::mutex> lock(b.mutex);
-    auto [it, fresh] = b.inflight.try_emplace(uri);
-    it->second.push_back({key, std::min(edge, kMaxThumbEdge)});
-    if (!fresh) return;  // that file's pyramid is already on its way
+    auto it = b.inflight.find(uri);
+    if (it != b.inflight.end()) {
+      for (const ImageBackend::Waiter& wt : it->second) {
+        DecodedImage d;
+        d.key = wt.key;
+        b.done.push_back(std::move(d));
+      }
+      b.inflight.erase(it);
+    } else {
+      DecodedImage d;
+      d.key = key;
+      b.done.push_back(std::move(d));
+    }
   }
-  ImageBackend* bp = &b;
-  b.client->request_size(uri, [bp](std::string u, thumtoo::SizeReply r) {
-    bp->on_size(u, r);
-  });
 }
 
 std::vector<DecodedImage> image_backend_take_done(ImageBackend& b) {

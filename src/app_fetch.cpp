@@ -611,6 +611,30 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   finish_fetch(*out);
 }
 
+// Every fetch path (including nested searches and decoder callbacks) must
+// complete its plain-data result, even when a library throws on a worker.
+// Keep exceptions away from detached std::threads, which would terminate.
+void fetch_page_guarded(const std::string& url,
+                        const std::shared_ptr<FetchShared>& out,
+                        bool allow_download) {
+  try {
+    fetch_page(url, out, allow_download);
+    return;
+  } catch (const std::exception& ex) {
+    std::cerr << "fetch: " << url << ": " << ex.what() << "\n";
+    out->error = std::string("Cannot load page: ") + ex.what();
+  } catch (...) {
+    std::cerr << "fetch: " << url << ": unknown library exception\n";
+    out->error = "Cannot load page: unexpected decoder or service error";
+  }
+  out->doc.reset();
+  if (out->download && out->download->phase.load() ==
+                           xanatoo::DownloadPhase::Pending)
+    out->download->phase.store(xanatoo::DownloadPhase::Skipped);
+  // No hashing or conversion on the failure path; publish the error itself.
+  out->done.store(true, std::memory_order_release);
+}
+
 // "page#id" → caret to the node labelled / titled "id".
 void jump_to_url_fragment(App& app, int pi, const std::string& url) {
   const size_t hash = url.find('#');
@@ -1166,8 +1190,8 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   // has the fetch transport) they run on workers: browsers forbid blocking
   // requests on the main thread.
 #if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
-  fetch_page(url, job.shared, purpose != FetchPurpose::Preview &&
-                              purpose != FetchPurpose::Subscription);
+  fetch_page_guarded(url, job.shared, purpose != FetchPurpose::Preview &&
+                                      purpose != FetchPurpose::Subscription);
 #else
   // Detached: a cancelled job just finishes into its (orphaned) shared state.
   std::thread(
@@ -1175,7 +1199,7 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
        allow = purpose != FetchPurpose::Preview &&
                purpose != FetchPurpose::Subscription] {
         xanatoo::TransferMeterScope meter(&shared->meter);
-        fetch_page(url, shared, allow);
+        fetch_page_guarded(url, shared, allow);
       })
       .detach();
 #endif

@@ -5325,3 +5325,19 @@ an MCP validation error: `digg_get_feed` rejects `limit: 30` (maximum 20).
 Fixed by constructing the feed arguments in a tested pure helper with a
 20-item limit (search remains at 30, within its documented 50-item maximum).
 Reserve bundle 291 for this Web handover, then 292 for the next.
+
+## Decoder exception containment (2026-11-22)
+
+Report: after an unrelated image 404, `nix develop -L . -c xanatoo-run`
+aborted with uncaught `DJVU::GException`. No stack trace, so the exact
+throwing library call is unconfirmed; the preceding 404 is not addressed.
+`read_fixed_layout` now converts std and non-std decoder exceptions into a
+regular page error; guarded detached page and image fetches always publish
+completion; the thumtoo thumbnail callbacks do not strand pending requests
+when an image decoder throws. Plain-data App/FetchShared/ImageFetchShared
+continue to be consumed by polling systems; no new framework. The standalone
+Digg offline tests can be rerun without networking. Full native build and
+DjVu runtime reproduction require the Nix development environment (not
+available in the Web container). Bundle 292 is the cumulative handover; next
+number 293. If the abort recurs, capture `thread apply all bt` under gdb: a
+DjVuLibre *internal* thread exception is not catchable at the caller.
