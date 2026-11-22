@@ -28,6 +28,12 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
 - Creator, contributor and language link to `search:archive:FIELD:"VALUE"`, the
   date to `search:archive:date:…` (its year, month or day; a date in another
   form stays text). Like any `archive` search: the 40 most downloaded, no paging.
+- Description: HTML, so it does not go through the Markdown. `ia_markdown`
+  writes a placeholder paragraph and `ia_insert_description` replaces it in the
+  parsed document by the `html_append_blocks` nodes (bold, links, lists, tables,
+  images). A blank line also ends a paragraph, and a description without block
+  tags keeps its line breaks. Links to archive.org searches become
+  `search:archive:…`; links other than http(s), mailto and ftp become text.
 - Files link to `archive.org/download/ID/NAME`; bookkeeping files (`*_meta.xml`,
   `*_files.xml`, torrents, item tiles) are left out, all others are listed (the
   metadata reply already carries them). Each file's `source` sorts them:

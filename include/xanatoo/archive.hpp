@@ -53,10 +53,17 @@ std::string ia_mediatype(std::string_view metadata_json);
 // reply for a collection's members (may be empty). Pure; an empty or
 // malformed reply gives a short "not found" page. `playable` (a file name
 // the Media panel takes in this build, is_playable_url) picks the "Play"
-// link of movies and audio; none without it.
+// link of movies and audio; none without it. The description is only a
+// placeholder paragraph: ia_insert_description fills it in.
 std::string ia_markdown(std::string_view metadata_json,
                         std::string_view members_json, const IaRef& ref,
                         bool (*playable)(std::string_view) = nullptr);
+
+// Replaces the placeholder paragraph of `doc` (the parsed ia_markdown of the
+// same reply) by the item's description, which is HTML. Links to archive.org
+// searches become search:archive: refs. Pure.
+void ia_insert_description(Document& doc, std::string_view metadata_json,
+                           const IaRef& ref);
 
 // Markdown of an uploader's items (`ref.uploader` set): the advancedsearch
 // reply for ia_members_url(ref). Pure.

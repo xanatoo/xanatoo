@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <functional>
+#include <initializer_list>
 #include <map>
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
@@ -207,27 +208,92 @@ std::string utc_date(long long unix_time) {
   return b;
 }
 
-// Description HTML → paragraphs (blank line separated), escaped.
-std::string description_md(std::string_view html) {
-  const std::string plain = html_to_plain(html);
-  std::string out, para;
-  auto flush = [&] {
-    const std::string t = one_line(para);
-    if (!t.empty()) out += esc(t) + "\n\n";
-    para.clear();
+// Stands for the description in the Markdown (ia_insert_description).
+constexpr std::string_view kDescriptionSlot = "ia-description-slot";
+
+// Descriptions are HTML, plain text or a mix (uploaders type into a box that
+// keeps newlines): a blank line becomes a paragraph break and, when there are
+// no block tags at all, a newline a line break. Lists, tables and <pre> keep
+// their whitespace.
+std::string description_html(std::string_view in) {
+  auto is_one_of = [](std::string_view t, std::initializer_list<std::string_view> set) {
+    return std::find(set.begin(), set.end(), t) != set.end();
   };
-  size_t i = 0;
-  while (i <= plain.size()) {
-    const size_t e = plain.find('\n', i);
-    const std::string_view line =
-        std::string_view(plain).substr(i, e == std::string::npos ? e : e - i);
-    if (one_line(line).empty()) flush();
-    else para += std::string(line) + " ";
-    if (e == std::string::npos) break;
-    i = e + 1;
-  }
-  flush();
+  // Calls tag(name, closing, text) and text(c) over the source.
+  auto scan = [&](auto&& tag, auto&& text) {
+    for (size_t i = 0; i < in.size();) {
+      const char n = in[i] == '<' && i + 1 < in.size() ? in[i + 1] : '\0';
+      if (n == '!' || n == '/' || std::isalpha(static_cast<unsigned char>(n))) {
+        const bool comment = in.substr(i, 4) == "<!--";
+        size_t e = comment ? in.find("-->", i + 4) : html_tag_end(in, i);
+        e = e == std::string_view::npos ? in.size() : e + (comment ? 3 : 1);
+        const bool closing = n == '/';
+        size_t a = i + 1 + closing, z = a;
+        while (z < e && std::isalnum(static_cast<unsigned char>(in[z]))) ++z;
+        tag(ascii_lower(in.substr(a, z - a)), closing, in.substr(i, e - i));
+        i = e;
+      } else {
+        i = text(i);
+      }
+    }
+  };
+  bool blocks = false;
+  scan(
+      [&](const std::string& t, bool, std::string_view) {
+        blocks |= is_one_of(t, {"p", "br", "div", "ul", "ol", "li", "dl", "table", "pre",
+                                "blockquote", "hr", "h1", "h2", "h3", "h4", "h5", "h6"});
+      },
+      [](size_t i) { return i + 1; });
+  std::string out;
+  int depth = 0;
+  scan(
+      [&](const std::string& t, bool closing, std::string_view src) {
+        if (is_one_of(t, {"pre", "ul", "ol", "dl", "table"}))
+          depth = std::max(0, depth + (closing ? -1 : 1));
+        out += src;
+      },
+      [&](size_t i) {
+        if (in[i] != '\n' && in[i] != '\r') {
+          out += in[i];
+          return i + 1;
+        }
+        size_t e = i, lines = 0;
+        while (e < in.size() && (in[e] == '\n' || in[e] == '\r' || in[e] == ' ' || in[e] == '\t')) {
+          lines += in[e] == '\n' || (in[e] == '\r' && (e + 1 == in.size() || in[e + 1] != '\n'));
+          ++e;
+        }
+        if (depth > 0) out += in.substr(i, e - i);
+        else if (lines > 1) out += "<p>";
+        else out += blocks ? "\n" : "<br>";
+        return e;
+      });
   return out;
+}
+
+// Where a link of a description leads: archive.org's own searches (which need
+// JavaScript) to the search page here, ordinary addresses as they are, "" for
+// anything else ("external:", "javascript:", …).
+std::string description_href(const std::string& href) {
+  for (std::string_view p : {"https://archive.org/", "http://archive.org/",
+                             "https://www.archive.org/", "http://www.archive.org/"}) {
+    if (!starts_with_ci(href, p)) continue;
+    const std::string_view rest = std::string_view(href).substr(p.size());
+    for (std::string_view d : {"search.php?", "search?"}) {
+      if (!starts_with(rest, d)) continue;
+      std::string_view q = rest.substr(d.size());
+      q = q.substr(0, q.find('#'));
+      while (!q.empty()) {
+        const size_t e = std::min(q.find('&'), q.size());
+        if (starts_with(q, "query="))
+          if (std::string r = search_ref("archive", search_decode(q.substr(6, e - 6))); !r.empty())
+            return r;
+        q.remove_prefix(std::min(e + 1, q.size()));
+      }
+    }
+  }
+  for (std::string_view p : {"https://", "http://", "mailto:", "ftp://"})
+    if (starts_with_ci(href, p)) return href;
+  return {};
 }
 
 // Plain text (reviews) → Markdown: blank lines end paragraphs, single
@@ -486,7 +552,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
     if (!facts.empty()) md += facts + "\n";
 
     const auto desc = field("description");
-    if (!desc.empty()) md += description_md(desc[0]);
+    if (!desc.empty()) md += std::string(kDescriptionSlot) + "\n\n";
 
     // Files.
     const Json* files = json_get(*reply, "files");
@@ -627,6 +693,47 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
   return md;
 }
 
+void ia_insert_description(Document& doc, std::string_view metadata_json, const IaRef& ref) {
+  const auto reply = json_parse(metadata_json);
+  const Json* meta = reply ? json_get(*reply, "metadata") : nullptr;
+  if (!meta || meta->type != Json::Type::Object) return;
+  const auto parts = values(json_get(*meta, "description"));
+  if (parts.empty()) return;
+
+  // Nothing before the slot can be a paragraph of exactly this text: there
+  // is only the title, the thumbnail and the "Label: value" list.
+  NodeId slot = INVALID_NODE;
+  for (const Node& n : doc.nodes)
+    if (n.kind == NodeKind::Paragraph && n.spans.size() == 1 &&
+        n.spans[0].text == kDescriptionSlot) {
+      slot = n.id;
+      break;
+    }
+  if (slot == INVALID_NODE) return;
+  const NodeId parent = doc.get(slot).parent;
+
+  HtmlOptions opt;
+  opt.base_url = ia_web_url(ref);
+  opt.images = true;
+  const size_t first_new = doc.nodes.size();
+  const size_t before = doc.get(parent).children.size();
+  for (const std::string& part : parts)
+    html_append_blocks(doc, parent, description_html(part), opt);
+  for (size_t i = first_new; i < doc.nodes.size(); ++i)
+    for (InlineSpan& s : doc.nodes[i].spans) {
+      if (s.href.empty() || (s.kind != InlineKind::Link && s.kind != InlineKind::Image)) continue;
+      s.href = description_href(s.href);
+      if (s.href.empty() && s.kind == InlineKind::Link) s.kind = InlineKind::Text;
+    }
+
+  // The new blocks came last: move them to where the slot is.
+  auto& kids = doc.get(parent).children;
+  std::rotate(std::find(kids.begin(), kids.end(), slot),
+              kids.begin() + static_cast<std::ptrdiff_t>(before), kids.end());
+  kids.erase(std::find(kids.begin(), kids.end(), slot));
+  doc.get(slot).parent = INVALID_NODE;
+}
+
 std::string ia_uploads_markdown(std::string_view members_json, const IaRef& ref) {
   std::string md = "# Uploads by " + esc(ref.uploader) + "\n\n";
   const std::string list = members_md(members_json, ref);
@@ -668,7 +775,9 @@ std::optional<Document> ia_fetch(std::string_view ref, std::string* err) {
     std::string ignored;
     if (auto m = get(ia_members_url(*r), &ignored)) members = std::move(*m);
   }
-  return parse_document(ia_markdown(*meta, members, *r, &is_playable_url), "archive.md");
+  Document doc = parse_document(ia_markdown(*meta, members, *r, &is_playable_url), "archive.md");
+  ia_insert_description(doc, *meta, *r);
+  return doc;
 }
 #endif
 

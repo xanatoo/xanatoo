@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — `ia:` descriptions keep their formatting
+
+- The description of an `ia:ID` page is imported as HTML (bold, links, line
+  breaks, lists, images) instead of flattened to text; its links to
+  archive.org searches open as `search:archive:…`. Checked under Xvfb.
+- Open: Rights and Notes are still plain text. Details: `docs/ARCHIVE.md`.
+
 ## Status (2026-11-22) — Copy Web Page URL
 
 - Page context menu and Edit menu: "Copy Web Page URL" copies the http(s)

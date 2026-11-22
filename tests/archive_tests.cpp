@@ -74,8 +74,45 @@ int main() {
   assert(has(dated("[19--?]"), "Date: \\[19--?\\]\n"));
   assert(has(dated("1997/98"), "Date: 1997/98\n"));
   assert(has(md, "[gutenberg](ia:gutenberg)"));
-  assert(has(md, "First."));
-  assert(has(md, "Second"));
+  // The description is HTML: it replaces a placeholder of the parsed page.
+  assert(has(md, "\n\nia-description-slot\n\n"));
+  auto described = [](const char* json_text) {
+    const std::string reply =
+        std::string(R"({"metadata":{"identifier":"d","description":)") + json_text + "}}";
+    Document doc;
+    const NodeId root = doc.create(NodeKind::Document);
+    auto para = [&](const char* t) { doc.append_text(doc.create(NodeKind::Paragraph, root), t); };
+    para("before");
+    para("ia-description-slot");
+    para("after");
+    ia_insert_description(doc, reply, {"d", 1, {}});
+    std::string out;  // "p:text[href]|…" of the root's children
+    for (NodeId c : doc.get(doc.root).children) {
+      assert(doc.get(c).parent == root);
+      out += doc.get(c).kind == NodeKind::Paragraph ? "p:" : doc.get(c).kind == NodeKind::List ? "list:" : "?:";
+      for (const InlineSpan& s : doc.get(c).spans) {
+        if (s.kind == InlineKind::Strong) out += "*" + s.text + "*";
+        else out += s.text;
+        if (!s.href.empty()) out += "[" + s.href + "]";
+      }
+      out += "|";
+    }
+    return out;
+  };
+  assert(described(R"("<p>First.</p><p><b>Second</b><br />x</p>")") ==
+         "p:before|p:First.|p:*Second*\nx|p:after|");
+  // archive.org's searches open here; other schemes are no links.
+  assert(described(R"("<a href=\"https://archive.org/search.php?query=g%3A(a%20b)\">g</a>")") ==
+         "p:before|p:g[search:archive:g%3A%28a+b%29]|p:after|");
+  assert(described(R"("<a href=\"/details/x\">i</a> <a href=\"external:mpv:x\">j</a>")") ==
+         "p:before|p:i[https://archive.org/details/x] j|p:after|");
+  // Plain text keeps its lines, HTML only its blank lines, lists neither.
+  assert(described(R"("a\r\nb\r\n\r\nc")") == "p:before|p:a\nb|p:c|p:after|");
+  assert(described(R"("a\nb<p>c\n\nd")") == "p:before|p:a b|p:c|p:d|p:after|");
+  assert(described(R"("<ul><li>a</li>\n\n<li>b</li></ul>")") == "p:before|list:|p:after|");
+  // Several values, and one without any text.
+  assert(described(R"(["a","b"])") == "p:before|p:a|p:b|p:after|");
+  assert(described(R"("<div></div>")") == "p:before|p:after|");
   assert(has(md, "[book.pdf](https://archive.org/download/book/book.pdf)"));
   assert(has(md, "my%20book.epub"));
   assert(!has(md, "book_meta.xml") && !has(md, "torrent"));
