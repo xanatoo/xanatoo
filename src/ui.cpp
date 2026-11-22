@@ -436,6 +436,7 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::Cut: return "cut";
     case UiCommand::Copy: return "copy";
     case UiCommand::CopyPageUrl:
+    case UiCommand::CopyPageWebUrl:
     case UiCommand::Link: return "link";
     case UiCommand::Paste: return "paste";
     case UiCommand::Replace:
@@ -3092,6 +3093,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Copy", UiCommand::Copy, cmd, state.selection, "Ctrl+C");
       menu_item_cmd("Copy Page URL", UiCommand::CopyPageUrl, cmd, true,
                     "Ctrl+Shift+U");
+      menu_item_cmd("Copy Web Page URL", UiCommand::CopyPageWebUrl, cmd,
+                    !state.web_page_url.empty());
       menu_item_cmd("Paste", UiCommand::Paste, cmd, true, "Ctrl+V");
       menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true, "Ctrl+A");
       menu_item_cmd("Select All", UiCommand::SelectAll, cmd, true, "Ctrl+Shift+A");
@@ -3794,6 +3797,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Copy", UiCommand::Copy, cmd, state.selection, "Ctrl+C");
       menu_item_cmd("Copy Page URL", UiCommand::CopyPageUrl, cmd, true,
                     "Ctrl+Shift+U");
+      if (!state.web_page_url.empty())
+        menu_item_cmd("Copy Web Page URL", UiCommand::CopyPageWebUrl, cmd);
       if (!state.context_comment_native.empty()) {
         if (ImGui::MenuItem("Copy Link to Comment")) {
           cmd = UiCommand::CopyText;

@@ -7365,6 +7365,26 @@ void test_wikipedia() {
   EXPECT_EQ(alternate_view_url("https://example.org/"), "");
   EXPECT_EQ(alternate_view_url("notes.md"), "");
 
+  // "Copy Web Page URL": the http(s) form of every non-http address.
+  EXPECT_EQ(page_web_url("hn:item?id=1"),
+            "https://news.ycombinator.com/item?id=1");
+  EXPECT_EQ(page_web_url("ia:nasa"), "https://archive.org/details/nasa");
+  EXPECT_EQ(page_web_url("feed:https://example.org/a.xml"),
+            "https://example.org/a.xml");
+  EXPECT_EQ(page_web_url("feed://example.org/a.xml"),
+            "https://example.org/a.xml");
+  EXPECT_EQ(page_web_url("wayback:20150301/https://example.com/page"),
+            "https://web.archive.org/web/20150301/https://example.com/page");
+  EXPECT_EQ(page_web_url("wayback:https://example.com/"),
+            "https://web.archive.org/web/2/https://example.com/");
+  EXPECT_EQ(page_web_url("sitemap:example.org"), "https://example.org/");
+  EXPECT_EQ(page_web_url("https://example.org/a.xml"), "");
+  EXPECT_EQ(page_web_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "");
+  EXPECT_EQ(page_web_url("gemini://example.org/"), "");
+  EXPECT_EQ(page_web_url("notes.md"), "");
+  EXPECT_EQ(page_web_url("feed:"), "");
+  EXPECT_EQ(page_web_url(""), "");
+
   EXPECT_EQ(up_url("/a/b/c.md"), "/a/b/");
   EXPECT_EQ(up_url("/a/b/"), "/a/");
   EXPECT_EQ(up_url("/a"), "/");

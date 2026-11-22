@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Copy Web Page URL
+
+- Page context menu and Edit menu: "Copy Web Page URL" copies the http(s)
+  address of a page shown under another one (hn:, reddit:, wikipedia:, ia:,
+  feed:, wayback:, sitemap:, search:, …); not offered otherwise.
+- Open: addresses without a canonical web site (nostr:, gemini:, media:,
+  JSON search engines) have none; the point in the page (`#…`) is not part
+  of it. Details: `docs/dev/SERVICES.md`.
+
 ## Status (2026-11-22) — `ia:` details link to searches
 
 - Creator, Contributor, Date and Language on `ia:ID` pages link to

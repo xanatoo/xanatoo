@@ -351,6 +351,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   {
     const std::string& path = path_of(app, focused_pane(app));
     ui_state.alternate_url = xanatoo::alternate_view_url(path);
+    ui_state.web_page_url = pane_web_url(app, focused_pane(app));
     ui_state.native_view = !ui_state.alternate_url.empty() &&
                            xanatoo::native_url_for(path).empty();
     if (auto snap = xanatoo::wayback_ref_from_snapshot_url(path)) {
@@ -2040,6 +2041,16 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       const std::string url = pane_address(app, p);
       if (url.empty()) {
         flash_status(app, "No page URL");
+        break;
+      }
+      SDL_SetClipboardText(url.c_str());
+      flash_status(app, "Copied " + url);
+      break;
+    }
+    case C::CopyPageWebUrl: {
+      const std::string url = pane_web_url(app, p);
+      if (url.empty()) {
+        flash_status(app, "No web address for this page");
         break;
       }
       SDL_SetClipboardText(url.c_str());

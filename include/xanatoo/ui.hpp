@@ -177,6 +177,7 @@ enum class UiCommand {
   Cut,
   Copy,
   CopyPageUrl,  // current gemini:// or file path
+  CopyPageWebUrl,  // http(s) address of a page with another address (hn:, …)
   Paste,
   SelectAll,
   SelectBlock,
@@ -588,6 +589,9 @@ struct UiState {
   // Other view of the focused page ("" = none): the native ref of a web
   // page (wikipedia:Title, hn:item?id=1) or the web URL of a native view.
   std::string alternate_url;
+  // http(s) address of a page shown under another one (hn:, feed:, search:,
+  // …); "" for web pages themselves and pages not on the web.
+  std::string web_page_url;
   // Wayback Machine: where ToggleArchive goes ("" = not available), and
   // whether the focused page already is a snapshot (target = the live page).
   std::string archive_url;

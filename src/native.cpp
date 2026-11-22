@@ -3,15 +3,19 @@
 
 #include "xanatoo/native.hpp"
 
+#include "xanatoo/feed.hpp"
 #include "xanatoo/forums.hpp"
 #include "xanatoo/nntp.hpp"
 #include "xanatoo/hackernews.hpp"
+#include "xanatoo/html_page.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/matrix.hpp"
 #include "xanatoo/reddit.hpp"
+#include "xanatoo/sitemap.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/video_sites.hpp"
 #include "xanatoo/archive.hpp"
+#include "xanatoo/wayback.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/youtube.hpp"
 
@@ -117,6 +121,21 @@ std::string web_url_for(std::string_view ref) {
     return url;
   }
   return {};
+}
+
+std::string page_web_url(std::string_view page) {
+  trim_ascii(page);
+  if (is_web_url(page)) return {};
+  if (starts_with_ci(page, "feed:"))
+    return page.size() > 5 ? feed_http_url(page) : std::string();
+  if (auto r = parse_wayback_ref(page)) {
+    // Without the "id_" modifier of the fetch: the page with the Wayback bar.
+    return "https://web.archive.org/web/" +
+           (r->timestamp.empty() ? std::string("2") : r->timestamp) + "/" +
+           r->url;
+  }
+  if (is_sitemap_ref(page)) return "https://" + sitemap_ref_host(page) + "/";
+  return web_url_for(page);
 }
 
 std::string native_url_for(std::string_view url) {

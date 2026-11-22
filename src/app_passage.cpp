@@ -7,7 +7,10 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/file_url.hpp"
+#include "xanatoo/html_page.hpp"
+#include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
+#include "xanatoo/search.hpp"
 #include "xanatoo/source_view.hpp"
 #include "xanatoo/util.hpp"
 
@@ -248,6 +251,15 @@ std::string pane_address(App& app, Pane& p) {
   xanatoo::Locator loc = p.locator;
   loc.base = std::move(page);
   return xanatoo::format_locator(loc);
+}
+
+std::string pane_web_url(App& app, Pane& p) {
+  const std::string page = pane_page(app, p);
+  if (!xanatoo::is_search_ref(page)) return xanatoo::page_web_url(page);
+  // A web search is its result page; JSON engines have none.
+  const std::string target =
+      xanatoo::search_target(page, app.search.engines);
+  return xanatoo::is_web_url(target) ? target : xanatoo::page_web_url(target);
 }
 
 void apply_locator(App& app, int pi, xanatoo::Locator loc) {

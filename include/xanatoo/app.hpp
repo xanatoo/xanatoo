@@ -2040,6 +2040,9 @@ xanatoo::NodeId pane_cut(App& app, Pane& p);
 // Full address of what the view shows: page + selectors. Local pages are
 // file:///abs/path URLs.
 std::string pane_address(App& app, Pane& p);
+// The http(s) address of a page shown under another one (page_web_url, and
+// the result page of a search:); "" for web pages and pages not on the web.
+std::string pane_web_url(App& app, Pane& p);
 // The address spelling of a page: a local path (relative to the cwd) as its
 // file: URL, everything else unchanged.
 std::string page_address(std::string_view page);

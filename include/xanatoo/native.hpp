@@ -33,6 +33,11 @@ std::string lemmy_ref_from_url(std::string_view url);
 // Ref (hn: / reddit: / lemmy: / wikipedia:) → https web URL, "" otherwise.
 std::string web_url_for(std::string_view ref);
 
+// The http(s) address a browser opens for a page with another address:
+// web_url_for plus feed:, wayback: (the snapshot) and sitemap: (the site's
+// front page). "" for http(s) pages themselves and pages not on the web.
+std::string page_web_url(std::string_view page);
+
 // Native form of a web page URL ("" when there is none).
 std::string native_url_for(std::string_view url);
 

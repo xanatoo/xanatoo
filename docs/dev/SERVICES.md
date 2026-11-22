@@ -26,6 +26,12 @@ read-only service clients. Every client is read-only: never post or log in.
   clients; the part after the prefix mirrors the web path (`hn:item?id=1`,
   `reddit:r/linux/`, `lemmy:lemmy.world/c/technology`). `web_url_for`
   maps a ref back to https for the API clients, which still take web URLs.
+- "Copy Web Page URL" (page context menu, Edit menu; `CopyPageWebUrl`)
+  copies `pane_web_url`: `page_web_url` (`web_url_for` plus `feed:`,
+  `wayback:`, `sitemap:`) or the result page of a `search:`. Absent
+  (context menu) / greyed (Edit) for http(s) pages and addresses without a
+  web form (gemini:, nostr:, …, JSON search engines). A new service that
+  has web pages goes into `web_url_for`.
 - Every importer titles its Thread with `set_thread_title` (a `Header` as
   the thread's first child, `thread_title` finds it), never `summary`: the
   title is drawn in the thread band and the Heading Outline lists it with
