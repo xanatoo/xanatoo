@@ -5360,3 +5360,19 @@ installed here, so full native application build and live MCP calls remain
 unverified. Clang on this host's libstdc++ still rejects the pre-existing
 recursive `Json` pair type in `json_dom.hpp` (not introduced by this change).
 Favicon handling was not touched. Web handover bundle 293 supersedes 292.
+
+## Digg editorial copy in native post view (2026-11-22)
+
+After the memory-safety fix, `digg:post/UUID` loaded, but some posts displayed
+only their Sources. The converter recognized only four flat text keys, although
+Digg's post pages distinguish teaser, TLDR, and editorial copy. Add bounded,
+explicit text-field mappings for flat post fields, known nested copy/story
+records and copy alongside `post` in the MCP detail envelope. Render intro,
+TLDR and editorial body ahead of sources; avoid duplicating identical text;
+show an explanatory note when the post lacks copy. Source excerpts remain
+under Sources. Digg does not distribute full original articles through MCP;
+following a Source should use the existing web reader. Tests exercise flat,
+nested, array-of-paragraph, envelope and absent-copy variants. Release,
+ASan and UBSan standalone Digg tests passed locally. No live MCP response or
+full Nix application build was possible in the sandbox (no network or Nix).
+Bundle 294 supersedes 293; reserve 295 next.

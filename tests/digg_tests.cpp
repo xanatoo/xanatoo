@@ -176,6 +176,65 @@ void mcp_owned_result_regression() {
   CHECK(err == "rate limited");
 }
 
+// Digg publishes editorial copy alongside source links. The MCP detail
+// payload may use flat strings, nested copy records, or a separate copy
+// section in the result envelope. None of them are full source articles.
+void editorial_copy() {
+  const ForumRef post = address("digg:post/01234567-89ab-cdef-0123-456789abcdef");
+  Document nested = digg_post_document(parse(R"JSON({
+    "post":{"title":"Launch coverage", "copy":{
+      "dek":"Short introduction", "tldr":{"text":"TLDR of the event"},
+      "body":{"text":"Digg's additional editorial paragraph"}}},
+    "sources":[{"title":"Source one","url":"https://example.com/article",
+                "text":"External source excerpt"}]
+  })JSON"), post);
+  CHECK(says(nested, "Short introduction"));
+  CHECK(says(nested, "TLDR of the event"));
+  CHECK(says(nested, "Digg's additional editorial paragraph"));
+  CHECK(says(nested, "External source excerpt"));
+  CHECK(link(nested, "https://example.com/article"));
+  CHECK(says(nested, "Sources"));
+  CHECK(!says(nested, "Digg did not include a summary"));
+
+  Document separate = digg_post_document(parse(R"JSON({
+    "post":{"title":"A story without inline copy"},
+    "summaryText":"Summary from response envelope",
+    "contentText":"Editorial body from response envelope",
+    "sources":[{"title":"Example","url":"https://example.com/other"}]
+  })JSON"), post);
+  CHECK(says(separate, "Summary from response envelope"));
+  CHECK(says(separate, "Editorial body from response envelope"));
+
+  Document paragraphs = digg_post_document(parse(R"JSON({
+    "post":{"title":"A story with blocks", "content":{
+      "paragraphs":["First authored paragraph", {"text":"Second authored paragraph"}]}}
+  })JSON"), post);
+  CHECK(says(paragraphs, "First authored paragraph"));
+  CHECK(says(paragraphs, "Second authored paragraph"));
+
+  Document empty = digg_post_document(parse(R"JSON({
+    "post":{"title":"No story copy"},
+    "sources":[{"title":"Source summary","description":"Source-only text"}]
+  })JSON"), post);
+  CHECK(says(empty, "Digg did not include a summary"));
+  CHECK(says(empty, "Source-only text"));
+  // A Source description is never promoted to the post's own summary.
+
+  Document repeated = digg_post_document(parse(R"JSON({
+    "post":{"title":"Same copy fields", "description":"Only once",
+            "summary":"Only once", "body":"Only once"}})JSON"), post);
+  int occurrences = 0;
+  for (const Node& node : repeated.nodes)
+    for (const InlineSpan& span : node.spans)
+      if (span.text == "Only once") ++occurrences;
+  CHECK(occurrences == 1);
+
+  Document listing = digg_list_document(parse(R"JSON({
+    "posts":[{"title":"Feed item", "copy":{"summary":"TLDR inside copy"}}]
+  })JSON"), address("digg:"));
+  CHECK(says(listing, "TLDR inside copy"));
+}
+
 void lists_and_posts() {
   auto payload = parse(R"({"posts":[
     {"id":"01234567-89ab-cdef-0123-456789abcdef", "title":"Reusable launch vehicle",
@@ -225,4 +284,5 @@ int main() {
   mcp_transport();
   mcp_owned_result_regression();
   lists_and_posts();
+  editorial_copy();
 }

@@ -39,6 +39,84 @@ long long count_field(const Json& obj,
   return json_number(first(obj, names));
 }
 
+// Digg post copy can be plain text or a small text record. Only traverse
+// known copy fields: never mistake a Source excerpt for Digg's own summary.
+std::string copy_text(const Json* value) {
+  if (!value) return {};
+  if (value->type == Json::Type::String) return value->s;
+  if (value->type == Json::Type::Object) {
+    for (std::string_view name : {"text", "plainText", "markdown", "body", "content"}) {
+      if (const Json* child = object(*value, name);
+          child && child->type == Json::Type::String && !child->s.empty())
+        return child->s;
+    }
+    // Some copy records contain a sequence of authored paragraphs. Keep
+    // their order, without interpreting arbitrary structured metadata as text.
+    for (std::string_view name : {"paragraphs", "blocks"}) {
+      if (const Json* parts = object(*value, name)) {
+        if (parts->type != Json::Type::Array) continue;
+        std::string joined;
+        for (const Json& part : parts->items) {
+          std::string paragraph;
+          if (part.type == Json::Type::String) paragraph = part.s;
+          else if (part.type == Json::Type::Object)
+            paragraph = text_field(part, {"text", "plainText"});
+          if (paragraph.empty()) continue;
+          if (!joined.empty()) joined += "\n\n";
+          joined += paragraph;
+        }
+        if (!joined.empty()) return joined;
+      }
+    }
+  }
+  return {};
+}
+
+// `copy` is the editorial copy on Digg's post pages. Other supported shapes
+// are the flat post fields and a bounded story/article record. This is a
+// data-driven mapping rather than recursive field-name guessing.
+std::string post_copy(const Json& post,
+                      std::initializer_list<std::string_view> names) {
+  for (const Json* obj : {&post, object(post, "copy"), object(post, "story"),
+                          object(post, "article"), object(post, "storyCopy")}) {
+    if (!obj || obj->type != Json::Type::Object) continue;
+    for (std::string_view name : names) {
+      std::string text = copy_text(object(*obj, name));
+      if (!text.empty()) return text;
+    }
+  }
+  return {};
+}
+
+std::string post_intro(const Json& post) {
+  return post_copy(post, {"dek", "subtitle", "subheading", "lead", "lede",
+                          "leadText", "teaser", "oneLiner", "oneLineSummary",
+                          "description"});
+}
+
+std::string post_summary(const Json& post) {
+  return post_copy(post, {"tldr", "tlDr", "tldrText", "tlDrText",
+                          "tldrSummary", "summary", "summaryText", "shortSummary"});
+}
+
+std::string post_body(const Json& post) {
+  std::string body = post_copy(post, {"body", "bodyText", "articleBody",
+                                      "articleText", "content", "contentText",
+                                      "storyText", "narrative"});
+  if (body.empty()) body = copy_text(object(post, "copy"));
+  return body;
+}
+
+void add_copy_section(Document& doc, NodeId parent, std::string_view heading,
+                      const std::string& text, std::string_view prior1 = {},
+                      std::string_view prior2 = {}) {
+  if (text.empty() || text == prior1 || text == prior2) return;
+  if (!heading.empty())
+    add_text(doc, doc.create(NodeKind::Header, parent), std::string(heading),
+             InlineKind::Strong);
+  append_plain(doc, parent, text);
+}
+
 const Json* list_field(const Json& obj,
                        std::initializer_list<std::string_view> names) {
   const Json* a = first(obj, names);
@@ -182,8 +260,10 @@ void add_story(Document& doc, NodeId thread, const Json& story) {
     add_sep(doc, cap);
     add_link(doc, cap, "Digg page", web, InlineRole::Metadata);
   }
-  const std::string summary = text_field(story, {"tldr", "tlDr", "summary", "description"});
-  if (!summary.empty()) append_plain(doc, art, summary);
+  const std::string intro = post_intro(story);
+  const std::string summary = post_summary(story);
+  if (!intro.empty()) append_plain(doc, art, intro);
+  if (!summary.empty() && summary != intro) append_plain(doc, art, summary);
 }
 
 // May be an unwrapped JSON-RPC result, a complete MCP reply, or a content
@@ -316,8 +396,25 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
   NodeId msg = add_message(doc, thread, head);
   if (!title.empty()) add_text(doc, doc.create(NodeKind::Header, msg), title,
                                InlineKind::Strong);
-  const std::string summary = text_field(*post, {"tldr", "tlDr", "summary", "description"});
-  if (!summary.empty()) append_plain(doc, msg, summary);
+  // Digg publishes its own headline, teaser, TLDR and sometimes a longer
+  // editorial passage. Sources are separate external publications, not the
+  // body of this Digg post. Keep both without showing duplicate copy.
+  std::string intro = post_intro(*post);
+  std::string summary = post_summary(*post);
+  std::string body = post_body(*post);
+  // The MCP detail envelope may keep editorial copy beside `post` rather
+  // than inside it. Do not traverse into its `sources` array.
+  if (post != &data) {
+    if (intro.empty()) intro = post_intro(data);
+    if (summary.empty()) summary = post_summary(data);
+    if (body.empty()) body = post_body(data);
+  }
+  add_copy_section(doc, msg, {}, intro);
+  add_copy_section(doc, msg, "TLDR", summary, intro);
+  add_copy_section(doc, msg, "Story", body, intro, summary);
+  if (intro.empty() && summary.empty() && body.empty())
+    add_note(doc, msg, "Digg did not include a summary for this post. "
+                       "Read the source links below for the original coverage.");
   const std::string url = post_web(*post);
   if (!url.empty()) {
     NodeId link = doc.create(NodeKind::Paragraph, msg);

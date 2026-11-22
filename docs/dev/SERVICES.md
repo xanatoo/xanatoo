@@ -520,8 +520,16 @@ Edit → Credentials…); they are read on the main thread when a load starts.
 - Digg's *topic* web URL can toggle to native view, but a story URL only
   exposes its short ID, not the UUID needed by `digg_get_post`.
   Story detail Documents include explicit web and source links.
+- A Digg post aggregates several outside articles or X posts: the MCP tool
+  supplies Digg's own headline/teaser/TLDR/editorial copy and source excerpts,
+  **not** the full text of external publishers' articles. `digg_post_document`
+  renders known flat and nested editorial copy fields before Sources, avoids
+  duplicate intro/TLDR/body text, and falls back to a clear note when no copy
+  is supplied. Following a Source URL uses Xanаtoo's normal web reading path.
+  Do not treat a source excerpt as Digg's editorial text or pick one source as
+  the canonical original article.
 - `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
-  pagination, full 20-item feeds, posts and sources without a network or SDL
+  pagination, full 20-item feeds, post copy variants, posts and sources without a network or SDL
   dependency. The MCP envelope must be read through pointers to its nested
   `result`: assigning that child JSON back onto its owning `Json` object
   corrupts memory (ASan heap-use-after-free regression, fixed in bundle 293).
