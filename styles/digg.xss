@@ -1,0 +1,35 @@
+;; SPDX-License-Identifier: GPL-3.0-or-later
+;;
+;; Digg — understated editorial reading list. The native document mapper
+;; provides compact headline/summary/attribution blocks; this is an optional
+;; presentation, not an API-specific rendering path.
+
+(stylesheet
+  (name "Digg")
+  (description "Compact editorial headlines, quiet citations and warm accents")
+
+  (define ink "#20252d")
+  (define muted "#58616b")
+  (define accent "#a93e21")
+  (define line "#d7d4ce")
+
+  (page (background "#fbfaf7") (color ink)
+        (selection (rgba 102 153 210 100)))
+  (fonts (body "Inter" "Source Sans 3" "Noto Sans" "DejaVu Sans" "sans-serif")
+         (heading "Inter" "Source Sans 3" "DejaVu Sans" "sans-serif")
+         (heading-scale 1.36)
+         (body-scale 0.95))
+
+  (role paragraph (space-after 0.48em))
+  (role heading (color ink) (space-before 0.8em) (space-after 0.4em))
+  (role thread (color ink) (background "#f4eee9") (border "#c16a47")
+               (space-before 0.5em) (space-after 0.95em))
+  (role section (indent 0) (space-before 0.35em) (space-after 0.55em))
+  (role article (space-before 0.52em) (space-after 0.85em))
+  (role caption (font small) (color muted) (space-after 0.35em))
+  (role metadata (font small) (color muted))
+  (role link (color accent) (underline #t))
+  (role visited-link (color "#825b69"))
+  (role rule (border line))
+  (role note (border "#c16a47"))
+  (role block-quote (border line) (color muted)))

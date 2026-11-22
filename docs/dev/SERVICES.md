@@ -528,15 +528,22 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   is supplied. Following a Source URL uses Xanаtoo's normal web reading path.
   Do not treat a source excerpt as Digg's editorial text or pick one source as
   the canonical original article.
-- Native Digg pages use two separate navigation rows (topics and views)
-  with the documented Home Trending / Topic Top defaults. Feed summaries
-  remain compact. Post pages render one headline and a metadata row, Digg
-  editorial copy, then individually grouped source entries (title/link,
-  attribution, date, excerpt); never show the excerpt as the post's body.
-  The source-page continuation is linked to Digg when the MCP returns
-  `nextSourceOffset` (the request argument for fetching further source
-  pages has not been validated here). Search now uses `nextCursor` with the
-  original query; the read-only MCP search covers the most recent 90 days.
+- Native page hierarchy is deliberately compact: the page has one title;
+  topic and sort links share a navigation-Chrome region (also available in
+  the Page panel); each feed entry is a bold, body-sized linked title, a
+  short editorial preview (clipped on a UTF-8/word boundary) and a quiet
+  metadata line. Long excerpts do not push other headlines off-screen.
+  Post pages show one headline, a dateline, Digg's introduction, an inline
+  **In brief** summary where different, and any additional editorial body.
+  The Sources section uses body-sized linked citations with attribution and
+  excerpts grouped per source, not a second stack of large headings.
+  Editorial copy and source excerpts are always distinct, and the reader's
+  chosen style sheet still controls appearance. `styles/digg.xss` offers an
+  optional compact Digg look, assignable to `service:digg` through the
+  Style Sheets panel. Its source-page continuation is still only a normal
+  external Digg link if `nextSourceOffset` is returned; this is not a
+  native pagination implementation. Search still uses `nextCursor` with
+  the original query and covers the most recent 90 days.
 - `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
   feed and search cursor pagination, 20-item feeds, post copy variants and
   semantic source grouping without network or SDL dependencies. The MCP envelope must be read through pointers to its nested

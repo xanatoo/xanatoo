@@ -107,14 +107,65 @@ std::string post_body(const Json& post) {
   return body;
 }
 
-void add_copy_section(Document& doc, NodeId parent, std::string_view heading,
-                      const std::string& text, std::string_view prior1 = {},
-                      std::string_view prior2 = {}) {
-  if (text.empty() || text == prior1 || text == prior2) return;
-  if (!heading.empty())
-    add_text(doc, doc.create(NodeKind::Header, parent), std::string(heading),
-             InlineKind::Strong);
-  append_plain(doc, parent, text);
+// A Digg post has a headline, a short editorial take and citations. Extra
+// copy is presented as body text, never as another headline-sized section.
+// The one short label identifies a summary without dominating the page.
+void add_editorial_copy(Document& doc, NodeId parent,
+                        const std::string& intro, const std::string& summary,
+                        const std::string& body) {
+  if (!intro.empty()) append_plain(doc, parent, intro);
+  if (!summary.empty() && summary != intro) {
+    NodeId line = doc.create(NodeKind::Paragraph, parent);
+    add_text(doc, line, "In brief: ", InlineKind::Strong);
+    add_text(doc, line, summary);
+  }
+  if (!body.empty() && body != intro && body != summary)
+    append_plain(doc, parent, body);
+  if (intro.empty() && summary.empty() && body.empty())
+    add_note(doc, parent, "Digg has no editorial summary for this story. "
+                          "The original reports are linked below.");
+}
+
+// Feed snippets are previews, not full articles. Normalize whitespace and
+// clip on a word/UTF-8 boundary so long editorial copy does not bury the
+// next headline; the post view retains the complete text.
+std::string feed_preview(std::string_view text) {
+  constexpr size_t kMaxBytes = 230;
+  std::string out;
+  out.reserve(std::min(text.size(), kMaxBytes + 32));
+  bool space = false;
+  for (unsigned char c : text) {
+    if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+      space = !out.empty();
+      continue;
+    }
+    if (space) { out += ' '; space = false; }
+    out += static_cast<char>(c);
+    if (out.size() > kMaxBytes + 32) break;
+  }
+  if (out.size() <= kMaxBytes) return out;
+  size_t stop = kMaxBytes;
+  while (stop && (static_cast<unsigned char>(out[stop]) & 0xc0) == 0x80)
+    --stop;
+  const size_t last_space = out.rfind(' ', stop);
+  if (last_space != std::string::npos && last_space >= kMaxBytes / 2)
+    stop = last_space;
+  while (stop && out[stop - 1] == ' ') --stop;
+  out.resize(stop);
+  out += "…";
+  return out;
+}
+
+// Linked headlines should stay semantically clickable but use body-sized
+// bold type rather than the large section-heading role.
+void add_story_link(Document& doc, NodeId para, const std::string& text,
+                    const std::string& href) {
+  if (href.empty()) {
+    add_text(doc, para, text, InlineKind::Strong);
+  } else {
+    add_link(doc, para, text, href);
+    add_mark(doc.get(para).spans.back(), InlineKind::Strong);
+  }
 }
 
 const Json* list_field(const Json& obj,
@@ -200,10 +251,11 @@ std::string topic_name(std::string_view slug) {
 std::string digg_ref(std::string path) { return "digg:" + path; }
 
 std::vector<NavItem> nav_for(const ForumRef& ref) {
+  if (starts_with(ref.path, "post/"))
+    return {{"All stories", "digg:", false}};
   const std::string topic = ref.path.substr(0, ref.path.find('/'));
   std::vector<NavItem> nav;
   for (const LabelRef& item : kTopics) {
-    // The Home feed is `digg:`, not `digg:all`.
     const std::string target = item.slug == "all" ? "digg:" :
                                digg_ref(std::string(item.slug));
     nav.push_back({std::string(item.name), target,
@@ -213,21 +265,27 @@ std::vector<NavItem> nav_for(const ForumRef& ref) {
   return nav;
 }
 
-// A separate navigation row keeps eight topics and five view options from
-// becoming one long, hard-to-scan line. The Topic page defaults to Top,
-// whereas Home defaults to Trending (as specified by the MCP feed tool).
-void add_view_nav(Document& doc, NodeId thread, const ForumRef& ref) {
+// Put both navigation rows in the page's Chrome region. Keeping sorting
+// controls outside the story Thread prevents them from visually reading as
+// part of the first story (and makes the Page panel treat them as navigation).
+void add_view_nav(Document& doc, const ForumRef& ref) {
   if (ref.path == "search" || starts_with(ref.path, "post/")) return;
   const size_t slash = ref.path.find('/');
   const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
   const std::string view = slash == std::string::npos ?
       (topic == "all" ? "trending" : "top") : ref.path.substr(slash + 1);
-  NodeId nav = doc.create(NodeKind::Chrome, thread);
-  doc.get(nav).summary = "navigation";
+  NodeId nav = INVALID_NODE;
+  for (NodeId id : doc.get(doc.root).children) {
+    if (doc.get(id).kind == NodeKind::Chrome &&
+        doc.get(id).summary == "navigation") { nav = id; break; }
+  }
+  if (nav == INVALID_NODE) return;
   NodeId line = doc.create(NodeKind::Paragraph, nav);
-  add_text(doc, line, "View: ", InlineKind::Strong);
+  add_text(doc, line, "Sort: ", InlineKind::Strong);
+  bool first_item = true;
   for (const LabelRef& item : kViews) {
-    if (item.slug != kViews[0].slug) add_meta(doc, line, " · ");
+    if (!first_item) add_meta(doc, line, " · ");
+    first_item = false;
     if (item.slug == view) add_text(doc, line, std::string(item.name), InlineKind::Strong);
     else add_link(doc, line, std::string(item.name),
                   digg_ref(topic + "/" + std::string(item.slug)));
@@ -252,26 +310,19 @@ void add_date(Document& doc, NodeId caption, const Json& obj) {
 }
 
 void add_stats(Document& doc, NodeId caption, const Json& post,
-               bool detail = false) {
+               bool detail = false, std::string_view current_topic = {}) {
   if (const Json* score = first(post, {"diggScore", "score"}))
-    add_meta(doc, caption, "Digg Score " + std::to_string(json_number(score)));
-  if (const Json* sources = first(post, {"sourceCount", "sourcesCount"})) {
-    add_sep(doc, caption);
-    add_meta(doc, caption, count(json_number(sources), "source", "sources"));
-  }
-  if (const Json* authors = first(post,
-          {"distinctSourceAuthors", "distinctSourceAuthorCount", "sourceAuthorCount"})) {
-    const bool numeric = authors->type == Json::Type::Number ||
-                         authors->type == Json::Type::String;
-    if (numeric || authors->type == Json::Type::Array) {
-      const long long n = authors->type == Json::Type::Array ?
-          static_cast<long long>(authors->items.size()) : json_number(authors);
+    add_meta(doc, caption, "Score " + std::to_string(json_number(score)));
+  // The post detail has a Sources heading with the count already. Do not
+  // repeat the same count in both the dateline and that heading.
+  if (!detail) {
+    if (const Json* sources = first(post, {"sourceCount", "sourcesCount"})) {
       add_sep(doc, caption);
-      add_meta(doc, caption, count(n, "source author", "source authors"));
+      add_meta(doc, caption, count(json_number(sources), "source", "sources"));
     }
   }
   const std::string topic = post_topic(post);
-  if (!topic.empty()) {
+  if (!topic.empty() && topic != current_topic) {
     add_sep(doc, caption);
     add_link(doc, caption, topic_name(topic), digg_ref(topic), InlineRole::Metadata);
   }
@@ -284,40 +335,50 @@ void add_stats(Document& doc, NodeId caption, const Json& post,
   }
 }
 
-// The feed is a scan-friendly list of summaries, not a repetition of the
-// complete post. Full Digg copy and attributed sources belong on post pages.
-void add_story(Document& doc, NodeId thread, const Json& story) {
+// The feed is a compact reading list. Titles remain bold links, not large
+// section headings; one brief excerpt and one quiet dateline per story.
+void add_story(Document& doc, NodeId thread, const Json& story,
+               std::string_view current_topic) {
   const std::string title = text_field(story, {"title", "headline", "label"});
   if (title.empty()) return;
   NodeId art = doc.create(NodeKind::Article, thread);
   doc.get(art).label = text_field(story, {"id", "shortId", "clusterUrlId"});
   const std::string ref = native_post(story);
   const std::string web = post_web(story);
-  NodeId heading = doc.create(NodeKind::Header, art);
-  if (!ref.empty()) add_link(doc, heading, title, ref);
-  else if (!web.empty()) add_link(doc, heading, title, web);
-  else add_text(doc, heading, title, InlineKind::Strong);
-  NodeId cap = doc.create(NodeKind::Caption, art);
-  add_stats(doc, cap, story);
-  if (!ref.empty() && !web.empty()) {
-    add_sep(doc, cap);
-    add_link(doc, cap, "Digg page", web, InlineRole::Metadata);
-  }
+  NodeId heading = doc.create(NodeKind::Paragraph, art);
+  add_story_link(doc, heading, title, !ref.empty() ? ref : web);
   const std::string summary = post_summary(story);
   const std::string intro = post_intro(story);
-  if (!summary.empty()) append_plain(doc, art, summary);
-  else if (!intro.empty()) append_plain(doc, art, intro);
+  if (!summary.empty() || !intro.empty()) {
+    const std::string preview = feed_preview(!summary.empty() ? summary : intro);
+    // Editorial snippets which simply repeat the headline add no information.
+    if (preview != title) append_plain(doc, art, preview);
+  }
+  // Do not emit an empty Caption: even without text its layout reserves
+  // vertical space, producing odd gaps in sparse API feed entries.
+  const std::string topic = post_topic(story);
+  const bool has_meta = first(story, {"diggScore", "score", "sourceCount",
+      "sourcesCount", "publishedAt", "createdAt", "firstSourceAt",
+      "firstSourceTime", "earliestSourceAt", "earliestSourceTime"}) ||
+      (!topic.empty() && topic != current_topic) || (!ref.empty() && !web.empty());
+  if (has_meta) {
+    NodeId cap = doc.create(NodeKind::Caption, art);
+    add_stats(doc, cap, story, false, current_topic);
+    if (!ref.empty() && !web.empty()) {
+      add_sep(doc, cap);
+      add_link(doc, cap, "Digg", web, InlineRole::Metadata);
+    }
+  }
 }
 
-// Keep each attributed source's title, attribution, date and excerpt inside
-// one Article. Previously excerpts were appended directly to the post, making
-// them look like Digg's own text and separating them from their publishers.
+// Source entries are citations, not a second news feed with giant headlines.
+// Keep the attribution under the link and the publisher's excerpt separate
+// from Digg's own editorial summary above.
 void add_source(Document& doc, NodeId section, const Json& source, size_t index) {
   const std::string href = text_field(source, {"url", "sourceUrl", "xUrl"});
   const std::string title = text_field(source, {"title", "headline"});
   std::string author = text_field(source,
       {"authorName", "author", "displayName", "username", "handle"});
-  // Some source records attribute an X post to a nested account record.
   if (author.empty()) {
     for (std::string_view key : {"author", "account"}) {
       const Json* person = object(source, key);
@@ -334,26 +395,30 @@ void add_source(Document& doc, NodeId section, const Json& source, size_t index)
 
   NodeId art = doc.create(NodeKind::Article, section);
   doc.get(art).label = "source-" + std::to_string(index + 1);
-  NodeId heading = doc.create(NodeKind::Header, art);
   const std::string name = !title.empty() ? title : !author.empty() ? author :
                            !outlet.empty() ? outlet : web_url(href) ? href : "Source";
-  if (web_url(href)) add_link(doc, heading, name, href);
-  else add_text(doc, heading, name, InlineKind::Strong);
+  NodeId line = doc.create(NodeKind::Paragraph, art);
+  add_story_link(doc, line, name, web_url(href) ? href : "");
 
-  NodeId cap = doc.create(NodeKind::Caption, art);
   const std::string type = text_field(source, {"type", "sourceType"});
-  if (type == "x" || type == "tweet") add_meta(doc, cap, "X post");
-  else if (type == "web" || type == "article") add_meta(doc, cap, "Article");
-  if (!author.empty() && author != name) {
-    add_sep(doc, cap);
-    add_meta(doc, cap, "by " + author);
+  const bool x_post = type == "x" || type == "tweet";
+  const bool has_outlet = !outlet.empty() && outlet != name && outlet != author;
+  const bool has_author = !author.empty() && author != name;
+  if (x_post || has_outlet || has_author ||
+      first(source, {"publishedAt", "createdAt", "firstSourceAt",
+                     "firstSourceTime", "earliestSourceAt", "earliestSourceTime"})) {
+    NodeId cap = doc.create(NodeKind::Caption, art);
+    if (x_post) add_meta(doc, cap, "X");
+    if (has_outlet) {
+      add_sep(doc, cap);
+      add_meta(doc, cap, outlet);
+    }
+    if (has_author) {
+      add_sep(doc, cap);
+      add_meta(doc, cap, "by " + author);
+    }
+    add_date(doc, cap, source);
   }
-  if (!outlet.empty() && outlet != name && outlet != author) {
-    add_sep(doc, cap);
-    add_meta(doc, cap, outlet);
-  }
-  add_date(doc, cap, source);
-  // The source text is an excerpt, never the full third-party article.
   if (!excerpt.empty() && excerpt != title && excerpt != name)
     append_plain(doc, art, excerpt);
 }
@@ -472,9 +537,10 @@ Document digg_list_document(const Json& reply, const ForumRef& ref) {
   Document doc;
   NodeId thread = start_document(doc, title, "Digg", nav_for(ref), "");
   doc.get(thread).label.clear();
-  if (!search) add_view_nav(doc, thread, ref);
+  if (!search) add_view_nav(doc, ref);
   if (posts) {
-    for (const Json& post : posts->items) add_story(doc, thread, post);
+    for (const Json& post : posts->items)
+      add_story(doc, thread, post, search ? std::string_view{} : topic);
   }
   if (!posts || posts->items.empty())
     add_note(doc, thread, search ? "No recent Digg posts matched this search." :
@@ -515,11 +581,17 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
   }
   NodeId art = doc.create(NodeKind::Article, thread);
   doc.get(art).label = "digg-post";
-  NodeId cap = doc.create(NodeKind::Caption, art);
-  add_stats(doc, cap, *post, true);
-  if (!url.empty()) {
-    add_sep(doc, cap);
-    add_link(doc, cap, "View on Digg", url, InlineRole::Metadata);
+  const bool has_dateline = !url.empty() ||
+      !post_topic(*post).empty() || first(*post, {"diggScore", "score",
+      "publishedAt", "createdAt", "firstSourceAt", "firstSourceTime",
+      "earliestSourceAt", "earliestSourceTime", "updatedAt", "lastUpdatedAt"});
+  if (has_dateline) {
+    NodeId cap = doc.create(NodeKind::Caption, art);
+    add_stats(doc, cap, *post, true);
+    if (!url.empty()) {
+      add_sep(doc, cap);
+      add_link(doc, cap, "View on Digg", url, InlineRole::Metadata);
+    }
   }
 
   // Digg publishes editorial copy and attributable outside sources, not
@@ -532,12 +604,7 @@ Document digg_post_document(const Json& reply, const ForumRef& ref) {
     if (summary.empty()) summary = post_summary(data);
     if (body.empty()) body = post_body(data);
   }
-  add_copy_section(doc, art, {}, intro);
-  add_copy_section(doc, art, "TLDR", summary, intro);
-  add_copy_section(doc, art, "Digg overview", body, intro, summary);
-  if (intro.empty() && summary.empty() && body.empty())
-    add_note(doc, art, "Digg did not include a summary for this post. "
-                       "Read the attributed sources below for coverage.");
+  add_editorial_copy(doc, art, intro, summary, body);
 
   const Json* sources = list_field(data, {"sources"});
   if (!sources) sources = list_field(*post, {"sources"});

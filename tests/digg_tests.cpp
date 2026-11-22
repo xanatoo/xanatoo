@@ -120,6 +120,19 @@ void polished_layout() {
   CHECK(!link(all_top, "digg:"));  // All is the selected topic
   CHECK(!link(all_top, "digg:all/top"));
 
+  // Sorting belongs to navigation Chrome (including the Page panel), not
+  // between the feed headline and its first article.
+  int sort_rows_in_chrome = 0, sort_rows_in_thread = 0;
+  for (const Node& n : topic.nodes) {
+    for (const InlineSpan& sp : n.spans) {
+      if (sp.text != "Sort: ") continue;
+      if (topic.get(n.parent).kind == NodeKind::Chrome) ++sort_rows_in_chrome;
+      if (topic.get(n.parent).kind == NodeKind::Thread) ++sort_rows_in_thread;
+    }
+  }
+  CHECK(sort_rows_in_chrome == 1);
+  CHECK(sort_rows_in_thread == 0);
+
   const ForumRef post = address("digg:post/01234567-89ab-cdef-0123-456789abcdef");
   Document doc = digg_post_document(parse(R"JSON({
     "post":{"title":"Grouped coverage", "id":"01234567-89ab-cdef-0123-456789abcdef",
@@ -136,8 +149,8 @@ void polished_layout() {
        {"title":"Unsafe link", "url":"javascript:alert(1)", "excerpt":"Still plain text"}
     ], "nextSourceOffset":3, "totalSources":5
   })JSON"), post);
-  CHECK(says(doc, "Digg Score 42"));
-  CHECK(says(doc, "2 source authors"));
+  CHECK(says(doc, "Score 42"));
+  CHECK(!says(doc, "source authors"));
   CHECK(says(doc, "Updated 2026-11-22"));
   CHECK(link(doc, "digg:science"));
   CHECK(says(doc, "Sources (5)"));
@@ -146,9 +159,20 @@ void polished_layout() {
   CHECK(says(doc, "Researcher"));
   CHECK(!link(doc, "javascript:alert(1)"));
   CHECK(says(doc, "by Reporter One"));
-  CHECK(says(doc, "X post"));
+  CHECK(says(doc, "X"));
   CHECK(says(doc, "See all sources on Digg"));
   CHECK(link(doc, "https://digg.com/science/a8bx21dc"));
+  // Sources without publisher/date/author must not produce blank rows.
+  Document sparse_source = digg_post_document(parse(R"JSON({
+    "title":"Short post", "summary":"One line", "sources":[
+      {"title":"Only a link", "url":"https://simple.example/article"}]
+  })JSON"), post);
+  int empty_source_captions = 0;
+  for (const Node& n : sparse_source.nodes)
+    if (n.kind == NodeKind::Caption && n.spans.empty())
+      ++empty_source_captions;
+  CHECK(empty_source_captions == 0);
+
   // The page title is shown by the Thread, not repeated in an Article.
   int title_lines = 0, source_articles = 0, excerpts_in_sources = 0;
   for (const Node& n : doc.nodes) {
@@ -168,6 +192,22 @@ void polished_layout() {
   CHECK(title_lines == 1);
   CHECK(source_articles == 3);
   CHECK(excerpts_in_sources == 2);
+
+  // Source headlines are readable body-size links, not twenty competing
+  // major headings. Only the story title and Sources should be large.
+  int major_headers = 0, source_links_on_paragraphs = 0;
+  for (const Node& n : doc.nodes) {
+    if (n.kind == NodeKind::Header) ++major_headers;
+    if (n.kind == NodeKind::Paragraph &&
+        doc.get(n.parent).kind == NodeKind::Article &&
+        doc.get(n.parent).label.find("source-") == 0) {
+      for (const InlineSpan& sp : n.spans)
+        if (sp.kind == InlineKind::Link && (sp.marks & kMarkStrong))
+          ++source_links_on_paragraphs;
+    }
+  }
+  CHECK(major_headers == 2);  // post headline + Sources
+  CHECK(source_links_on_paragraphs == 2);
 
   // A publisher address in `post.url` must not be mislabelled a Digg page.
   Document misleading = digg_post_document(parse(R"({"title":"External link",
@@ -275,7 +315,7 @@ void editorial_copy() {
   CHECK(says(nested, "External source excerpt"));
   CHECK(link(nested, "https://example.com/article"));
   CHECK(says(nested, "Sources"));
-  CHECK(!says(nested, "Digg did not include a summary"));
+  CHECK(!says(nested, "Digg has no editorial summary"));
 
   Document separate = digg_post_document(parse(R"JSON({
     "post":{"title":"A story without inline copy"},
@@ -297,7 +337,7 @@ void editorial_copy() {
     "post":{"title":"No story copy"},
     "sources":[{"title":"Source summary","description":"Source-only text"}]
   })JSON"), post);
-  CHECK(says(empty, "Digg did not include a summary"));
+  CHECK(says(empty, "Digg has no editorial summary"));
   CHECK(says(empty, "Source-only text"));
   // A Source description is never promoted to the post's own summary.
 
@@ -329,8 +369,20 @@ void lists_and_posts() {
   CHECK(link(doc, "https://digg.com/science/abcd1234"));
   CHECK(link(doc, "digg:science?cursor=abc%2F123%3D"));
   CHECK(says(doc, "Successful test flight"));
+  int feed_title_headers = 0, strong_link_titles = 0;
+  for (const Node& node : doc.nodes) {
+    if (node.kind == NodeKind::Header) ++feed_title_headers;
+    if (node.kind != NodeKind::Paragraph ||
+        doc.get(node.parent).kind != NodeKind::Article) continue;
+    for (const InlineSpan& span : node.spans)
+      if (span.text == "Reusable launch vehicle" &&
+          span.kind == InlineKind::Link && (span.marks & kMarkStrong))
+        ++strong_link_titles;
+  }
+  CHECK(feed_title_headers == 1);  // only the page's own title
+  CHECK(strong_link_titles == 1);
   CHECK(says(doc, "3 sources"));
-  CHECK(says(doc, "Digg Score 45"));
+  CHECK(says(doc, "Score 45"));
   CHECK(link(doc, "https://digg.com/tech/efgh5678"));
 
   Document search = digg_list_document(payload, address("digg:search?query=flight"));
@@ -341,6 +393,35 @@ void lists_and_posts() {
      "clusterUrlId":"abcdef12","topic":"ai"}]})"), address("digg:ai"));
   CHECK(says(clusters, "Short story"));
   CHECK(link(clusters, "https://digg.com/ai/abcdef12"));
+
+  // Sparse entries need no empty metadata spacer.
+  Document sparse = digg_list_document(parse(R"({"posts":[{"title":"Minimal"}]})"),
+                                        address("digg:"));
+  for (const Node& n : sparse.nodes)
+    CHECK(n.kind != NodeKind::Caption || !n.spans.empty());
+
+  // Overlong snippets in feeds are previews and should not overwhelm the
+  // page or split a multibyte character in the middle.
+  const std::string long_copy = std::string(229, 'a') + "é" + std::string(180, 'b');
+  Json long_story = parse(R"({"posts":[{"title":"Clipped story"}]})");
+  Json summary;
+  summary.type = Json::Type::String;
+  summary.s = long_copy;
+  long_story.fields[0].second.items[0].fields.emplace_back("summary", std::move(summary));
+  const Document clipped = digg_list_document(long_story, address("digg:"));
+  bool got_preview = false;
+  for (const Node& n : clipped.nodes)
+    for (const InlineSpan& sp : n.spans)
+      if (sp.text.find("aaa") != std::string::npos) {
+        CHECK(sp.text.size() <= 240);
+        CHECK(sp.text.ends_with("…"));
+        // U+00E9 begins exactly at the clipping boundary: it must not be
+        // emitted as a dangling first UTF-8 byte.
+        CHECK(sp.text.find("é") == std::string::npos);
+        CHECK(sp.text.find("\xC3") == std::string::npos);
+        got_preview = true;
+      }
+  CHECK(got_preview);
 
   Document detail = digg_post_document(parse(R"JSON({"post":{
     "id":"01234567-89ab-cdef-0123-456789abcdef",

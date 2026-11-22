@@ -127,14 +127,17 @@ Technology listings (the latter is **not** rank-ordered). There is no
 published public write/authentication interface for making Diggs or
 posting comments. Digg web **topic** URLs are convertible to native
 refs; post web URLs cannot be converted to an MCP UUID, so they remain
-ordinary web pages. The native layout uses one story headline, an attributed
-Digg Score / source / topic / date line, the Digg introduction, TLDR and any
-longer Digg overview, then a Sources section. Each linked source is a distinct
-Article with author, outlet, publication time and excerpt grouped together;
-source excerpts are never promoted into Digg copy. When the MCP response
-indicates more source pages, the post offers a link to Digg for the rest.
-Topic navigation and view selection are separate rows. Search has its own
-cursor pagination and no fabricated numbered pages. See
+ordinary web pages. The native feed is a compact reading list: one bold, body-sized link and a
+short preview for each story, followed by subdued score/source/date metadata.
+Topic and sorting controls live together in the navigation region, separate
+from the feed. The post view has one prominent headline, an inline Digg
+summary and any further editorial copy, followed by a bibliography-like
+Sources list. Source titles are smaller clickable citations, with their
+attributions and excerpts immediately beneath; excerpts are never promoted
+into Digg editorial copy. An optional `styles/digg.xss` theme can be pinned to
+`service:digg` in the Style Sheets panel. When more source pages exist, the
+post retains a link to Digg for them; native pagination is not a design goal
+at present. See
 https://digg.com/llms.txt and https://digg.com/mcp/connect for the
 published interfaces.
 

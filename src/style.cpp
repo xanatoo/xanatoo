@@ -977,7 +977,7 @@ std::vector<std::string> style_pin_keys(std::string_view url) {
     service = service == "gemini" ? "gemini" : "web";
   } else if (service != "lemmy" && service != "hn" &&
              service != "reddit" && service != "wikipedia" &&
-             service != "nostr") {
+             service != "nostr" && service != "digg") {
     return keys;
   }
   if (service == "web" || service == "gemini" || service == "lemmy") {

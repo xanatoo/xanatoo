@@ -5396,3 +5396,24 @@ these shapes; there is still no direct network access or Nix available in the
 Web container, so full live API and Nix app tests remain for local follow-up.
 Favicon handling is deliberately unchanged. Cumulative handover 295
 supersedes 294; reserve 296 next.
+
+## Digg document layout refinement (2026-11-22)
+
+User found previous page layout too cluttered; do not spend time on new
+pagination. The earlier UI built a separate large `Header` for *every* story
+and source and put sorting controls under the Thread title. Reworked the pure
+JSON-to-Document mapper: a single Thread headline, body-sized bold links for
+feed stories and source citations, source excerpts kept with the correct
+attribution, concise preview text with UTF-8-safe clipping only on feed pages,
+a quiet score/date line without repeated source-author statistics, and
+editorial intro/brief/body without extra oversized heading bands. Topic and
+sorting controls share the existing Chrome region. Supplied an optional
+`styles/digg.xss` editorial look and made `service:digg` a valid style-pin
+key (explicit, not imposed over the reader's current theme). Added layout
+structure, empty-metadata, and UTF-8 clipping tests; retained previous API
+and existing pagination untouched. GCC optimized regression tests and
+AddressSanitizer + UndefinedBehaviorSanitizer tests pass for the final mapper.
+The `digg.xss` source parses as one stylesheet form. Full stylesheet load,
+SDL visual review and the Nix application build still need Nix/FreeType/SDL
+in the development environment. Web handover bundle 296 supersedes 295;
+reserve 297 next.

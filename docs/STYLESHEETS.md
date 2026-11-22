@@ -40,8 +40,8 @@ observed domain and/or service. Domain pins take priority over service pins:
 - `service:lemmy` — all Lemmy refs without a more specific domain pin.
 - `domain:example.org` — pages from the exact HTTP(S) hostname.
 - `service:web` — other HTTP(S) pages without a hostname pin.
-- Other supported services include `hn`, `reddit`, `nostr`, `wikipedia` and
-  `gemini`. The latter can also be pinned by domain.
+- Other supported services include `hn`, `reddit`, `digg`, `nostr`,
+  `wikipedia` and `gemini`. The latter can also be pinned by domain.
 
 Every pin and its theme is listed under **All saved assignments**, where you
 can remove it. You can also type a `domain:host` or `service:name` key into
@@ -53,7 +53,8 @@ without a matching pin use the regular global `view.conf` theme. Changing
 documents or tabs changes the *effective* theme, not the saved default.
 Deleting a personal sheet removes any pins that point to it.
 
-The built-in themes include airy **Editorial**, warm **Linen**, low-glare
+The built-in themes include Digg (a compact editorial list, pin with
+`service:digg`), airy **Editorial**, warm **Linen**, low-glare
 **Blue Hour** and discussion-focused **Forum** alongside the earlier default,
 Night, Sepia Book, Reddit, Hacker News and accessibility styles. Discussion
 cards now have more breathing room between replies; **Compact** is available

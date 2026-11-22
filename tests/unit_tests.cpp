@@ -2710,6 +2710,8 @@ void test_style_assignments() {
             (std::vector<std::string>{"domain:lemmy.world", "service:lemmy"}));
   EXPECT_EQ(style_pin_keys("reddit:r/popular"),
             (std::vector<std::string>{"service:reddit"}));
+  EXPECT_EQ(style_pin_keys("digg:science/top"),
+            (std::vector<std::string>{"service:digg"}));
   EXPECT(style_pin_keys("/tmp/local.md").empty());
   StylePins pins{{"service:web", "editorial"},
                  {"domain:example.org", "linen"},
