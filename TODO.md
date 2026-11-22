@@ -5429,3 +5429,22 @@ The `digg.xss` source parses as one stylesheet form. Full stylesheet load,
 SDL visual review and the Nix application build still need Nix/FreeType/SDL
 in the development environment. Web handover bundle 296 supersedes 295;
 reserve 297 next.
+
+## Digg missing media and content audit (2026-11-22)
+
+User pointed out that the native reader silently dropped thumbnails and other
+post metadata. Confirmed by inspecting `forum_digg.cpp`: no Digg `Image`
+nodes were created. Digg's HTML web pages contain featured/related imagery,
+fuller Digg-authored articles, Useful links, tags, engagement signals and
+native comments. The **published MCP documentation does not promise all of
+these fields**, so website/API parity cannot be claimed without a real MCP
+capture. Implemented shallow, explicit mapping for thumbnails and featured
+images (normal Xanаtoo image system; alt, credit, originals; video URL not
+misused as image), structured Digg editorial sections, useful links, related
+stories, entity tags, source-author counts, rank and *clearly labelled*
+aggregated source engagement metrics. No new pagination or favicon changes.
+Synthetic fixtures cover feed/post media, invalid/over-nested URLs, structured
+copy and sparse payloads. The app still cannot retrieve comments when MCP
+does not supply a discussion array; contributor avatars and web-only article
+content remain outside the native reader. Live API verification and visual
+SDL/Nix review still required on a networked machine.

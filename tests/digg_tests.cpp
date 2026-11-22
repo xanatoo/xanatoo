@@ -150,7 +150,7 @@ void polished_layout() {
     ], "nextSourceOffset":3, "totalSources":5
   })JSON"), post);
   CHECK(says(doc, "Score 42"));
-  CHECK(!says(doc, "source authors"));
+  CHECK(says(doc, "2 source authors"));
   CHECK(says(doc, "Updated 2026-11-22"));
   CHECK(link(doc, "digg:science"));
   CHECK(says(doc, "Sources (5)"));
@@ -214,6 +214,83 @@ void polished_layout() {
     "url":"https://publisher.example/important", "summary":"Summary"})"), post);
   CHECK(!link(misleading, "https://publisher.example/important"));
   CHECK(!says(misleading, "View on Digg"));
+}
+
+// Images and editorial metadata must survive the JSON->Document boundary.
+// These are synthetic field shapes, not a claim that all are guaranteed by MCP.
+void media_and_metadata() {
+  Document feed = digg_list_document(parse(R"JSON({"posts":[
+    {"title":"Story with a picture","thumbnailUrl":"https://cdn.digg.com/cover.jpg",
+     "diggScore":8, "sourceCount":4, "distinctSourceAuthorCount":3},
+    {"title":"Nested video poster", "media":[{"type":"video",
+     "url":"https://video.example/movie.mp4",
+     "thumbnail":{"url":"https://cdn.digg.com/poster.jpg", "alt":"Video still"}}]},
+    {"title":"Invalid image","imageUrl":"javascript:alert(1)"},
+    {"title":"No image"},
+    {"title":"Malformed nested image", "thumbnail": {"thumbnail": {
+     "thumbnail":{"url":"https://cdn.digg.com/deep.jpg"}}}}
+  ]})JSON"), address("digg:"));
+  int pics = 0;
+  for (const Node& n : feed.nodes) {
+    if (n.kind != NodeKind::Image) continue;
+    ++pics;
+    CHECK(n.float_side == "right");
+    CHECK(n.src == "https://cdn.digg.com/cover.jpg" ||
+          n.src == "https://cdn.digg.com/poster.jpg");
+    if (n.src.ends_with("poster.jpg")) CHECK(n.alt == "Video still");
+  }
+  CHECK(pics == 2);
+  CHECK(says(feed, "3 source authors"));
+
+  Document post = digg_post_document(parse(R"JSON({"post":{
+    "title":"Full Digg story", "url":"https://digg.com/ai/aabbccdd",
+    "heroImage":{"url":"https://cdn.digg.com/hero.jpg", "originalUrl":"https://cdn.digg.com/hero-full.jpg",
+                 "altText":"Hero picture","credit":"Photographer Example"},
+    "article":{"sections":[
+      {"heading":"Key findings", "paragraphs":["First reported fact", "Second reported fact"]},
+      {"type":"image","url":"https://cdn.digg.com/chart.jpg", "alt":"Chart"}
+    ]}, "entities":[{"name":"Acme","url":"https://digg.com/entities/abcd"}, "Other"],
+    "usefulLinks":[{"url":"https://example.org/report","title":"Primary report"}],
+    "relatedPosts":[{"id":"01234567-89ab-cdef-0123-456789abcdef", "title":"Followup"}],
+    "combinedViews":8300,"combinedLikes":42,"distinctSourceAuthorCount":7,
+    "summary":"Editorial summary"
+  },"sources":[{"url":"https://publisher.example/a", "title":"Original coverage"}]})JSON"),
+    address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  CHECK(says(post, "Photographer Example"));
+  CHECK(says(post, "Key findings"));
+  CHECK(says(post, "First reported fact"));
+  CHECK(says(post, "Second reported fact"));
+  CHECK(says(post, "8300 source views"));
+  CHECK(says(post, "42 source likes"));
+  CHECK(says(post, "7 source authors"));
+  CHECK(says(post, "Useful links"));
+  CHECK(says(post, "Related stories"));
+  CHECK(says(post, "Tags:"));
+  CHECK(link(post, "https://example.org/report"));
+  CHECK(link(post, "digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  CHECK(link(post, "https://digg.com/entities/abcd"));
+  CHECK(!says(post, "no editorial summary"));
+  int images = 0, hero_links = 0;
+  for (const Node& n : post.nodes) {
+    if (n.kind != NodeKind::Image) continue;
+    ++images;
+    CHECK(n.float_side.empty());
+    if (n.src == "https://cdn.digg.com/hero.jpg") {
+      CHECK(n.alt == "Hero picture");
+      for (const InlineSpan& span : n.spans)
+        if (span.href == "https://cdn.digg.com/hero-full.jpg") ++hero_links;
+    } else CHECK(n.src == "https://cdn.digg.com/chart.jpg");
+  }
+  CHECK(images == 2);
+  CHECK(hero_links == 1);
+
+  // Missing metadata must not produce empty placeholder sections or images.
+  Document sparse = digg_post_document(parse(R"({"title":"Empty", "summary":"Only text"})"),
+      address("digg:post/01234567-89ab-cdef-0123-456789abcdef"));
+  for (const Node& n : sparse.nodes) {
+    CHECK(n.kind != NodeKind::Image);
+    CHECK(n.label != "related" && n.label != "useful-links");
+  }
 }
 
 void comments_document() {
@@ -501,6 +578,7 @@ int main() {
   feed_arguments();
   search_arguments();
   polished_layout();
+  media_and_metadata();
   comments_document();
   mcp_transport();
   mcp_owned_result_regression();

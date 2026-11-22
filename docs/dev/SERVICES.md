@@ -537,6 +537,30 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   as native Digg comment totals. The comment record shapes are covered by
   offline tests only; no live MCP response containing native comments has
   been verified.
+- Optional image records in MCP/static responses are mapped to the normal
+  document `Image` node: right-floated thumbnails on feed entries and a
+  centered hero image on post pages, retaining supplied alt text, credits and
+  links to an original image. A media item's video URL is never used as an
+  image URL; only explicit poster/thumbnail fields qualify. Image records
+  may be missing from MCP even when Digg's HTML page contains an image.
+  The public `llms.txt` does **not** guarantee images in the Feed/Post tools.
+- Fields that the old renderer silently dropped are now mapped **when
+  present**: `distinctSourceAuthorCount`, aggregated source engagement
+  (labelled *source* views/likes/saves/reposts/replies, NOT Digg comments),
+  daily rank, tags/entities, Useful links and Related stories. When present,
+  ordered editorial `sections`/`contentBlocks` render as separate semantic
+  paragraphs; no external publisher text is fabricated. Absent fields do not
+  generate blank UI sections. Named-field extraction is intentionally shallow
+  and bounded, not a recursive JSON walker.
+- The live Digg **website** additionally displays full editorial stories,
+  featured media, related stories and native comment threads. Those surfaces
+  are **not** proof that the public read-only MCP tool exposes the same
+  records. All optional fields above are exercised with synthetic offline
+  response fixtures, not a live MCP capture. The app still cannot retrieve
+  native Digg comments without an actual public response containing them;
+  the page links to Digg instead. Contributor avatars and dynamic web-only
+  widgets have not been implemented. A verified live MCP response/schema is
+  needed before claiming parity with Digg.com.
 - Native page hierarchy is deliberately compact: the page has one title;
   topic and sort links share a navigation-Chrome region (also available in
   the Page panel); each feed entry is a bold, body-sized linked title, a
