@@ -1074,7 +1074,7 @@ target_compile_definitions(xanatoo_video_sites_tests PRIVATE XANATOO_VIDEO=0
 add_test(NAME video_sites_tests COMMAND xanatoo_video_sites_tests)
 add_executable(xanatoo_archive_tests
   tests/archive_tests.cpp src/archive.cpp src/util.cpp src/paths.cpp
-  src/version.cpp src/document.cpp src/html_min.cpp)
+  src/version.cpp src/document.cpp src/html_min.cpp src/search.cpp)
 target_include_directories(xanatoo_archive_tests PRIVATE include ${SDL2_INCLUDE_DIRS})
 target_link_libraries(xanatoo_archive_tests PRIVATE ${SDL2_LIBRARIES})
 target_compile_definitions(xanatoo_archive_tests PRIVATE XANATOO_HTTPS=0

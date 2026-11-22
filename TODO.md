@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — `ia:` details link to searches
+
+- Creator, Contributor, Date and Language on `ia:ID` pages link to
+  `search:archive:creator:"…"` etc. (`search_link` / `date_link` in
+  `archive.cpp`); a date that is not YYYY[-MM[-DD]] stays text.
+- Open: Publisher / Subjects / Sponsor are still text; `archive` searches
+  show 40 results without paging. Details: `docs/ARCHIVE.md`.
+
 ## Status (2026-11-22) — Foldable lists
 
 - Every list item with a list inside it folds (no markup or style sheet

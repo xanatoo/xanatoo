@@ -25,6 +25,9 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
   uploader (an e-mail address, as the public API gives it) linking to
   `ia:uploader:ADDRESS` (`advancedsearch` with `q=uploader:"ADDRESS"`; View →
   web toggle opens the same search on archive.org).
+- Creator, contributor and language link to `search:archive:FIELD:"VALUE"`, the
+  date to `search:archive:date:…` (its year, month or day; a date in another
+  form stays text). Like any `archive` search: the 40 most downloaded, no paging.
 - Files link to `archive.org/download/ID/NAME`; bookkeeping files (`*_meta.xml`,
   `*_files.xml`, torrents, item tiles) are left out, all others are listed (the
   metadata reply already carries them). Each file's `source` sorts them:

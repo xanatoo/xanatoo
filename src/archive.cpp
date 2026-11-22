@@ -7,6 +7,7 @@
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/json_dom.hpp"
 #include "xanatoo/parse.hpp"
+#include "xanatoo/search.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
 
@@ -134,6 +135,38 @@ std::string joined(const std::vector<std::string>& v, const char* sep, size_t ma
     if (i) out += sep;
     out += esc(one_line(v[i]));
   }
+  if (v.size() > max) out += sep + std::string("…");
+  return out;
+}
+
+// A metadata value linked to everything with the same value in `field`: a
+// phrase search of the "archive" engine. Quotes and backslashes would end or
+// break the phrase; the index ignores punctuation anyway.
+std::string search_link(std::string_view field, std::string_view value) {
+  std::string phrase;
+  for (char c : value) phrase += c == '"' || c == '\\' ? ' ' : c;
+  phrase = one_line(phrase);
+  if (phrase.empty()) return esc(one_line(value));
+  return link(value, search_ref("archive", std::string(field) + ":\"" + phrase + "\""));
+}
+
+// "1997", "1997-03" or "1997-03-04", with or without a time behind it → the
+// year, month or day search; anything else ("[19--?]") stays text.
+std::string date_link(std::string_view value) {
+  const std::string shown = one_line(value);
+  const size_t n = std::min(shown.find_first_of("T "), shown.size());
+  bool ok = n == 4 || n == 7 || n == 10;
+  for (size_t i = 0; ok && i < n; ++i)
+    ok = i == 4 || i == 7 ? shown[i] == '-' : shown[i] >= '0' && shown[i] <= '9';
+  if (!ok) return esc(shown);
+  return link(shown, search_ref("archive", "date:" + shown.substr(0, n)));
+}
+
+std::string search_links(std::string_view field, const std::vector<std::string>& v,
+                         const char* sep, size_t max = 12) {
+  std::string out;
+  for (size_t i = 0; i < v.size() && i < max; ++i)
+    out += (i ? sep : "") + search_link(field, v[i]);
   if (v.size() > max) out += sep + std::string("…");
   return out;
 }
@@ -373,10 +406,10 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
     auto add = [&](const char* label, const std::string& v) {
       if (!v.empty()) facts += "- " + std::string(label) + ": " + v + "\n";
     };
-    add("Creator", joined(field("creator"), "; "));
-    add("Date", joined(field("date"), "; ", 1));
+    add("Creator", search_links("creator", field("creator"), "; "));
+    if (const auto date = field("date"); !date.empty()) add("Date", date_link(date[0]));
     add("Publisher", joined(field("publisher"), "; ", 3));
-    add("Language", joined(field("language"), ", ", 5));
+    add("Language", search_links("language", field("language"), ", ", 5));
     add("Type", esc(type));
     std::string colls;
     for (const std::string& c : field("collection"))
@@ -413,7 +446,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
       add("Open Library", ol);
     }
     add("Call number", joined(field("call_number"), "; ", 2));
-    add("Contributor", joined(field("contributor"), "; ", 3));
+    add("Contributor", search_links("contributor", field("contributor"), "; ", 3));
     add("Sponsor", joined(field("sponsor"), "; ", 3));
     {
       std::string scan = joined(field("scanningcenter"), "; ", 1);

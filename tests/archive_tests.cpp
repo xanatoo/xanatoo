@@ -53,12 +53,26 @@ int main() {
     {"name":"my book.epub","format":"EPUB","source":"derivative","size":"3145728"}],
    "metadata":{"identifier":"book","title":"A *Book* [1]","mediatype":"texts",
      "creator":["Doe, Jane","Roe, R."],"date":"1901-02-03","collection":["gutenberg"],
-     "subject":["Travel","Maps"],"description":"<p>First.</p><p>Second</p>",
+     "subject":["Travel","Maps"],"language":["eng","ger"],"contributor":"The \"Big\" [Lib]","description":"<p>First.</p><p>Second</p>",
      "licenseurl":"http://creativecommons.org/publicdomain/zero/1.0/"}})";
   assert(ia_mediatype(item) == "texts");
   const std::string md = ia_markdown(item, "", {"book", 1});
   assert(has(md, "# A \\*Book\\* \\[1\\]"));
-  assert(has(md, "Creator: Doe, Jane; Roe, R."));
+  // Creator, date, language and contributor link to searches for the value.
+  assert(has(md, "Creator: [Doe, Jane](search:archive:creator%3A%22Doe%2C+Jane%22); "
+                 "[Roe, R.](search:archive:creator%3A%22Roe%2C+R.%22)\n"));
+  assert(has(md, "Date: [1901-02-03](search:archive:date%3A1901-02-03)\n"));
+  assert(has(md, "Language: [eng](search:archive:language%3A%22eng%22), "
+                 "[ger](search:archive:language%3A%22ger%22)\n"));
+  assert(has(md, "[The \"Big\" (Lib)](search:archive:contributor%3A%22The+Big+%5BLib%5D%22)\n"));
+  auto dated = [](const char* d) {
+    return ia_markdown(std::string(R"({"metadata":{"identifier":"d","mediatype":"texts","date":")") +
+                       d + "\"}}", "", {"d", 1});
+  };
+  assert(has(dated("1997"), "Date: [1997](search:archive:date%3A1997)\n"));
+  assert(has(dated("1997-03-04T00:00:00Z"), "](search:archive:date%3A1997-03-04)\n"));
+  assert(has(dated("[19--?]"), "Date: \\[19--?\\]\n"));
+  assert(has(dated("1997/98"), "Date: 1997/98\n"));
   assert(has(md, "[gutenberg](ia:gutenberg)"));
   assert(has(md, "First."));
   assert(has(md, "Second"));
