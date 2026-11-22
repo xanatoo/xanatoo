@@ -9,6 +9,7 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include <string>
 #include <unordered_set>
 
 namespace xanatoo {
@@ -3427,84 +3428,121 @@ std::string selected_text(const Document& doc, const Selection& sel,
   return out;
 }
 
+// ---- Find ----
 
-std::optional<Caret> find_next(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len,
-                               const std::vector<NodeId>& skip) {
-  match_len = 0;
-  if (query.empty() || doc.root == INVALID_NODE) return std::nullopt;
+// Simple (one code point to one) lower case of the common scripts.
+static uint32_t fold_cp(uint32_t cp) {
+  if (cp < 0x80) return cp >= 'A' && cp <= 'Z' ? cp + 32 : cp;
+  if (cp == 0xA0) return ' ';  // no-break space
+  if (cp >= 0xC0 && cp <= 0xDE) return cp == 0xD7 ? cp : cp + 32;
+  if (cp == 0x130) return 'i';  // I with dot
+  if (cp == 0x178) return 0xFF;
+  if ((cp >= 0x100 && cp <= 0x137) || (cp >= 0x14A && cp <= 0x177))
+    return cp | 1;
+  if ((cp >= 0x139 && cp <= 0x148) || (cp >= 0x179 && cp <= 0x17E))
+    return (cp & 1) ? cp + 1 : cp;
+  if (cp == 0x386) return 0x3AC;
+  if (cp >= 0x388 && cp <= 0x38A) return cp + 37;
+  if (cp == 0x38C) return 0x3CC;
+  if (cp == 0x38E || cp == 0x38F) return cp + 63;
+  if (cp >= 0x391 && cp <= 0x3AB) return cp == 0x3A2 ? cp : cp + 32;
+  if (cp == 0x3C2) return 0x3C3;  // final sigma
+  if (cp >= 0x410 && cp <= 0x42F) return cp + 32;
+  if (cp >= 0x400 && cp <= 0x40F) return cp + 80;
+  if (cp >= 0x460 && cp <= 0x481) return cp | 1;
+  if (cp >= 0x1E00 && cp <= 0x1EFF && !(cp >= 0x1E96 && cp <= 0x1E9F))
+    return cp | 1;
+  return cp;
+}
 
-  // Lowercase query for case-insensitive ASCII search
-  std::string q = ascii_lower(query);
+static std::u32string fold_text(const std::string& s) {
+  std::u32string out;
+  for (size_t bi = 0; bi < s.size();) {
+    const auto [cp, len] = decode_cp(s, bi);
+    if (len == 0) break;
+    out.push_back(fold_cp(cp));
+    bi += len;
+  }
+  return out;
+}
 
-  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
-  if (nodes.empty()) return std::nullopt;
+namespace {
 
-  auto node_rank = [&](NodeId id) -> size_t {
-    auto it = std::find(nodes.begin(), nodes.end(), id);
-    return it == nodes.end() ? 0 : static_cast<size_t>(it - nodes.begin());
-  };
+// Text of one node as the search sees it: folded, one unit per code point,
+// with the (span, char) each unit came from.
+struct FoldedNode {
+  std::u32string text;
+  std::vector<std::pair<size_t, size_t>> at;
 
-  size_t start_rank = node_rank(from.node);
-  // Start searching from the character after `from`
-  size_t start_span = from.span_index;
-  size_t start_ch = from.char_index + 1;
-
-  auto search_node = [&](NodeId nid, size_t from_span, size_t from_ch) -> std::optional<Caret> {
-    const Node& n = doc.get(nid);
-    // Build full text with codepoint index map back to (span, ch)
-    struct Map { size_t span; size_t ch; };
-    std::string lower;
-    std::vector<Map> map;
+  void read(const Node& n) {
+    text.clear();
+    at.clear();
     for (size_t si = 0; si < n.spans.size(); ++si) {
-      size_t ci = 0;
-      size_t bi = 0;
-      const std::string& t = n.spans[si].text;
-      while (bi < t.size()) {
-        auto [cp, len] = decode_cp(t, bi);
-        if (len == 0) break;
-        char ascii = (cp < 128) ? static_cast<char>(cp) : '?';
-        if (ascii >= 'A' && ascii <= 'Z') ascii = static_cast<char>(ascii - 'A' + 'a');
-        lower.push_back(ascii);
-        map.push_back({si, ci});
-        bi += len;
-        ++ci;
-      }
+      const std::u32string part = fold_text(n.spans[si].text);
+      for (size_t ci = 0; ci < part.size(); ++ci) at.emplace_back(si, ci);
+      text += part;
     }
-    // Determine byte start in lower from (from_span, from_ch)
-    size_t start = 0;
-    for (size_t i = 0; i < map.size(); ++i) {
-      if (map[i].span > from_span || (map[i].span == from_span && map[i].ch >= from_ch)) {
-        start = i;
-        break;
-      }
-      start = i + 1;
-    }
-    if (start >= lower.size()) return std::nullopt;
-    auto pos = lower.find(q, start);
-    if (pos == std::string::npos) return std::nullopt;
-    Caret c;
-    c.node = nid;
-    c.span_index = map[pos].span;
-    c.char_index = map[pos].ch;
-    match_len = q.size();  // ASCII query length ≈ codepoints for ASCII
-    return c;
-  };
+  }
 
-  // Search from current node onward, then wrap
-  for (size_t pass = 0; pass < 2; ++pass) {
-    size_t i0 = (pass == 0) ? start_rank : 0;
-    size_t i1 = (pass == 0) ? nodes.size() : start_rank + 1;
-    for (size_t i = i0; i < i1 && i < nodes.size(); ++i) {
-      size_t fs = 0, fc = 0;
-      if (pass == 0 && i == start_rank) {
-        fs = start_span;
-        fc = start_ch;
-      }
-      if (auto hit = search_node(nodes[i], fs, fc)) {
-        return hit;
-      }
-    }
+  // Units before the caret position.
+  size_t index_of(const Caret& c) const {
+    const std::pair<size_t, size_t> key{c.span_index, c.char_index};
+    return static_cast<size_t>(
+        std::lower_bound(at.begin(), at.end(), key) - at.begin());
+  }
+
+  // The `len` (> 0) units at `pos`. The end stays in the span of the last
+  // one, so a match across spans is covered whole.
+  Selection range(NodeId id, size_t pos, size_t len) const {
+    const auto& a = at[pos];
+    const auto& b = at[pos + len - 1];
+    return Selection{Caret{id, a.first, a.second},
+                     Caret{id, b.first, b.second + 1}};
+  }
+};
+
+// Where a search in `nodes` (document order) starts from `from`: its node,
+// or the next searched one after a node that is skipped.
+struct FindStart {
+  size_t rank = 0;
+  bool inside = false;  // nodes[rank] is from.node
+};
+
+FindStart find_start(const Document& doc, const std::vector<NodeId>& nodes,
+                     const Caret& from) {
+  const auto it = std::find(nodes.begin(), nodes.end(), from.node);
+  if (it != nodes.end())
+    return {static_cast<size_t>(it - nodes.begin()), true};
+  std::vector<NodeId> all;
+  collect_text_nodes(doc, doc.root, all);
+  size_t rank = 0;
+  for (NodeId id : all) {
+    if (id == from.node) return {rank, false};
+    if (rank < nodes.size() && nodes[rank] == id) ++rank;
+  }
+  return {};
+}
+
+}  // namespace
+
+std::optional<Selection> find_next(const Document& doc,
+                                   const std::string& query,
+                                   const Caret& from,
+                                   const std::vector<NodeId>& skip) {
+  const std::u32string q = fold_text(query);
+  if (q.empty() || doc.root == INVALID_NODE) return std::nullopt;
+  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
+  const FindStart start = find_start(doc, nodes, from);
+  FoldedNode text;
+  // To the end, then from the top up to (and including) the start node.
+  for (size_t k = 0; k <= nodes.size(); ++k) {
+    if (nodes.empty()) break;
+    const size_t i = (start.rank + k) % nodes.size();
+    text.read(doc.get(nodes[i]));
+    const size_t first = k == 0 && start.inside ? text.index_of(from) : 0;
+    const size_t pos = text.text.find(q, first);
+    if (pos != std::u32string::npos)
+      return text.range(nodes[i], pos, q.size());
   }
   return std::nullopt;
 }
@@ -3512,198 +3550,91 @@ std::optional<Caret> find_next(const Document& doc, const std::string& query,
 std::vector<Caret> find_all(const Document& doc, const std::string& query,
                             size_t max, const std::vector<NodeId>& skip) {
   std::vector<Caret> out;
-  if (query.empty() || max == 0 || doc.root == INVALID_NODE) return out;
-  const std::string q = ascii_lower(query);
-  const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
-  struct Map { size_t span; size_t ch; };
-  std::string lower;
-  std::vector<Map> map;
-  for (NodeId nid : nodes) {
-    const Node& n = doc.get(nid);
-    lower.clear();
-    map.clear();
-    // Same folding as find_next: one byte per code point.
-    for (size_t si = 0; si < n.spans.size(); ++si) {
-      const std::string& t = n.spans[si].text;
-      size_t ci = 0;
-      for (size_t bi = 0; bi < t.size(); ++ci) {
-        auto [cp, len] = decode_cp(t, bi);
-        if (len == 0) break;
-        char ascii = cp < 128 ? static_cast<char>(cp) : '?';
-        if (ascii >= 'A' && ascii <= 'Z')
-          ascii = static_cast<char>(ascii - 'A' + 'a');
-        lower.push_back(ascii);
-        map.push_back({si, ci});
-        bi += len;
-      }
-    }
-    for (size_t pos = lower.find(q); pos != std::string::npos;
-         pos = lower.find(q, pos + q.size())) {
-      out.push_back(Caret{nid, map[pos].span, map[pos].ch});
+  const std::u32string q = fold_text(query);
+  if (q.empty() || max == 0 || doc.root == INVALID_NODE) return out;
+  FoldedNode text;
+  for (NodeId id : text_nodes_except(doc, skip)) {
+    text.read(doc.get(id));
+    for (size_t pos = text.text.find(q); pos != std::u32string::npos;
+         pos = text.text.find(q, pos + q.size())) {
+      out.push_back(text.range(id, pos, q.size()).anchor);
       if (out.size() >= max) return out;
     }
   }
   return out;
 }
 
-std::optional<Caret> find_prev(const Document& doc, const std::string& query,
-                               const Caret& from, size_t& match_len,
-                               const std::vector<NodeId>& skip) {
-  match_len = 0;
-  if (query.empty() || doc.root == INVALID_NODE) return std::nullopt;
-
-  std::string q = ascii_lower(query);
-
+std::optional<Selection> find_prev(const Document& doc,
+                                   const std::string& query,
+                                   const Caret& from,
+                                   const std::vector<NodeId>& skip) {
+  const std::u32string q = fold_text(query);
+  if (q.empty() || doc.root == INVALID_NODE) return std::nullopt;
   const std::vector<NodeId> nodes = text_nodes_except(doc, skip);
-  if (nodes.empty()) return std::nullopt;
-
-  auto node_rank = [&](NodeId id) -> size_t {
-    auto it = std::find(nodes.begin(), nodes.end(), id);
-    return it == nodes.end() ? 0 : static_cast<size_t>(it - nodes.begin());
-  };
-
-  size_t start_rank = node_rank(from.node);
-
-  auto search_node_back = [&](NodeId nid, size_t to_span,
-                              size_t to_ch) -> std::optional<Caret> {
-    const Node& n = doc.get(nid);
-    struct Map { size_t span; size_t ch; };
-    std::string lower;
-    std::vector<Map> map;
-    for (size_t si = 0; si < n.spans.size(); ++si) {
-      size_t ci = 0;
-      size_t bi = 0;
-      const std::string& t = n.spans[si].text;
-      while (bi < t.size()) {
-        auto [cp, len] = decode_cp(t, bi);
-        if (len == 0) break;
-        char ascii = (cp < 128) ? static_cast<char>(cp) : '?';
-        if (ascii >= 'A' && ascii <= 'Z') ascii = static_cast<char>(ascii - 'A' + 'a');
-        lower.push_back(ascii);
-        map.push_back({si, ci});
-        bi += len;
-        ++ci;
-      }
-    }
-    if (lower.empty() || q.size() > lower.size()) return std::nullopt;
-
-    // End exclusive index: first map entry at or after (to_span, to_ch)
-    size_t end = 0;
-    bool found = false;
-    for (size_t i = 0; i < map.size(); ++i) {
-      if (map[i].span > to_span ||
-          (map[i].span == to_span && map[i].ch >= to_ch)) {
-        end = i;
-        found = true;
-        break;
-      }
-    }
-    if (!found) end = lower.size();
-    if (end == 0) return std::nullopt;
-
-    // Search in [0, end) for the last occurrence of q
-    size_t search_end = end;
-    if (search_end < q.size()) return std::nullopt;
-    auto pos = lower.rfind(q, search_end - q.size());
-    if (pos == std::string::npos || pos + q.size() > end) return std::nullopt;
-
-    Caret c;
-    c.node = nid;
-    c.span_index = map[pos].span;
-    c.char_index = map[pos].ch;
-    match_len = q.size();
-    return c;
-  };
-
-  // Search current node before caret, then earlier nodes, then wrap from end
-  for (size_t pass = 0; pass < 2; ++pass) {
-    if (pass == 0) {
-      // Current node: only before the caret
-      if (auto hit =
-              search_node_back(nodes[start_rank], from.span_index, from.char_index))
-        return hit;
-      // Earlier nodes (full text)
-      for (size_t i = start_rank; i > 0; --i) {
-        size_t idx = i - 1;
-        const Node& n = doc.get(nodes[idx]);
-        size_t last_span = n.spans.empty() ? 0 : n.spans.size() - 1;
-        size_t last_ch = 0;
-        if (!n.spans.empty())
-          last_ch = utf8_char_count(n.spans[last_span].text) + 1;
-        if (auto hit = search_node_back(nodes[idx], last_span, last_ch))
-          return hit;
-      }
-    } else {
-      // Wrap: nodes after start_rank, from the end
-      for (size_t i = nodes.size(); i > start_rank + 1; --i) {
-        size_t idx = i - 1;
-        const Node& n = doc.get(nodes[idx]);
-        size_t last_span = n.spans.empty() ? 0 : n.spans.size() - 1;
-        size_t last_ch = 0;
-        if (!n.spans.empty())
-          last_ch = utf8_char_count(n.spans[last_span].text) + 1;
-        if (auto hit = search_node_back(nodes[idx], last_span, last_ch))
-          return hit;
-      }
-    }
+  const size_t count = nodes.size();
+  if (count == 0) return std::nullopt;
+  const FindStart start = find_start(doc, nodes, from);
+  FoldedNode text;
+  // Before the caret in its node, the nodes above, then from the end down
+  // to (and including) the start node. Outside a searched node: the nodes
+  // above it first.
+  const size_t lead = start.inside ? 0 : 1;
+  for (size_t k = lead; k <= count + lead; ++k) {
+    const size_t i = (start.rank + 2 * count - k) % count;
+    text.read(doc.get(nodes[i]));
+    const size_t end =
+        k == 0 ? text.index_of(from) : text.text.size();
+    if (end < q.size()) continue;
+    const size_t pos = text.text.rfind(q, end - q.size());
+    if (pos != std::u32string::npos)
+      return text.range(nodes[i], pos, q.size());
   }
   return std::nullopt;
 }
 
-size_t replace_all(Document& doc, const std::string& query,
-                   const std::string& replacement) {
-  if (query.empty() || doc.root == INVALID_NODE) return 0;
-  size_t count = 0;
-  std::vector<NodeId> nodes;
-  collect_text_nodes(doc, doc.root, nodes);
-  std::string q = ascii_lower(query);
-  const size_t qlen = q.size();
-  if (qlen == 0) return 0;
+bool is_match(const Document& doc, const std::string& query,
+              const Selection& sel) {
+  if (sel.empty() || sel.anchor.node != sel.focus.node) return false;
+  if (sel.anchor.node == INVALID_NODE || sel.anchor.node >= doc.next_id)
+    return false;
+  const std::u32string q = fold_text(query);
+  if (q.empty()) return false;
+  FoldedNode text;
+  text.read(doc.get(sel.anchor.node));
+  size_t a = text.index_of(sel.anchor), b = text.index_of(sel.focus);
+  if (a > b) std::swap(a, b);
+  return b - a == q.size() && text.text.compare(a, q.size(), q) == 0;
+}
 
-  for (NodeId nid : nodes) {
-    size_t search_from = 0;  // index into lower map for this node
-    for (;;) {
-      Node& n = doc.get(nid);
-      struct Map {
-        size_t span;
-        size_t ch;
-      };
-      std::string lower;
-      std::vector<Map> map;
-      for (size_t si = 0; si < n.spans.size(); ++si) {
-        size_t ci = 0, bi = 0;
-        const std::string& t = n.spans[si].text;
-        while (bi < t.size()) {
-          auto [cp, len] = decode_cp(t, bi);
-          if (len == 0) break;
-          char ascii = (cp < 128) ? static_cast<char>(cp) : '?';
-          if (ascii >= 'A' && ascii <= 'Z')
-            ascii = static_cast<char>(ascii - 'A' + 'a');
-          lower.push_back(ascii);
-          map.push_back({si, ci});
-          bi += len;
-          ++ci;
-        }
-      }
-      if (search_from >= lower.size()) break;
-      auto pos = lower.find(q, search_from);
-      if (pos == std::string::npos || pos >= map.size()) break;
-      Caret a{nid, map[pos].span, map[pos].ch};
-      Caret b = a;
-      advance_caret(doc, b, qlen);
-      Selection sel;
-      sel.anchor = a;
-      sel.focus = b;
+Caret find_origin(const Document& doc, const Selection& sel, bool end) {
+  const bool forward = caret_cmp(doc, sel.anchor, sel.focus) <= 0;
+  return forward == end ? sel.focus : sel.anchor;
+}
+
+size_t replace_all(Document& doc, const std::string& query,
+                   const std::string& replacement,
+                   const std::vector<NodeId>& skip) {
+  const std::u32string q = fold_text(query);
+  if (q.empty() || doc.root == INVALID_NODE) return 0;
+  const size_t added = utf8_char_count(replacement);
+  size_t count = 0;
+  FoldedNode text;
+  for (NodeId id : text_nodes_except(doc, skip)) {
+    text.read(doc.get(id));
+    for (size_t pos = text.text.find(q); pos != std::u32string::npos;) {
+      const size_t before = text.text.size();
+      Selection sel = text.range(id, pos, q.size());
       delete_selection(doc, sel);
-      size_t repl_chars = 0;
-      if (!replacement.empty()) {
-        insert_text(doc, sel.focus, replacement);
-        repl_chars = utf8_char_count(replacement);
+      text.read(doc.get(id));
+      if (text.text.size() == before) {  // not editable here (transclusion)
+        pos = text.text.find(q, pos + q.size());
+        continue;
       }
+      if (!replacement.empty()) insert_text(doc, sel.focus, replacement);
       ++count;
-      // Skip past the just-written replacement so we do not loop when
-      // replacement contains the query (e.g. "a" → "aa").
-      search_from = pos + std::max(size_t{1}, repl_chars);
+      // Go on after the replacement: it may contain the query ("a" → "aa").
+      text.read(doc.get(id));
+      pos = text.text.find(q, pos + added);
     }
   }
   return count;

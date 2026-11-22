@@ -192,12 +192,28 @@ const std::vector<UiHelpTopic> kTopics = {
     {"move block down", "Move block down",
      "Swaps the current block with the one after it. **Alt+Down**."},
     {"find", "Find",
-     "Leap search: type in the status-bar prompt, the view jumps to each "
-     "match as you type. **F3** finds the next one. **Ctrl+F**."},
-    {"replace", "Replace",
+     "Opens the find bar at the bottom of the page; the view jumps to the "
+     "match as you type. **Enter** / **F3** go to the next match, with "
+     "**Shift** to the previous one, **Esc** closes the bar. **Ctrl+F**."},
+    {"find_text", "Find",
+     "The text to find; upper and lower case are the same. **Enter** goes to "
+     "the next match, **Shift+Enter** to the previous one."},
+    {"find_prev", "Previous match",
+     "Goes to the match before this one; after the first comes the last. "
+     "**Shift+Enter** / **Shift+F3**."},
+    {"find_next", "Next match",
+     "Goes to the next match; after the last comes the first. **Enter** / "
+     "**F3**."},
+    {"find_close", "Close the find bar",
+     "The match stays selected and **F3** continues the search. **Esc**."},
+    {"find_replacement", "Replace with",
+     "What the match is replaced with. **Enter** replaces and goes to the "
+     "next match, **Ctrl+Shift+Enter** replaces all."},
+    {"replace|find_replace", "Replace",
      "Find and replace in the document, one match at a time. **Ctrl+H**."},
-    {"replace all", "Replace all",
-     "Replaces every match of the last search."},
+    {"replace all|find_replace_all", "Replace all",
+     "Replaces every match in the page. **Ctrl+Shift+Enter** in the find "
+     "bar."},
     {"preferences", "Preferences",
      "Settings of the program: interface scale, hover previews, updates and "
      "other options. Saved in the configuration directory."},
@@ -473,7 +489,7 @@ const std::vector<UiHelpTopic> kTopics = {
      "Bookmarks the page, or the selection if there is one; a filled "
      "ribbon means the page is bookmarked, a click removes it then. "
      "**Ctrl+Shift+B**."},
-    {"tb_find", "Find", "Leap search in the page. **Ctrl+F**."},
+    {"tb_find", "Find", "Finds text in the page. **Ctrl+F**."},
     {"tb_split", "Split / join",
      "Splits the centre into two independent tiles, or joins them again "
      "(keeping the left). **Ctrl+\\**."},

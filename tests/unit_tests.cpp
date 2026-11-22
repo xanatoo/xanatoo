@@ -896,6 +896,84 @@ void test_find_all() {
   EXPECT(find_all(doc, "", 5).empty());
 }
 
+void test_find_steps() {
+  using namespace xanatoo;
+  Document doc;
+  doc.root = doc.create(NodeKind::Document);
+  NodeId a = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(a, "abab \xC3\x9C" "ber");
+  NodeId b = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(b, "a bold ");
+  doc.append_text(b, "wo", InlineKind::Strong);
+  doc.append_text(b, "rd, ab ?");
+
+  auto at = [](const std::optional<Selection>& s, NodeId n, size_t ci) {
+    return s && s->anchor.node == n && s->anchor.char_index == ci;
+  };
+  // A match at the start counts, and so does one right after another.
+  const Caret top{a, 0, 0};
+  auto hit = find_next(doc, "AB", top);
+  EXPECT(at(hit, a, 0));
+  if (!hit) return;
+  EXPECT_EQ(hit->focus.char_index, size_t{2});
+  EXPECT(is_match(doc, "ab", *hit));
+  EXPECT(!is_match(doc, "a", *hit));
+  EXPECT(!is_match(doc, "ba", *hit));
+  // A longer query searches from the start of the match: it stays.
+  EXPECT(at(find_next(doc, "aba", find_origin(doc, *hit, false)), a, 0));
+  hit = find_next(doc, "ab", find_origin(doc, *hit, true));
+  EXPECT(at(hit, a, 2));
+  if (!hit) return;
+  // Back from a match goes to the one before, not to itself.
+  EXPECT(at(find_prev(doc, "ab", find_origin(doc, *hit, false)), a, 0));
+  hit = find_next(doc, "ab", find_origin(doc, *hit, true));
+  EXPECT(hit && hit->anchor.node == b);
+  if (!hit) return;
+  EXPECT(at(find_next(doc, "ab", find_origin(doc, *hit, true)), a, 0));  // wrap
+  hit = find_prev(doc, "ab", top);
+  EXPECT(hit && hit->anchor.node == b);
+  // The only match is found again from its own end and start.
+  hit = find_next(doc, "bold", top);
+  EXPECT(at(hit, b, 2));
+  if (!hit) return;
+  EXPECT(at(find_next(doc, "bold", find_origin(doc, *hit, true)), b, 2));
+  EXPECT(at(find_prev(doc, "bold", find_origin(doc, *hit, false)), b, 2));
+  // A selection made backwards has the same ends.
+  const Selection back{hit->focus, hit->anchor};
+  EXPECT(find_origin(doc, back, true) == hit->focus);
+  EXPECT(find_origin(doc, back, false) == hit->anchor);
+  EXPECT(is_match(doc, "bold", back));
+
+  // Beyond ASCII, in either case; "?" is a question mark only.
+  EXPECT(at(find_next(doc, "\xC3\xBC" "BER", top), a, 5));
+  EXPECT_EQ(find_all(doc, "?", 10).size(), size_t{1});
+  EXPECT(!find_next(doc, "\xC3\xB6", top));
+  EXPECT(!find_next(doc, "", top));
+
+  // A match over two spans is covered whole, and replaced whole.
+  hit = find_next(doc, "word", top);
+  EXPECT(hit && hit->anchor.span_index == 1 && hit->focus.span_index == 2);
+  if (!hit) return;
+  EXPECT_EQ(selected_text(doc, *hit), "word");
+
+  // From inside a skipped block: the matches around it.
+  NodeId c = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(c, "ab");
+  NodeId e = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(e, "ab");
+  EXPECT(at(find_next(doc, "ab", Caret{c, 0, 0}, {c}), e, 0));
+  hit = find_prev(doc, "ab", Caret{c, 0, 1}, {c});
+  EXPECT(hit && hit->anchor.node == b);
+
+  EXPECT_EQ(replace_all(doc, "word", "words of word"), size_t{1});
+  EXPECT_EQ(plain_text(doc, b), "a bold words of word, ab ?");
+  EXPECT_EQ(replace_all(doc, "ab", "abab", {c}), size_t{4});
+  EXPECT_EQ(plain_text(doc, a), "abababab \xC3\x9C" "ber");
+  EXPECT_EQ(plain_text(doc, c), "ab");
+  EXPECT_EQ(replace_all(doc, "AB", ""), size_t{9});
+  EXPECT_EQ(plain_text(doc, a), " \xC3\x9C" "ber");
+}
+
 void test_foreign_markdown() {
   using namespace xanatoo;
   Document doc;
@@ -9245,6 +9323,7 @@ int main() {
   test_related_sites();
   test_reddit_urls();
   test_find_all();
+  test_find_steps();
   test_foreign_markdown();
   test_lemmy_quote_links();
   test_lemmy_urls();

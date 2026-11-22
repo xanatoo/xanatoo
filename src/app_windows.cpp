@@ -608,8 +608,15 @@ FloatWindow* float_at(App& app, int x, int y) {
 
 std::optional<UiPanelLayer> float_layer_at(App& app, int x, int y) {
   if (const FloatWindow* w = float_at(app, x, y))
-    return embedded_panel_layer(w->role);
+    return float_ui_layer(app, *w);
   return std::nullopt;
+}
+
+UiPanelLayer float_ui_layer(App& app, const FloatWindow& w) {
+  if (w.role == WindowRole::Document && w.view == app.focus &&
+      find_bar_shown(app))
+    return UiPanelLayer::FindBar;
+  return embedded_panel_layer(w.role);
 }
 
 // Keep pointer feedback and actual resize initiation in sync. The small
@@ -1084,6 +1091,8 @@ static void draw_soft_window(App& app, FloatWindow& sw) {
   fill_doc_paper(app, clip);
   draw_pane(app, sw.view);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+  if (sw.view == app.focus)
+    app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::FindBar);
 }
 
 void draw_floats(App& app) {

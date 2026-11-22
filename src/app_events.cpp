@@ -332,8 +332,12 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       const auto layer = app.ui.panel_at(static_cast<float>(x),
                                          static_cast<float>(y));
       if (const FloatWindow* w = float_at(app, mxw, myw);
-          w && layer && embedded_panel_layer(w->role) == layer)
+          w && layer && float_ui_layer(app, *w) == layer)
         focus_float(app, *w);
+      if (layer == xanatoo::UiPanelLayer::FindBar) {
+        app.key_focus = KeyFocus::Document;
+        app.prompt.pending = false;  // ImGui gives the keys to what was hit
+      }
       return;
     }
     // The previous ImGui text field may still own keyboard focus even though
@@ -394,7 +398,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     app.key_focus = KeyFocus::Document;
 
     // Clicking the document dismisses status-bar prompts (Esc also works).
-    if (prompt_active(app) && !prompt_is_search(app)) close_prompt(app);
+    leave_prompt(app);
 
     float mx = static_cast<float>(x);
     const int at = pane_at(app, mx, static_cast<float>(y));
@@ -1431,31 +1435,16 @@ static void on_textinput(App& app, SDL_Event& ev, bool imgui_mouse,
     return;
   }
 
-  if (prompt_active(app)) {
+  if (prompt_has_keys(app)) {
     Prompt& pr = app.prompt;
-    if (!prompt_is_search(app)) {
+    if (prompt_is_search(app)) {  // the bar's field is about to get the keys
+      if (pr.fresh) pr.text.clear();
+      pr.fresh = false;
       pr.text += ev.text.text;
-      return;
+      find_retype(app);
+    } else {
+      pr.text += ev.text.text;
     }
-    if (pr.kind == PromptKind::Replace && !pr.text.empty() && pr.focus_second) {
-      pr.text2 += ev.text.text;
-      return;
-    }
-    pr.text += ev.text.text;
-    Pane& p = focused_pane(app);
-    size_t mlen = 0;
-    xanatoo::Caret from = p.sel.focus;
-    if (from.char_index > 0) from.char_index -= 1;
-    if (auto hit = xanatoo::find_next(doc_of(app, p), pr.text, from, mlen,
-                                      find_skips(app, p))) {
-      reveal_hit(app, p, hit->node);
-      p.sel.anchor = *hit;
-      p.sel.focus = *hit;
-      xanatoo::advance_caret(doc_of(app, p), p.sel.focus, mlen);
-      note_program_selection(app);
-      scroll_caret_into_view(app, p);
-    }
-    reset_blink(app);
     return;
   }
   if (browsing(app)) return;  // read-only: no typing into the document
@@ -2104,6 +2093,12 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
   return false;
 }
 
+// Keys the find bar's field leaves to the application.
+static bool find_bar_key(SDL_Keycode key, bool ctrl, bool shift) {
+  return key == SDLK_F3 ||
+         (ctrl && (key == SDLK_g || key == SDLK_f || (key == SDLK_h && !shift)));
+}
+
 static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
                        bool imgui_keys) {
   bool shift = (xanatoo::sdl::keymod(ev) & KMOD_SHIFT) != 0;
@@ -2168,7 +2163,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   // arrows do not move the caret while typing a path or query.
   // Path/URL minibuffer also needs Tab (complete), arrows (cursor /
   // history), Home/End, Delete, and C-a/e/u/w.
-  const bool status_prompt = prompt_active(app);
+  const bool status_prompt = prompt_has_keys(app);
   if (status_prompt) {
     const SDL_Keycode k = xanatoo::sdl::keycode(ev);
     const bool minibuf_path = minibuf_active(app);
@@ -2177,10 +2172,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         k == SDLK_KP_ENTER || k == SDLK_DELETE ||
         // Paste into the status-bar buffer
         (ctrl && k == SDLK_v) ||
-        // Search: F3 / Shift+F3 still jump matches while the query is open
-        (prompt_is_search(app) && (k == SDLK_F3 || k == SDLK_g)) ||
-        // Allow Tab to switch replace-field focus when replace is open
-        (app.prompt.kind == PromptKind::Replace && k == SDLK_TAB) ||
+        // The find bar's field is about to take the keys
+        (prompt_is_search(app) &&
+         (k == SDLK_F3 || (ctrl && (k == SDLK_g || k == SDLK_f ||
+                                    k == SDLK_h)))) ||
         // Path minibuffer: completion + cursor + history
         (minibuf_path &&
          (k == SDLK_TAB || k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT ||
@@ -2192,7 +2187,8 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
              xanatoo::sdl::keycode(ev) != SDLK_F1 && xanatoo::sdl::keycode(ev) != SDLK_F2 &&
              xanatoo::sdl::keycode(ev) != SDLK_F5 &&
              xanatoo::sdl::keycode(ev) != SDLK_F8 && xanatoo::sdl::keycode(ev) != SDLK_F9 &&
-             xanatoo::sdl::keycode(ev) != SDLK_F11) {
+             xanatoo::sdl::keycode(ev) != SDLK_F11 &&
+             !(app.ui.find_field_active() && find_bar_key(key, ctrl, shift))) {
     return;
   }
 
@@ -2247,7 +2243,8 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (browsing(app) && !status_prompt) {
     const SDL_Keycode k = xanatoo::sdl::keycode(ev);
     const bool browse_ok =
-        k == SDLK_ESCAPE || k == SDLK_F1 || k == SDLK_F2 || k == SDLK_F5 ||
+        k == SDLK_ESCAPE || k == SDLK_F1 || k == SDLK_F2 || k == SDLK_F3 ||
+        k == SDLK_F5 ||
         k == SDLK_F8 || k == SDLK_F9 || k == SDLK_F11 || k == SDLK_LEFT ||
         k == SDLK_RIGHT || k == SDLK_UP || k == SDLK_DOWN || k == SDLK_PAGEUP ||
         k == SDLK_PAGEDOWN || k == SDLK_HOME || k == SDLK_END ||
@@ -2355,9 +2352,11 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       if (app.outline_mode) {
         app.outline_mode = false;
       } else if (prompt_active(app)) {
-        const bool was_search = prompt_is_search(app);
-        close_prompt(app, /*forget_search=*/true);
-        if (was_search) reset_blink(app);
+        if (prompt_is_search(app)) {
+          execute_command(app, UiCommand::FindClose);
+        } else {
+          close_prompt(app);
+        }
       } else if (cancel_fetches(app)) {
         flash_status(app, "Stopped loading");
       } else if (app.help_mode) {
@@ -2486,9 +2485,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         break;
       }
       if (ctrl) {
-        open_prompt(app, PromptKind::Search);
-        std::cout << "Leap search: type to find, F3 next, Esc cancel\n";
-        reset_blink(app);
+        execute_command(app, UiCommand::Find);
       }
       break;
 
@@ -2503,18 +2500,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         break;
       }
       if (ctrl) {
-        // Leap replace: find with current query (or enter search), then type
-        // replacement
-        open_search(app, true);
-        app.prompt.text2.clear();
-        if (app.prompt.text.empty()) {
-          std::cout << "Leap replace: type find text, Tab to edit replacement, "
-                       "Enter replaces\n";
-        } else {
-          std::cout << "Leap replace: type replacement for \""
-                    << app.prompt.text << "\"\n";
-        }
-        reset_blink(app);
+        execute_command(app, UiCommand::Replace);
       }
       break;
 
@@ -2523,35 +2509,13 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       if (xanatoo::sdl::keycode(ev) == SDLK_F3 || ctrl) {
         if (!prompt_is_search(app)) {
           if (app.last_search.empty()) break;
-          open_search(app, false);
+          open_search(app, false, /*focus=*/false);
         }
-        Pane& pp = focused_pane(app);
-        size_t mlen = 0;
-        const bool backward = shift || (xanatoo::sdl::keymod(ev) & KMOD_SHIFT) != 0;
-        auto hit = backward
-                       ? xanatoo::find_prev(doc_of(app, pp), app.prompt.text,
-                                            pp.sel.focus, mlen,
-                                            find_skips(app, pp))
-                       : xanatoo::find_next(doc_of(app, pp), app.prompt.text,
-                                            pp.sel.focus, mlen,
-                                            find_skips(app, pp));
-        if (hit) {
-          reveal_hit(app, pp, hit->node);
-          pp.sel.anchor = *hit;
-          pp.sel.focus = *hit;
-          xanatoo::advance_caret(doc_of(app, pp), pp.sel.focus, mlen);
-          note_program_selection(app);
-          scroll_caret_into_view(app, pp);
-          reset_blink(app);
-        }
+        find_step(app, shift);
       }
       break;
 
     case SDLK_TAB:
-      if (app.prompt.kind == PromptKind::Replace) {
-        app.prompt.focus_second = !app.prompt.focus_second;
-        break;
-      }
       // Ctrl+Tab / Ctrl+Shift+Tab — cycle document tabs
       if (ctrl && !app.tab_order.empty()) {
         auto& p = focused_pane(app);
@@ -2617,13 +2581,13 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       break;
 
     case SDLK_BACKSPACE:
-      if (prompt_active(app)) {
-        std::string& target = (app.prompt.kind == PromptKind::Replace &&
-                               app.prompt.focus_second)
-                                  ? app.prompt.text2
-                                  : app.prompt.text;
-        xanatoo::utf8_pop_back(target);
-        if (prompt_is_search(app)) reset_blink(app);
+      if (prompt_has_keys(app)) {
+        if (prompt_is_search(app)) {
+          if (app.prompt.fresh) app.prompt.text.clear();
+          app.prompt.fresh = false;
+        }
+        xanatoo::utf8_pop_back(app.prompt.text);
+        find_retype(app);
         break;
       }
       edit(app);
@@ -2726,7 +2690,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
           char* clip = SDL_GetClipboardText();
           if (clip && clip[0]) {
             // Status-bar prompts: paste into the active buffer, not the doc.
-            if (prompt_active(app)) {
+            if (prompt_has_keys(app)) {
               // Single-line prompts: strip newlines.
               std::string clean;
               for (const char* c = clip; *c; ++c)
@@ -2734,11 +2698,12 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
               if (minibuf_active(app)) {
                 app.minibuf.insert_utf8(clean);
                 minibuf_sync_out(app);
-              } else if (app.prompt.kind == PromptKind::Replace &&
-                         app.prompt.focus_second) {
-                app.prompt.text2 += clean;
               } else {
+                if (prompt_is_search(app) && app.prompt.fresh)
+                  app.prompt.text.clear();
+                app.prompt.fresh = false;
                 app.prompt.text += clean;
+                find_retype(app);
               }
             } else {
               edit(app);
@@ -2811,7 +2776,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
                                          : "Structure highlight off\n");
       } else if (ctrl && !shift) {
         // Focus interactive toolbar URL bar
-        close_prompt(app);
+        leave_prompt(app);
         app.ui.focus_url_bar();
       }
       break;
@@ -3130,7 +3095,13 @@ void handle_event(App& app, SDL_Event& ev) {
         static_cast<float>(mx), static_cast<float>(my),
         float_layer_at(app, mx, my));
   }
-  if (!native_obscures_ui) app.ui.process_event(ev);
+  // Typing before the find bar's field is active goes to the prompt, not into
+  // the queue the field reads once it is.
+  const bool find_typing =
+      prompt_is_search(app) && app.prompt.pending &&
+      (kind == xanatoo::sdl::EventKind::KeyDown ||
+       kind == xanatoo::sdl::EventKind::TextInput);
+  if (!native_obscures_ui && !find_typing) app.ui.process_event(ev);
   // Mouse events SDL synthesises from touches only drive ImGui chrome; the
   // document surface gets the raw finger events (app_touch.cpp).
   if (is_touch_mouse_event(ev)) return;

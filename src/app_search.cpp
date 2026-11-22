@@ -68,7 +68,7 @@ void toggle_search_engine(App& app, const std::string& id) {
 void show_search_bar(App& app) {
   if (!app.search.open) app.needs_layout = true;
   app.search.open = true;
-  close_prompt(app);
+  leave_prompt(app);
   app.ui.focus_search();
 }
 

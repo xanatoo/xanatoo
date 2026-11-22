@@ -325,12 +325,14 @@ StatusLine compute_status(App& app) {
   std::string& label = st.text;
   StatusTone& tone = st.tone;
   tone = StatusTone::Hint;
+  // The find bar is at its view, not here.
+  const bool prompt_shown = prompt_active(app) && !prompt_is_search(app);
   if (std::string over = media_panel_hover(app, static_cast<int>(app.mouse_x),
                                             static_cast<int>(app.mouse_y));
-      !over.empty() && !prompt_active(app)) {
+      !over.empty() && !prompt_shown) {
     label = std::move(over);
     tone = StatusTone::Info;
-  } else if (prompt_active(app)) {
+  } else if (prompt_shown) {
     const Prompt& pr = app.prompt;
     tone = StatusTone::Prompt;
     const std::string shown_or_dots = pr.text.empty() ? "…" : pr.text;
@@ -374,16 +376,7 @@ StatusLine compute_status(App& app) {
         label += "    Enter confirm · Esc cancel";
         break;
       case PromptKind::Replace:
-        label = "Find: " + shown_or_dots;
-        label += "  →  Replace: ";
-        label += pr.text2.empty() ? "…" : pr.text2;
-        label += pr.focus_second ? "  [repl] " : "  [find] ";
-        label += " Tab switch · Enter replace · Ctrl+Shift+Enter all · Esc";
-        break;
       case PromptKind::Search:
-        label = "Leap: " + shown_or_dots;
-        label += "    F3 next · Shift+F3 prev · Esc cancel";
-        break;
       case PromptKind::None:
         break;
     }
@@ -595,13 +588,13 @@ StatusLine compute_status(App& app) {
   } else {
     label =
         "F1 help · Ctrl+S save · Ctrl+A block · Ctrl+Shift+A all · "
-        "Ctrl+F leap · Ctrl+B/I style · drag to select";
+        "Ctrl+F find · Ctrl+B/I style · drag to select";
     tone = StatusTone::Hint;
   }
 
   // Selection / document statistics shown in the right-hand panel
   // (idle status only).
-  if (!prompt_active(app) && !app.help_mode && !app.outline_mode) {
+  if (!prompt_shown && !app.help_mode && !app.outline_mode) {
     Pane& fp = focused_pane(app);
     StatsCache& sc = fp.stats;
     // Both counts walk the selection / whole document: once per layout.

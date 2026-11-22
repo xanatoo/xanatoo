@@ -76,23 +76,33 @@ void open_prompt(App& app, PromptKind kind, std::string initial) {
   if (prompt_uses_minibuf(kind)) minibuf_begin(app, app.prompt.text);
 }
 
-void open_search(App& app, bool replace) {
-  std::string q = prompt_is_search(app) ? app.prompt.text : app.last_search;
-  std::string r = prompt_is_search(app) ? app.prompt.text2 : app.last_replace;
-  open_prompt(app, replace ? PromptKind::Replace : PromptKind::Search,
-              std::move(q));
-  app.prompt.text2 = std::move(r);
+void open_search(App& app, bool replace, bool focus) {
+  if (!prompt_is_search(app)) {
+    open_prompt(app, PromptKind::Search, app.last_search);
+    app.prompt.text2 = app.last_replace;
+  }
+  Prompt& pr = app.prompt;
+  pr.kind = replace ? PromptKind::Replace : PromptKind::Search;
+  if (focus) {
+    pr.pending = !app.ui.find_field_active();
+    pr.fresh = true;
+    ++app.find_focus_seq;
+    app.key_focus = KeyFocus::Document;
+  }
+  reset_blink(app);
 }
 
-void close_prompt(App& app, bool forget_search) {
+void leave_prompt(App& app) {
+  if (prompt_is_search(app))
+    app.prompt.pending = false;
+  else
+    close_prompt(app);
+}
+
+void close_prompt(App& app) {
   if (prompt_is_search(app)) {
-    if (forget_search) {
-      app.last_search.clear();
-      app.last_replace.clear();
-    } else {
-      app.last_search = app.prompt.text;
-      app.last_replace = app.prompt.text2;
-    }
+    app.last_search = app.prompt.text;
+    app.last_replace = app.prompt.text2;
   }
   if (prompt_uses_minibuf(app.prompt.kind)) app.minibuf.clear();
   app.prompt = Prompt{};
@@ -116,7 +126,7 @@ void minibuf_sync_out(App& app) {
 }
 
 bool commit_prompt(App& app, bool ctrl, bool shift) {
-  if (!prompt_active(app)) return false;
+  if (!prompt_has_keys(app)) return false;
   Pane& p = focused_pane(app);
   xanatoo::Document& d = doc_of(app, p);
   Prompt& pr = app.prompt;
@@ -125,42 +135,12 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       return false;
 
     case PromptKind::Search:
-      return false;  // Enter falls through to the document
-
-    case PromptKind::Replace: {
-      if (pr.text.empty()) return false;
-      if (ctrl && shift) {
-        // Replace all occurrences
-        edit(app);
-        size_t n = xanatoo::replace_all(d, pr.text, pr.text2);
-        app.needs_layout = true;
-        std::cout << "Replace all: " << n << " substitution(s)\n";
-        reset_blink(app);
-        return true;
-      }
-      if (!p.sel.empty()) {
-        edit(app);
-        xanatoo::delete_selection(d, p.sel);
-        if (!pr.text2.empty()) {
-          xanatoo::insert_text(d, p.sel.focus, pr.text2);
-          p.sel.anchor = p.sel.focus;
-        }
-        app.needs_layout = true;
-      }
-      // Find next
-      size_t mlen = 0;
-      if (auto hit = xanatoo::find_next(d, pr.text, p.sel.focus, mlen,
-                                        find_skips(app, p))) {
-        reveal_hit(app, p, hit->node);
-        p.sel.anchor = *hit;
-        p.sel.focus = *hit;
-        xanatoo::advance_caret(d, p.sel.focus, mlen);
-        note_program_selection(app);
-        scroll_caret_into_view(app, p);
-      }
-      reset_blink(app);
+    case PromptKind::Replace:
+      if (ctrl && shift && pr.kind == PromptKind::Replace)
+        find_replace_all(app);
+      else
+        find_step(app, shift);
       return true;
-    }
 
     case PromptKind::EditLink:
     case PromptKind::EditCite: {

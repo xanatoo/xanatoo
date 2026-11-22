@@ -187,6 +187,12 @@ enum class UiCommand {
   Find,
   Replace,
   ReplaceAll,
+  // Find bar; arg "find text\nreplacement" ("" = unchanged).
+  FindText,
+  FindNext,
+  FindPrev,
+  FindClose,
+  ReplaceOne,
   // Format / inline
   Bold,
   Italic,
@@ -570,6 +576,15 @@ struct UiState {
   std::vector<std::string> context_blocks;
   int context_article = -1;
   int context_section = -1;
+  // Find bar of the focused view (App::prompt).
+  bool find_open = false, find_replace = false;
+  int find_x = 0, find_y = 0, find_w = 0, find_h = 0;
+  std::string find_text, find_replacement;
+  uint64_t find_focus_seq = 0;   // a new value focuses the field
+  bool find_select_all = false;  // … with its text selected
+  size_t find_count = 0, find_index = 0;  // "index of count", 0 = none
+  bool find_capped = false;
+  bool find_can_replace = false;
   bool reply_open = false;
   // Embedded panels whose native window is rolled up (`ui_panel_bit`): their
   // ImGui body is not built while the frame shows only its title.
@@ -823,6 +838,8 @@ public:
   void open_media_menu(float x, float y);
 
   UiFrameResult begin_frame(const UiState& state);
+  // A text field of the find bar has the keys.
+  bool find_field_active() const { return find_field_active_; }
   // Finalize ImGui's command lists before native panels are painted. Each
   // embedded form is then drawn immediately after its owning native frame;
   // application chrome and popups are painted last in end_frame().
@@ -847,6 +864,7 @@ private:
   bool tool_button(const char* id, const char* icon_name, const char* tip,
                    UiCommand c, UiCommand& out, bool enabled = true,
                    bool* right_clicked = nullptr, bool latched = false);
+  void find_bar(const UiState& state, UiCommand& cmd, std::string& arg);
   bool tool_menu_begin(const char* id, const char* icon_name, const char* tip);
   void toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd);
   void draw_url_suggestions(const UiState& state, UiFrameResult& result,
@@ -965,6 +983,17 @@ private:
   IdentitySection identity_section_shown_ = IdentitySection::Gemini;
   bool identity_section_init_ = false;
   int identity_section_settle_ = 0;  // frames to ignore the shown tab
+  char find_input_[1024] = {};
+  char find_replace_input_[1024] = {};
+  // Texts last taken from the app; anything else is typing it has not seen.
+  std::string find_text_seen_, find_replacement_seen_;
+  uint64_t find_seq_seen_ = 0;
+  bool find_field_active_ = false;
+  bool enter_shift_ = false, enter_ctrl_ = false;  // of the last Enter press
+  bool find_refocus_ = false;  // a button was pressed: back to the field
+  // Frames left in which the activated field gets its caret / selection.
+  int find_caret_frames_ = 0;
+  bool find_caret_select_ = false;
   char reply_input_[16384] = {}; // Markdown draft, not sent to any server
   uint64_t reply_generation_seen_ = 0;
   char annotation_new_note_[16384] = {};

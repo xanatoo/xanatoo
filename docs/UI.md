@@ -174,7 +174,8 @@ client area the text holds still so it can be read and scrolled.
 ## Paint order
 
 1. Document panes, including overlays, footnotes, scrollbars and page chrome.
-2. Centre tile split chrome.
+2. Centre tile split chrome, then the find bar of a focused centre view (of a
+   document window: right after that window's page).
 3. All native floating/docked frames and client content, back to front. Each
    embedded ImGui form is submitted immediately after its owning native frame;
    nested ImGui child windows remain part of that form. Resize grips between
@@ -185,8 +186,8 @@ client area the text holds still so it can be read and scrolled.
    draw lists, rendered in `Ui::end_frame` above the SDL chrome.
 
 `Ui::prepare_render` finalizes ImGui draw lists after `run_chrome`, before
-`draw_floats`. The `ui_panel_layer` classifier recognizes the six embedded
-panel roots and their child windows. Tooltips and popups remain foreground
+`draw_floats`. The `ui_panel_layer` classifier recognizes the embedded
+panel roots (and the find bar) and their child windows. Tooltips and popups remain foreground
 ImGui windows. Each modern SDL2/SDL3 render pass receives only its selected
 draw lists, preserving their native FloatWindow z-order. The old SDL2
 per-triangle fallback, which caches a whole UI frame as one texture, retains

@@ -20,7 +20,7 @@ Inspired by *Xanadu*, **HyperCard**, and the *Canon Cat*.
 |-----|--------|
 | **Ctrl+S** | Save |
 | **Ctrl+O** / **Ctrl+L** | Open file / focus location bar |
-| **Ctrl+F** | Leap search (F3 next) |
+| **Ctrl+F** | Find in the page (Enter next) |
 | **Ctrl+\\** | Dual-pane split |
 | **Ctrl+T** / **Ctrl+W** | New tab / close tab |
 | **Ctrl+Shift+P** | Pop out to floating window |

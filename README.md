@@ -165,7 +165,7 @@ read-only, with Save As offering an editable Markdown copy.
 | Action | Shortcut |
 | --- | --- |
 | Open a file or address | **Ctrl+L** |
-| Search in the current document / find next | **Ctrl+F** / **F3** |
+| Find in the current document / next match (Shift: previous) | **Ctrl+F** / **Enter** or **F3** |
 | Search the web/services (choose engine) | **Ctrl+Alt+K** |
 | Toggle split view | **Ctrl+\\** |
 | Outline / page navigation panel | **Ctrl+Shift+O** / **Ctrl+Alt+P** |

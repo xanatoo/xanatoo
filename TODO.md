@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Find bar at the page, find bugs
+
+- Ctrl+F / Ctrl+H open a bar at the bottom of the focused view (tile or
+  document window) instead of a status-bar prompt: field, previous / next,
+  "3 of 17", ✕; Replace has a second row. It follows the focused view and
+  stays open until Esc / ✕; F3 then continues the search.
+- Fixed: Enter replaced the match with a line break, also on read-only pages
+  (now next / previous match); typing on could skip the match being typed;
+  matches across formatting were selected one character short; F3 did
+  nothing in browse mode; Replace and Replace All changed read-only pages
+  from the prompt, and Replace All also hidden parts (`find_skips`).
+- Unit tests for the search; the bar checked under Xvfb (one pane, split,
+  document window, mouse, replace, undo, hackaday feed).
+- Open: the bar covers the lower end of the TILES tab between tiles; the
+  on-screen keyboard (gamepad) types into the document, not into the bar;
+  Ctrl+Shift+P does nothing in browse mode; the View menu names F3 for the
+  virtual keyboard, which has no such key. Details: `docs/dev/APP.md`.
+
 ## Status (2026-11-22) — Two-body stretchtext, feeds open as summaries
 
 - A `Stretch` may have a `Summary` child (`:::summary`, `(summary …)`,
@@ -20,11 +38,6 @@
   fold states are not kept across reloads; Org / Gemtext exports write both
   bodies one after the other; the page's word count has both. Details:
   `docs/dev/CONTENT.md`.
-- Found on the way, not fixed (older): Enter in the find prompt falls
-  through to the document and replaces the match with a line break, also on
-  read-only pages (`commit_prompt`, `PromptKind::Search`); find-as-you-type
-  restarts near the end of the last match, so each further letter can skip
-  the match being typed (`on_textinput`).
 
 ## Status (2026-11-22) — Feeds: no second copy of the lead image
 

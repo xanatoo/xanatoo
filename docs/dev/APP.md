@@ -37,6 +37,7 @@ behaviour is free functions ("systems") taking `App&`:
 | `app_drafts.cpp` | unsaved edits → drafts in the revision store (`revstore.hpp`): autosave, restore on load (`attach_draft`), save / revert, `drafts:` page |
 | `app_about.cpp` | `about:` page (Help → About): services, document formats, images (thumtoo / libvips loaders, MuPDF / DjVu) and libraries of this build, gathered from the feature switches and runtime versions; `about_markdown` (`about.hpp`) formats it. New services and user-visible optional deps get an entry there |
 | `app_report.cpp` | startup report on stderr (gamepkgstd `LOGGING.md`): version / build / compiler, features, system, SDL / loader env, each library's runtime vs built-against version and the mapped file, video, renderer + GL strings, controllers with the mapping SDL applies, directories. New libraries get a line there too; choices made while loading (fonts, icons, style, ImGui render path) are logged where they are made, as `topic: details` on stderr |
+| `app_find.cpp` | find and replace in the focused view: `find_retype` (typing searches from `Prompt::origin`, so a match that still fits stays), `find_step`, `find_replace_one` / `_all`, `find_hits` (cached per view: count and scrollbar ticks), the bar's geometry (`find_bar_h` / `find_bar_rect`); the search itself is `find_next` / `find_prev` / `find_all` in `editor.cpp` (case folded, matches may cross spans) |
 | `app_footnotes.cpp` | footnote overlay: notes of on-screen `FootnoteRef` marks laid out in a strip at the pane bottom (`FootnoteOverlay` per pane), in as many columns as the text column fits (min 18em each, whole notes balanced by height via `balance_columns`), leaving out the last notes when their marks would sit under the strip (`fit_footnote_strip`: marks top to bottom, the most leading notes whose height keeps shown marks above and the rest under the strip, from the scroll position alone so there is no resize feedback), on a sheet a shade off the paper under a thick rule; links in notes hover, follow, middle-click into a tab and take the right-click link menu like page links; nothing of the page under the strip is hovered or targeted (`footnote_overlay_link` hit-tests `FootnoteOverlay::doc`; `Hover::link_in_footnotes` marks the hovered link as the strip's; `follow_link_hit` in app_events.cpp is shared with page clicks), a click elsewhere jumps to the note; `hovered_footnote` (mark under the pointer) is washed in the style's `mark` colour here and in the Context panel (`App::context_footnote`) |
 | `app_quotes.cpp` | quote links in threads (`docs/QUOTES.md`): `quote_links_of` caches `find_quote_links` per buffer (`DocBuffer::quotes`, keyed on `DocBuffer::doc_gen`), margin arrows on linked quotes (`quote_icons` / `quote_icon_at`), dotted underline under quoted originals, context menu jumps both ways (`App::context_quotes`, `UiCommand::JumpQuote`); `refresh_context_panel` fills the Context panel from the hover (quote, link, unlinked image, transclusion). Pictures (an image link's target, or an image that is no link) set `App::context_image_src` / `context_image_base` and are drawn fitted by `draw_context_image` (app_gallery.cpp, the gallery's single-image look), not laid out. A laid-out page takes clicks (`press_context` in app_windows.cpp): links open in the focused view via `follow_context_link` / `context_link_target`, resolved against `App::context_address` (the page `context_doc` came from; set wherever it is loaded, also in app_fetch.cpp); other presses select text (`App::context_sel`, Ctrl+C / Ctrl+A in `handle_context_key`) |
 | `app_page.cpp` | Page panel (`WindowRole::Page`, `PagePanel`, Ctrl+Alt+P): navigation / sidebar Chrome (`margin_chrome`, found at any depth) of the focused page as link rows in a dockable tool window; while it is open the panes leave those regions out (`LayoutEngine::set_hide_panel_chrome`, set by `update_page_panel`) |
@@ -150,7 +151,19 @@ Status-bar prompts are one `Prompt` record (`App::prompt`: `PromptKind`,
 `open_prompt` / `open_search`, close with `close_prompt`, Enter dispatches
 through `commit_prompt` (`app_prompts.cpp`). At most one prompt is active;
 path/URL kinds edit through `App::minibuf` (`prompt_uses_minibuf`), and
-`last_search`/`last_replace` keep a displaced find for F3 / Replace All.
+`last_search`/`last_replace` keep a closed or displaced find for F3 /
+Replace All.
+
+The kinds Search and Replace are not in the status bar but in the find bar,
+an ImGui strip (`Ui::find_bar`) below the text of `app.focus`, which takes its
+height from the view (`pane_foot_h` = page bar + find bar, wherever a view's
+height is set). It stays open while its page is used: `leave_prompt` (document
+click, URL bar, F2) closes other prompts only, and code asking "does the
+prompt take keys" uses `prompt_has_keys`, not `prompt_active` — true for a
+search only while `Prompt::pending`, until the field is active. The bar's
+commands carry "find text\nreplacement" (`find_set_texts`) and keep the keys in
+the field. In a document window the bar is drawn with that window
+(`float_ui_layer`, `UiPanelLayer::FindBar`).
 
 Unsaved edits are never discarded behind a confirmation: before a buffer
 is replaced or dropped call `stash_draft` / `stash_or_confirm` (the latter
@@ -182,7 +195,7 @@ desktop, SDL3 or SDL2 >= 2.26):
   (`App::primary_sel_input`, set in `handle_event`) in the same view and
   buffer. Program-set selections (history restore, passage addresses, undo,
   find) and switching to a view that has one are only recorded in
-  `App::primary_sel`; find matches are set from key presses, so they call
+  `App::primary_sel`; find matches are set from user input, so they call
   `note_program_selection`. Read-only pages publish too.
 - Middle-click paste in edit mode reads `sdl::primary_selection()` (the
   clipboard where the platform has no primary selection).

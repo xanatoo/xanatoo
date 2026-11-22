@@ -452,7 +452,7 @@ void place_centre_rows(App& app) {
         app.tile_axis == TileAxis::Columns && area.view == 0;
     const int x = area.rect.x + (left_scroll ? kSbW : 0);
     const int w = std::max(1, area.rect.w - (left_scroll ? kSbW : 0));
-    const int h = std::max(1, area.rect.h - pane_bar_h(app, p));
+    const int h = std::max(1, area.rect.h - pane_foot_h(app, p));
     if (p.w != w || p.h != h) app.needs_layout = true;
     p.sb_left = left_scroll;
     p.x = x;
@@ -467,7 +467,7 @@ void place_centre_rows(App& app) {
     p.x = dock;
     p.y = top;
     p.w = 0;
-    p.h = std::max(1, view_h - pane_bar_h(app, p));
+    p.h = std::max(1, view_h - pane_foot_h(app, p));
   }
 }
 

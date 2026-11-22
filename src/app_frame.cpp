@@ -304,6 +304,24 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_quote_items.clear();
   for (const auto& q : app.context_quotes)
     ui_state.context_quote_items.push_back(q.label);
+  ui_state.find_open = find_bar_shown(app) && !media_fullscreen(app);
+  if (ui_state.find_open) {
+    const SDL_Rect r = find_bar_rect(app);
+    const FindStatus st = find_status(app);
+    ui_state.find_x = r.x;
+    ui_state.find_y = r.y;
+    ui_state.find_w = r.w;
+    ui_state.find_h = r.h;
+    ui_state.find_replace = app.prompt.kind == PromptKind::Replace;
+    ui_state.find_text = app.prompt.text;
+    ui_state.find_replacement = app.prompt.text2;
+    ui_state.find_focus_seq = app.find_focus_seq;
+    ui_state.find_select_all = app.prompt.fresh;
+    ui_state.find_count = st.count;
+    ui_state.find_capped = st.capped;
+    ui_state.find_index = st.index;
+    ui_state.find_can_replace = !browsing(app);
+  }
   ui_state.reply_open = app.reply.open;
   ui_state.reply_generation = app.reply.generation;
   ui_state.reply_author = app.reply.author;
@@ -916,7 +934,8 @@ static bool changes_document(xanatoo::UiCommand cmd) {
   switch (cmd) {
     case C::NewDocument: case C::RevertToSaved:
     case C::Undo: case C::Redo: case C::Cut: case C::Paste:
-    case C::Replace: case C::ReplaceAll: case C::VirtualKey:
+    case C::Replace: case C::ReplaceOne: case C::ReplaceAll:
+    case C::VirtualKey:
     case C::Bold: case C::Italic: case C::Code: case C::Strike:
     case C::Cite: case C::Link:
     case C::Heading1: case C::Heading2: case C::Heading3:
@@ -954,6 +973,24 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   }
 
   switch (cmd) {
+    case C::FindText:
+      find_set_texts(app, arg);
+      break;
+    case C::FindNext:
+    case C::FindPrev:
+      find_set_texts(app, arg);
+      find_step(app, cmd == C::FindPrev);
+      break;
+    case C::FindClose:
+      close_prompt(app);
+      app.ui.release_input_capture();
+      app.key_focus = KeyFocus::Document;
+      reset_blink(app);
+      break;
+    case C::ReplaceOne:
+      find_set_texts(app, arg);
+      find_replace_one(app);
+      break;
     case C::JumpQuote: {
       const size_t k = static_cast<size_t>(std::atoi(arg.c_str()));
       if (app.context_quote_buf != p.buf || k >= app.context_quotes.size())
@@ -1030,7 +1067,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       open_prompt(app, PromptKind::OpenFile);
       break;
     case C::OpenUrlBar:
-      close_prompt(app);
+      leave_prompt(app);
       app.ui.focus_url_bar();
       break;
     case C::CollectionView:
@@ -2146,21 +2183,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::Replace:
       open_search(app, true);
       break;
-    case C::ReplaceAll: {
-      const std::string& query =
-          prompt_is_search(app) ? app.prompt.text : app.last_search;
-      const std::string& repl =
-          prompt_is_search(app) ? app.prompt.text2 : app.last_replace;
-      if (!query.empty()) {
-        edit(app);
-        size_t n = xanatoo::replace_all(d, query, repl);
-        app.needs_layout = true;
-        std::cout << "Replace all: " << n << " substitution(s)\n";
-      } else {
-        open_search(app, true);
-      }
+    case C::ReplaceAll:
+      find_set_texts(app, arg);
+      find_replace_all(app);
       break;
-    }
     case C::Bold:
       if (!p.sel.empty()) {
         edit(app);
@@ -2690,7 +2716,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.edit_mode = !app.edit_mode;
       if (browsing(app)) {
         // Clear any status prompts so they do not trap keys
-        close_prompt(app);
+        leave_prompt(app);
         flash_status(
             app,
             "Browse mode — read-only · F2 edits · gamepad: D-pad move, "
@@ -3110,7 +3136,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
 
 void run_chrome(App& app) {
   // Content only keeps the status line while a prompt or notice needs it.
-  status_bar_h = app.chrome_hidden && app.prompt.kind == PromptKind::None &&
+  const bool status_prompt = prompt_active(app) && !prompt_is_search(app);
+  status_bar_h = app.chrome_hidden && !status_prompt &&
                          xanatoo::sdl::ticks() >= app.status_notice_until
                      ? 0
                      : status_bar_full_h;
@@ -3119,6 +3146,7 @@ void run_chrome(App& app) {
   // places windows, but doing it only there leaves the child controls at the
   // pre-snap position when a dragged/resized panel reaches a screen edge.
   place_windows(app);
+  place_centre_rows(app);  // so does the find bar, below a view
   xanatoo::UiState ui_state;
   build_ui_state(app, ui_state);
   ui_state.pointer_x = ui_state.stick_active ? ui_state.stick_cx : app.mouse_x;
@@ -3127,8 +3155,10 @@ void run_chrome(App& app) {
   ui_state.pointer_native_top = float_layer_at(
       app, static_cast<int>(ui_state.pointer_x),
       static_cast<int>(ui_state.pointer_y));
+  if (ui_state.find_open && app.focus < kCentreViews)
+    ui_state.native_panel_order.push_back(xanatoo::UiPanelLayer::FindBar);
   for (const FloatWindow* w : float_stack(app)) {
-    const auto layer = embedded_panel_layer(w->role);
+    const auto layer = float_ui_layer(app, *w);
     if (layer != xanatoo::UiPanelLayer::Chrome)
       ui_state.native_panel_order.push_back(layer);
   }
@@ -3136,6 +3166,8 @@ void run_chrome(App& app) {
   app.ui_top = ui_frame.top_reserved;
   app.ui_bottom = ui_frame.bottom_reserved;
   place_centre_rows(app);  // the toolbar may have changed height
+  if (!ui_state.find_open || app.ui.find_field_active())
+    app.prompt.pending = false;
   // A tab dragged off the strip previews where it would dock.
   {
     const auto hot = ui_frame.context_block_hot;
@@ -3153,9 +3185,15 @@ void run_chrome(App& app) {
     app.dock_preview = Dock::None;
   }
   execute_command(app, ui_frame.cmd, ui_frame.arg);
+  // The find bar keeps the keys in its field.
+  using C = xanatoo::UiCommand;
+  const bool find_cmd =
+      ui_frame.cmd == C::FindText || ui_frame.cmd == C::FindNext ||
+      ui_frame.cmd == C::FindPrev || ui_frame.cmd == C::ReplaceOne ||
+      (ui_frame.cmd == C::ReplaceAll && !ui_frame.arg.empty());
   // A tab press selects it but may turn into a drag (reorder / tear off),
   // so its mouse capture stays.
-  if (ui_frame.cmd != xanatoo::UiCommand::None &&
+  if (ui_frame.cmd != xanatoo::UiCommand::None && !find_cmd &&
       ui_frame.cmd != xanatoo::UiCommand::SelectTab &&
       ui_frame.cmd != xanatoo::UiCommand::ReorderTabs &&
       ui_frame.cmd != xanatoo::UiCommand::EditReply &&
@@ -4422,25 +4460,12 @@ static void draw_pane_scrollbar(App& app, int i) {
         if (y >= 0.f) mark_at(y, c.r, c.g, c.b);
       }
     }
-    // Search hits (cheap capped scan while leap search is active).
+    // Search hits (while the find bar is open).
     if (prompt_is_search(app) && !app.prompt.text.empty() &&
         &pane == &app.panes[app.focus]) {
-      const xanatoo::Document& sd = doc_of(app, pane);
-      const DocBuffer* sb = find_buf(app, pane.buf);
-      const uint64_t gen = sb ? sb->doc_gen : 0;
-      SearchTicks& st = pane.search_ticks;
-      if (st.query != app.prompt.text || st.doc != &sd ||
-          st.buf != pane.buf || st.doc_gen != gen ||
-          st.nodes != sd.nodes.size()) {
-        st.query = app.prompt.text;
-        st.doc = &sd;
-        st.buf = pane.buf;
-        st.doc_gen = gen;
-        st.nodes = sd.nodes.size();
-        st.hits = xanatoo::find_all(sd, app.prompt.text, 48,
-                                    find_skips(app, pane));
-      }
-      for (const xanatoo::Caret& hit : st.hits) {
+      const std::vector<xanatoo::Caret>& hits = find_hits(app, pane);
+      const size_t shown = std::min<size_t>(hits.size(), 48);
+      for (const xanatoo::Caret& hit : std::span(hits).first(shown)) {
         auto cpos = xanatoo::caret_screen_pos(
             pane.layout, hit, 0.f,
             static_cast<float>(app.fonts.regular.line_height()));
@@ -5298,7 +5323,7 @@ static std::string image_alt_tooltip(App& app) {
 
 void draw_hover_tooltip(App& app) {
   {
-    const bool prompt = prompt_active(app) || app.help_mode;
+    const bool prompt = prompt_has_keys(app) || app.help_mode;
     std::string tip;
     if (!prompt) {
       if (app.hover.stretch != xanatoo::INVALID_NODE ||
@@ -5572,6 +5597,8 @@ void run_frame(App& app) {
   // Freeze ImGui's draw lists before painting native frames. Rich panel forms
   // now composite inside float_stack rather than across everything at the end.
   app.ui.prepare_render();
+  if (app.focus < kCentreViews && !media_fullscreen(app))
+    app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::FindBar);
   draw_floats(app);
   // The status line is fixed chrome and rejects pointer input in its strip.
   // Paint it after free windows too, so a very tall panel cannot cover it.

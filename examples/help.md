@@ -63,8 +63,11 @@ Export via *File → Export as S-expression…* or *Export as Markdown…*.
 - **Ctrl+Home** / **End** — Document start / end
 - **Page Up** / **Down** — Scroll by page
 - **Ctrl+←** / **→** — Word left / right
-- **Ctrl+F** / **F3** — Leap search / next match
-- **Ctrl+H** — Find and replace
+- **Ctrl+F** — Find bar at the bottom of the page: matches show as you type;
+  **Enter** / **F3** next, **Shift+Enter** / **Shift+F3** previous, **Esc** or
+  ✕ closes it (**F3** then continues the search)
+- **Ctrl+H** — Find and replace: **Tab** switches the fields, **Enter** in the
+  second replaces the match, **Ctrl+Shift+Enter** replaces all
 - **Ctrl+Shift+O** — Outline (headings by section depth)
 - **Ctrl+K** — Search bar (hidden by default; engine button + field,
   Enter searches, Esc closes). **Ctrl+L** takes `w xanadu` / `ax electron
@@ -159,8 +162,8 @@ browse toolbar otherwise. Foreign pages remain read-only until saved as an
 editable local copy.
 
 **F11** (gamepad **X**) toggles **Content only**: menu bar, toolbars, tabs
-and the status line disappear and only the page is left. Prompts (Ctrl+F,
-Ctrl+L) and notices still bring up the status line; right-click → **Show
+and the status line disappear and only the page is left. Prompts
+and notices still bring up the status line; right-click → **Show
 Menus and Toolbars** also leaves it.
 
 **F9** (View → **Reader Mode**, the book button) hides the page chrome of a

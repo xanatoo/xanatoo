@@ -389,7 +389,7 @@ void place_windows(App& app) {
     if (!view_live(app, w.view)) continue;
     Pane& p = app.panes[w.view];
     auto [cx, cy, cw, ch] = soft_client_rect(app, w);
-    const int ph = std::max(1, ch - pane_bar_h(app, p));  // page bar below
+    const int ph = std::max(1, ch - pane_foot_h(app, p));  // bars below
     if (p.w != cw || p.h != ph) app.needs_layout = true;
     p.x = cx;
     p.y = cy;

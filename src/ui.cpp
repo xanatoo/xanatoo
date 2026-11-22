@@ -868,6 +868,216 @@ bool Ui::tool_button(const char* id, const char* icon_name, const char* tip,
 
 
 
+// A copied-in field of the find bar: `buf` follows `text` whenever the app
+// changed it, and is left alone while it holds typing the app has not seen.
+static void sync_find_field(char* buf, size_t size, const std::string& text,
+                            std::string& seen, bool force) {
+  if (!force && text == seen) return;
+  seen = text;
+  std::snprintf(buf, size, "%s", text.c_str());
+}
+
+// Strip below the text of the focused view (UiState::find_*): the query with
+// previous / next, the count and a close button; the replacement under it.
+void Ui::find_bar(const UiState& state, UiCommand& cmd, std::string& arg) {
+  if (!state.find_open) {
+    find_field_active_ = false;
+    find_caret_frames_ = 0;
+    return;
+  }
+  const bool focus = find_seq_seen_ != state.find_focus_seq;
+  find_seq_seen_ = state.find_focus_seq;
+  sync_find_field(find_input_, sizeof(find_input_), state.find_text,
+                  find_text_seen_, focus);
+  sync_find_field(find_replace_input_, sizeof(find_replace_input_),
+                  state.find_replacement, find_replacement_seen_, focus);
+  find_caret_select_ = state.find_select_all;
+
+  ImGui::SetNextWindowPos(ImVec2(static_cast<float>(state.find_x),
+                                 static_cast<float>(state.find_y)));
+  ImGui::SetNextWindowSize(ImVec2(static_cast<float>(state.find_w),
+                                  static_cast<float>(state.find_h)));
+  constexpr ImGuiWindowFlags flags =
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+      ImGuiWindowFlags_NoScrollWithMouse;
+  const float row = 26.f * scale_, gap = 4.f * scale_;
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.f, 1.f));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(gap * 1.5f, gap));
+  ImGui::PushStyleVar(
+      ImGuiStyleVar_FramePadding,
+      ImVec2(5.f * scale_,
+             std::max(0.f, (row - ImGui::GetFontSize()) * 0.5f)));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, gap));
+  bool active = false;
+  if (ImGui::Begin("##find_bar", nullptr, flags)) {
+    const ImVec2 at = ImGui::GetWindowPos();
+    const float width = ImGui::GetWindowWidth();
+    ImGui::GetWindowDrawList()->AddLine(
+        at, ImVec2(at.x + width, at.y),
+        ImGui::GetColorU32(ImGuiCol_Border));
+    const auto command = [&](UiCommand c) {
+      cmd = c;
+      arg = std::string(find_input_) + "\n" + find_replace_input_;
+    };
+    // Enter keeps the field; the caret goes to the end (ImGui selects all).
+    const auto place_caret = [](ImGuiInputTextCallbackData* cb) -> int {
+      auto* ui = static_cast<Ui*>(cb->UserData);
+      const bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter, true) ||
+                         ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, true);
+      if (ui->find_caret_frames_ <= 0 && !enter) return 0;
+      cb->SelectionStart =
+          ui->find_caret_frames_ > 0 && ui->find_caret_select_ ? 0
+                                                               : cb->BufTextLen;
+      cb->SelectionEnd = cb->CursorPos = cb->BufTextLen;
+      ui->find_caret_frames_ = 0;
+      return 0;
+    };
+    const auto field = [&](const char* id, char* buf, size_t size) {
+      ImGuiIO& io = ImGui::GetIO();
+      const bool keep = io.ConfigInputTextEnterKeepActive;
+      io.ConfigInputTextEnterKeepActive = true;
+      const bool enter = ImGui::InputText(
+          id, buf, size,
+          ImGuiInputTextFlags_EnterReturnsTrue |
+              ImGuiInputTextFlags_CallbackAlways,
+          place_caret, this);
+      io.ConfigInputTextEnterKeepActive = keep;
+      active |= ImGui::IsItemActive();
+      return enter;
+    };
+
+    const float close_x = width - row - gap;
+    const float label_w =
+        std::max(ImGui::CalcTextSize("Find").x,
+                 state.find_replace ? ImGui::CalcTextSize("Replace").x : 0.f) +
+        gap * 2.f;
+    const bool narrow = width < 420.f * scale_;
+    const float field_x = narrow ? gap * 1.5f : gap * 1.5f + label_w;
+    const char* const all_label = narrow ? "All" : "Replace All";
+    const float pad_x = 2.f * ImGui::GetStyle().FramePadding.x;
+    const float count_w =
+        narrow ? 0.f : ImGui::CalcTextSize("1000+ matches").x + 2.f * gap;
+    const float tail =
+        std::max(2.f * (row + gap) + count_w,
+                 state.find_replace ? ImGui::CalcTextSize("Replace").x +
+                                          ImGui::CalcTextSize(all_label).x +
+                                          2.f * (pad_x + gap)
+                                    : 0.f);
+    const float field_w = std::clamp(close_x - field_x - tail - gap,
+                                     40.f * scale_, 420.f * scale_);
+
+    if (!narrow) {
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Find");
+      ImGui::SameLine();
+    }
+    ImGui::SetCursorPosX(field_x);
+    ImGui::SetNextItemWidth(field_w);
+    if (std::exchange(find_refocus_, false) || focus) {
+      ImGui::SetKeyboardFocusHere();
+      find_caret_frames_ = 4;
+    }
+    const bool mod_all = state.find_replace && state.find_can_replace &&
+                         enter_ctrl_ && enter_shift_;
+    if (field("##find_text", find_input_, sizeof(find_input_)))
+      command(mod_all        ? UiCommand::ReplaceAll
+              : enter_shift_ ? UiCommand::FindPrev
+                             : UiCommand::FindNext);
+    // After a button the keys go back to the field: Enter keeps stepping.
+    const auto press = [&](UiCommand c) {
+      command(c);
+      find_refocus_ = true;
+    };
+    const auto tip = [](const char* key, const char* text) {
+      note_hover_help(key, text);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", text);
+    };
+    const bool none = find_input_[0] == '\0';
+    // Tab goes between the two fields.
+    ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
+    ImGui::BeginDisabled(none);
+    ImGui::SameLine();
+    if (ImGui::ArrowButtonEx("##find_prev", ImGuiDir_Up, ImVec2(row, row)))
+      press(UiCommand::FindPrev);
+    draw_button_inner_bevel();
+    tip("find_prev", "Previous match (Shift+Enter, Shift+F3)");
+    ImGui::SameLine();
+    if (ImGui::ArrowButtonEx("##find_next", ImGuiDir_Down, ImVec2(row, row)))
+      press(UiCommand::FindNext);
+    draw_button_inner_bevel();
+    tip("find_next", "Next match (Enter, F3)");
+    ImGui::EndDisabled();
+    if (!narrow && !none) {
+      ImGui::SameLine(0.f, 2.f * gap);
+      ImGui::AlignTextToFramePadding();
+      const char* const more = state.find_capped ? "+" : "";
+      if (state.find_count == 0)
+        ImGui::TextColored(ImVec4(0.75f, 0.1f, 0.1f, 1.f), "Not found");
+      else if (state.find_index > 0)
+        ImGui::Text("%zu of %zu%s", state.find_index, state.find_count, more);
+      else
+        ImGui::Text("%zu%s %s", state.find_count, more,
+                    state.find_count == 1 ? "match" : "matches");
+    }
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(close_x);
+    if (ImGui::Button("##find_close", ImVec2(row, row)))
+      command(UiCommand::FindClose);
+    draw_button_inner_bevel();
+    {
+      const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+      const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+      const float r = row * 0.18f;
+      const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
+      ImDrawList* draw = ImGui::GetWindowDrawList();
+      draw->AddLine(ImVec2(c.x - r, c.y - r), ImVec2(c.x + r, c.y + r), ink,
+                    1.6f * scale_);
+      draw->AddLine(ImVec2(c.x - r, c.y + r), ImVec2(c.x + r, c.y - r), ink,
+                    1.6f * scale_);
+    }
+    tip("find_close", "Close the find bar (Esc)");
+    ImGui::PopItemFlag();
+
+    if (state.find_replace) {
+      if (!narrow) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Replace");
+        ImGui::SameLine();
+      }
+      ImGui::SetCursorPosX(field_x);
+      ImGui::SetNextItemWidth(field_w);
+      if (field("##find_replacement", find_replace_input_,
+                sizeof(find_replace_input_)))
+        command(mod_all ? UiCommand::ReplaceAll : UiCommand::ReplaceOne);
+      ImGui::PushItemFlag(ImGuiItemFlags_NoTabStop, true);
+      ImGui::BeginDisabled(none || !state.find_can_replace);
+      ImGui::SameLine();
+      if (classic_button("Replace", ImVec2(0.f, row)))
+        press(UiCommand::ReplaceOne);
+      tip("find_replace", "Replace this match and go to the next (Enter)");
+      ImGui::SameLine();
+      if (classic_button(all_label, ImVec2(0.f, row)))
+        press(UiCommand::ReplaceAll);
+      tip("find_replace_all", "Replace every match (Ctrl+Shift+Enter)");
+      ImGui::EndDisabled();
+      ImGui::PopItemFlag();
+    }
+    // Typing the app has not been told yet.
+    if (cmd == UiCommand::None &&
+        (state.find_text != find_input_ ||
+         state.find_replacement != find_replace_input_))
+      command(UiCommand::FindText);
+  }
+  ImGui::End();
+  ImGui::PopStyleVar(6);
+  find_field_active_ = active;
+}
+
 // Icon (or text) button that opens a popup menu. When true, fill items then tool_menu_end().
 bool Ui::tool_menu_begin(const char* id, const char* icon_name, const char* tip) {
   const Icon* ic = icon(icon_name);
@@ -1036,6 +1246,13 @@ void Ui::process_event(const SDL_Event& ev) {
       xanatoo::sdl::keycode(ev) == SDLK_TAB &&
       (xanatoo::sdl::keymod(ev) & KMOD_CTRL)) {
     return;
+  }
+  // Shift can be up again by the time the frame sees Enter (find bar).
+  if (kind == xanatoo::sdl::EventKind::KeyDown &&
+      (xanatoo::sdl::keycode(ev) == SDLK_RETURN ||
+       xanatoo::sdl::keycode(ev) == SDLK_KP_ENTER)) {
+    enter_shift_ = (xanatoo::sdl::keymod(ev) & KMOD_SHIFT) != 0;
+    enter_ctrl_ = (xanatoo::sdl::keymod(ev) & KMOD_CTRL) != 0;
   }
   // Middle click on a text field pastes the primary selection, X11 style.
   // Whether a field is under the press is known only once a frame has laid
@@ -3902,6 +4119,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     ImGui::EndPopup();
   }
+
+  find_bar(state, cmd, result.arg);
 
   // ---- Reply composer: custom floating/dockable frame underneath, ImGui
   // text widget and Markdown tools above it. Nothing here sends a request.

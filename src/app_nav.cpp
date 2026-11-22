@@ -650,7 +650,7 @@ void remove_bookmark_folder(App& app, const std::string& path) {
 void poll_shared_state(App& app) {
   // An open prompt may be stepping through a ring: wait until it closes.
   const uint64_t now = xanatoo::sdl::ticks();
-  if (prompt_active(app) || now - app.shared_state_poll_ms < 1000) return;
+  if (prompt_has_keys(app) || now - app.shared_state_poll_ms < 1000) return;
   app.shared_state_poll_ms = now;
   if (!xanatoo::statedb_changed_elsewhere()) return;
   history_changed(app);

@@ -213,7 +213,7 @@ void begin_select(App& app) {
     t.mode = TouchMode::Hold;  // nothing to select; menu on lift
     return;
   }
-  if (prompt_active(app) && !prompt_is_search(app)) close_prompt(app);
+  leave_prompt(app);
   focus_view(app, t.pane);
   p.sel.focus = *hit;
   p.sel.anchor = *hit;

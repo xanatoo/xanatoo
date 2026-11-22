@@ -247,8 +247,8 @@ struct ScrollMarks {
   std::unordered_map<xanatoo::NodeId, float> block_y;
 };
 
-// Scrollbar ticks of the leap search: the first hits of the query, kept
-// while the query and the document stay the same (draw_pane_scrollbar).
+// The hits of the find query, kept while the query and the document stay the
+// same (find_hits): the bar's count and the first scrollbar ticks.
 struct SearchTicks {
   std::string query;
   const xanatoo::Document* doc = nullptr;
@@ -1046,7 +1046,14 @@ struct Prompt {
   PromptKind kind = PromptKind::None;
   std::string text;           // find text / path / URL / href / summary …
   std::string text2;          // replacement text (Replace only)
-  bool focus_second = false;  // Replace: editing text2
+  // Search / Replace (app_find.cpp): the bar's field shall get the keys and
+  // does not have them yet — typing goes to `text` meanwhile. `fresh`: the
+  // next typing replaces the text (it is selected).
+  bool pending = false;
+  bool fresh = false;
+  xanatoo::Caret origin;     // where typing searches from
+  xanatoo::Selection found;  // the selection find made last, in `found_buf`
+  BufferId found_buf = kNoBuffer;
   // Target of EditLink / EditCite / EditSummary.
   xanatoo::NodeId node = xanatoo::INVALID_NODE;
   size_t span = 0;
@@ -1286,6 +1293,7 @@ struct App {
   // Last find / replace text, kept when another prompt displaces a search
   // so F3 / Replace All keep working.
   std::string last_search, last_replace;
+  uint64_t find_focus_seq = 0;  // requests to focus the find bar's field
   xanatoo::Minibuffer minibuf;
   std::vector<std::string> minibuf_hist_path;
   std::vector<std::string> minibuf_hist_url;
@@ -1798,6 +1806,13 @@ int page_bar_h(const App& app);
 inline int pane_bar_h(const App& app, const Pane& p) {
   return pane_paged(app, p) ? page_bar_h(app) : 0;
 }
+// Height of the find bar below the focused view (0 for the others, or while
+// closed); it goes under the page bar.
+int find_bar_h(const App& app, const Pane& p);
+// All that a view's text area leaves free at the bottom.
+inline int pane_foot_h(const App& app, const Pane& p) {
+  return pane_bar_h(app, p) + find_bar_h(app, p);
+}
 // layout_panes: cut the freshly laid out single-column pane.layout into
 // pages (replaces it) when the view is paged; else clears pane.pages.
 void paginate_pane(App& app, Pane& p, int columns, float column_w);
@@ -1935,19 +1950,49 @@ inline bool prompt_is_search(const App& app) {
   return app.prompt.kind == PromptKind::Search ||
          app.prompt.kind == PromptKind::Replace;
 }
+// The prompt takes plain keys: every status-bar prompt, and the find bar only
+// until its field has them (afterwards ImGui or the document does).
+inline bool prompt_has_keys(const App& app) {
+  return prompt_active(app) && (!prompt_is_search(app) || app.prompt.pending);
+}
 // Path/URL kinds edited through the Minibuffer (Tab completion, history).
 bool prompt_uses_minibuf(PromptKind k);
 // Opens `kind` (closing any prompt that was open); `initial` seeds the text.
 void open_prompt(App& app, PromptKind kind, std::string initial = {});
-// Closes the prompt and clears its text. Search text survives in last_search
-// unless `forget_search` (Esc).
-void close_prompt(App& app, bool forget_search = false);
-// Opens the Find (or Find+Replace) prompt, keeping the current / last query.
-void open_search(App& app, bool replace);
+// Closes the prompt and clears its text. Search text survives in last_search.
+void close_prompt(App& app);
+// The keys go elsewhere (document click, URL bar): closes status-bar
+// prompts; the find bar stays open.
+void leave_prompt(App& app);
+// Opens the Find (or Find+Replace) bar, keeping the current / last query;
+// `focus` puts the keys into its field, the query selected.
+void open_search(App& app, bool replace, bool focus = true);
 const char* prompt_label(PromptKind k);
-// Enter pressed: commit the active prompt. Returns false when the key should
-// fall through to the document (no prompt, or an empty/plain find).
+// Enter pressed: commit the prompt that has the keys. Returns false when the
+// key should fall through to the document (no prompt, or an empty one).
 bool commit_prompt(App& app, bool ctrl, bool shift);
+
+// ---- Find and replace (app_find.cpp) ----
+// The query changed: the match at or after the place the typing started.
+void find_retype(App& app);
+// The bar's fields: "find text\nreplacement"; anything else is ignored.
+void find_set_texts(App& app, const std::string& arg);
+// Next / previous match of the query from the selection, wrapping.
+void find_step(App& app, bool backward);
+// Replaces the selection if it is a match, then goes to the next one.
+void find_replace_one(App& app);
+void find_replace_all(App& app);
+// Matches of the query in the view, kept in Pane::search_ticks.
+const std::vector<xanatoo::Caret>& find_hits(App& app, Pane& p);
+struct FindStatus {
+  size_t count = 0;
+  bool capped = false;  // there may be more
+  size_t index = 0;     // 1-based match that is selected, 0 = none
+};
+FindStatus find_status(App& app);
+bool find_bar_shown(App& app);
+SDL_Rect find_bar_rect(const App& app);
+
 bool minibuf_active(App& app);
 void minibuf_begin(App& app, const std::string& initial = {});
 void minibuf_commit_path_hist(App& app);
@@ -2655,6 +2700,9 @@ FloatWindow* float_at(App& app, int x, int y);  // topmost window under (x,y)
 // nullopt = no native frame; Chrome = a native-only panel, which covers any
 // embedded ImGui form belonging to a different window.
 std::optional<UiPanelLayer> float_layer_at(App& app, int x, int y);
+// The UI layer that goes with a window: the panel it embeds, or the find bar
+// of the document it shows.
+UiPanelLayer float_ui_layer(App& app, const FloatWindow& w);
 // Same edge hit-test as float_press, including the resize slack outside a frame.
 // bit 1=right, 2=bottom, 4=left, 8=top. Zero if nothing resizable is hit.
 int float_resize_at(App& app, int x, int y);
