@@ -202,17 +202,22 @@ std::optional<Json> unwrap(Json reply, std::string* err) {
     if (err) *err = text_field(*error, {"message", "detail"});
     return std::nullopt;
   }
-  if (const Json* result = object(reply, "result")) reply = *result;
-  if (const Json* failed = object(reply, "isError"); failed && failed->b) {
+  // Do not assign a nested `result` back onto its owning JSON tree. The
+  // source can be invalidated while vector/object members are being copied.
+  // Keep both the envelope and selected result alive until extraction.
+  const Json* result = object(reply, "result");
+  if (!result) result = &reply;
+  if (const Json* failed = object(*result, "isError");
+      failed && failed->type == Json::Type::Bool && failed->b) {
     if (err) {
-      const Json* c = list_field(reply, {"content"});
+      const Json* c = list_field(*result, {"content"});
       *err = c && !c->items.empty() ? text_field(c->items.front(), {"text"})
                                      : "Digg MCP returned a tool error";
     }
     return std::nullopt;
   }
-  if (const Json* data = object(reply, "structuredContent")) return *data;
-  if (const Json* parts = list_field(reply, {"content"})) {
+  if (const Json* data = object(*result, "structuredContent")) return *data;
+  if (const Json* parts = list_field(*result, {"content"})) {
     for (const Json& part : parts->items) {
       const std::string payload = text_field(part, {"text"});
       if (auto parsed = parse_object_json(payload)) return parsed;
@@ -220,7 +225,7 @@ std::optional<Json> unwrap(Json reply, std::string* err) {
     if (err) *err = "Digg MCP returned text instead of structured JSON";
     return std::nullopt;
   }
-  return reply;
+  return *result;
 }
 
 }  // namespace

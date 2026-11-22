@@ -5341,3 +5341,22 @@ DjVu runtime reproduction require the Nix development environment (not
 available in the Web container). Bundle 292 is the cumulative handover; next
 number 293. If the abort recurs, capture `thread apply all bt` under gdb: a
 DjVuLibre *internal* thread exception is not catchable at the caller.
+
+## Digg MCP result ownership regression (2026-11-22)
+
+User reported `digg:` failing with `Cannot load page: basic_string::_M_create`
+after fixing the request limit. Investigation found a concrete memory safety
+bug in `src/forum_digg.cpp`: `unwrap()` performed `reply = *result` where
+`result` was a pointer into `reply`'s own JSON tree. That invalidates the
+source during copy assignment for some nested result shapes. Reproduced an
+ASan heap-use-after-free with a JSON-RPC result with regular fields; also
+confirmed the newly added regression test fails under ASan with the old
+`src/forum_digg.cpp` at `unwrap()` and passes with the fixed code. Decoder
+now walks an unmodified JSON tree using a const `result` pointer and copies
+only the extracted return value. Tests include variations of metadata field
+order/count and a full 20-story page. Debug ASan/UBSan and GCC release
+standalone Digg tests pass; GCC forum transport source builds. Nix is not
+installed here, so full native application build and live MCP calls remain
+unverified. Clang on this host's libstdc++ still rejects the pre-existing
+recursive `Json` pair type in `json_dom.hpp` (not introduced by this change).
+Favicon handling was not touched. Web handover bundle 293 supersedes 292.

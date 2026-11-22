@@ -117,6 +117,65 @@ void mcp_transport() {
   CHECK(error.find("JSON") != std::string::npos);
 }
 
+// A normal MCP reply owns the `result` object in its top-level fields.
+// Regression: assigning `reply = *json_get(reply, "result")` used to copy
+// from an element of reply.fields into reply itself. Depending on the JSON
+// shape this caused heap-use-after-free (confirmed with AddressSanitizer).
+// Exercise different result member counts/order, including nested arrays.
+void mcp_owned_result_regression() {
+  const std::string posts = R"({"posts":[{"id":"01234567-89ab-cdef-0123-456789abcdef",
+      "title":"First \u2014 story","summary":"Detail"}]})";
+  const std::string content = "\"content\":[{\"type\":\"text\",\"text\":\"not structured JSON\"}]";
+  const std::string structured = "\"structuredContent\":" + posts;
+  const std::string flag = "\"isError\":false";
+  const std::string extra = "\"extra\":{\"nested\":[{\"text\":\"" +
+      std::string(512, 'x') + "\"}]}";
+  const std::string properties[] = {structured, content, flag, extra};
+  for (size_t width = 1; width <= 4; ++width) {
+    for (size_t rotate = 0; rotate < 4; ++rotate) {
+      std::string fields;
+      for (size_t i = 0; i < width; ++i) {
+        if (!fields.empty()) fields += ',';
+        fields += properties[(i + rotate) % 4];
+      }
+      // Only replies including structuredContent are expected to unwrap as
+      // feed data; other variants still must parse without throwing.
+      const std::string response = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{" +
+                                   fields + "}}";
+      std::string err;
+      auto result = digg_mcp_decode(response, &err);
+      CHECK(result || !err.empty());
+      if (result && fields.find("structuredContent") != std::string::npos) {
+        CHECK(json_string(json_path(*result, "posts/0/title")) == "First — story");
+        Document doc = digg_list_document(*result, address("digg:"));
+        CHECK(says(doc, "First — story"));
+      }
+    }
+  }
+  // A full feed page, not just a one-post stub: make sure the decoded tree
+  // survives long enough to produce all 20 Document entries.
+  std::string page = R"({"jsonrpc":"2.0","id":1,"result":{"structuredContent":{"posts":[)";
+  for (int i = 0; i < 20; ++i) {
+    if (i) page += ',';
+    page += "{\"title\":\"Digg story " + std::to_string(i) +
+            "\",\"summary\":\"" + std::string(300, 'x') + "\"}";
+  }
+  page += R"(]}}})";
+  auto feed = digg_mcp_decode(page);
+  CHECK(feed);
+  Document full = digg_list_document(*feed, address("digg:"));
+  int articles = 0;
+  for (const Node& n : full.nodes)
+    if (n.kind == NodeKind::Article) ++articles;
+  CHECK(articles == 20);
+
+  const std::string fail = R"({"jsonrpc":"2.0","id":1,"result":{
+    "isError":true,"content":[{"type":"text","text":"rate limited"}]}})";
+  std::string err;
+  CHECK(!digg_mcp_decode(fail, &err));
+  CHECK(err == "rate limited");
+}
+
 void lists_and_posts() {
   auto payload = parse(R"({"posts":[
     {"id":"01234567-89ab-cdef-0123-456789abcdef", "title":"Reusable launch vehicle",
@@ -164,5 +223,6 @@ int main() {
   refs();
   feed_arguments();
   mcp_transport();
+  mcp_owned_result_regression();
   lists_and_posts();
 }

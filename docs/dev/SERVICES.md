@@ -521,4 +521,7 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   exposes its short ID, not the UUID needed by `digg_get_post`.
   Story detail Documents include explicit web and source links.
 - `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
-  pagination, posts and sources without a network or SDL dependency.
+  pagination, full 20-item feeds, posts and sources without a network or SDL
+  dependency. The MCP envelope must be read through pointers to its nested
+  `result`: assigning that child JSON back onto its owning `Json` object
+  corrupts memory (ASan heap-use-after-free regression, fixed in bundle 293).

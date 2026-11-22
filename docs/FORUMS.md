@@ -128,8 +128,11 @@ refs; post web URLs cannot be converted to an MCP UUID, so they remain
 ordinary web pages. See https://digg.com/llms.txt and
 https://digg.com/mcp/connect for the published interfaces.
 
-The parser / MCP envelope tests are offline (`xanatoo_digg_tests`). The
-transport has not yet been live-tested against Digg from this environment.
+The parser / MCP envelope tests are offline (`xanatoo_digg_tests`), including
+full 20-story feeds and a regression for use-after-free when unwrapping an
+MCP `result` nested inside its owning JSON object. The regression triggers
+AddressSanitizer on the old implementation and passes on the corrected one.
+The transport has not yet been live-tested against Digg from this environment.
 
 ## Not done
 
