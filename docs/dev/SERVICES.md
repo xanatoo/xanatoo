@@ -105,7 +105,11 @@ read-only service clients. Every client is read-only: never post or log in.
   menu (`UiCommand::OpenPageFeed`, `feed:` prefixed when `is_feed_url`
   cannot tell). No icon on local pages, native views or feeds themselves;
   no guessing of `/feed.xml` (pages without the link get no icon).
-- Entry HTML goes through `html_min` (below).
+- Entry HTML goes through `html_min` (below). An entry shows one body:
+  `content:encoded` / `content`, else `description` / `summary` (never both).
+- `media:thumbnail` is an image floated left before the body, left out when
+  the body shows the same file in another size (`image_identity` ignores
+  scheme, query and WordPress' `-800x445`).
 
 ## Wikipedia (`wikipedia.hpp`)
 

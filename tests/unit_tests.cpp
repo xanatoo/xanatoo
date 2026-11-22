@@ -6584,6 +6584,47 @@ void test_parse_feeds() {
     }
   }
 
+  // A thumbnail is left out when the body shows the same image in another
+  // size; a different one stays, floated before the body.
+  auto thumbs = parse_feed(
+      "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" "
+      "xmlns:content=\"http://purl.org/rss/1.0/modules/content/\"><channel>"
+      "<title>T</title>"
+      "<item><title>Query</title><description>short</description>"
+      "<content:encoded><![CDATA[<div><img src=\"https://t.example/a.jpg?w=800\"/>"
+      "</div><p>Body</p>]]></content:encoded>"
+      "<media:thumbnail url=\"https://t.example/a.jpg\"/></item>"
+      "<item><title>Suffix</title><description><![CDATA[<p>"
+      "<img src=\"http://t.example/b-800x445.png\"/> Text</p>]]></description>"
+      "<media:thumbnail url=\"https://t.example/b-150x150.png\"/></item>"
+      "<item><title>Other</title><description><![CDATA[<p>Text</p>"
+      "<img src=\"https://t.example/pic?id=1\"/>]]></description>"
+      "<media:thumbnail url=\"https://t.example/pic?id=2\"/></item>"
+      "</channel></rss>",
+      "https://t.example/feed");
+  EXPECT(thumbs.has_value());
+  if (thumbs) {
+    const auto arts = articles(*thumbs);
+    EXPECT_EQ(arts.size(), 3u);
+    auto floated = [&](NodeId art) {
+      for (NodeId c : thumbs->get(art).children)
+        if (thumbs->get(c).float_side == "left") return thumbs->get(c).src;
+      return std::string{};
+    };
+    if (arts.size() == 3) {
+      EXPECT_EQ(floated(arts[0]), "");
+      EXPECT_EQ(floated(arts[1]), "");
+      EXPECT_EQ(floated(arts[2]), "https://t.example/pic?id=2");
+      const Node& other = thumbs->get(arts[2]);
+      EXPECT(other.children.size() > 2 &&
+             thumbs->get(other.children[1]).float_side == "left");
+      EXPECT_EQ(thumbs->get(other.children[1]).parent, arts[2]);
+      // Only the full text is shown, not the summary next to it.
+      for (NodeId c : thumbs->get(arts[0]).children)
+        EXPECT(plain_text(*thumbs, c) != "short");
+    }
+  }
+
   auto rdf = parse_feed(
       "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" "
       "xmlns=\"http://purl.org/rss/1.0/\"><channel><title>R</title></channel>"

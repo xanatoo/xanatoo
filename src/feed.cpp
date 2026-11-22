@@ -503,14 +503,53 @@ void demote_headings(Document& doc, NodeId first_new, int top) {
   }
 }
 
-// Thumbnail, statistics, body and enclosures of an entry.
+// Address of an image file without what only picks its size: the scheme, the
+// query and WordPress' "-800x445" before the extension. Addresses that do not
+// name an image file (image.php?id=7) are kept whole.
+std::string image_identity(std::string_view url) {
+  url = url.substr(0, url.find('#'));
+  std::string_view path = url.substr(0, url.find('?'));
+  const size_t dot = path.rfind('.');
+  if (dot == std::string_view::npos) return std::string(url);
+  const std::string ext = ascii_lower(path.substr(dot));
+  if (ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".gif" &&
+      ext != ".webp" && ext != ".avif")
+    return std::string(url);
+  std::string_view stem = path.substr(0, dot);
+  if (const size_t colon = stem.find("://"); colon != std::string_view::npos)
+    stem.remove_prefix(colon + 3);
+  auto digits = [](std::string_view d) {
+    return !d.empty() && d.find_first_not_of("0123456789") == std::string_view::npos;
+  };
+  if (const size_t dash = stem.rfind('-'); dash != std::string_view::npos) {
+    const std::string_view size = stem.substr(dash + 1);
+    const size_t x = size.find('x');
+    if (x != std::string_view::npos && digits(size.substr(0, x)) &&
+        digits(size.substr(x + 1)))
+      stem = stem.substr(0, dash);
+  }
+  return std::string(stem) + ext;
+}
+
+// True when a node created since `first_new` shows the image `url`, in
+// whatever size.
+bool shows_image(const Document& doc, NodeId first_new, const std::string& url) {
+  const std::string want = image_identity(url);
+  for (NodeId id = first_new; id < doc.next_id; ++id) {
+    const Node& n = doc.get(id);
+    if (n.kind == NodeKind::Image && image_identity(n.src) == want) return true;
+    for (const InlineSpan& s : n.spans)
+      if (s.kind == InlineKind::Image && image_identity(s.src) == want) return true;
+  }
+  return false;
+}
+
+// Thumbnail, statistics, body and enclosures of an entry. The thumbnail is
+// left out when the body shows the same image.
 void append_entry_body(Document& doc, NodeId parent, const Entry& e,
                        std::string_view src, const std::string& url) {
-  if (!e.thumb.empty()) {
-    NodeId im = doc.create(NodeKind::Image, parent);
-    doc.get(im).src = resolve_url(url, e.thumb);
-    doc.get(im).float_side = "left";  // text and stats run beside it
-  }
+  const size_t thumb_at = doc.get(parent).children.size();
+  const NodeId first_new = doc.next_id;
   if (std::string stats = media_stats_line(e); !stats.empty()) {
     NodeId sp = doc.create(NodeKind::Paragraph, parent);
     InlineSpan ss;
@@ -520,9 +559,20 @@ void append_entry_body(Document& doc, NodeId parent, const Entry& e,
   }
   if (e.body) {
     const std::string base = e.link.empty() ? url : e.link;
-    const NodeId first_new = doc.next_id;
     append_content(doc, parent, src, *e.body, base, e.body_html);
     demote_headings(doc, first_new, 3);
+  }
+  if (!e.thumb.empty()) {
+    std::string thumb = resolve_url(url, e.thumb);
+    if (!shows_image(doc, first_new, thumb)) {
+      const NodeId im = doc.create(NodeKind::Image);
+      Node& n = doc.get(im);
+      n.parent = parent;
+      n.src = std::move(thumb);
+      n.float_side = "left";  // text and stats run beside it
+      auto& kids = doc.get(parent).children;
+      kids.insert(kids.begin() + static_cast<std::ptrdiff_t>(thumb_at), im);
+    }
   }
   for (const XmlNode* enc : e.enclosures) {
     std::string href = html_attr(enc->attrs, "url");

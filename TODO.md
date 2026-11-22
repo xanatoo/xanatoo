@@ -2,6 +2,23 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-22) — Feeds: no second copy of the lead image
+
+- Report: hackaday.com/blog/feed/ shows each image twice. Not description +
+  content:encoded (only the full text was shown): the `media:thumbnail` was
+  floated above a body that starts with the same file (`?w=800`). It is now
+  left out when the body shows that image in another size (`image_identity`
+  in `feed.cpp`). Unit test; checked under Xvfb.
+- Open, idea (not decided): when an entry has both `description` / `summary`
+  and a longer full text, show the summary and *replace* it with the full
+  text on click. Today's `Stretch` cannot: its `summary` is a plain string
+  that stays above the children, and its state is content (`expanded`), not
+  view state. Would need a Stretch with summary blocks (text, links, image)
+  besides the body, fold state per buffer like `list_folds`, page-wide
+  Summaries / Full Text, and jumps / search unfolding. Feeds would use it
+  with the floated thumbnail in the summary; drop WordPress' "…read more"
+  tail, and skip it when the summary is (nearly) the whole text.
+
 ## Status (2026-11-22) — `ia:` descriptions keep their formatting
 
 - The description of an `ia:ID` page is imported as HTML (bold, links, line
