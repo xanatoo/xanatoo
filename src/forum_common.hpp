@@ -95,6 +95,7 @@ std::optional<Document> se_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> flarum_fetch(const ForumRef& ref, std::string* err);
 std::optional<Document> lesswrong_fetch(const ForumRef& ref, std::string* err);
+std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err);
 #endif
 
 }  // namespace xanatoo::forum

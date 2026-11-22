@@ -1,9 +1,10 @@
-# Forums (Discourse, Lobsters, 4chan, Stack Exchange, Bluesky, Flarum, LessWrong)
+# Forums (Discourse, Lobsters, 4chan, Stack Exchange, Bluesky, Flarum, LessWrong, Digg)
 
 Read-only, local-only clients for discussion sites with public JSON APIs,
 in the same shape as `hn:` and `lemmy:`: listings become a Thread of
 `Article` entries (Header = title link, Caption = counts / author / time),
-discussions a Thread of `Message` nodes. No accounts, no posting, no
+discussions a Thread of `Message` nodes. Digg groups news by event and
+provides each post’s original sources. No accounts, no posting, no
 cookies. Gated by `XANATOO_FORUMS` (default ON, needs a TLS backend; off in
 the minimal port).
 
@@ -35,6 +36,12 @@ recorded replies.
 | `lesswrong:users/SLUG` | profile (karma, counts, bio) + posts, newest first |
 | `lesswrong:w/SLUG` | tag / wiki page: description + posts by relevance |
 | `lesswrong:search?query=Q[&page=N]` | posts found, plus matching tags and users |
+| `digg:` | trending stories across topics |
+| `digg:TOPIC` | AI, technology, gaming, entertainment, world-business, science or sports |
+| `digg:TOPIC/top` / `digg:TOPIC/newest` | select a feed view; `trending`, `best`, `hot` are also supported |
+| `digg:all/top` | a feed view across all topics |
+| `digg:search?query=WORDS` | published Digg stories found by keyword/semantic search |
+| `digg:post/UUID` | Digg post summary and its attributed X/web sources (UUID from a feed/search) |
 
 The 4chan prefix is `fourchan:` because a URI scheme must start with a
 letter: `4chan:g/` would be read as a local path.
@@ -99,10 +106,35 @@ Exchange hosts, bsky.app, lesswrong.com: `/posts/ID/slug?commentId=C` →
 - The `lesswrong` search engine (keyword `lw`) opens
   `lesswrong:search?query=…`.
 
+### Digg MCP
+
+The official `https://digg.com/mcp` Streamable HTTP endpoint offers
+anonymous, read-only tools. xanatoo currently uses `digg_get_feed`,
+`digg_search_posts`, and `digg_get_post`, sending JSON-RPC `tools/call` requests directly
+(accepting JSON or SSE), without an API key or browser, and renders the
+structured response as native articles. Feed results carry an opaque
+`nextCursor` to fetch more stories, which may expire; search covers only
+recent published stories, not the whole historic archive. `digg_get_post`
+uses a UUID (not the short ID in a Digg web page URL), and its sources
+link to the original articles or X posts. The current implementation shows
+the first source page only; remaining sources can be read on Digg’s site.
+
+If MCP is unavailable, the documented `ai-clusters-ranked.json` and
+`tech/clusters.json` JSON feeds provide a limited fallback for AI and
+Technology listings (the latter is **not** rank-ordered). There is no
+published public write/authentication interface for making Diggs or
+posting comments. Digg web **topic** URLs are convertible to native
+refs; post web URLs cannot be converted to an MCP UUID, so they remain
+ordinary web pages. See https://digg.com/llms.txt and
+https://digg.com/mcp/connect for the published interfaces.
+
+The parser / MCP envelope tests are offline (`xanatoo_digg_tests`). The
+transport has not yet been live-tested against Digg from this environment.
+
 ## Not done
 
 - public-inbox (lore.kernel.org). Usenet / NNTP is its own client:
   `docs/NNTP.md`.
 - Subscriptions for forum listings; search engines for them except
-  LessWrong (the existing `bluesky` search engine still links bsky.app web
-  pages).
+  LessWrong and Digg (the existing `bluesky` search engine still links
+  bsky.app web pages).

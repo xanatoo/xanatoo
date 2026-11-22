@@ -101,6 +101,10 @@ AboutSection services() {
                      "`lesswrong:` listings and threads (public JSON / GraphQL "
                      "APIs; LessWrong search)",
                      "lobsters:", "`-DXANATOO_FORUMS=ON`"});
+  s.items.push_back({"Digg", XANATOO_FORUMS,
+                     "`digg:` feeds, `digg:search?query=…` and posts with "
+                     "attributed source links (public read-only MCP)",
+                     "digg:", "`-DXANATOO_FORUMS=ON`"});
   s.items.push_back({"Reddit", XANATOO_REDDIT,
                      "`reddit:r/…` subreddits and threads (public .json)",
                      "reddit:r/linux/", "`-DXANATOO_REDDIT=ON`"});

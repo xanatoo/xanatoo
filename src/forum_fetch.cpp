@@ -13,6 +13,7 @@
 #if defined(XANATOO_FORUMS) && XANATOO_FORUMS
 
 #include "xanatoo/http_status.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/https.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/version.hpp"
@@ -402,6 +403,74 @@ std::optional<Document> lesswrong_fetch(const ForumRef& ref, std::string* err) {
   return bad(ref, err);
 }
 
+// Digg's published endpoint speaks Streamable HTTP MCP. Public tools are
+// anonymous and read-only. Accept both JSON-RPC JSON and SSE responses;
+// never send cookies, user credentials or a request to a write tool.
+std::optional<Json> digg_mcp_call(std::string_view tool, std::string_view arguments,
+                                 std::string* err) {
+  const std::string body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
+                           "\"params\":{\"name\":" + json_quote(tool) +
+                           ",\"arguments\":" + std::string(arguments) + "}}";
+  static const std::string agent = user_agent("read-only Digg MCP client");
+  HttpRequestSecurity security;
+  security.require_https = true;
+  security.public_only = true;
+  security.max_response_bytes = 4 * 1024 * 1024;
+  std::string e;
+  auto result = https_request("POST", "https://digg.com/mcp", agent,
+                              "Content-Type: application/json\r\n"
+                              "Accept: application/json, text/event-stream\r\n"
+                              "MCP-Protocol-Version: 2025-06-18\r\n",
+                              body, &e, security);
+  if (!result) {
+    if (err) *err = "Digg MCP: " + e;
+    return std::nullopt;
+  }
+  if (result->status != 200) {
+    if (err) *err = http_status_error(result->status, "https://digg.com/mcp");
+    return std::nullopt;
+  }
+  return digg_mcp_decode(result->body, err);
+}
+
+std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err) {
+  if (starts_with(ref.path, "post/")) {
+    auto reply = digg_mcp_call("digg_get_post",
+                                "{\"id\":" + json_quote(ref.path.substr(5)) + "}", err);
+    if (!reply) return std::nullopt;
+    return digg_post_document(*reply, ref);
+  }
+  if (ref.path == "search") {
+    auto reply = digg_mcp_call("digg_search_posts",
+                                "{\"query\":" + json_quote(ref.query) +
+                                ",\"limit\":30}", err);
+    if (!reply) return std::nullopt;
+    return digg_list_document(*reply, ref);
+  }
+  const size_t slash = ref.path.find('/');
+  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
+  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
+  std::string args = "{\"topic\":" + json_quote(topic) + ",\"limit\":30";
+  if (!view.empty()) args += ",\"view\":" + json_quote(view);
+  // Ref cursors are URL-escaped to keep '/' and '&' out of addresses.
+  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
+  args += "}";
+  auto reply = digg_mcp_call("digg_get_feed", args, err);
+  if (!reply && ref.cursor.empty() && (topic == "ai" || topic == "tech") &&
+      (view.empty() || view == "trending" || view == "top")) {
+    // Published, keyless feeds as a fallback when MCP is unavailable. Tech
+    // clusters are short-id-ordered, not score-ranked; AI ranked is ranked.
+    const std::string url = topic == "ai" ?
+        "https://digg.com/ai-clusters-ranked.json" : "https://digg.com/tech/clusters.json";
+    std::string ignored;
+    reply = get_json(url, &ignored);
+    if (reply && err) err->clear();
+  }
+  if (!reply) return std::nullopt;
+  return digg_list_document(*reply, ref);
+}
+
+
 }  // namespace forum
 
 std::optional<Document> forum_fetch(std::string_view ref, std::string* err) {
@@ -418,6 +487,7 @@ std::optional<Document> forum_fetch(std::string_view ref, std::string* err) {
     case ForumSite::Bluesky: return forum::bsky_fetch(*r, err);
     case ForumSite::Flarum: return forum::flarum_fetch(*r, err);
     case ForumSite::LessWrong: return forum::lesswrong_fetch(*r, err);
+    case ForumSite::Digg: return forum::digg_fetch(*r, err);
   }
   return std::nullopt;
 }

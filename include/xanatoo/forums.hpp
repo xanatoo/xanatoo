@@ -24,6 +24,9 @@
 //   lesswrong:users/SLUG               profile + posts
 //   lesswrong:w/SLUG                   tag / wiki page + posts
 //   lesswrong:search?query=Q           posts, tags and users found
+//   digg: / digg:TOPIC[/VIEW]          Digg feed (all topics or a topic)
+//   digg:search?query=Q               recent published posts
+//   digg:post/UUID                    post, summary and original sources
 //
 // Parsers are pure (JSON in, Document out) and tested with cut-down recorded
 // replies; only forum_fetch touches the network.
@@ -38,7 +41,7 @@
 namespace xanatoo {
 
 enum class ForumSite {
-  Discourse, Lobsters, FourChan, StackExchange, Bluesky, Flarum, LessWrong
+  Discourse, Lobsters, FourChan, StackExchange, Bluesky, Flarum, LessWrong, Digg
 };
 
 struct ForumRef {
@@ -90,6 +93,11 @@ Document bsky_thread_document(const Json& reply, const ForumRef& ref);
 Document flarum_list_document(const Json& reply, const ForumRef& ref);
 Document flarum_discussion_document(const Json& discussion, const Json& posts,
                                     const ForumRef& ref);
+// Digg public MCP tools: structured results, no account or write operations.
+// The MCP transport envelope (JSON or SSE) is decoded by digg_mcp_decode.
+std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err = nullptr);
+Document digg_list_document(const Json& reply, const ForumRef& ref);
+Document digg_post_document(const Json& reply, const ForumRef& ref);
 // LessWrong: whole GraphQL replies ({"data": …}); /api/search multi-query
 // reply (array: posts, tags, users). Listings ask for this many entries.
 constexpr size_t kLessWrongPageSize = 30;

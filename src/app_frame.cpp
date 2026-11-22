@@ -435,6 +435,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
          nullptr},
         {"News and forums", "Hacker News", "hn:", false, nullptr},
         {nullptr, "Lobsters", "lobsters:", false, nullptr},
+        {nullptr, "Digg", "digg:", false, nullptr},
         {nullptr, "LessWrong", "lesswrong:", false, nullptr},
         {nullptr, "Reddit (r/popular)", "reddit:r/popular/", false, nullptr},
         {nullptr, "4chan (boards)", "fourchan:", false, nullptr},

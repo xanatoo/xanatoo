@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
 // Forum refs (discourse: / lobsters: / fourchan: / stackexchange: / bsky: /
-// flarum: / lesswrong:), their web forms and the shared document helpers. The site
+// flarum: / lesswrong: / digg:), their web forms and the shared document helpers. The site
 // mappers live in forum_<site>.cpp, the network side in forum_fetch.cpp.
 
 #include "xanatoo/forums.hpp"
@@ -37,6 +37,7 @@ constexpr SiteInfo kSites[] = {
     {ForumSite::Bluesky, "bsky:", false, "Bluesky"},
     {ForumSite::Flarum, "flarum:", true, "Flarum"},
     {ForumSite::LessWrong, "lesswrong:", false, "LessWrong"},
+    {ForumSite::Digg, "digg:", false, "Digg"},
 };
 
 const SiteInfo& info(ForumSite s) {
@@ -128,6 +129,45 @@ std::string decode_query(std::string_view v) {
   return percent_decode(plus);
 }
 
+bool digg_topic(std::string_view topic) {
+  return topic == "all" || topic == "ai" || topic == "tech" || topic == "gaming" ||
+         topic == "entertainment" || topic == "world-business" ||
+         topic == "science" || topic == "sports";
+}
+
+bool digg_view(std::string_view view) {
+  return view == "trending" || view == "top" || view == "newest" ||
+         view == "best" || view == "hot";
+}
+
+bool digg_uuid(std::string_view id) {
+  if (id.size() != 36) return false;
+  for (size_t i = 0; i < id.size(); ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (id[i] != '-') return false;
+    } else if (!std::isxdigit(static_cast<unsigned char>(id[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool valid_digg_ref(const ForumRef& r) {
+  if (r.page != 1 || !r.fragment.empty()) return false;
+  if (r.path == "search") return !r.query.empty() && r.cursor.empty();
+  if (!r.query.empty()) return false;
+  if (starts_with(r.path, "post/"))
+    return digg_uuid(std::string_view(r.path).substr(5)) && r.cursor.empty();
+  const size_t slash = r.path.find('/');
+  const std::string_view topic(r.path.data(),
+      slash == std::string::npos ? r.path.size() : slash);
+  if (!topic.empty() && !digg_topic(topic)) return false;
+  if (slash != std::string::npos && topic.empty()) return false;
+  return slash == std::string::npos ||
+         (digg_view(std::string_view(r.path).substr(slash + 1)) &&
+          std::string_view(r.path).substr(slash + 1).find('/') == std::string_view::npos);
+}
+
 bool all_digits(std::string_view s) {
   if (s.empty()) return false;
   for (char c : s)
@@ -171,6 +211,7 @@ std::optional<ForumRef> parse_forum_ref(std::string_view s) {
     r.query = decode_query(query_value(query, "query"));
     r.fragment = std::string(frag);
     if (si.site == ForumSite::Bluesky && r.path.empty()) return std::nullopt;
+    if (si.site == ForumSite::Digg && !valid_digg_ref(r)) return std::nullopt;
     return r;
   }
   return std::nullopt;
@@ -202,7 +243,8 @@ std::string forum_ref_string(const ForumRef& r) {
   };
   if (!r.query.empty()) param("query", forum::url_encode(r.query));
   if (r.page > 1) param("page", std::to_string(r.page));
-  if (!r.cursor.empty()) param("cursor", r.cursor);
+  if (!r.cursor.empty()) param("cursor",
+      r.site == ForumSite::Digg ? forum::url_encode(percent_decode(r.cursor)) : r.cursor);
   if (!r.fragment.empty()) out += "#" + r.fragment;
   return out;
 }
@@ -229,6 +271,12 @@ std::string forum_web_url(const ForumRef& r) {
       break;
     case ForumSite::Bluesky:
       url = "https://bsky.app/profile/" + r.path;
+      break;
+    case ForumSite::Digg:
+      if (r.path == "search" || starts_with(r.path, "post/")) return {};
+      url = "https://digg.com/";
+      if (!r.path.empty() && r.path != "all" && !starts_with(r.path, "all/"))
+        url += r.path.substr(0, r.path.find('/'));
       break;
     case ForumSite::LessWrong:
       url = "https://www.lesswrong.com/";
@@ -260,6 +308,17 @@ std::string forum_ref_from_web_url(std::string_view url) {
     seg.push_back(p.substr(0, sl));
     if (sl == std::string_view::npos) break;
     p.remove_prefix(sl + 1);
+  }
+  if (host == "digg.com" || host == "www.digg.com") {
+    r.site = ForumSite::Digg;
+    r.page = 1;
+    r.fragment.clear();
+    if (seg.empty() || (seg.size() == 1 && seg[0].empty())) return "digg:";
+    // Only Feed URLs have enough information for a native conversion.
+    // Digg's short web post ids are not the UUIDs required by digg_get_post.
+    if (seg.size() != 1 || !digg_topic(seg[0])) return {};
+    r.path = std::string(seg[0]);
+    return forum_ref_string(r);
   }
   if (host == "lobste.rs" || host == "www.lobste.rs") {
     r.site = ForumSite::Lobsters;
@@ -375,6 +434,14 @@ std::string forum_up_ref(const ForumRef& r) {
   up.query.clear();
   up.fragment.clear();
   const std::string& p = r.path;
+  if (r.site == ForumSite::Digg) {
+    if (p.empty()) return {};
+    if (p == "search" || starts_with(p, "post/")) up.path.clear();
+    else if (size_t slash = p.find('/'); slash != std::string::npos)
+      up.path = p.substr(0, slash);
+    else up.path.clear();
+    return forum_ref_string(up);
+  }
   if (r.site == ForumSite::Bluesky) {
     const size_t sl = p.find('/');
     if (sl == std::string::npos) return {};

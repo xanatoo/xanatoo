@@ -20,6 +20,7 @@ directory page, but its links say what is missing.
 
 - [Hacker News](hn:) · [new](hn:newest) · [Ask HN](hn:ask) · [Show HN](hn:show)
 - [Lobsters](lobsters:) · [newest](lobsters:newest) · [tag: programming](lobsters:t/programming)
+- [Digg](digg:) · [Technology](digg:tech) · [Science](digg:science) · [AI](digg:ai) · [search: “graphics”](digg:search?query=graphics)
 - [LessWrong](lesswrong:) · [search: “forecasting”](lesswrong:search?query=forecasting)
 - [Reddit: r/popular](reddit:r/popular/) · [r/programming](reddit:r/programming/) · [r/space](reddit:r/space/) · [r/AskHistorians](reddit:r/AskHistorians/)
 - [4chan](fourchan:) — board list, work-safe boards first; [/g/ technology](fourchan:g/) · [/sci/ science](fourchan:sci/)

@@ -282,6 +282,9 @@ std::vector<SearchEngine> builtin_table() {
       {"lesswrong", "LessWrong", "lw", "LW", "lesswrong:search?query=%s",
        "page", "+",
        {"lesswrong:", "lesswrong.com"}},
+      {"digg", "Digg", "dg", "Dg", "digg:search?query=%s",
+       "page", "+",
+       {"digg:", "digg.com"}},
       {"dailymotion", "Dailymotion", "dm", "DM",
        "dailymotion:search?search=%s", "page", "+",
        {"dailymotion:", "dailymotion.com"}},
@@ -352,6 +355,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"mediaccc", 0x2a6e3f},
       {"dailymotion", 0x0066dc}, {"duckduckgo", 0xde5833},
       {"grokipedia", 0x111111},  {"lesswrong", 0x5f9b65},
+      {"digg", 0x333333},
       {"freeserp", 0x5b21b6},  {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)

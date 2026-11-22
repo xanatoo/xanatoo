@@ -22,7 +22,7 @@ read-only service clients. Every client is read-only: never post or log in.
 
 ## Service refs (`native.hpp`)
 
-- `hn:` / `reddit:` / `lemmy:` refs select the native Thread + Message
+- `hn:` / `reddit:` / `lemmy:` / `digg:` refs select the native Thread + Message
   clients; the part after the prefix mirrors the web path (`hn:item?id=1`,
   `reddit:r/linux/`, `lemmy:lemmy.world/c/technology`). `web_url_for`
   maps a ref back to https for the API clients, which still take web URLs.
@@ -500,3 +500,23 @@ Edit → Credentials…); they are read on the main thread when a load starts.
   Matrix directories, Flarum forums and the small-net hosts were probed
   by hand (anonymous `publicRooms`, `/api`, a request on the protocol's
   port) and only those that answered are listed.
+
+## Digg
+
+- `digg:` (Home), `digg:tech`, `digg:ai`, `digg:gaming`,
+  `digg:entertainment`, `digg:world-business`, `digg:science`,
+  `digg:sports`; `digg:TOPIC/top`, `/newest`, `/best`, `/hot`,
+  `/trending` select view. Search: `digg:search?query=WORDS`; post:
+  `digg:post/UUID` (a Digg MCP UUID, not the web short slug).
+  The unified search engine `digg` (`dg` keyword) opens `digg:search`.
+- `src/forum_digg.cpp` handles pure JSON/SSE-MCP decoding and Document
+  conversion. The API call is in `src/forum_fetch.cpp`, using verified
+  HTTPS POST to the official `digg_get_feed`, `digg_search_posts` and
+  `digg_get_post` tools. Only anonymous, read-only tools; no login.
+- If the MCP endpoint is unavailable, `tech/clusters.json` and
+  `ai-clusters-ranked.json` are the published limited feed fallback.
+- Digg's *topic* web URL can toggle to native view, but a story URL only
+  exposes its short ID, not the UUID needed by `digg_get_post`.
+  Story detail Documents include explicit web and source links.
+- `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
+  pagination, posts and sources without a network or SDL dependency.

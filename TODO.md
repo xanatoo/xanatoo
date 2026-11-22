@@ -5309,3 +5309,16 @@ Done (WASM fetch transport): `src/https_wasm.cpp`, Wikipedia / HN / web reader
 verified in Firefox (Xvfb). Remaining: opt-in CORS proxy prefix; remote
 images and downloads in the browser; WebSocket Nostr; `final_url` after
 browser redirects.
+
+## Digg native reader (2026-11-22)
+
+Implemented `digg:` as a read-only forum service using the official Digg
+MCP endpoint: all seven topics and Home, view selection, cursor paging,
+recent-search queries, UUID post summaries and original source links.
+Static JSON fallback for AI and Technology; no write, vote or login support.
+Services menu, About, unified Digg search (`dg`) and documentation updated.
+`xanatoo_digg_tests` runs
+without SDL/TLS; live Digg network tests remain pending (network inaccessible
+in this development environment). Cumulative Web handover bundle 290
+includes this change from the original history; reserve bundle 291 for the
+next Web handover.

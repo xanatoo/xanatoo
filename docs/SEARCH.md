@@ -79,7 +79,7 @@ Search is an address, not a widget in the document and not a panel.
 | `bluesky` | Bluesky | `searchPosts` → one card per post, link to bsky.app |
 | `page` | PeerTube (`pt`, sepiasearch), Odysee (`od`), Dailymotion (`dm`), media.ccc.de (`ccc`) | `peertube:` / `odysee:` / `dailymotion:` / `mediaccc:` search refs (`docs/VIDEO_SITES.md`) |
 | `feed` | arXiv, Reddit, Mastodon hashtag, Flickr tags | the feed path |
-| `page` | YouTube (`youtube:results?…`, native InnerTube search), Standard Ebooks, Marginalia, Wiby, DuckDuckGo (html), Grokipedia (`gk`) | the web / ebook path |
+| `page` | YouTube (`youtube:results?…`, native InnerTube search), Digg (`dg`, `digg:search?query=…`), LessWrong (`lw`), Standard Ebooks, Marginalia, Wiby, DuckDuckGo (html), Grokipedia (`gk`) | the native service / web / ebook path |
 
 ## JSON mappers (`search_results.cpp`)
 

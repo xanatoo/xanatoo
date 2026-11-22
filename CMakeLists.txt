@@ -146,7 +146,7 @@ option(XANATOO_MATRIX "Enable read-only Matrix rooms / directories (Client-Serve
 option(XANATOO_YOUTUBE "Enable YouTube channel / video / comment fetch (InnerTube, TLS HTTPS)" ON)
 option(XANATOO_VIDEO "Enable PeerTube / Odysee / Dailymotion fetch (public JSON APIs, TLS HTTPS)" ON)
 option(XANATOO_HN "Enable Hacker News fetch (Firebase + Algolia APIs, TLS HTTPS)" ON)
-option(XANATOO_FORUMS "Enable Discourse / Lobsters / 4chan / Stack Exchange / Bluesky / Flarum / LessWrong fetch (public JSON APIs, TLS HTTPS)" ON)
+option(XANATOO_FORUMS "Enable Discourse / Lobsters / 4chan / Stack Exchange / Bluesky / Flarum / LessWrong / Digg fetch (public JSON / MCP, TLS HTTPS)" ON)
 option(XANATOO_EBOOKS "Enable Standard Ebooks / remote EPUB downloads (TLS HTTPS)" ON)
 option(XANATOO_FEEDS "Enable RSS / Atom feed fetch (TLS HTTPS)" ON)
 option(XANATOO_WEB "Open other http(s) pages in-app as reader views (TLS HTTPS)" ON)
@@ -264,6 +264,7 @@ add_executable(xanatoo
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
   src/forum_lesswrong.cpp
+  src/forum_digg.cpp
   src/forum_fetch.cpp
   src/nntp.cpp
   src/nntp_fetch.cpp
@@ -799,6 +800,7 @@ add_executable(xanatoo_tests
   src/forum_bluesky.cpp
   src/forum_flarum.cpp
   src/forum_lesswrong.cpp
+  src/forum_digg.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
@@ -1051,6 +1053,26 @@ add_test(NAME quote_links_tests COMMAND xanatoo_quote_links_tests)
 add_executable(xanatoo_scrollbar_geometry_tests tests/scrollbar_geometry_tests.cpp)
 target_include_directories(xanatoo_scrollbar_geometry_tests PRIVATE include)
 add_test(NAME scrollbar_geometry_tests COMMAND xanatoo_scrollbar_geometry_tests)
+# Digg MCP envelope and document tests are standalone; run without SDL/TLS.
+add_executable(xanatoo_digg_tests
+  tests/digg_tests.cpp src/forums.cpp src/forum_digg.cpp
+  src/document.cpp src/util.cpp src/time.cpp)
+target_include_directories(xanatoo_digg_tests PRIVATE include)
+# The shared forum helpers include unused HTML converters in this target.
+# Drop those dead functions rather than pulling SDL and the full parser in.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(xanatoo_digg_tests PRIVATE -ffunction-sections -fdata-sections)
+  if(APPLE)
+    target_link_options(xanatoo_digg_tests PRIVATE -Wl,-dead_strip)
+  else()
+    target_link_options(xanatoo_digg_tests PRIVATE -Wl,--gc-sections)
+  endif()
+elseif(MSVC)
+  target_compile_options(xanatoo_digg_tests PRIVATE /Gy)
+  target_link_options(xanatoo_digg_tests PRIVATE /OPT:REF)
+endif()
+add_test(NAME digg_tests COMMAND xanatoo_digg_tests)
+
 add_executable(xanatoo_lemmy_discovery_tests
   tests/lemmy_discovery_tests.cpp src/lemmy_discovery.cpp)
 target_include_directories(xanatoo_lemmy_discovery_tests PRIVATE include)
