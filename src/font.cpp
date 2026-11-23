@@ -184,7 +184,7 @@ const Font::FallbackFace* Font::fallback_face(uint32_t codepoint) {
 // text on a light page too heavy and light text on a dark page too thin.
 // Blending as if in a space of gamma kTextGamma evens both out; the full
 // sRGB 2.2 looks washed out, so this stays near what browsers show.
-static constexpr double kTextGamma = 1.8; // 2.2 1.8 1.45;
+static constexpr double kTextGamma = 1.2; // 2.2 1.8 1.45;
 
 static const std::array<uint8_t, 256>& coverage_curve(bool light_text) {
   static const auto curves = [] {
