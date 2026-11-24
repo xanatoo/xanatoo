@@ -48,14 +48,16 @@ void add_tags(Document& doc, NodeId cap, const Json& q, const ForumRef& ref) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::se_service_rows(const ForumRef& ref) {
+  return {{"", {{"Questions", se_ref(ref, ""), ref.path.empty()}}}};
+}
+
 Document se_list_document(const Json& reply, const ForumRef& ref) {
   std::string what = "Recent questions";
   if (starts_with(ref.path, "questions/tagged/"))
     what = "Questions tagged " + ref.path.substr(17);
   Document doc;
-  NodeId thread = start_document(doc, ref.host + " — " + what, ref.host,
-                                 {{"Questions", se_ref(ref, ""), ref.path.empty()}},
-                                 "stackexchange");
+  NodeId thread = start_document(doc, ref.host + " — " + what, "stackexchange");
   const std::vector<Json>& items = arr(reply, "items");
   for (const Json& q : items) {
     const std::string id = std::to_string(num(q, "question_id"));
@@ -99,15 +101,14 @@ Document se_question_document(const Json& question, const Json& answers,
   const std::vector<Json>& qs = arr(question, "items");
   Document doc;
   if (qs.empty()) {
-    start_document(doc, ref.host, ref.host, {{"Questions", se_ref(ref, "")}}, "stackexchange");
+    start_document(doc, ref.host, "stackexchange");
     add_note(doc, doc.root, "Question not found.");
     return doc;
   }
   const Json& q = qs[0];
   const std::string qid = std::to_string(num(q, "question_id"));
   const std::string title = html_decode_entities(str(q, "title"));
-  NodeId thread = start_document(doc, title, ref.host,
-                                 {{"Questions", se_ref(ref, "")}}, "stackexchange");
+  NodeId thread = start_document(doc, title, "stackexchange");
   // Comments by the post they belong to, oldest first.
   std::map<long long, std::vector<const Json*>> by_post;
   if (comments)

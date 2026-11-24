@@ -1007,10 +1007,25 @@ std::string server_label(const NntpRef& r) {
   return s;
 }
 
-// "Usenet: host · comp.* · comp.lang.* · comp.lang.c" (the last one bold).
-std::vector<NavItem> nav_for(const NntpRef& r, std::string_view last_group,
-                             bool group_current) {
-  std::vector<NavItem> nav;
+void add_date(Document& doc, NodeId cap, const std::string& raw_date) {
+  const std::string iso = nntp_date_iso(raw_date);
+  InlineSpan date;
+  date.role = InlineRole::Metadata;
+  date.text = iso.empty() ? raw_date : short_time(iso);
+  date.datetime = iso;
+  doc.get(cap).spans.push_back(std::move(date));
+}
+
+std::string thousands(int64_t n) {
+  std::string s = std::to_string(n);
+  for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), ",");
+  return s;
+}
+// Server, then the hierarchy steps of the group or wildmat the page shows:
+// "host · comp.* · comp.lang.* · comp.lang.c" (the page's own step current).
+std::vector<ServiceLink> nav_for(const NntpRef& r, std::string_view last_group,
+                                 bool group_current) {
+  std::vector<ServiceLink> nav;
   nav.push_back({server_label(r), nntp_groups_url(r, ""),
                  r.view == NntpView::Groups && r.wildmat.empty()});
   std::string name(last_group);
@@ -1033,21 +1048,18 @@ std::vector<NavItem> nav_for(const NntpRef& r, std::string_view last_group,
   return nav;
 }
 
-void add_date(Document& doc, NodeId cap, const std::string& raw_date) {
-  const std::string iso = nntp_date_iso(raw_date);
-  InlineSpan date;
-  date.role = InlineRole::Metadata;
-  date.text = iso.empty() ? raw_date : short_time(iso);
-  date.datetime = iso;
-  doc.get(cap).spans.push_back(std::move(date));
-}
-
-std::string thousands(int64_t n) {
-  std::string s = std::to_string(n);
-  for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), ",");
-  return s;
-}
 }  // namespace
+
+ServiceBar nntp_service_bar(const NntpRef& r) {
+  ServiceBar bar;
+  bar.id = "nntp:" + r.host;
+  bar.name = kSite;
+  bar.home = nntp_groups_url(r, "");
+  bar.color = 0x6b4fbb;
+  const bool group_page = r.view == NntpView::Group;
+  bar.rows.push_back({"", nav_for(r, r.view == NntpView::Groups ? "" : r.group, group_page)});
+  return bar;
+}
 
 Document nntp_groups_document(std::vector<NntpGroupInfo> groups,
                               const NntpRef& ref) {
@@ -1055,7 +1067,7 @@ Document nntp_groups_document(std::vector<NntpGroupInfo> groups,
   const std::string title = ref.wildmat.empty()
                                 ? "Newsgroups on " + server_label(ref)
                                 : ref.wildmat + " on " + server_label(ref);
-  NodeId thread = start_document(doc, title, kSite, nav_for(ref, "", false), "groups");
+  NodeId thread = start_document(doc, title, "groups");
   groups.erase(std::remove_if(groups.begin(), groups.end(),
                               [&](const NntpGroupInfo& g) {
                                 return !nntp_wildmat_match(ref.wildmat, g.name);
@@ -1161,8 +1173,7 @@ Document nntp_group_document(const std::vector<NntpOverview>& over,
                              const NntpRef& ref, int64_t first, int64_t low,
                              int64_t total) {
   Document doc;
-  NodeId thread = start_document(doc, ref.group, kSite, nav_for(ref, ref.group, true),
-                                 ref.group);
+  NodeId thread = start_document(doc, ref.group, ref.group);
   // Threads in this window: root id → member indices (window order).
   std::map<std::string, std::vector<size_t>> by_root;
   std::set<std::string> ids;
@@ -1264,8 +1275,7 @@ Document nntp_thread_document(const std::vector<NntpArticle>& articles,
     }
   }
   if (title.empty()) title = ref.group;
-  NodeId thread = start_document(doc, title, kSite, nav_for(ref, ref.group, false),
-                                 ref.group);
+  NodeId thread = start_document(doc, title, ref.group);
   // Reply tree: parent = the nearest reference present in this thread.
   std::unordered_map<std::string, size_t> by_id;
   for (size_t i = 0; i < articles.size(); ++i) by_id[articles[i].message_id] = i;
@@ -1325,8 +1335,8 @@ Document nntp_thread_document(const std::vector<NntpArticle>& articles,
 Document nntp_article_document(const NntpArticle& a, const NntpRef& ref) {
   Document doc;
   const std::string group = article_group(a, ref);
-  NodeId thread = start_document(doc, a.subject.empty() ? "(no subject)" : a.subject,
-                                 kSite, nav_for(ref, group, false), group);
+  NodeId thread =
+      start_document(doc, a.subject.empty() ? "(no subject)" : a.subject, group);
   MsgHead h;
   h.label = a.message_id;
   h.author = mail_display_name(a.from);

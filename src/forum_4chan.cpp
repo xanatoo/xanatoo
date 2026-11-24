@@ -115,11 +115,22 @@ std::string first_quote(std::string_view html) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::fourchan_service_rows(const ForumRef& ref) {
+  ServiceRow row;
+  row.links.push_back({"Boards", chan_ref(""), ref.path.empty()});
+  const std::string board = board_of(ref);
+  if (!board.empty())
+    row.links.push_back({"/" + board + "/", chan_ref(board),
+                         ref.path.find('/') == std::string::npos ||
+                             ref.path == board + "/"});
+  return {row};
+}
+
 Document fourchan_boards_document(const Json& reply) {
   Document doc;
   ForumRef top;
   top.site = ForumSite::FourChan;
-  NodeId thread = start_document(doc, "4chan — Boards", "4chan", {}, "4chan");
+  NodeId thread = start_document(doc, "4chan — Boards", "4chan");
   // Work-safe boards first; the rest under their own heading.
   for (int ws = 1; ws >= 0; --ws) {
     NodeId sect = doc.create(NodeKind::Article, thread);
@@ -145,9 +156,7 @@ Document fourchan_boards_document(const Json& reply) {
 Document fourchan_catalog_document(const Json& reply, const ForumRef& ref) {
   const std::string board = board_of(ref);
   Document doc;
-  NodeId thread = start_document(
-      doc, "/" + board + "/ — Catalog", "4chan",
-      {{"Boards", chan_ref("")}, {"/" + board + "/", "", true}}, "4chan");
+  NodeId thread = start_document(doc, "/" + board + "/ — Catalog", "4chan");
   size_t n = 0;
   for (const Json& page : reply.type == Json::Type::Array ? reply.items : std::vector<Json>{}) {
     for (const Json& t : arr(page, "threads")) {
@@ -201,9 +210,7 @@ Document fourchan_thread_document(const Json& reply, const ForumRef& ref) {
   }
   if (title.empty()) title = "/" + board + "/ thread " + op;
   Document doc;
-  NodeId thread = start_document(
-      doc, title, "4chan",
-      {{"Boards", chan_ref("")}, {"/" + board + "/", chan_ref(board)}}, "4chan");
+  NodeId thread = start_document(doc, title, "4chan");
   const std::string here = board + "/thread/" + op;
   // Threading: a post hangs under its first quotelink to an earlier post of
   // this thread (none, a later or a missing post → top level). Posts are

@@ -6,6 +6,7 @@
 
 #include "xanatoo/forums.hpp"
 #include "xanatoo/json_dom.hpp"
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/types.hpp"
 
 #include <cstdint>
@@ -63,16 +64,21 @@ void append_plain(Document& doc, NodeId parent, std::string_view text);
 // Apply `fn` to every link href under the document (spans of all nodes).
 void map_links(Document& doc, const std::function<void(std::string&)>& fn);
 
-// New document: root, an optional nav line "Site: a · b" (`nav` pairs of
-// text / ref, the current one bold), and a Thread. Returns the thread.
-struct NavItem {
-  std::string text, ref;
-  bool current = false;
-};
+// New document: root and a Thread; returns the thread. The site's
+// sections ("Hottest · Newest · Active") are not part of the page: the
+// service strip shows them (<site>_service_rows, forum_service_bar).
+using NavItem = ServiceLink;
 NodeId start_document(Document& doc, const std::string& title,
-                      const std::string& site,
-                      const std::vector<NavItem>& nav,
                       const std::string& thread_label);
+// Rows of each site's service strip, from the address alone.
+std::vector<ServiceRow> discourse_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> lobsters_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> fourchan_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> se_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> bsky_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> flarum_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> lesswrong_service_rows(const ForumRef& ref);
+std::vector<ServiceRow> digg_service_rows(const ForumRef& ref);
 // "← Newer · Page N · Older →" under the root.
 void add_pager(Document& doc, const ForumRef& ref, bool has_next,
                const std::string& next_word = "More");

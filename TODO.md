@@ -2,6 +2,26 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Service strips for native services
+
+- The "Hacker News: Top · New · Best · Ask HN · Show HN" rows (and the
+  forum / Digg / Usenet equivalents) left the generated documents for a
+  per-service toolbar on top of the page (docs/UI.md "Service strips"):
+  `service_bar.hpp` (pure, from the address), drawn by `Ui::service_bars`
+  in `Pane::head_h` like the edit strip. Favicon + name (front page),
+  sections with the current one marked, extra rows (Digg Sort / From,
+  Bluesky profile tabs), the service's search engine on the right, accent
+  colour for strip and tabs (`UiState::tab_service_color`).
+- Digg comment pages got an in-page "← Story" link instead of the nav item;
+  the Digg post topic and an NNTP message's group are no longer offered
+  (not derivable from the address).
+- Tests: forum_tests `test_service_bars` + strip assertions replacing the
+  in-page nav checks; nntp_tests; ui_panel_layers. Checked under Xvfb: HN,
+  Digg (three rows), strip search → `search:digg:…` keeps the strip,
+  `search:hn:…` too, Lobsters tab tint.
+- Later: service strips for Reddit, Lemmy, Wikipedia, Gemini, YouTube, …
+  (same `service_bar()` dispatch); live strip in unfocused document windows.
+
 ## Status (2026-11-24) — Editable documents: edit strip on the page, lock
 
 - No global edit mode any more (`App::edit_mode` removed). Non-foreign

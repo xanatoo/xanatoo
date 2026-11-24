@@ -42,8 +42,7 @@ std::string topic_path(const Json& t) {
 
 Document categories_document(const Json& reply, const ForumRef& ref) {
   Document doc;
-  NodeId thread = start_document(doc, ref.host + " — Categories", ref.host,
-                                 nav_for(ref), "discourse");
+  NodeId thread = start_document(doc, ref.host + " — Categories", "discourse");
   const Json* list = json_path(reply, "category_list/categories");
   for (const Json& c : list ? list->items : std::vector<Json>{}) {
     NodeId art = doc.create(NodeKind::Article, thread);
@@ -62,6 +61,10 @@ Document categories_document(const Json& reply, const ForumRef& ref) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::discourse_service_rows(const ForumRef& ref) {
+  return {{"", nav_for(ref)}};
+}
+
 Document discourse_list_document(const Json& reply, const ForumRef& ref) {
   if (ref.path == "categories") return categories_document(reply, ref);
   std::map<long long, std::string> users;
@@ -71,8 +74,7 @@ Document discourse_list_document(const Json& reply, const ForumRef& ref) {
   if (ref.path == "top") what = "Top";
   else if (starts_with(ref.path, "c/")) what = "Category " + ref.path.substr(2);
   Document doc;
-  NodeId thread = start_document(doc, ref.host + " — " + what, ref.host,
-                                 nav_for(ref), "discourse");
+  NodeId thread = start_document(doc, ref.host + " — " + what, "discourse");
   const Json* list = json_get(reply, "topic_list");
   const std::vector<Json>& topics = arr(list ? *list : reply, "topics");
   for (const Json& t : topics) {
@@ -148,8 +150,7 @@ Document discourse_topic_document(const Json& reply, const ForumRef& ref) {
   const Json* posts = json_path(reply, "post_stream/posts");
   if (posts && !posts->items.empty()) topic.page = page_of(posts->items[0]);
   Document doc;
-  NodeId thread = start_document(doc, title.empty() ? ref.host : title, ref.host,
-                                 nav_for(ref), "discourse");
+  NodeId thread = start_document(doc, title.empty() ? ref.host : title, "discourse");
   for (const Json& p : posts ? posts->items : std::vector<Json>{}) {
     const std::string cooked = str(p, "cooked");
     const long long number = num(p, "post_number");

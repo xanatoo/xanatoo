@@ -93,6 +93,16 @@ void relayout_if_needed(App& app) {
 }
 
 // Icons share the image cache and its asynchronous remote fetcher.
+// Accent of the native service a tab's page belongs to (0 = none). A pure
+// memo of service_bar(), which parses the address.
+static uint32_t service_tab_color(const std::string& path) {
+  static std::unordered_map<std::string, uint32_t> memo;
+  if (const auto it = memo.find(path); it != memo.end()) return it->second;
+  if (memo.size() > 1024) memo.clear();
+  const auto bar = xanatoo::service_bar(path);
+  return memo[path] = bar ? bar->color : 0u;
+}
+
 static SDL_Texture* address_icon(App& app, const std::string& address) {
   std::string base = xanatoo::parse_locator(address).base;
   std::string web = xanatoo::web_url_for(base);
@@ -311,7 +321,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.edit_bars.clear();
   for (const int vi : live_views(app)) {
     const Pane& ep = app.panes[vi];
-    if (ep.head_h <= 0) continue;
+    if (ep.head_h <= 0 || ep.head_service) continue;
     if (vi >= kCentreViews && vi != app.focus) continue;
     const DocBuffer* eb = find_buf(app, ep.buf);
     if (!eb) continue;
@@ -327,6 +337,33 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     bar.dirty = eb->dirty;
     bar.selection = bar.focused && !ep.sel.empty();
     ui_state.edit_bars.push_back(bar);
+  }
+  // Service strips: the same places, for the pages of native services.
+  ui_state.service_bars.clear();
+  for (const int vi : live_views(app)) {
+    Pane& sp = app.panes[vi];
+    if (sp.head_h <= 0 || !sp.head_service || !sp.service) continue;
+    if (vi >= kCentreViews && vi != app.focus) continue;
+    const xanatoo::ServiceBar& s = *sp.service;
+    xanatoo::UiServiceBar bar;
+    bar.view = vi;
+    bar.x = sp.x - (sp.sb_left ? kSbW : 0);
+    bar.y = sp.y - sp.head_h;
+    bar.w = sp.w + (sp.sb_left ? kSbW : 0);
+    bar.h = sp.head_h;
+    bar.floating = vi >= kCentreViews;
+    bar.id = s.id;
+    bar.name = s.name;
+    bar.home = s.home;
+    bar.color = s.color;
+    bar.rows = s.rows;
+    const std::string target = service_address(app, sp.service_addr);
+    bar.icon = address_icon(app, target);
+    if (!bar.icon && !s.home.empty()) bar.icon = address_icon(app, s.home);
+    bar.search_engine = xanatoo::engine_for_address(target, app.search.active);
+    for (const auto& e : app.search.active)
+      if (e.id == bar.search_engine) bar.search_name = e.name;
+    ui_state.service_bars.push_back(std::move(bar));
   }
   ui_state.find_open = find_bar_shown(app) && !media_fullscreen(app);
   if (ui_state.find_open) {
@@ -874,6 +911,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.tab_ids.clear();
   ui_state.tab_icons.clear();
   ui_state.tab_editable.clear();
+  ui_state.tab_service_color.clear();
   ui_state.active_tab = 0;
   for (int ti = 0; ti < static_cast<int>(app.tab_order.size()); ++ti) {
     const BufferId bi = app.tab_order[static_cast<size_t>(ti)];
@@ -882,6 +920,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     const DocBuffer* tab_buffer = find_buf(app, bi);
     ui_state.tab_icons.push_back(tab_buffer ? address_icon(app, tab_buffer->path) : nullptr);
     ui_state.tab_editable.push_back(buffer_takes_edits(app, bi) ? 1 : 0);
+    ui_state.tab_service_color.push_back(
+        tab_buffer ? service_tab_color(service_address(app, tab_buffer->path)) : 0);
     if (bi == app.panes[app.centre_focus].buf) ui_state.active_tab = ti;
   }
   ui_state.urlbar_entries.clear();
@@ -3188,11 +3228,13 @@ void run_chrome(App& app) {
   ui_state.pointer_native_top = float_layer_at(
       app, static_cast<int>(ui_state.pointer_x),
       static_cast<int>(ui_state.pointer_y));
-  for (const auto& bar : ui_state.edit_bars)
-    if (!bar.floating) {
+  {
+    bool tile_strip = false;
+    for (const auto& bar : ui_state.edit_bars) tile_strip |= !bar.floating;
+    for (const auto& bar : ui_state.service_bars) tile_strip |= !bar.floating;
+    if (tile_strip)
       ui_state.native_panel_order.push_back(xanatoo::UiPanelLayer::EditBar);
-      break;
-    }
+  }
   if (ui_state.find_open && app.focus < kCentreViews)
     ui_state.native_panel_order.push_back(xanatoo::UiPanelLayer::FindBar);
   for (const FloatWindow* w : float_stack(app)) {

@@ -65,12 +65,15 @@ std::string rel_id(const Json& item, std::string_view name) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::flarum_service_rows(const ForumRef& ref) {
+  return {{"", {{"Discussions", fl_ref(ref, ""), ref.path.empty()}}}};
+}
+
 Document flarum_list_document(const Json& reply, const ForumRef& ref) {
   const auto users = users_of(reply);
   const auto tags = tags_of(reply);
   Document doc;
-  NodeId thread = start_document(doc, ref.host + " — Discussions", ref.host,
-                                 {{"Discussions", fl_ref(ref, ""), true}}, "flarum");
+  NodeId thread = start_document(doc, ref.host + " — Discussions", "flarum");
   const std::vector<Json>& items = arr(reply, "data");
   for (const Json& d : items) {
     const Json* a = json_get(d, "attributes");
@@ -121,8 +124,7 @@ Document flarum_discussion_document(const Json& discussion, const Json& posts,
   const std::string title = attrs ? str(*attrs, "title") : std::string();
   const auto users = users_of(posts);
   Document doc;
-  NodeId thread = start_document(doc, title.empty() ? ref.host : title, ref.host,
-                                 {{"Discussions", fl_ref(ref, "")}}, "flarum");
+  NodeId thread = start_document(doc, title.empty() ? ref.host : title, "flarum");
   const std::string path = "d/" + id;
   for (const Json& p : arr(posts, "data")) {
     const Json* a = json_get(p, "attributes");

@@ -169,14 +169,17 @@ void native_links(Document& doc, const std::string& post_id,
 
 }  // namespace
 
+std::vector<ServiceRow> forum::lesswrong_service_rows(const ForumRef& ref) {
+  return {{"", nav_for(ref)}};
+}
+
 Document lesswrong_list_document(const Json& reply, const ForumRef& ref) {
   std::string what = "Frontpage";
   if (ref.path == "new") what = "New";
   else if (ref.path == "top") what = "Top";
   else if (ref.path == "curated") what = "Curated";
   Document doc;
-  NodeId thread = start_document(doc, "LessWrong — " + what, "LessWrong",
-                                 nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, "LessWrong — " + what, "lesswrong");
   const std::vector<Json>& posts = results(reply, "posts");
   for (const Json& p : posts) add_post_entry(doc, thread, p);
   if (posts.empty()) add_note(doc, doc.root, "No posts.");
@@ -188,8 +191,7 @@ Document lesswrong_list_document(const Json& reply, const ForumRef& ref) {
 
 Document lesswrong_quicktakes_document(const Json& reply, const ForumRef& ref) {
   Document doc;
-  NodeId thread = start_document(doc, "LessWrong — Quick takes", "LessWrong",
-                                 nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, "LessWrong — Quick takes", "lesswrong");
   const std::vector<Json>& takes = results(reply, "comments");
   for (const Json& c : takes) {
     const Json* post = json_get(c, "post");
@@ -218,8 +220,7 @@ Document lesswrong_post_document(const Json& reply, const ForumRef& ref) {
   const Json* p = result(reply, "post");
   Document doc;
   const std::string title = p ? str(*p, "title") : std::string();
-  NodeId thread = start_document(doc, title.empty() ? "LessWrong" : title,
-                                 "LessWrong", nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, title.empty() ? "LessWrong" : title, "lesswrong");
   if (!p) {
     add_note(doc, thread, "No such post.");
     add_web_link(doc, doc.root, ref);
@@ -291,8 +292,7 @@ Document lesswrong_user_document(const Json& user, const Json& posts,
   const Json* u = result(user, "user");
   Document doc;
   const std::string name = u ? str(*u, "displayName") : std::string();
-  NodeId thread = start_document(doc, name.empty() ? "LessWrong" : name + " — LessWrong",
-                                 "LessWrong", nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, name.empty() ? "LessWrong" : name + " — LessWrong", "lesswrong");
   if (!u) {
     add_note(doc, thread, "No such user.");
     add_web_link(doc, doc.root, ref);
@@ -325,8 +325,7 @@ Document lesswrong_tag_document(const Json& tag, const Json& posts,
   const Json* t = tags.empty() ? nullptr : &tags.front();
   Document doc;
   const std::string name = t ? str(*t, "name") : std::string();
-  NodeId thread = start_document(doc, name.empty() ? "LessWrong" : name + " — LessWrong",
-                                 "LessWrong", nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, name.empty() ? "LessWrong" : name + " — LessWrong", "lesswrong");
   if (!t) {
     add_note(doc, thread, "No such tag or wiki page.");
     add_web_link(doc, doc.root, ref);
@@ -351,8 +350,7 @@ Document lesswrong_tag_document(const Json& tag, const Json& posts,
 
 Document lesswrong_search_document(const Json& reply, const ForumRef& ref) {
   Document doc;
-  NodeId thread = start_document(doc, "LessWrong — Search: " + ref.query,
-                                 "LessWrong", nav_for(ref), "lesswrong");
+  NodeId thread = start_document(doc, "LessWrong — Search: " + ref.query, "lesswrong");
   // One result object per index, in request order: posts, tags, users.
   const Json* posts = json_at(reply, 0);
   const Json* tags = json_at(reply, 1);

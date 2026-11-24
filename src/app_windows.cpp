@@ -1103,9 +1103,24 @@ static void draw_soft_window(App& app, FloatWindow& sw) {
     const int bx = p.x - (p.sb_left ? kSbW : 0);
     const SDL_Rect band{bx, p.y - p.head_h, p.w + (p.sb_left ? kSbW : 0),
                         p.head_h};
-    th::fill(app.sdl, band, pal.face);
-    th::fill(app.sdl, SDL_Rect{band.x, band.y + band.h - 1, band.w, 1},
-             pal.shadow);
+    if (p.head_service && p.service) {
+      // A service strip: its tint and accent line (Ui::service_bars).
+      const uint32_t c = p.service->color;
+      auto mix = [&](uint8_t a, uint32_t b) {
+        return static_cast<uint8_t>((a * 86 + (b & 0xff) * 14) / 100);
+      };
+      th::fill(app.sdl, band,
+               th::rgb(mix(pal.face.r, c >> 16), mix(pal.face.g, c >> 8),
+                       mix(pal.face.b, c)));
+      const int line = std::max(2, static_cast<int>(std::lround(2.f * app.ui_scale)));
+      th::fill(app.sdl, SDL_Rect{band.x, band.y + band.h - line, band.w, line},
+               th::rgb(static_cast<uint8_t>(c >> 16), static_cast<uint8_t>(c >> 8),
+                       static_cast<uint8_t>(c)));
+    } else {
+      th::fill(app.sdl, band, pal.face);
+      th::fill(app.sdl, SDL_Rect{band.x, band.y + band.h - 1, band.w, 1},
+               pal.shadow);
+    }
   }
 }
 

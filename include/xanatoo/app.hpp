@@ -44,6 +44,7 @@
 #include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/annotations.hpp"
 #include "xanatoo/search.hpp"
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/related_sites.hpp"
 #include "xanatoo/sitemap.hpp"
 #include "xanatoo/types.hpp"
@@ -432,9 +433,14 @@ struct Pane {
   int w = 0;
   int y = 0;
   int h = 0;
-  // The edit strip above the text (edit_bar_h; 0 = none): the view's tile
-  // starts at y - head_h.
+  // The strip above the text (pane_head_h; 0 = none): the view's tile
+  // starts at y - head_h. An editable document's edit strip, else the
+  // service strip of a native service's page (head_service).
   int head_h = 0;
+  bool head_service = false;
+  // pane_service_bar's last result, for the address service_addr.
+  std::string service_addr;
+  std::optional<xanatoo::ServiceBar> service;
   // Prior block heights for viewport virtualization (node → height).
   std::unordered_map<xanatoo::NodeId, float> height_cache;
   int last_layout_pane_w = 0;  // drop cache when this pane's width changes
@@ -1715,6 +1721,15 @@ void set_pane_locked(App& app, const Pane& p, bool locked);
 bool buffer_takes_edits(App& app, BufferId id);
 // Height of the edit strip above an editable view (0 when it has none).
 int edit_bar_h(App& app, const Pane& p);
+// The address whose service strip a page shows: the page, or the target of
+// a search: address (a Digg search is Digg's).
+std::string service_address(App& app, const std::string& address);
+// The service strip of the view's page (docs/UI.md "Service strips"), also
+// while it loads; nullptr for pages of no native service.
+const xanatoo::ServiceBar* pane_service_bar(App& app, Pane& p);
+// Height of the strip on top of a view: its edit strip, else its service
+// strip (sets Pane::head_service); 0 when chrome is hidden.
+int pane_head_h(App& app, Pane& p);
 inline constexpr const char* kReadOnlyNotice =
     "Read-only page (foreign content) — Ctrl+S saves an editable Markdown copy";
 inline constexpr const char* kLockedNotice =

@@ -268,6 +268,7 @@ add_executable(xanatoo
   src/forum_flarum.cpp
   src/forum_lesswrong.cpp
   src/forum_digg.cpp
+  src/service_bar.cpp
   src/forum_fetch.cpp
   src/nntp.cpp
   src/nntp_fetch.cpp
@@ -805,6 +806,7 @@ add_executable(xanatoo_tests
   src/forum_flarum.cpp
   src/forum_lesswrong.cpp
   src/forum_digg.cpp
+  src/service_bar.cpp
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp

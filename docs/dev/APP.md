@@ -19,6 +19,7 @@ behaviour is free functions ("systems") taking `App&`:
 | `app_chrome.cpp` | status line (`compute_status` is pure data → `draw_status_bar`), floating window frame, client scrollbar |
 | `app_windows.cpp` | floating windows (`FloatWindow`, role = Help/Outline/Backlinks/Sitemap/Page/History/Styles/Document): one z-stack, shared hit-test / drag / resize / scroll / draw |
 | `app_softwin.cpp` / `dock_slices.hpp` | docked panel geometry: adjacent panels in a side column or top/bottom band have persisted relative `dock_share` sizes; drag the separator between them to resize, independently of the dock's outer width/height handle |
+| `service_bar.cpp` | the service strip of an address (`service_bar`, pure; dispatches to `hn_service_bar` / `forum_service_bar` / `nntp_service_bar`); the app keeps it per view in `Pane::service` (`pane_service_bar`, `pane_head_h`), `Ui::service_bars` draws it — docs/UI.md "Service strips" |
 | `search.cpp` | search engines (built-in table + user `search.sexp`), the `search:<engine>:<query>` address, query encoding, Ctrl+L keywords — pure, `search.hpp`, `docs/SEARCH.md` |
 | `opensearch.cpp` | a site's OpenSearch description → engine (`parse_opensearch`, `engine_sexp`, `save_user_engine` to `search.sexp`, worker-thread `fetch_opensearch`), `opensearch.hpp` |
 | `page_links.cpp` | what a web page declares in `<link rel>`: icons, next / prev / contents …, OpenSearch, canonical (`safe_canonical`), hreflang, language names, Accept-Language value — pure, `page_links.hpp`, `docs/dev/CONTENT.md` "Page links" |

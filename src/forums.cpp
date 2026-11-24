@@ -595,26 +595,9 @@ void map_links(Document& doc, const std::function<void(std::string&)>& fn) {
 }
 
 NodeId start_document(Document& doc, const std::string& title,
-                      const std::string& site, const std::vector<NavItem>& nav,
                       const std::string& thread_label) {
   NodeId root = doc.create(NodeKind::Document);
   doc.meta.title = title;
-  if (!nav.empty()) {
-    // A <nav> region: the Page panel takes it while it is open.
-    NodeId bar = doc.create(NodeKind::Chrome, root);
-    doc.get(bar).summary = "navigation";
-    NodeId line = doc.create(NodeKind::Paragraph, bar);
-    doc.append_text(line, site + ": ", InlineKind::Strong);
-    bool first = true;
-    for (const NavItem& item : nav) {
-      if (!first) doc.append_text(line, " · ");
-      first = false;
-      if (item.current || item.ref.empty())
-        doc.append_text(line, item.text, InlineKind::Strong);
-      else
-        add_link(doc, line, item.text, item.ref);
-    }
-  }
   NodeId thread = doc.create(NodeKind::Thread, root);
   set_thread_title(doc, thread, title);
   doc.get(thread).label = thread_label;
@@ -661,5 +644,60 @@ void add_note(Document& doc, NodeId parent, const std::string& text) {
 }
 
 }  // namespace forum
+
+ServiceBar forum_service_bar(const ForumRef& r) {
+  using namespace forum;
+  ServiceBar bar;
+  ForumRef home;
+  home.site = r.site;
+  home.host = r.host;
+  bar.home = forum_ref_string(home);
+  bar.name = forum_site_name(r.site);
+  switch (r.site) {
+    case ForumSite::Discourse:
+      bar.id = "discourse:" + r.host;
+      bar.name = r.host;
+      bar.rows = discourse_service_rows(r);
+      break;
+    case ForumSite::Lobsters:
+      bar.id = "lobsters";
+      bar.color = 0xac130d;
+      bar.rows = lobsters_service_rows(r);
+      break;
+    case ForumSite::FourChan:
+      bar.id = "4chan";
+      bar.color = 0x117743;
+      bar.rows = fourchan_service_rows(r);
+      break;
+    case ForumSite::StackExchange:
+      bar.id = "stackexchange:" + r.host;
+      bar.name = r.host;
+      bar.color = r.host.find("stackoverflow") != std::string::npos ? 0xf48024 : 0x0077cc;
+      bar.rows = se_service_rows(r);
+      break;
+    case ForumSite::Bluesky:
+      bar.id = "bluesky";
+      bar.color = 0x1185fe;
+      bar.rows = bsky_service_rows(r);
+      break;
+    case ForumSite::Flarum:
+      bar.id = "flarum:" + r.host;
+      bar.name = r.host;
+      bar.rows = flarum_service_rows(r);
+      break;
+    case ForumSite::LessWrong:
+      bar.id = "lesswrong";
+      bar.color = 0x5f9b65;
+      bar.rows = lesswrong_service_rows(r);
+      break;
+    case ForumSite::Digg:
+      bar.id = "digg";
+      bar.color = 0x333333;
+      bar.rows = digg_service_rows(r);
+      break;
+  }
+  if (!bar.color) bar.color = service_color_for(bar.id);
+  return bar;
+}
 
 }  // namespace xanatoo

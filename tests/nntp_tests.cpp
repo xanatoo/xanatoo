@@ -7,6 +7,7 @@
 // unit_tests.cpp).
 
 #include "xanatoo/nntp.hpp"
+#include "xanatoo/service_bar.hpp"
 
 #include <cstdio>
 #include <string>
@@ -304,7 +305,20 @@ void test_documents() {
   Document l = nntp_groups_document(few, ref("news://h/a.*"));
   EXPECT_EQ(count_kind(l, NodeKind::Article), 2u);
   EXPECT(has_href(l, "news://h/a.b"));
-  EXPECT(has_href(l, "news://h/"));  // breadcrumb to the server
+  // Server and hierarchy steps are on the service strip, not in the page.
+  EXPECT(!has_href(l, "news://h/"));
+  {
+    const auto bar = service_bar("news://h/a.*");
+    EXPECT(bar.has_value());
+    EXPECT_EQ(bar->name, std::string("Usenet"));
+    EXPECT_EQ(bar->home, std::string("news://h/"));
+    EXPECT_EQ(bar->rows.at(0).links.at(0).ref, std::string("news://h/"));
+    EXPECT_EQ(bar->rows.at(0).links.back().text, std::string("a.*"));
+    EXPECT(bar->rows.at(0).links.back().current);
+    const auto group = service_bar("news://h/comp.lang.c");
+    EXPECT(group && group->rows.at(0).links.size() == 4u);  // h · comp.* · comp.lang.* · comp.lang.c
+    EXPECT(group && group->rows.at(0).links.back().current);
+  }
 
   // Many groups fold into hierarchies.
   std::string active;

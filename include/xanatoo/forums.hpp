@@ -38,6 +38,7 @@
 // replies; only forum_fetch touches the network.
 
 #include "xanatoo/json_dom.hpp"
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/types.hpp"
 
 #include <optional>
@@ -68,6 +69,8 @@ struct ForumRef {
 std::optional<ForumRef> parse_forum_ref(std::string_view ref);
 bool is_forum_ref(std::string_view ref);
 std::string forum_ref_string(const ForumRef& r);
+// The service strip of a forum page (service_bar.hpp).
+ServiceBar forum_service_bar(const ForumRef& r);
 const char* forum_site_name(ForumSite s);
 // Equivalent web page ("" when there is none).
 std::string forum_web_url(const ForumRef& r);

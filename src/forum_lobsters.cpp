@@ -68,6 +68,10 @@ void add_title(Document& doc, NodeId parent, const Json& s, bool on_story) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::lobsters_service_rows(const ForumRef& ref) {
+  return {{"", nav_for(ref)}};
+}
+
 Document lobsters_list_document(const Json& reply, const ForumRef& ref) {
   std::string what = "Hottest";
   if (ref.path == "newest") what = "Newest";
@@ -75,8 +79,7 @@ Document lobsters_list_document(const Json& reply, const ForumRef& ref) {
   else if (starts_with(ref.path, "t/")) what = "Tag " + ref.path.substr(2);
   else if (starts_with(ref.path, "~")) what = ref.path.substr(1, ref.path.find('/') - 1);
   Document doc;
-  NodeId thread = start_document(doc, "Lobsters — " + what, "Lobsters",
-                                 nav_for(ref), "lobsters");
+  NodeId thread = start_document(doc, "Lobsters — " + what, "lobsters");
   const std::vector<Json>& stories =
       reply.type == Json::Type::Array ? reply.items : arr(reply, "stories");
   for (const Json& s : stories) {
@@ -111,8 +114,7 @@ Document lobsters_story_document(const Json& s, const ForumRef& ref) {
   const std::string id = str(s, "short_id");
   const std::string title = str(s, "title");
   Document doc;
-  NodeId thread = start_document(doc, title.empty() ? "Lobsters" : title,
-                                 "Lobsters", nav_for(ref), "lobsters");
+  NodeId thread = start_document(doc, title.empty() ? "Lobsters" : title, "lobsters");
   MsgHead head;
   head.label = id;
   head.author = str(s, "submitter_user");

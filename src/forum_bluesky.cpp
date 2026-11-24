@@ -323,19 +323,23 @@ void native_links(Document& doc) {
 
 }  // namespace
 
+std::vector<ServiceRow> forum::bsky_service_rows(const ForumRef& ref) {
+  if (ref.path.empty() || !is_profile(ref)) return {};
+  const std::string actor = ref.path.substr(0, ref.path.find('/'));
+  const std::string tab = profile_tab(ref);
+  ServiceRow row;
+  row.label = actor;
+  for (const auto& [text, t] : {std::pair<const char*, const char*>{"Posts", ""},
+                                {"Replies", "replies"}, {"Media", "media"},
+                                {"Feeds", "feeds"}})
+    row.links.push_back({text, bsky_ref(*t ? actor + "/" + t : actor), tab == t});
+  return {row};
+}
+
 Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* head) {
   Document doc;
   const std::string title = feed_title(reply, ref, head);
-  std::vector<NavItem> nav;
-  if (is_profile(ref)) {
-    const std::string actor = ref.path.substr(0, ref.path.find('/'));
-    const std::string tab = profile_tab(ref);
-    for (const auto& [text, t] : {std::pair<const char*, const char*>{"Posts", ""},
-                                  {"Replies", "replies"}, {"Media", "media"},
-                                  {"Feeds", "feeds"}})
-      nav.push_back({text, bsky_ref(*t ? actor + "/" + t : actor), tab == t});
-  }
-  NodeId thread = start_document(doc, "Bluesky — " + title, "Bluesky", nav, "bluesky");
+  NodeId thread = start_document(doc, "Bluesky — " + title, "bluesky");
   if (head) add_head(doc, thread, *head, ref);
   size_t posts = 0;
   // getActorFeeds: the custom feeds an account publishes.
@@ -392,7 +396,7 @@ Document bsky_thread_document(const Json& reply, const ForumRef& ref) {
   Document doc;
   const Json* root = json_get(reply, "thread");
   if (!root || !is_post_view(*root)) {
-    start_document(doc, "Bluesky", "Bluesky", {}, "bluesky");
+    start_document(doc, "Bluesky", "bluesky");
     add_note(doc, doc.root, "Post not found (deleted, or hidden from logged-out viewers).");
     add_web_link(doc, doc.root, ref);
     return doc;
@@ -401,7 +405,7 @@ Document bsky_thread_document(const Json& reply, const ForumRef& ref) {
   const Json* author = post ? json_get(*post, "author") : nullptr;
   NodeId thread = start_document(
       doc, "Bluesky — " + (author ? display_of(*author) : std::string("post")),
-      "Bluesky", {}, "bluesky");
+      "bluesky");
   // Parents, outermost first.
   std::vector<const Json*> parents;
   for (const Json* p = json_get(*root, "parent"); p && is_post_view(*p);

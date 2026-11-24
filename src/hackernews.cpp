@@ -101,6 +101,44 @@ std::optional<HnUrl> parse_hn_url(std::string_view s) {
 
 bool is_hn_url(std::string_view s) { return parse_hn_url(s).has_value(); }
 
+namespace {
+
+// The ranked lists: HnUrl::list, title, path on news.ycombinator.com.
+constexpr const char* kLists[][3] = {{"top", "Top", "news"},
+                                     {"new", "New", "newest"},
+                                     {"best", "Best", "best"},
+                                     {"ask", "Ask HN", "ask"},
+                                     {"show", "Show HN", "show"}};
+
+const char* list_title(const std::string& list) {
+  for (const auto& l : kLists)
+    if (list == l[0]) return l[1];
+  return "Top";
+}
+
+const char* list_path(const std::string& list) {
+  for (const auto& l : kLists)
+    if (list == l[0]) return l[2];
+  return "news";
+}
+
+}  // namespace
+
+std::optional<ServiceBar> hn_service_bar(std::string_view url) {
+  const auto u = parse_hn_url(url);
+  if (!u) return std::nullopt;
+  ServiceBar bar;
+  bar.id = "hn";
+  bar.name = "Hacker News";
+  bar.home = "https://news.ycombinator.com/news";
+  bar.color = 0xff6600;
+  ServiceRow& row = bar.rows.emplace_back();
+  for (const auto& l : kLists)
+    row.links.push_back({l[1], std::string("https://news.ycombinator.com/") + l[2],
+                         u->list == l[0]});
+  return bar;
+}
+
 void hn_append_html(Document& doc, NodeId parent, std::string_view html) {
   HtmlOptions opt;
   opt.base_url = "https://news.ycombinator.com/";
@@ -350,38 +388,6 @@ void append_comments(Document& doc, NodeId thread, const HnItem& parent) {
   }
 }
 
-const char* list_title(const std::string& list) {
-  if (list == "new") return "New";
-  if (list == "best") return "Best";
-  if (list == "ask") return "Ask HN";
-  if (list == "show") return "Show HN";
-  return "Top";
-}
-
-// "Top · New · Best · Ask · Show" header line, a <nav> region (the Page
-// panel takes it while it is open).
-void append_nav(Document& doc, NodeId root, const std::string& current) {
-  NodeId bar = doc.create(NodeKind::Chrome, root);
-  doc.get(bar).summary = "navigation";
-  NodeId nav = doc.create(NodeKind::Paragraph, bar);
-  static const char* kLists[][2] = {{"top", "news"},
-                                    {"new", "newest"},
-                                    {"best", "best"},
-                                    {"ask", "ask"},
-                                    {"show", "show"}};
-  doc.append_text(nav, "Hacker News: ", InlineKind::Strong);
-  bool first = true;
-  for (const auto& l : kLists) {
-    if (!first) doc.append_text(nav, " · ");
-    first = false;
-    if (current == l[0])
-      doc.append_text(nav, list_title(l[0]), InlineKind::Strong);
-    else
-      append_link(doc, nav, list_title(l[0]),
-                  std::string("https://news.ycombinator.com/") + l[1]);
-  }
-}
-
 std::optional<Document> fetch_list(const HnUrl& u, std::string* err) {
   auto ids_json = get_json(
       "https://hacker-news.firebaseio.com/v0/" + u.list + "stories.json", err);
@@ -419,7 +425,6 @@ std::optional<Document> fetch_list(const HnUrl& u, std::string* err) {
 
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
-  append_nav(doc, root, u.list);
   NodeId thread = doc.create(NodeKind::Thread, root);
   set_thread_title(doc, thread, std::string("Hacker News — ") + list_title(u.list));
   doc.get(thread).label = "hn";
@@ -436,11 +441,8 @@ std::optional<Document> fetch_list(const HnUrl& u, std::string* err) {
                     "No stories returned from Hacker News.");
   }
   NodeId more = doc.create(NodeKind::Paragraph, root);
-  static const std::unordered_map<std::string, std::string> kPath = {
-      {"top", "news"}, {"new", "newest"}, {"best", "best"},
-      {"ask", "ask"},  {"show", "show"}};
   append_link(doc, more, "More →",
-              "https://news.ycombinator.com/" + kPath.at(u.list) +
+              std::string("https://news.ycombinator.com/") + list_path(u.list) +
                   "?p=" + std::to_string(u.page + 1));
   std::cerr << "HN: " << by_id.size() << " stories\n";
   return doc;
@@ -480,7 +482,6 @@ std::optional<Document> fetch_item(const HnUrl& u, std::string* err) {
 
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
-  append_nav(doc, root, {});
   NodeId thread = doc.create(NodeKind::Thread, root);
   doc.get(thread).label = "hn";
   if (root_item.title.empty()) {
@@ -523,7 +524,6 @@ std::optional<Document> fetch_user(const HnUrl& u, std::string* err) {
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
   doc.meta.title = "HN user: " + name;
-  append_nav(doc, root, {});
   NodeId title = doc.create(NodeKind::Header, root);
   doc.append_text(title, name, InlineKind::Strong);
   NodeId details = doc.create(NodeKind::Paragraph, root);

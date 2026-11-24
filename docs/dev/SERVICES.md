@@ -42,6 +42,21 @@ read-only service clients. Every client is read-only: never post or log in.
   views stay native: `native_rewrite_links` (HN, Reddit) or refs emitted by
   `lemmy.cpp` (its path test is too loose for arbitrary links).
 
+## Service strips (`service_bar.hpp`)
+
+- Generated service pages carry no navigation rows ("Hacker News: Top ·
+  New · …", forum sort tabs, Digg topic / sort / range rows, Usenet
+  hierarchy breadcrumbs): the service's sections are on its **service
+  strip** (docs/UI.md "Service strips"), computed from the address only.
+- A new native service adds a `*_service_bar(ref)` (id, name, home, accent
+  colour, rows; mark the page's section `current`) and a branch in
+  `service_bar()` (`service_bar.cpp`). Forums add a
+  `forum::<site>_service_rows` and a case in `forum_service_bar`
+  (forums.cpp). Anything that needs the fetched data (a post's topic, a
+  message's group) stays in the page as an ordinary link.
+- `start_document(doc, title, thread_label)` (forum_common.hpp) no longer
+  takes nav items.
+
 ## Hacker News
 
 - Read-only (`src/hackernews.cpp`), gated by `XANATOO_HN` (default ON).

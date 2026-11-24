@@ -68,12 +68,53 @@ binary files are not (`pane_read_only`).
   is focused (they draw in its `FindBar` layer as `##find_bar/edit_strip`);
   unfocused it paints a plain band of the same height. A tool on another
   view's strip focuses that view first (`UiFrameResult::edit_bar_view`).
+- Service pages have a **service strip** in the same place instead (see
+  "Service strips"); a page never has both, since service pages are
+  read-only.
 - **New document** (Ctrl+N, File → New Document, the page button beside
   "+" on the tab strip) opens a blank document in a **new tab**, already
   stored in the local database (`db:`, listed under Local documents) with
   its title selected to type over; it never replaces the page in view.
   Right-clicking "+" offers New Tab, New Document, Open File… and Local
   Documents.
+
+
+## Service strips
+
+Pages of a native service (Hacker News, Lobsters, Discourse, 4chan, Stack
+Exchange, Bluesky, Flarum, LessWrong, Digg, Usenet) have a **service strip**
+on top of the page, where an editable document has its edit strip
+(`Pane::head_h` with `Pane::head_service`, from `pane_head_h`). It replaces
+the "Hacker News: Top · New · Best · …" lines the generated pages used to
+start with (`NodeKind::Chrome` navigation regions): those pages carry no
+navigation rows any more.
+
+- `service_bar(address)` (`service_bar.hpp`, pure) derives the strip from
+  the address alone, so it is there while the page loads and stays the same
+  across all pages of the service. Each service describes its own:
+  `hn_service_bar`, `forum_service_bar` (with the per-site
+  `forum::*_service_rows`), `nntp_service_bar`. A forum's own web pages
+  (`https://lobste.rs/…`) get its strip as well.
+- Contents: the favicon and name (opens the front page, `home`), a
+  separator, the sections with the page's own highlighted (`current`);
+  further rows start with their label (Digg's "Sort" and "From"). Links
+  that do not fit go into a "»" menu, so the reserved height
+  (`service_bar_height`: one row per `ServiceRow`) always fits.
+- Search: the engine that claims the address (`engine_for_address` over the
+  enabled engines) gets a field on the right of the first row; Enter opens
+  `search:<engine>:<query>`. A search's result page keeps its service's
+  strip (`service_address`: the search's target, or for JSON engines the
+  first service address among the engine's `sites`), with no section
+  marked.
+- Colour: `ServiceBar::color` (a service's own accent, else
+  `service_color_for(id)`, a hue from the id) tints the strip, draws its
+  bottom line and tints the service's tabs (`UiState::tab_service_color`;
+  the green editable tab wins).
+- Layers as for edit strips: centre tiles draw `##edit_bar/svc<view>`
+  (EditBar), a focused document window `##find_bar/service_strip`; an
+  unfocused window paints a tinted band. A link or search on another view's
+  strip focuses that view first (`UiFrameResult::edit_bar_view`).
+- Old snapshots taken before the strip still show their in-page rows.
 
 ## Toolbar states
 

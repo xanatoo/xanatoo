@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 #pragma once
 
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/types.hpp"
 
 #include <optional>
@@ -15,6 +16,8 @@ namespace xanatoo {
 //   https://news.ycombinator.com/newest      (/best, /ask, /show; ?p=2)
 //   https://news.ycombinator.com/item?id=1   (story + comment tree)
 bool is_hn_url(std::string_view s);
+// The service strip of a Hacker News address (service_bar.hpp).
+std::optional<ServiceBar> hn_service_bar(std::string_view url);
 
 // Map HN comment HTML (<p>, <a>, <i>, <pre><code>, "> quote" paragraphs)
 // to Paragraph / BlockQuote / CodeBlock children of `parent`.

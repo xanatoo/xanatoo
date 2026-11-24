@@ -466,8 +466,9 @@ void place_centre_rows(App& app) {
     p.sb_left = left_scroll;
     p.x = x;
     p.w = w;
-    // The edit strip of an editable document sits on top of its text.
-    p.head_h = std::min(edit_bar_h(app, p), area.rect.h / 2);
+    // The edit strip of an editable document, or the service strip of a
+    // service's page, sits on top of its text.
+    p.head_h = std::min(pane_head_h(app, p), area.rect.h / 2);
     p.y = area.rect.y + p.head_h;
     p.h = std::max(1, area.rect.h - p.head_h - pane_foot_h(app, p));
     if (old_w != p.w || old_h != p.h) app.needs_layout = true;
@@ -480,6 +481,7 @@ void place_centre_rows(App& app) {
     p.y = top;
     p.w = 0;
     p.head_h = 0;
+    p.head_service = false;
     p.h = std::max(1, view_h - pane_foot_h(app, p));
   }
 }
@@ -490,6 +492,51 @@ int edit_bar_h(App& app, const Pane& p) {
   const DocBuffer* b = find_buf(app, p.buf);
   if (!b || b->placeholder || pane_read_only(app, p)) return 0;
   return xanatoo::edit_bar_height(static_cast<float>(width), app.ui_scale);
+}
+
+std::string service_address(App& app, const std::string& address) {
+  // A search of a service's engine belongs to that service.
+  if (!xanatoo::is_search_ref(address)) return address;
+  std::string target = xanatoo::search_target(address, app.search.engines);
+  if (!target.empty()) return target;
+  // A JSON engine (Hacker News via Algolia) fetches no page: the first
+  // address its `sites` claim that is a service's.
+  const auto ref = xanatoo::parse_search_ref(address);
+  if (!ref) return address;
+  for (const xanatoo::SearchEngine& e : app.search.engines) {
+    if (e.id != ref->engine) continue;
+    for (const std::string& site : e.sites) {
+      std::string a = site.find(':') != std::string::npos
+                          ? site
+                          : "https://" + site + "/";
+      if (xanatoo::service_bar(a)) return a;
+    }
+  }
+  return address;
+}
+
+const xanatoo::ServiceBar* pane_service_bar(App& app, Pane& p) {
+  if (!find_buf(app, p.buf)) return nullptr;
+  std::string address = xanatoo::parse_locator(pane_address(app, p)).base;
+  if (address != p.service_addr) {
+    p.service = xanatoo::service_bar(service_address(app, address));
+    if (p.service && xanatoo::is_search_ref(address))
+      for (xanatoo::ServiceRow& row : p.service->rows)  // a search: no section
+        for (xanatoo::ServiceLink& l : row.links) l.current = false;
+    p.service_addr = std::move(address);
+  }
+  return p.service ? &*p.service : nullptr;
+}
+
+int pane_head_h(App& app, Pane& p) {
+  p.head_service = false;
+  if (const int h = edit_bar_h(app, p); h > 0) return h;
+  const int width = p.w + (p.sb_left ? kSbW : 0);
+  if (width <= 0 || app.chrome_hidden || media_fullscreen(app)) return 0;
+  const xanatoo::ServiceBar* bar = pane_service_bar(app, p);
+  if (!bar) return 0;
+  p.head_service = true;
+  return xanatoo::service_bar_height(*bar, app.ui_scale);
 }
 
 int tile_gutter_size(const App& app) {

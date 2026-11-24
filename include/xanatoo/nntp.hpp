@@ -18,6 +18,7 @@
 // Parsers and document builders are pure and tested offline; only
 // nntp_fetch (nntp_fetch.cpp) touches the network.
 
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/types.hpp"
 
 #include <cstdint>
@@ -57,6 +58,8 @@ struct NntpRef {
 bool is_nntp_url(std::string_view s);
 std::optional<NntpRef> parse_nntp_url(std::string_view s);
 std::string nntp_url_string(const NntpRef& r);
+// The service strip of a news address (service_bar.hpp).
+ServiceBar nntp_service_bar(const NntpRef& r);
 // Handy constructors for links (same scheme / host / port as `on`).
 std::string nntp_group_url(const NntpRef& on, std::string_view group,
                            int page = 1);

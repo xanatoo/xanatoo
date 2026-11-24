@@ -16,6 +16,7 @@
 #include "xanatoo/reddit_credentials.hpp"
 #include "xanatoo/catalog_credentials.hpp"
 #include "xanatoo/reply.hpp"
+#include "xanatoo/search.hpp"
 #include "xanatoo/util.hpp"
 #include "ui_panel_imgui_order.hpp"
 
@@ -1055,6 +1056,202 @@ void Ui::edit_bars(const UiState& state, UiFrameResult& result,
     }
     ImGui::End();
     ImGui::PopStyleVar(5);
+    if (cmd != before) result.edit_bar_view = bar.view;
+  }
+}
+
+// `a` tinted towards the accent `b` (0xRRGGBB) by `t`.
+static ImVec4 tint_rgb(theme::Rgb a, uint32_t b, float t) {
+  auto ch = [&](int x, uint32_t y) {
+    return (static_cast<float>(x) * (1.f - t) + static_cast<float>(y & 0xff) * t) /
+           255.f;
+  };
+  return ImVec4(ch(a.r, b >> 16), ch(a.g, b >> 8), ch(a.b, b), 1.f);
+}
+
+// The service strip on top of each view showing a native service's page
+// (docs/UI.md "Service strips"): favicon and name (the service's front
+// page), its sections with the page's own marked, further rows ("Sort",
+// "From") under the first, and the service's search on the right. Links
+// that do not fit go into a "»" menu, so the height service_bar_height()
+// reserved always fits.
+void Ui::service_bars(const UiState& state, UiFrameResult& result,
+                      UiCommand& cmd) {
+  constexpr ImGuiWindowFlags flags =
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse |
+      ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoFocusOnAppearing;
+  const theme::Palette& pal = theme::palette();
+  const float row_h = service_bar_row_h(scale_);
+  const float button_h = row_h - 4.f * scale_;
+  for (const UiServiceBar& bar : state.service_bars) {
+    if (bar.w <= 0 || bar.h <= 0) continue;
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(bar.x),
+                                   static_cast<float>(bar.y)));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(bar.w),
+                                    static_cast<float>(bar.h)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.f, 1.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                        ImVec2(kServiceBarPadX, kServiceBarPadY));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(6.f * scale_, ImGui::GetStyle().FramePadding.y));
+    const float field_border = ImGui::GetStyle().FrameBorderSize;
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);  // flat links
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, tint_rgb(pal.face, bar.color, 0.14f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.f, 0.f, 0.f, 0.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                          tint_rgb(pal.face, bar.color, 0.30f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                          tint_rgb(pal.face, bar.color, 0.45f));
+    // Like the edit strip: a document window's strip draws with that
+    // window's other embedded ImGui (FindBar layer), a tile's under all
+    // windows (EditBar layer).
+    char name[40];
+    if (bar.floating)
+      std::snprintf(name, sizeof name, "##find_bar/service_strip");
+    else
+      std::snprintf(name, sizeof name, "##edit_bar/svc%d", bar.view);
+    const UiCommand before = cmd;
+    if (ImGui::Begin(name, nullptr, flags)) {
+      const ImVec2 at = ImGui::GetWindowPos();
+      const float width = ImGui::GetWindowWidth();
+      const float line = std::max(2.f, std::round(2.f * scale_));
+      ImGui::GetWindowDrawList()->AddRectFilled(
+          ImVec2(at.x, at.y + static_cast<float>(bar.h) - line),
+          ImVec2(at.x + width, at.y + static_cast<float>(bar.h)),
+          IM_COL32(bar.color >> 16 & 0xff, bar.color >> 8 & 0xff,
+                   bar.color & 0xff, 255));
+      const ImGuiStyle& style = ImGui::GetStyle();
+      auto open = [&](const std::string& ref) {
+        cmd = UiCommand::NavigateUrl;
+        result.arg = ref;
+      };
+      auto link_w = [&](const ServiceLink& l) {
+        return ImGui::CalcTextSize(l.text.c_str()).x + 2.f * style.FramePadding.x +
+               style.ItemSpacing.x;
+      };
+      auto link = [&](const ServiceLink& l, size_t i) {
+        ImGui::PushID(static_cast<int>(i));
+        const bool hot = l.current;
+        if (hot)
+          ImGui::PushStyleColor(ImGuiCol_Button,
+                                tint_rgb(pal.face, bar.color, 0.40f));
+        ImGui::BeginDisabled(l.ref.empty() && !hot);
+        if (ImGui::Button(l.text.c_str(), ImVec2(0.f, button_h)) && !l.ref.empty())
+          open(l.ref);
+        if (!l.ref.empty() && ImGui::IsItemHovered())
+          ImGui::SetTooltip("%s", l.ref.c_str());
+        ImGui::EndDisabled();
+        if (hot) ImGui::PopStyleColor();
+        ImGui::PopID();
+        ImGui::SameLine();
+      };
+      auto separator = [&] {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            ImVec2(p.x + 3.f, p.y + 4.f), ImVec2(p.x + 3.f, p.y + button_h - 4.f),
+            ImGui::GetColorU32(ImGuiCol_Separator));
+        ImGui::Dummy(ImVec2(7.f, button_h));
+        ImGui::SameLine();
+      };
+      std::string& query = service_search_[bar.id];
+      const float search_w =
+          bar.search_engine.empty()
+              ? 0.f
+              : std::min(220.f * scale_, std::max(90.f * scale_, width * 0.28f));
+      const float more_w = ImGui::CalcTextSize("\xC2\xBB").x +
+                           2.f * style.FramePadding.x + style.ItemSpacing.x;
+      for (size_t r = 0; r < std::max<size_t>(1, bar.rows.size()); ++r) {
+        ImGui::SetCursorPos(ImVec2(kServiceBarPadX,
+                                   kServiceBarPadY + static_cast<float>(r) * row_h +
+                                       (row_h - button_h) * 0.5f));
+        ImGui::PushID(static_cast<int>(r));
+        if (r == 0) {
+          if (bar.icon) {
+            const float side = 16.f * scale_;
+            const ImVec2 size = icon_size(bar.icon, side);
+            const ImVec2 c = ImGui::GetCursorPos();
+            ImGui::SetCursorPos(ImVec2(c.x + 2.f, c.y + (button_h - size.y) * 0.5f));
+            ImGui::Image(reinterpret_cast<ImTextureID>(bar.icon), size);
+            ImGui::SameLine();
+            ImGui::SetCursorPosY(c.y);
+          }
+          ImGui::PushStyleColor(ImGuiCol_Text,
+                                tint_rgb(pal.text, bar.color, 0.35f));
+          ImGui::BeginDisabled(bar.home.empty());
+          if (ImGui::Button(bar.name.c_str(), ImVec2(0.f, button_h)))
+            open(bar.home);
+          if (!bar.home.empty() && ImGui::IsItemHovered())
+            ImGui::SetTooltip("Front page — %s", bar.home.c_str());
+          ImGui::EndDisabled();
+          ImGui::PopStyleColor();
+          ImGui::SameLine();
+        } else if (!bar.rows[r].label.empty()) {
+          ImGui::AlignTextToFramePadding();
+          ImGui::TextDisabled("%s", bar.rows[r].label.c_str());
+          ImGui::SameLine();
+        }
+        if (r < bar.rows.size() && !bar.rows[r].links.empty()) {
+          if (r == 0 || bar.rows[r].label.empty()) separator();
+          const auto& links = bar.rows[r].links;
+          const float right = width - kServiceBarPadX -
+                              (r == 0 && search_w > 0.f ? search_w + style.ItemSpacing.x
+                                                        : 0.f);
+          // How many fit, keeping room for "»" when some do not.
+          float x = ImGui::GetCursorPosX();
+          size_t fit = 0;
+          float total = x;
+          for (const auto& l : links) total += link_w(l);
+          if (total <= right) {
+            fit = links.size();
+          } else {
+            for (; fit < links.size() && x + link_w(links[fit]) + more_w <= right; ++fit)
+              x += link_w(links[fit]);
+          }
+          for (size_t i = 0; i < fit; ++i) link(links[i], i);
+          if (fit < links.size()) {
+            if (ImGui::Button("\xC2\xBB", ImVec2(0.f, button_h)))
+              ImGui::OpenPopup("##more");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("More");
+            if (ImGui::BeginPopup("##more")) {
+              for (size_t i = fit; i < links.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::MenuItem(links[i].text.c_str(), nullptr,
+                                    links[i].current, !links[i].ref.empty()))
+                  open(links[i].ref);
+                ImGui::PopID();
+              }
+              ImGui::EndPopup();
+            }
+            ImGui::SameLine();
+          }
+        }
+        if (r == 0 && search_w > 0.f) {
+          ImGui::SetCursorPosX(width - kServiceBarPadX - search_w);
+          ImGui::SetNextItemWidth(search_w);
+          ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, field_border);
+          char buf[512];
+          std::snprintf(buf, sizeof buf, "%s", query.c_str());
+          const std::string hint = "Search " + bar.search_name;
+          if (ImGui::InputTextWithHint("##search", hint.c_str(), buf, sizeof buf,
+                                       ImGuiInputTextFlags_EnterReturnsTrue)) {
+            std::string_view q(buf);
+            trim_ascii(q);
+            if (!q.empty()) open(search_ref(bar.search_engine, q));
+          }
+          ImGui::PopStyleVar();
+          query = buf;
+        }
+        ImGui::NewLine();
+        ImGui::PopID();
+      }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar(6);
     if (cmd != before) result.edit_bar_view = bar.view;
   }
 }
@@ -2931,6 +3128,21 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline,
                                   col(pal.doc_tab_edit_line));
             tab_colors += 7;
+          } else if (i < static_cast<int>(state.tab_service_color.size()) &&
+                     state.tab_service_color[static_cast<size_t>(i)]) {
+            // A native service's page: its accent (docs/UI.md "Service
+            // strips").
+            const uint32_t c = state.tab_service_color[static_cast<size_t>(i)];
+            const theme::Palette& pal = theme::palette();
+            const ImVec4 line = tint_rgb(pal.face, c, 1.f);
+            ImGui::PushStyleColor(ImGuiCol_Tab, tint_rgb(pal.face_dark, c, 0.18f));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmed, tint_rgb(pal.face_dark, c, 0.18f));
+            ImGui::PushStyleColor(ImGuiCol_TabHovered, tint_rgb(pal.face, c, 0.32f));
+            ImGui::PushStyleColor(ImGuiCol_TabSelected, tint_rgb(pal.face, c, 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected, tint_rgb(pal.face, c, 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, line);
+            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline, line);
+            tab_colors += 7;
           }
           if (ImGui::BeginTabItem(id.c_str(), &open, flags)) {
             ImGui::EndTabItem();
@@ -4151,6 +4363,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
 
   find_bar(state, cmd, result.arg);
   edit_bars(state, result, cmd);
+  service_bars(state, result, cmd);
 
   // ---- Reply composer: custom floating/dockable frame underneath, ImGui
   // text widget and Markdown tools above it. Nothing here sends a request.

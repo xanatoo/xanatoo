@@ -554,48 +554,6 @@ void add_feed_entry(Document& doc, NodeId thread, const Story& s,
   add_caption(doc, art, s, current_topic, false);
 }
 
-// Another "Label: a · b" line in the document's navigation.
-void add_nav_row(Document& doc, const std::string& label,
-                 const std::vector<NavItem>& items) {
-  for (NodeId id : doc.get(doc.root).children) {
-    if (doc.get(id).kind != NodeKind::Chrome) continue;
-    const NodeId line = doc.create(NodeKind::Paragraph, id);
-    doc.append_text(line, label + ": ", InlineKind::Strong);
-    bool first = true;
-    for (const NavItem& item : items) {
-      if (!first) doc.append_text(line, " · ");
-      first = false;
-      if (item.current) doc.append_text(line, item.text, InlineKind::Strong);
-      else add_link(doc, line, item.text, item.ref);
-    }
-    return;
-  }
-}
-
-void add_feed_nav(Document& doc, const ForumRef& ref, const DiggPath& p) {
-  std::vector<NavItem> items;
-  if (p.kind == DiggPath::Kind::Search) {
-    for (const Choice& c : kSorts) {
-      ForumRef r = ref;
-      r.cursor.clear();
-      r.fragment.clear();
-      r.path = "search/" + std::string(c.slug);
-      items.push_back({std::string(c.name), forum_ref_string(r), c.slug == p.sort});
-    }
-    add_nav_row(doc, "Sort", items);
-    return;
-  }
-  for (const Choice& c : kViews)
-    items.push_back({std::string(c.name), feed_ref(p.topic, c.slug), c.slug == p.view});
-  add_nav_row(doc, "Sort", items);
-  if (p.range.empty()) return;
-  items.clear();
-  for (const Choice& c : kRanges)
-    items.push_back({std::string(c.name), feed_ref(p.topic, p.view, c.slug),
-                     c.slug == p.range});
-  add_nav_row(doc, "From", items);
-}
-
 // "More … →" by the reply's opaque cursor.
 void add_more(Document& doc, NodeId parent, const Json& reply, ForumRef ref,
               const std::string& text) {
@@ -782,6 +740,40 @@ void add_comment_section(Document& doc, NodeId thread, const Story& s,
 
 }  // namespace
 
+// Topics, then the feed's sort and time window (or a search's order).
+std::vector<ServiceRow> forum::digg_service_rows(const ForumRef& ref) {
+  const DiggPath p = digg_path(ref.path);
+  const bool feed = p.kind == DiggPath::Kind::Feed;
+  std::vector<ServiceRow> rows(1);
+  for (const Choice& t : kTopics)
+    rows[0].links.push_back({std::string(t.name), feed_ref(t.slug), feed && t.slug == p.topic});
+  if (p.kind == DiggPath::Kind::Search) {
+    ServiceRow& sort = rows.emplace_back();
+    sort.label = "Sort";
+    for (const Choice& c : kSorts) {
+      ForumRef r = ref;
+      r.cursor.clear();
+      r.fragment.clear();
+      r.page = 1;
+      r.path = "search/" + std::string(c.slug);
+      sort.links.push_back({std::string(c.name), forum_ref_string(r), c.slug == p.sort});
+    }
+    return rows;
+  }
+  if (!feed) return rows;
+  ServiceRow& sort = rows.emplace_back();
+  sort.label = "Sort";
+  for (const Choice& c : kViews)
+    sort.links.push_back({std::string(c.name), feed_ref(p.topic, c.slug), c.slug == p.view});
+  if (p.range.empty()) return rows;
+  ServiceRow& from = rows.emplace_back();
+  from.label = "From";
+  for (const Choice& c : kRanges)
+    from.links.push_back({std::string(c.name), feed_ref(p.topic, p.view, c.slug),
+                          c.slug == p.range});
+  return rows;
+}
+
 Document digg_list_document(const Json& reply, const ForumRef& ref,
                             const DiggImages& images) {
   const DiggPath p = digg_path(ref.path);
@@ -793,12 +785,8 @@ Document digg_list_document(const Json& reply, const ForumRef& ref,
     title += " · " + std::string(find_choice(kViews, p.view)->name);
   if (p.range.size() && p.range != kRanges[0].slug)
     title += " · " + std::string(find_choice(kRanges, p.range)->name);
-  std::vector<NavItem> nav;
-  for (const Choice& t : kTopics)
-    nav.push_back({std::string(t.name), feed_ref(t.slug), t.slug == topic});
   Document doc;
-  const NodeId thread = start_document(doc, title, "Digg", nav, "digg");
-  add_feed_nav(doc, ref, p);
+  const NodeId thread = start_document(doc, title, "digg");
   if (search && json_get(reply, "totalMatches"))
     add_meta(doc, doc.create(NodeKind::Caption, thread),
              count(num(reply, "totalMatches"), "story", "stories") + " found");
@@ -817,11 +805,9 @@ Document digg_post_document(const Json& reply, const ForumRef& ref,
                             const DiggPost& extra) {
   const Json* record = json_get(reply, "story");
   const Story s = record ? read_story(*record) : Story{};
-  std::vector<NavItem> nav = {{"All stories", "digg:", false}};
-  if (!s.topic.empty()) nav.push_back({topic_name(s.topic), feed_ref(s.topic), false});
   Document doc;
-  const NodeId thread = start_document(
-      doc, s.title.empty() ? "Digg story" : s.title, "Digg", nav, "digg");
+  const NodeId thread =
+      start_document(doc, s.title.empty() ? "Digg story" : s.title, "digg");
   const NodeId art = doc.create(NodeKind::Article, thread);
   doc.get(art).label = s.id;
   add_caption(doc, art, s, {}, true);
@@ -852,10 +838,10 @@ Document digg_comments_document(const Json& reply, const ForumRef& ref,
   const bool one = p.kind == DiggPath::Kind::Replies;
   CommentList list{std::string(p.id), {}};
   Document doc;
-  const NodeId thread = start_document(
-      doc, one ? "Digg — Replies" : "Digg — Comments", "Digg",
-      {{"All stories", "digg:", false}, {"Story", digg_ref("post/" + list.post), false}},
-      "digg");
+  const NodeId thread =
+      start_document(doc, one ? "Digg — Replies" : "Digg — Comments", "digg");
+  add_link(doc, doc.create(NodeKind::Paragraph, thread), "← Story",
+           digg_ref("post/" + list.post));
   if (one)
     for (const Json& r : arr(reply, "replies")) add_comment(doc, thread, r, list);
   else

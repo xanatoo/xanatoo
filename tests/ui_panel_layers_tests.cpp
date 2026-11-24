@@ -14,6 +14,9 @@ int main() {
   assert(ui_panel_layer("##edit_bar/v0") == UiPanelLayer::EditBar);
   assert(ui_panel_layer("##edit_bar/v1") == UiPanelLayer::EditBar);
   assert(ui_panel_layer("##find_bar/edit_strip") == UiPanelLayer::FindBar);
+  // Service strips share the edit strips' places.
+  assert(ui_panel_layer("##edit_bar/svc0") == UiPanelLayer::EditBar);
+  assert(ui_panel_layer("##find_bar/service_strip") == UiPanelLayer::FindBar);
   assert(ui_panel_layer("##edit_barx") == UiPanelLayer::Chrome);
   assert(ui_panel_layer("##bookmarks_panel_body") == UiPanelLayer::Bookmarks);
   assert(ui_panel_layer("##styles_panel_body") == UiPanelLayer::Styles);

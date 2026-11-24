@@ -12,6 +12,7 @@
 #include "xanatoo/matrix.hpp"
 #include "xanatoo/style.hpp"
 #include "xanatoo/subscriptions.hpp"
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/ui_panel_layers.hpp"
 #include <string>
 #include <optional>
@@ -378,6 +379,22 @@ struct UiEditBar {
   bool in_stretch = false;
 };
 
+// The service strip of a view showing a native service's page (docs/UI.md
+// "Service strips"): name, favicon, sections and the service's search.
+struct UiServiceBar {
+  int view = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+  bool floating = false;  // in a document window (drawn with its frame)
+  std::string id;         // ServiceBar::id (keeps the search text apart)
+  std::string name;
+  std::string home;
+  uint32_t color = 0;  // accent 0xRRGGBB
+  SDL_Texture* icon = nullptr;
+  std::vector<ServiceRow> rows;
+  std::string search_engine;  // engine id; "" = no search field
+  std::string search_name;
+};
+
 struct UiState {
   // Native FloatWindows determine both the painted and interactive stacking
   // of embedded ImGui forms. Chrome remains on top of all native windows.
@@ -592,6 +609,8 @@ struct UiState {
   int context_section = -1;
   // Edit strips of the editable views shown.
   std::vector<UiEditBar> edit_bars;
+  // Service strips of the service pages shown.
+  std::vector<UiServiceBar> service_bars;
   // Find bar of the focused view (App::prompt).
   bool find_open = false, find_replace = false;
   int find_x = 0, find_y = 0, find_w = 0, find_h = 0;
@@ -757,6 +776,7 @@ struct UiState {
   std::vector<uint32_t> tab_ids;  // buffer id of each tab (stable ImGui ids)
   std::vector<SDL_Texture*> tab_icons;
   std::vector<uint8_t> tab_editable;  // 1: editable, unlocked (green tab)
+  std::vector<uint32_t> tab_service_color;  // service accent; 0 = none
   int active_tab = 0;
   bool has_floating = false;
   std::string status_left;
@@ -888,6 +908,8 @@ private:
                    bool* right_clicked = nullptr, bool latched = false);
   void find_bar(const UiState& state, UiCommand& cmd, std::string& arg);
   void edit_bars(const UiState& state, UiFrameResult& result, UiCommand& cmd);
+  void service_bars(const UiState& state, UiFrameResult& result,
+                    UiCommand& cmd);
   bool tool_menu_begin(const char* id, const char* icon_name, const char* tip);
   void toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd);
   void draw_url_suggestions(const UiState& state, UiFrameResult& result,
@@ -1007,6 +1029,8 @@ private:
   bool identity_section_init_ = false;
   int identity_section_settle_ = 0;  // frames to ignore the shown tab
   char find_input_[1024] = {};
+  // Search fields of the service strips, by ServiceBar::id.
+  std::unordered_map<std::string, std::string> service_search_;
   char find_replace_input_[1024] = {};
   // Texts last taken from the app; anything else is typing it has not seen.
   std::string find_text_seen_, find_replacement_seen_;

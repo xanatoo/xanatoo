@@ -9,6 +9,7 @@
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/json_dom.hpp"
 #include "xanatoo/layout.hpp"
+#include "xanatoo/service_bar.hpp"
 
 #include <cstdio>
 #include <string>
@@ -52,6 +53,26 @@ std::string all_text(const Document& d) {
     for (const InlineSpan& s : n.spans) out += s.text + "|";
     out += n.src + "|";
   }
+  return out;
+}
+
+// A link of the address's service strip.
+bool bar_has(std::string_view address, std::string_view href) {
+  const auto bar = service_bar(address);
+  if (!bar) return false;
+  for (const ServiceRow& row : bar->rows)
+    for (const ServiceLink& l : row.links)
+      if (l.ref == href) return true;
+  return false;
+}
+
+// Text of the strip's current links, "|"-joined.
+std::string bar_current(std::string_view address) {
+  std::string out;
+  if (const auto bar = service_bar(address))
+    for (const ServiceRow& row : bar->rows)
+      for (const ServiceLink& l : row.links)
+        if (l.current) out += l.text + "|";
   return out;
 }
 
@@ -424,8 +445,11 @@ void test_bluesky() {
   EXPECT_EQ(fp.meta.title, "Bluesky — Bob (@bob.example)");
   EXPECT(all_text(fp).find("Writes things.") != std::string::npos);
   EXPECT(all_text(fp).find("12 followers") != std::string::npos);
-  EXPECT(has_href(fp, "bsky:bob.example/replies"));  // profile tabs
-  EXPECT(has_href(fp, "bsky:bob.example/feeds"));
+  EXPECT(!has_href(fp, "bsky:bob.example/replies"));  // tabs: on the strip
+  EXPECT(bar_has("bsky:bob.example", "bsky:bob.example/replies"));
+  EXPECT(bar_has("bsky:bob.example", "bsky:bob.example/feeds"));
+  EXPECT_EQ(bar_current("bsky:bob.example/media"), "Media|");
+  EXPECT(service_bar("bsky:bob.example/post/3k")->rows.empty());
   Json big = parse(R"({"did":"did:plc:b","handle":"b.example","followersCount":35814333,
       "followsCount":1234,"postsCount":999})");
   const std::string bt = all_text(bsky_feed_document(feed, ref("bsky:b.example/media"), &big));
@@ -583,13 +607,12 @@ void test_lesswrong() {
   const std::string lt = all_text(l);
   EXPECT(lt.find("(example.org)") != std::string::npos);
   EXPECT(lt.find("[Question] T") != std::string::npos);
-  // The "LessWrong: Frontpage · New · …" bar is a <nav> region (Page panel).
-  {
-    const Node& bar = l.get(l.get(l.root).children.at(0));
-    EXPECT(bar.kind == NodeKind::Chrome);
-    EXPECT_EQ(bar.summary, "navigation");
-    EXPECT(margin_chrome(l, bar));
-  }
+  // "Frontpage · New · …" are on the service strip, not in the page.
+  EXPECT(count_kind(l, NodeKind::Chrome) == 0);
+  EXPECT(!has_href(l, "lesswrong:new"));
+  EXPECT(bar_has("lesswrong:", "lesswrong:new"));
+  EXPECT_EQ(bar_current("lesswrong:"), "Frontpage|");
+  EXPECT_EQ(bar_current("lesswrong:posts/A/a"), "");
 
   // Search: posts, tags and users of one multi-query reply.
   Json found = parse(R"([{"hits":[{"objectID":"P1","slug":"s","title":"Secrets","url":null,
@@ -688,7 +711,8 @@ void test_digg() {
   EXPECT(has_href(f, "digg:tech"));
   EXPECT(has_href(f, "https://digg.com/tech/7xbz1s0w"));
   EXPECT(has_href(f, "digg:?cursor=c1%2B%2F%3D"));
-  EXPECT(has_href(f, "digg:all/top"));
+  EXPECT(bar_has("digg:", "digg:all/top"));
+  EXPECT_EQ(bar_current("digg:"), "All|Trending|");
   EXPECT_EQ(count_kind(f, NodeKind::Header), 1u);  // the page title; entries are bold links
   EXPECT_EQ(count_kind(f, NodeKind::Image), 1u);
   EXPECT(all_text(f).find("cdn.digg.com/cdn-cgi/image/width=240,height=160,fit=cover,quality=85,format=jpeg/"
@@ -696,7 +720,9 @@ void test_digg() {
   EXPECT(all_text(f).find("Atlanta ground stop has been lifted") != std::string::npos);
   // The Top feed offers its time windows.
   Document t = digg_list_document(Json{}, ref("digg:ai/top/7d"));
-  EXPECT(has_href(t, "digg:ai/top/30d"));
+  EXPECT(bar_has("digg:ai/top/7d", "digg:ai/top/30d"));
+  EXPECT_EQ(service_bar("digg:ai/top/7d")->rows.at(2).label, "From");
+  EXPECT_EQ(bar_current("digg:ai/top/7d"), "AI|Top|7 days|");
   EXPECT(all_text(t).find("No stories.") != std::string::npos);
   // The static JSON feed: relative addresses, no topic.
   Json clusters = parse(R"({"clusters":[{"id":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
@@ -712,7 +738,8 @@ void test_digg() {
   Document s = digg_list_document(found, ref("digg:search?query=gemini"));
   EXPECT(all_text(s).find("41 stories found") != std::string::npos);
   EXPECT(all_text(s).find("9 authors") != std::string::npos);
-  EXPECT(has_href(s, "digg:search/newest?query=gemini"));
+  EXPECT(bar_has("digg:search?query=gemini", "digg:search/newest?query=gemini"));
+  EXPECT_EQ(bar_current("digg:search?query=gemini"), "Relevance|");
   EXPECT(!has_href(s, "digg:search?query=gemini&cursor="));
 
   // A story page: the web page's id, picture and article.
@@ -809,6 +836,50 @@ void test_digg() {
 }
 }  // namespace
 
+// The service strip of each site, from the address alone.
+void test_service_bars() {
+  EXPECT(!service_bar("https://example.org/"));
+  EXPECT(!service_bar("file:/tmp/x.md"));
+  EXPECT(!service_bar(""));
+
+  auto hn = service_bar("https://news.ycombinator.com/newest");
+  EXPECT(hn.has_value());
+  EXPECT_EQ(hn->id, "hn");
+  EXPECT_EQ(hn->name, "Hacker News");
+  EXPECT_EQ(hn->color, 0xff6600u);
+  EXPECT_EQ(hn->rows.size(), 1u);
+  EXPECT_EQ(hn->rows[0].links.size(), 5u);
+  EXPECT_EQ(bar_current("https://news.ycombinator.com/newest"), "New|");
+  EXPECT_EQ(bar_current("https://news.ycombinator.com/"), "Top|");
+  EXPECT_EQ(bar_current("https://news.ycombinator.com/item?id=1"), "");
+  EXPECT(bar_has("https://news.ycombinator.com/item?id=1",
+                 "https://news.ycombinator.com/show"));
+
+  EXPECT_EQ(bar_current("lobsters:newest"), "Newest|");
+  EXPECT_EQ(service_bar("lobsters:s/abc")->home, "lobsters:");
+  // A forum's own web pages get its strip as well.
+  EXPECT_EQ(service_bar("https://lobste.rs/newest")->id, "lobsters");
+
+  auto d = service_bar("discourse:forum.example/top");
+  EXPECT(d.has_value());
+  EXPECT_EQ(d->name, "forum.example");
+  EXPECT_EQ(d->id, "discourse:forum.example");
+  EXPECT(d->color != 0u);
+  EXPECT_EQ(d->color, service_color_for("discourse:forum.example"));
+  EXPECT_EQ(bar_current("discourse:forum.example/top"), "Top|");
+
+  EXPECT_EQ(bar_current("fourchan:g/"), "/g/|");
+  EXPECT_EQ(bar_current("fourchan:g/thread/1"), "");
+  EXPECT(bar_has("fourchan:g/thread/1", "fourchan:g/"));
+  EXPECT_EQ(bar_current("fourchan:"), "Boards|");
+
+  // Geometry: one row at least; Digg's Top feed has three.
+  EXPECT_EQ(service_bar_height(*hn, 1.f),
+            static_cast<int>(service_bar_row_h(1.f) + 2 * kServiceBarPadY));
+  EXPECT(service_bar_height(*service_bar("digg:ai/top/7d"), 1.f) >
+         2 * service_bar_height(*hn, 1.f));
+}
+
 void test_forums(int& passed, int& failed) {
   test_refs();
   test_discourse();
@@ -819,6 +890,7 @@ void test_forums(int& passed, int& failed) {
   test_flarum();
   test_lesswrong();
   test_digg();
+  test_service_bars();
   passed += g_passed;
   failed += g_failed;
 }
