@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Touch long press: menu on the timer, chrome too
+
+- The context menu now opens once the finger has rested 500 ms, not on the
+  lift. On text the word is selected at the same moment; dragging on closes
+  the menu (`Ui::close_popups`) and extends the selection, lifting opens it
+  again. On no text the menu stays open until the lift (`TouchMode::Hold`
+  no longer pans).
+- ImGui chrome (URL bar, search bar, tabs, toolbar buttons, panel forms):
+  `TouchMode::UiHold` times the touch ImGui gets as a mouse; held still, it
+  becomes a right click (`Ui::touch_long_press(true)`), so every chrome
+  context menu works. `touch_long_press` first lets go of ImGui's left
+  button and clears its active widget until that release is seen, so the
+  lifting finger clicks nothing (neither the held button / tab nor a menu
+  item that opened under it); page long presses use it too.
+- The toolbar search field had no context menu at all: Cut, Copy, Paste,
+  Select All, Clear, Paste and Search.
+- Not tried on a device yet (no touch input under Xvfb).
+
 ## Status (2026-11-24) — Password-less Nostr keys
 
 - New / imported nsec keys can be kept without a password ("No password"

@@ -650,10 +650,13 @@ enum class TouchMode : uint8_t {
   Idle,     // no finger down
   Pending,  // one finger down: not yet a tap, pan or long press
   Pan,      // dragging scrolls the target
-  Select,   // after a long press on text: dragging extends the selection,
-            // lifting opens the context menu
-  Hold,     // long press on no text: lifting opens the context menu,
-            // moving pans instead
+  Select,   // after a long press on text: the word is selected and the
+            // context menu open; dragging closes it and extends the
+            // selection, lifting then opens it again
+  Hold,     // after a long press on no text: the context menu is open,
+            // waiting for the lift
+  UiHold,   // one finger on ImGui chrome, which gets the touch as a mouse:
+            // held still, it becomes a right click (the chrome's menus)
   Direct,   // scrollbar / float frame / split gutter: plain pointer drag
   Pinch,    // two fingers: zoom
   Image,    // one finger on a single-image gallery view: pan / swipe / tap
@@ -678,6 +681,7 @@ struct Touch {
   Uint32 start_ticks = 0;
   bool on_float = false;
   bool on_image = false;  // `pane` shows a single gallery image
+  bool menu_open = false;  // the long press opened a context menu
   int pane = 0;
   // Pan velocity (scroll px/s) and the fling that continues it.
   float velocity = 0.f;

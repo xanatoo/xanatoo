@@ -2,11 +2,14 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 // Touchscreen gestures, browser style: tap = left click (follow links,
-// place caret), drag = scroll with momentum, long press = select word and
-// drag to extend, lifting then opens the context menu (the touch right
-// click; on no text it opens on lift without the selection), two-finger
-// pinch = zoom. Touches on ImGui chrome are left
-// to ImGui, which sees SDL's touch-synthesised mouse events.
+// place caret), drag = scroll with momentum, long press = the touch right
+// click: once the finger has rested long enough (not on the lift), the word
+// under it is selected and the context menu opens; dragging on from there
+// closes the menu and extends the selection, lifting opens it again.
+// Two-finger pinch = zoom. Touches on ImGui chrome (URL bar, search bar,
+// tabs, toolbar, panel forms) are left to ImGui, which sees SDL's
+// touch-synthesised mouse events; held still there, the touch turns into a
+// right click, which opens that chrome's context menu.
 // Gutters (tile divider, dock splits, dock edges) are thin: besides a finger
 // right on one, two fingers placed either side of a gutter grab it and drag
 // it along with their midpoint. Pinches stay within one page, so a pair of
@@ -148,12 +151,14 @@ void begin_gesture(App& app, float x, float y) {
   t.last_move_ticks = t.start_ticks;
   t.on_float = false;
   t.on_image = false;
+  t.menu_open = false;
   const int xi = static_cast<int>(x), yi = static_cast<int>(y);
-  if (app.ui.captures_point(x, y, float_layer_at(app, xi, yi))) {
-    t.mode = TouchMode::Ignored;
+  if (app.ui.captures_point(x, y, float_layer_at(app, xi, yi)) ||
+      y < app.ui_top) {
+    t.mode = TouchMode::UiHold;
     return;
   }
-  if (y < app.ui_top || yi >= app.win_h - status_bar_h) {
+  if (yi >= app.win_h - status_bar_h) {
     t.mode = TouchMode::Ignored;
     return;
   }
@@ -197,12 +202,33 @@ void begin_gesture(App& app, float x, float y) {
   t.mode = TouchMode::Pending;
 }
 
-// Long press on pane text: select the word and let the drag extend it.
-// Elsewhere (no text, a panel's client) the press only waits for the lift.
+// The context menu at the pressed spot, while the finger still rests.
+void open_touch_menu(App& app) {
+  Touch& t = app.touch;
+  pointer_right_down(app, static_cast<int>(t.start_x),
+                     static_cast<int>(t.start_y), false);
+  // ImGui still holds the finger as a left press: the lift must not click
+  // a menu item that opened under it.
+  app.ui.touch_long_press(false);
+  t.menu_open = true;
+}
+
+// The menu a long press opened is in the way of what the finger does next.
+void close_touch_menu(App& app) {
+  Touch& t = app.touch;
+  if (!t.menu_open) return;
+  app.ui.close_popups();
+  t.menu_open = false;
+}
+
+// Long press on pane text: select the word and open the context menu;
+// dragging on extends the selection. Elsewhere (no text, a panel's client)
+// only the menu opens.
 void begin_select(App& app) {
   Touch& t = app.touch;
   if (t.on_float) {
     t.mode = TouchMode::Hold;
+    open_touch_menu(app);
     return;
   }
   Pane& p = app.panes[t.pane];
@@ -210,7 +236,8 @@ void begin_select(App& app) {
   const float my = content_y(app, t.start_y, t.pane);
   auto hit = xanatoo::hit_test(p.layout, lx, my, p.scroll_y);
   if (!hit) {
-    t.mode = TouchMode::Hold;  // nothing to select; menu on lift
+    t.mode = TouchMode::Hold;  // nothing to select: just the menu
+    open_touch_menu(app);
     return;
   }
   leave_prompt(app);
@@ -222,6 +249,7 @@ void begin_select(App& app) {
   app.dragging_sel = true;
   reset_blink(app);
   t.mode = TouchMode::Select;
+  open_touch_menu(app);
 }
 
 void begin_pinch(App& app) {
@@ -279,11 +307,14 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   if (t.count == 1) {
     app.pointer_away = false;  // ImGui follows this finger again
     begin_gesture(app, x, y);
+  } else if (t.mode == TouchMode::UiHold) {
+    t.mode = TouchMode::Ignored;  // two fingers on chrome: no right click
   } else if (t.mode == TouchMode::Direct && float_span_begin(app)) {
     t.mode = TouchMode::FloatSpan;  // a free window's title held: span it
   } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
              t.mode == TouchMode::Pan || t.mode == TouchMode::Image ||
              t.mode == TouchMode::Select || t.mode == TouchMode::Direct) {
+    close_touch_menu(app);
     // The gutter comes first, whichever side touched down first and
     // whatever that finger began; only then a pinch (not for a press).
     if (!begin_gutter_drag(app) && t.mode != TouchMode::Select &&
@@ -305,8 +336,13 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
   f->y = y;
   const bool primary = f == &t.fingers[0];
   switch (t.mode) {
+    case TouchMode::UiHold:  // ImGui drags it (a slider, a tab, a scroll)
+      if (std::hypot(x - t.start_x, y - t.start_y) >= kSlopPx)
+        t.mode = TouchMode::Ignored;
+      break;
+    case TouchMode::Hold:  // the menu is open: wait for the lift
+      break;
     case TouchMode::Pending:
-    case TouchMode::Hold:
       if (std::hypot(x - t.start_x, y - t.start_y) < kSlopPx) break;
       t.mode = TouchMode::Pan;
       // Start from the origin so the content stays under the finger.
@@ -326,6 +362,13 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
       break;
     }
     case TouchMode::Select:
+      if (!primary) break;
+      if (t.menu_open) {  // the finger rests on the word, under the menu
+        if (std::hypot(x - t.start_x, y - t.start_y) < kSlopPx) break;
+        close_touch_menu(app);
+      }
+      pointer_motion(app, static_cast<int>(x), static_cast<int>(y), false);
+      break;
     case TouchMode::Direct:
       if (primary)
         pointer_motion(app, static_cast<int>(x), static_cast<int>(y), false);
@@ -401,18 +444,18 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
       }
       break;
     case TouchMode::Select:
-      // Target the pressed spot: it lies inside the selected word, so the
-      // menu keeps the (possibly extended) selection for Copy & co.
+      // After a drag the menu opens again. Target the pressed spot: it lies
+      // inside the selected word, so the menu keeps the extended selection
+      // for Copy & co.
       if (primary) {
         pointer_left_up(app, xi, yi);
-        pointer_right_down(app, static_cast<int>(t.start_x),
-                           static_cast<int>(t.start_y), false);
+        if (!t.menu_open)
+          pointer_right_down(app, static_cast<int>(t.start_x),
+                             static_cast<int>(t.start_y), false);
       }
       break;
-    case TouchMode::Hold:
-      if (primary)
-        pointer_right_down(app, static_cast<int>(t.start_x),
-                           static_cast<int>(t.start_y), false);
+    case TouchMode::Hold:    // the menu opened when the timer fired
+    case TouchMode::UiHold:  // a tap: ImGui clicked it
       break;
     case TouchMode::Direct:
       if (primary) pointer_left_up(app, xi, yi);
@@ -473,6 +516,10 @@ void update_touch(App& app) {
   const Uint32 now = xanatoo::sdl::ticks();
   if (t.mode == TouchMode::Pending && now - t.start_ticks >= kLongPressMs)
     begin_select(app);
+  if (t.mode == TouchMode::UiHold && now - t.start_ticks >= kLongPressMs) {
+    app.ui.touch_long_press(true);
+    t.mode = TouchMode::Ignored;
+  }
   if (!t.flinging) return;
   const float dt = static_cast<float>(now - t.fling_ticks) / 1000.f;
   if (dt <= 0.f) return;

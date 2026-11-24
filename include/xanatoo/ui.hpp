@@ -906,6 +906,15 @@ public:
   void open_history_menu(float x, float y);
   // The Media panel's seek bar menu (UiState::media_menu).
   void open_media_menu(float x, float y);
+  // A touch long press fired while the finger is still down. ImGui's left
+  // button (SDL's touch-synthesised mouse) is let go now, and the widget it
+  // holds is dropped without a click, so the lifting finger presses nothing
+  // (not a button, nor a menu item that opened under it). With
+  // `right_click`, a right click follows where ImGui's pointer is: the
+  // context menu of the URL bar, the search bar, a tab, a toolbar button…
+  void touch_long_press(bool right_click);
+  // Close every open popup (a touch menu the finger then dragged away from).
+  void close_popups();
 
   UiFrameResult begin_frame(const UiState& state);
   // A text field of the find bar has the keys.
@@ -955,6 +964,10 @@ private:
   std::unordered_map<std::string, Icon> icons_;
 
   bool context_open_ = false;
+  // touch_long_press: drop ImGui's active widget each frame until its left
+  // button is up (the release may trickle in a frame late).
+  bool touch_cancel_press_ = false;
+  bool close_popups_ = false;
   bool window_menu_open_ = false;
   uint32_t window_menu_buffer_id_ = 0;
   float window_menu_x_ = 0.f;
@@ -1105,6 +1118,11 @@ private:
   bool reddit_credentials_loaded_ = false;
   bool reddit_secret_visible_ = false;
   bool focus_search_ = false;    // Ctrl+K / View → Search Bar
+  // The search field's context menu: the range it acts on (byte offsets;
+  // the caret when nothing was selected) and a pending Select All.
+  int search_context_begin_ = 0;
+  int search_context_end_ = 0;
+  bool search_select_all_ = false;
   bool url_bar_editing_ = false;
   bool wanted_text_input_ = false;  // io.WantTextInput last frame
 

@@ -1814,6 +1814,28 @@ void Ui::open_context_menu(float x, float y) {
   context_y_ = y;
 }
 
+void Ui::touch_long_press(bool right_click) {
+  if (!ready_) return;
+  ImGuiIO& io = ImGui::GetIO();
+  touch_cancel_press_ = true;
+  // No position event: the finger's own motion events placed the pointer,
+  // and a move would hold the button events back a frame (touch trickling).
+  io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+  io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+  if (right_click) {
+    io.AddMouseButtonEvent(ImGuiMouseButton_Right, true);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);
+  }
+}
+
+void Ui::close_popups() {
+  close_popups_ = true;
+  // A menu requested this frame is not open yet: drop the request too.
+  context_open_ = window_menu_open_ = tile_menu_open_ = false;
+  bookmark_menu_open_ = download_menu_open_ = false;
+  media_menu_open_ = history_menu_open_ = false;
+}
+
 void Ui::open_window_menu(float x, float y, uint32_t buffer_id) {
   window_menu_open_ = true;
   window_menu_x_ = x;
@@ -2923,7 +2945,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           ImVec2(field_icon_w,
                  std::max(0.f, (field_h - ImGui::GetFontSize()) * 0.5f)));
       ImGui::SetNextItemWidth(field_icon_w + search_field_w);
-      if (focus_search_) {
+      if (focus_search_ || search_select_all_) {
         ImGui::SetKeyboardFocusHere();
         focus_search_ = false;
       }
@@ -2932,10 +2954,77 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       bool enter = ImGui::InputTextWithHint(
           "##searchfield", hint.c_str(), search_input_, sizeof(search_input_),
           ImGuiInputTextFlags_EnterReturnsTrue);
+      const ImGuiID search_id = ImGui::GetItemID();
+      const int search_len = static_cast<int>(std::strlen(search_input_));
+      if (search_select_all_) {
+        // Focused above; the selection applies on the next frame.
+        if (ImGuiInputTextState* st = ImGui::GetInputTextState(search_id)) {
+          st->WantReloadUserBuf = true;
+          st->ReloadSelectionStart = 0;
+          st->ReloadSelectionEnd = search_len;
+        }
+        search_select_all_ = false;
+      }
+      // Right click (or a touch long press): Cut, Copy, Paste… The range is
+      // taken now, before the menu takes the focus from the field.
+      if (ImGui::IsItemHovered() &&
+          ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+        const ImGuiInputTextState* st = ImGui::GetInputTextState(search_id);
+        int a = search_len, b = search_len;
+        if (st && st->HasSelection()) {
+          a = std::min(st->GetSelectionStart(), st->GetSelectionEnd());
+          b = std::max(st->GetSelectionStart(), st->GetSelectionEnd());
+        } else if (st) {
+          a = b = st->GetCursorPos();
+        }
+        search_context_begin_ = std::clamp(a, 0, search_len);
+        search_context_end_ = std::clamp(b, search_context_begin_, search_len);
+        ImGui::OpenPopup("##search_context");
+      }
       if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         cmd = UiCommand::ToggleSearchBar;
       ImGui::PopStyleVar(2);
       ImGui::PopStyleColor(3);
+      if (ImGui::BeginPopup("##search_context")) {
+        const std::string value = search_input_;
+        const int from = std::min(search_context_begin_,
+                                  static_cast<int>(value.size()));
+        const int to = std::clamp(search_context_end_, from,
+                                  static_cast<int>(value.size()));
+        const bool selected = to > from;
+        const char* clip = ImGui::GetClipboardText();
+        const std::string clipboard = clip ? clip : "";
+        auto set_query = [&](const std::string& text) {
+          std::snprintf(search_input_, sizeof(search_input_), "%s",
+                        text.c_str());
+          if (ImGuiInputTextState* st = ImGui::GetInputTextState(search_id))
+            st->ReloadUserBufAndMoveToEnd();
+        };
+        auto replaced = [&](const std::string& with) {
+          return value.substr(0, from) + with + value.substr(to);
+        };
+        if (ImGui::MenuItem("Cut", nullptr, false, selected)) {
+          ImGui::SetClipboardText(value.substr(from, to - from).c_str());
+          set_query(replaced(""));
+        }
+        if (ImGui::MenuItem("Copy", nullptr, false, selected))
+          ImGui::SetClipboardText(value.substr(from, to - from).c_str());
+        if (ImGui::MenuItem("Paste", nullptr, false, !clipboard.empty()))
+          set_query(replaced(clipboard));
+        if (ImGui::MenuItem("Select All", nullptr, false, !value.empty()))
+          search_select_all_ = true;
+        if (ImGui::MenuItem("Clear", nullptr, false, !value.empty()))
+          set_query("");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Paste and Search", nullptr, false,
+                            !clipboard.empty()) &&
+            cmd == UiCommand::None) {
+          set_query(clipboard);
+          cmd = UiCommand::Search;
+          result.arg = clipboard;
+        }
+        ImGui::EndPopup();
+      }
       // The bar sits at the right window edge: the menu hangs leftwards.
       ImGui::SetNextWindowPos(ImVec2(field_end.x, field_end.y + 2.f * scale_),
                               ImGuiCond_Always, ImVec2(1.f, 0.f));
@@ -3442,6 +3531,16 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   ImGui::GetCurrentContext()->TestEngineHookItems = hover_tracking_;
   g_hover_capture = UiHoverItem{};
   ImGui::NewFrame();
+  if (touch_cancel_press_) {
+    // A held button or tab then sees the release without being active:
+    // no click. A text field gives up the keys (and the soft keyboard).
+    ImGui::ClearActiveID();
+    if (!ImGui::GetIO().MouseDown[ImGuiMouseButton_Left])
+      touch_cancel_press_ = false;
+  }
+  if (std::exchange(close_popups_, false) &&
+      !ImGui::GetCurrentContext()->OpenPopupStack.empty())
+    ImGui::ClosePopupToLevel(0, true);
   // Stick is an *extra* pointer. Only drive ImGui from it while the stick is
   // actively used (axis motion or A/B held); otherwise leave the real mouse.
   if (state.stick_cursor && state.stick_active) {
