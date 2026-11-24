@@ -19,8 +19,13 @@
   in-page nav checks; nntp_tests; ui_panel_layers. Checked under Xvfb: HN,
   Digg (three rows), strip search → `search:digg:…` keeps the strip,
   `search:hn:…` too, Lobsters tab tint.
-- Later: service strips for Reddit, Lemmy, Wikipedia, Gemini, YouTube, …
-  (same `service_bar()` dispatch); live strip in unfocused document windows.
+- Follow-up: `hn:` refs had no strip (only the https form was parsed);
+  strips added for Wikipedia (Main page / Current events, per language),
+  Reddit (Popular / All, a subreddit's sorts), Lemmy, YouTube (comment
+  order), the video sites, Internet Archive, Wayback ("Live page") and
+  small-net hosts. Links keep the page's form (web ↔ native).
+- Later: Matrix, Nostr and feed strips; live strip in unfocused document
+  windows.
 
 ## Status (2026-11-24) — Editable documents: edit strip on the page, lock
 

@@ -855,10 +855,45 @@ void test_service_bars() {
   EXPECT(bar_has("https://news.ycombinator.com/item?id=1",
                  "https://news.ycombinator.com/show"));
 
+  // The native hn: form has the same strip; its links stay native.
+  EXPECT_EQ(service_bar("hn:")->id, "hn");
+  EXPECT_EQ(bar_current("hn:"), "Top|");
+  EXPECT_EQ(bar_current("hn:newest"), "New|");
+  EXPECT(bar_has("hn:item?id=1", "hn:show"));
+  EXPECT(!bar_has("hn:item?id=1", "https://news.ycombinator.com/show"));
+  EXPECT_EQ(service_bar("hn:")->home, "hn:");
+
+  // Wikipedia, native and on the web.
+  EXPECT_EQ(service_bar("wikipedia:Main_Page")->name, "Wikipedia");
+  EXPECT_EQ(bar_current("wikipedia:Main_Page"), "Main page|");
+  EXPECT_EQ(service_bar("wikipedia:de:Berlin")->name, "Wikipedia (de)");
+  EXPECT_EQ(service_bar("wikipedia:de:Berlin")->home, "wikipedia:de:Main_Page");
+  EXPECT_EQ(service_bar("https://en.wikipedia.org/wiki/Rust")->id, "wikipedia");
+  EXPECT(bar_has("https://en.wikipedia.org/wiki/Rust",
+                 "https://en.wikipedia.org/wiki/Main_Page"));
+
+  // Reddit: a subreddit's sorts.
+  EXPECT_EQ(bar_current("reddit:r/popular/"), "Popular|Hot|");
+  EXPECT_EQ(bar_current("reddit:r/rust/"), "Hot|");
+  EXPECT_EQ(bar_current("reddit:r/rust/new/"), "New|");
+  EXPECT(bar_has("reddit:r/rust/comments/x/y/", "reddit:r/rust/top/"));
+  EXPECT_EQ(bar_current("reddit:r/rust/comments/x/y/"), "");
+  EXPECT(service_bar("https://www.reddit.com/r/rust/").has_value());
+
+  EXPECT_EQ(service_bar("lemmy:lemmy.world/c/rust")->name, "lemmy.world");
+  EXPECT_EQ(bar_current("lemmy:lemmy.world/c/rust"), "c/rust|");
+  EXPECT_EQ(service_bar("youtube:@GoogleDevelopers")->name, "YouTube");
+  EXPECT_EQ(service_bar("mediaccc:")->name, "media.ccc.de");
+  EXPECT(service_bar("ia:prelinger").has_value());
+  EXPECT_EQ(service_bar("gemini://geminiprotocol.net/docs/")->home,
+            "gemini://geminiprotocol.net/");
+  EXPECT(service_bar("gemini://a.example/")->color != 0u);
+
   EXPECT_EQ(bar_current("lobsters:newest"), "Newest|");
   EXPECT_EQ(service_bar("lobsters:s/abc")->home, "lobsters:");
-  // A forum's own web pages get its strip as well.
+  // A forum's own web pages get its strip as well, with web links.
   EXPECT_EQ(service_bar("https://lobste.rs/newest")->id, "lobsters");
+  EXPECT_EQ(bar_current("https://lobste.rs/newest"), "Newest|");
 
   auto d = service_bar("discourse:forum.example/top");
   EXPECT(d.has_value());

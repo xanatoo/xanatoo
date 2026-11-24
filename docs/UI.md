@@ -82,7 +82,10 @@ binary files are not (`pane_read_only`).
 ## Service strips
 
 Pages of a native service (Hacker News, Lobsters, Discourse, 4chan, Stack
-Exchange, Bluesky, Flarum, LessWrong, Digg, Usenet) have a **service strip**
+Exchange, Bluesky, Flarum, LessWrong, Digg, Usenet, Wikipedia, Reddit,
+Lemmy, YouTube, PeerTube / Odysee / Dailymotion / media.ccc.de, Internet
+Archive, Wayback, and Gemini / Gopher / Spartan / Nex / Finger hosts) have
+a **service strip**
 on top of the page, where an editable document has its edit strip
 (`Pane::head_h` with `Pane::head_service`, from `pane_head_h`). It replaces
 the "Hacker News: Top · New · Best · …" lines the generated pages used to
@@ -93,8 +96,13 @@ navigation rows any more.
   the address alone, so it is there while the page loads and stays the same
   across all pages of the service. Each service describes its own:
   `hn_service_bar`, `forum_service_bar` (with the per-site
-  `forum::*_service_rows`), `nntp_service_bar`. A forum's own web pages
-  (`https://lobste.rs/…`) get its strip as well.
+  `forum::*_service_rows`), `nntp_service_bar`; the smaller ones are in
+  `service_bar.cpp`. Native refs (`hn:`, `wikipedia:`) and the services'
+  web pages (`https://news.ycombinator.com/`, `https://lobste.rs/…`,
+  `https://en.wikipedia.org/wiki/…`, via `native_url_for`) get the same
+  strip; its links keep the page's form (web pages link to web pages,
+  native views to native refs). Small-net hosts get one strip per host
+  (name, front page, a colour from the host).
 - Contents: the favicon and name (opens the front page, `home`), a
   separator, the sections with the page's own highlighted (`current`);
   further rows start with their label (Digg's "Sort" and "From"). Links

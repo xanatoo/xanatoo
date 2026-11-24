@@ -50,7 +50,9 @@ read-only service clients. Every client is read-only: never post or log in.
   strip** (docs/UI.md "Service strips"), computed from the address only.
 - A new native service adds a `*_service_bar(ref)` (id, name, home, accent
   colour, rows; mark the page's section `current`) and a branch in
-  `service_bar()` (`service_bar.cpp`). Forums add a
+  `ref_bar()` (`service_bar.cpp`), keyed on the native ref form only:
+  web URLs reach it through `native_url_for`, and `service_bar()` maps the
+  links back to the page's form (`web_url_for` / `native_url_for`). Forums add a
   `forum::<site>_service_rows` and a case in `forum_service_bar`
   (forums.cpp). Anything that needs the fetched data (a post's topic, a
   message's group) stays in the page as an ordinary link.
