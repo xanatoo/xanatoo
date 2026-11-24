@@ -64,6 +64,23 @@ std::vector<std::vector<std::string>> nostr_reply_tags(
     const std::vector<std::vector<std::string>>& parent_tags,
     std::string_view relay_hint = {}, std::string_view self = {});
 
+// How to answer an event: the reply's kind and tags, or why it cannot be
+// answered. Kind 1 → kind 1 (NIP-10, nostr_reply_tags); kind 9 group / chat
+// message → kind 9 with a `q` tag and the parent's `h` group (NIP-C7,
+// NIP-29); a kind-1111 comment → kind 1111 under the same root; any other
+// content event (kind 11 threads, articles, pictures, …) → a NIP-22 kind-1111
+// comment rooted at it (`A` for addressable events). Profiles, lists,
+// reactions, reposts, deletions, DMs and ephemeral events are refused.
+struct NostrReplyPlan {
+  int kind = 0;  // 0: refused, see error
+  std::vector<std::vector<std::string>> tags;
+  std::string error;
+};
+NostrReplyPlan nostr_reply_plan(
+    int parent_kind, std::string_view parent_id, std::string_view parent_pubkey,
+    const std::vector<std::vector<std::string>>& parent_tags,
+    std::string_view relay_hint = {}, std::string_view self = {});
+
 // What one relay said to a published event (nostr_publish).
 struct NostrPublishResult {
   std::string relay;
@@ -87,13 +104,16 @@ std::vector<std::string> nostr_publish_relays();
 std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
                                               std::vector<std::string> relays = {});
 
-// A kind-1 reply to event `parent_id` as `secret_hex` (blocking): finds the
-// parent in the cache or on relays, tags it (nostr_reply_tags plus the
-// text's mentions), signs and publishes. Empty results with *err set when
-// it never got as far as the relays; *event_id gets the reply's id.
+// A reply to event `parent_id` as `secret_hex` (blocking): finds the
+// parent in the cache or on relays, plans it (nostr_reply_plan plus `p`
+// tags for the text's mentions), signs and publishes. `page` is the address
+// the parent was shown on: a NIP-29 group page sends to the group's relay
+// only. Empty results with *err set when it never got as far as the relays;
+// *event_id gets the reply's id.
 std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
                                             std::string_view text,
                                             const std::string& secret_hex,
+                                            std::string_view page,
                                             std::string* event_id,
                                             std::string* err);
 #endif

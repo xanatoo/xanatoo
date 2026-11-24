@@ -504,9 +504,10 @@ void send_reply(App& app) {
   app.nostr_reply.results.clear();
   app.nostr_reply.status = "Sending the reply…";
   std::thread([job, parent = app.reply.label, text = app.reply.text,
+               page = app.reply.page,
                secret = app.nostr_unlocked.at(app.nostr_active_identity)]() mutable {
     try {
-      job->results = xanatoo::nostr_reply(parent, text, secret, &job->event_id,
+      job->results = xanatoo::nostr_reply(parent, text, secret, page, &job->event_id,
                                           &job->error);
     } catch (...) {
       job->error = "failed";

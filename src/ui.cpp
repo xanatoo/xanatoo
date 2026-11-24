@@ -5757,12 +5757,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                 "kind " + std::to_string(ev.kind) +
                 " · " + name + " · " + summary;
             if (ImGui::Selectable(label.c_str(), false,
-                                  (ev.kind == 1 || ev.kind == 9 || ev.kind == 11) ?
+                                  (ev.kind == 1 || ev.kind == 9 || ev.kind == 11 || ev.kind == 1111) ?
                                     0 : ImGuiSelectableFlags_Disabled)) {
               cmd = UiCommand::NavigateUrl;
               result.arg = "nostr:" + nostr_bech32("note", ev.id);
             }
-            if (ev.kind == 1 || ev.kind == 9 || ev.kind == 11)
+            if (ev.kind == 1 || ev.kind == 9 || ev.kind == 11 || ev.kind == 1111)
               middle_open(cmd, result.arg, "nostr:" + nostr_bech32("note", ev.id));
             if (ImGui::IsItemHovered())
               ImGui::SetTooltip("%s\n%s", ev.id.c_str(), ev.pubkey.c_str());

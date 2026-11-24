@@ -1287,6 +1287,65 @@ void test_nostr_reply_tags() {
   EXPECT(nostr_reply_tags("xyz", a, {}).empty());
 }
 
+void test_nostr_reply_plan() {
+  using namespace xanatoo;
+  using V = std::vector<std::string>;
+  const std::string a(64, 'a'), b(64, 'b'), me(64, 'd');
+  const std::string root(64, '1'), parent(64, '3');
+  // Kind 1 keeps NIP-10.
+  NostrReplyPlan p = nostr_reply_plan(1, root, a, {}, "wss://r", me);
+  EXPECT_EQ(p.kind, 1);
+  EXPECT(!p.tags.empty() && p.tags[0][3] == "root");
+  // Group chat: kind 9 in the same group, quoting the parent.
+  p = nostr_reply_plan(9, parent, a, {{"h", "g1"}, {"previous", "x"}}, "wss://g", me);
+  EXPECT_EQ(p.kind, 9);
+  EXPECT(p.tags.size() == 3 && p.tags[0] == V({"h", "g1"}) &&
+         p.tags[1] == V({"q", parent, "wss://g", a}) && p.tags[2] == V({"p", a}));
+  // A group thread (kind 11): a NIP-22 comment rooted at it, still in the group.
+  p = nostr_reply_plan(11, root, a, {{"h", "g1"}, {"title", "T"}}, "wss://g", me);
+  EXPECT_EQ(p.kind, 1111);
+  EXPECT(p.tags.size() == 7);
+  if (p.tags.size() == 7) {
+    EXPECT(p.tags[0] == V({"E", root, "wss://g", a}));
+    EXPECT(p.tags[1] == V({"K", "11"}));
+    EXPECT(p.tags[2] == V({"P", a, "wss://g"}));
+    EXPECT(p.tags[3] == V({"e", root, "wss://g", a}));
+    EXPECT(p.tags[4] == V({"k", "11"}));
+    EXPECT(p.tags[5] == V({"p", a, "wss://g"}));
+    EXPECT(p.tags[6] == V({"h", "g1"}));
+  }
+  // An article (addressable): rooted by its address, parent by a and e.
+  p = nostr_reply_plan(30023, root, a, {{"d", "slug"}}, "", me);
+  EXPECT_EQ(p.kind, 1111);
+  const std::string addr = "30023:" + a + ":slug";
+  EXPECT(!p.tags.empty() && p.tags[0] == V({"A", addr, ""}));
+  EXPECT(std::find(p.tags.begin(), p.tags.end(), V({"a", addr, ""})) != p.tags.end());
+  EXPECT(std::find(p.tags.begin(), p.tags.end(), V({"k", "30023"})) != p.tags.end());
+  // A comment on a comment keeps the root scope, the parent becomes it.
+  p = nostr_reply_plan(1111, parent, b,
+                       {{"A", addr, ""}, {"K", "30023"}, {"P", a, ""},
+                        {"a", addr, ""}, {"e", root, "", a}, {"k", "30023"},
+                        {"p", a, ""}},
+                       "", me);
+  EXPECT_EQ(p.kind, 1111);
+  EXPECT(p.tags.size() == 6);
+  if (p.tags.size() == 6) {
+    EXPECT(p.tags[0] == V({"A", addr, ""}));
+    EXPECT(p.tags[1] == V({"K", "30023"}));
+    EXPECT(p.tags[2] == V({"P", a, ""}));
+    EXPECT(p.tags[3] == V({"e", parent, "", b}));
+    EXPECT(p.tags[4] == V({"k", "1111"}));
+    EXPECT(p.tags[5] == V({"p", b, ""}));
+  }
+  EXPECT_EQ(nostr_reply_plan(1111, parent, b, {{"e", root}}).kind, 0);
+  // Not answerable.
+  for (int k : {0, 3, 4, 5, 6, 7, 16, 10002, 20001}) {
+    p = nostr_reply_plan(k, parent, a, {});
+    EXPECT(p.kind == 0 && !p.error.empty());
+  }
+  EXPECT_EQ(nostr_reply_plan(1, "x", a, {}).kind, 0);
+}
+
 void test_nostr_local_cache() {
   using namespace xanatoo;
   namespace fs = std::filesystem;
@@ -9525,6 +9584,7 @@ int main() {
   test_nostr_refs();
   test_nostr_content();
   test_nostr_reply_tags();
+  test_nostr_reply_plan();
   test_nostr_local_cache();
   test_parse_markup();
   test_parse_unclaimed_block_lines();

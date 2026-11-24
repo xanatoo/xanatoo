@@ -138,11 +138,14 @@ five default relays in parallel (`nostr_publish`), each answer (NIP-01
 `OK`) listed per relay. An accepted note goes into the local cache and can
 be opened with View note.
 
-**Replies:** right-click a note → Reply… posts a kind-1 reply as the
-unlocked active account, with NIP-10 marked `e` tags (`root`, `reply`) and
-`p` tags for the thread's people (`nostr_reply_tags`, `nostr_reply`); see
-`docs/REPLIES.md`. Replies to other event kinds (NIP-22 comments) are
-refused for now.
+**Replies:** right-click a message → Reply… posts as the unlocked active
+account (`nostr_reply_plan`, `nostr_reply`; see `docs/REPLIES.md`): kind-1
+notes get NIP-10 kind-1 replies, NIP-29 / NIP-C7 chat (kind 9) gets a kind-9
+answer with a `q` tag in the same group, everything else with content a
+NIP-22 kind-1111 comment (uppercase root scope, lowercase parent). Threads
+also fetch kind-1111 comments (`#E`) and quoting chat replies (`#q`) and
+show them as messages; group timelines include comments. NIP-42 AUTH is not
+done, so relays that require it refuse (the per-relay answer says so).
 
 Not yet: NIP-46 remote signers,
 relay preferences (NIP-65), profile editing (kind 0), follow lists

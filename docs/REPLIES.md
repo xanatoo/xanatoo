@@ -24,10 +24,21 @@ a short panel can scroll to reach the Send button.
   watch-only, no signing in this build) and keeps Send disabled. Nostr
   notes are plain text, so only the Quote button is offered. A worker
   (`send_reply` → `nostr_reply`) finds the parent (local cache, else the
-  default relays by id; only kind-1 parents), tags it per NIP-10 (marked
-  `root` / `reply` e tags and `p` tags for the parent's author and everyone
-  it tagged, `nostr_reply_tags`, plus `nostr:npub` mentions), signs and
-  publishes like a note. On success the composer empties and the views
+  group's relay and the default relays by id) and lets `nostr_reply_plan`
+  pick the answer by the parent's kind:
+  - kind 1 note → kind 1 with NIP-10 marked `root` / `reply` e tags and
+    `p` tags for the parent's author and everyone it tagged;
+  - kind 9 group / chat message → kind 9 quoting it (`q`, NIP-C7) in the
+    same group (`h`);
+  - kind 1111 comment → kind 1111 under the same root (its uppercase tags);
+  - anything else with content (kind 11 group threads, articles, pictures,
+    …) → a NIP-22 kind-1111 comment rooted at it (`A` for addressable
+    events), keeping the group's `h`;
+  - profiles, lists, reactions, reposts, deletions, private messages, zaps
+    and ephemeral events are refused with a message.
+
+  `nostr:npub` mentions add `p` tags. Group replies go only to the group's
+  relay (reply from the group page); the rest to the default publish relays. On success the composer empties and the views
   showing the page reload; the outcome stays under the Send button.
 - **Other services:** Send deliberately does not contact anything. It
   reports that no account is connected, leaving the draft visible; the

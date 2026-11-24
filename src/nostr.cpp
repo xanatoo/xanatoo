@@ -512,6 +512,99 @@ std::vector<std::vector<std::string>> nostr_reply_tags(
   return out;
 }
 
+namespace {
+
+std::string kind_name(int kind) {
+  switch (kind) {
+    case 0: return "profiles";
+    case 3: return "follow lists";
+    case 4: case 13: case 14: case 1059: return "private messages";
+    case 5: return "deletion requests";
+    case 6: case 16: return "reposts";
+    case 7: return "reactions";
+    case 9734: case 9735: return "zaps";
+    default: break;
+  }
+  if (kind >= 10000 && kind < 20000) return "lists";
+  if (kind >= 20000 && kind < 30000) return "ephemeral events";
+  return {};
+}
+
+const std::vector<std::string>* first_tag(
+    const std::vector<std::vector<std::string>>& tags, std::string_view name) {
+  for (const auto& t : tags)
+    if (t.size() >= 2 && t[0] == name) return &t;
+  return nullptr;
+}
+
+}  // namespace
+
+NostrReplyPlan nostr_reply_plan(
+    int parent_kind, std::string_view parent_id, std::string_view parent_pubkey,
+    const std::vector<std::vector<std::string>>& parent_tags,
+    std::string_view relay_hint, std::string_view self) {
+  NostrReplyPlan plan;
+  const std::string id = ascii_lower(parent_id);
+  const std::string author = ascii_lower(parent_pubkey);
+  const std::string hint(relay_hint);
+  if (!is_hex64(id) || !is_hex64(author)) {
+    plan.error = "not a Nostr event";
+    return plan;
+  }
+  if (parent_kind == 1) {
+    plan.kind = 1;
+    plan.tags = nostr_reply_tags(id, author, parent_tags, relay_hint, self);
+    return plan;
+  }
+  if (const std::string what = kind_name(parent_kind); !what.empty()) {
+    plan.error = "replies to " + what + " are not possible";
+    return plan;
+  }
+  const auto* group = first_tag(parent_tags, "h");
+  if (parent_kind == 9) {
+    // NIP-C7 chat reply: quote the parent; stay in its NIP-29 group.
+    plan.kind = 9;
+    if (group) plan.tags.push_back({"h", (*group)[1]});
+    plan.tags.push_back({"q", id, hint, author});
+    if (author != self) plan.tags.push_back({"p", author});
+    return plan;
+  }
+  // NIP-22 comment: uppercase tags name the root, lowercase the parent.
+  plan.kind = 1111;
+  const std::string kind = std::to_string(parent_kind);
+  if (parent_kind == 1111) {
+    for (const auto& t : parent_tags)
+      if (t.size() >= 2 && t[0].size() == 1 &&
+          std::string_view("AEIKP").find(t[0][0]) != std::string_view::npos)
+        plan.tags.push_back(t);
+    if (!first_tag(plan.tags, "K")) {
+      plan.kind = 0;
+      plan.error = "the comment does not name what it comments on";
+      plan.tags.clear();
+      return plan;
+    }
+  }
+  std::string address;  // kind:pubkey:d for addressable events
+  if (parent_kind >= 30000 && parent_kind < 40000) {
+    const auto* d = first_tag(parent_tags, "d");
+    address = kind + ":" + author + ":" + (d ? (*d)[1] : std::string());
+  }
+  if (parent_kind != 1111) {
+    if (!address.empty())
+      plan.tags.push_back({"A", address, hint});
+    else
+      plan.tags.push_back({"E", id, hint, author});
+    plan.tags.push_back({"K", kind});
+    plan.tags.push_back({"P", author, hint});
+  }
+  if (!address.empty()) plan.tags.push_back({"a", address, hint});
+  plan.tags.push_back({"e", id, hint, author});
+  plan.tags.push_back({"k", kind});
+  plan.tags.push_back({"p", author, hint});
+  if (group) plan.tags.push_back({"h", (*group)[1]});
+  return plan;
+}
+
 #if defined(XANATOO_NOSTR) && XANATOO_NOSTR
 
 namespace {
@@ -543,6 +636,13 @@ bool parse_event_json(std::string_view json, NostrEvent& ev) {
       marked_reply = ev.reply_to;
   }
   if (!marked_reply.empty()) ev.reply_to = marked_reply;
+  // NIP-C7 chat replies quote their parent instead.
+  if (ev.kind == 9 && ev.reply_to.empty())
+    for (const auto& t : ev.tags)
+      if (t.size() >= 2 && t[0] == "q" && is_hex64(t[1])) {
+        ev.reply_to = ascii_lower(t[1]);
+        break;
+      }
   return true;
 }
 
@@ -814,6 +914,12 @@ std::string format_time(int64_t ts) {
   return buf;
 }
 
+// Kinds shown as messages: notes, group chat (9), threads (11) and NIP-22
+// comments (1111).
+bool shown_kind(int kind) {
+  return kind == 1 || kind == 9 || kind == 11 || kind == 1111;
+}
+
 // One kind-1 note → Message. Its spans link the header: author name →
 // nostr:npub1… (the author's notes), date → nostr:note1… (the note's thread).
 void add_note_message(Document& doc, NodeId thread, const NostrEvent& e,
@@ -863,7 +969,7 @@ Document events_to_document(const std::string& root_id,
   set_thread_title(doc, thread, "Nostr discussion");
 
   for (const auto& e : events) {
-    if (e.id == root_id && (e.kind == 1 || e.kind == 9 || e.kind == 11)) {
+    if (e.id == root_id && shown_kind(e.kind)) {
       std::string sub = e.content;
       if (sub.size() > 72) {
         sub.resize(72);
@@ -884,7 +990,7 @@ Document events_to_document(const std::string& root_id,
             });
 
   for (const auto& e : events)
-    if (e.kind == 1 || e.kind == 9 || e.kind == 11)
+    if (shown_kind(e.kind))
       add_note_message(doc, thread, e, profiles, true);
 
   if (doc.get(thread).children.empty()) {
@@ -1059,7 +1165,9 @@ void query_relay(const std::string& relay, const std::string& event_id,
   std::string req =
       std::string("[\"REQ\",\"") + sub + "\"," +
       "{\"ids\":[\"" + event_id + "\"]}," +
-      "{\"kinds\":[1,9,11],\"#e\":[\"" + event_id + "\"],\"limit\":80}]";
+      "{\"kinds\":[1,9,11,1111],\"#e\":[\"" + event_id + "\"],\"limit\":80}," +
+      "{\"kinds\":[1111],\"#E\":[\"" + event_id + "\"],\"limit\":80}," +
+      "{\"kinds\":[9],\"#q\":[\"" + event_id + "\"],\"limit\":40}]";
   if (!ws_send_text(c, req)) {
     if (last_err) *last_err = "WS send failed";
     return;
@@ -1159,7 +1267,7 @@ void query_group_timeline(const std::string& relay, std::string_view group_id,
   const std::string gid = quote_nostr_filter(group_id);
   const std::string req = "[\"REQ\",\"xanatoo-group\","
       "{\"kinds\":[39000],\"#d\":[" + gid + "],\"limit\":5},"
-      "{\"kinds\":[1,9,11],\"#h\":[" + gid + "],\"limit\":100}]";
+      "{\"kinds\":[1,9,11,1111],\"#h\":[" + gid + "],\"limit\":100}]";
   if (!ws_send_text(c, req)) {
     if (last_err) *last_err = "WS send failed";
     return;
@@ -1341,7 +1449,7 @@ Document group_timeline_document(std::string_view relay, std::string_view group_
   std::vector<NostrEvent> events;
   for (auto& kv : by_id) {
     auto& e = kv.second;
-    if (e.kind != 1 && e.kind != 9 && e.kind != 11) continue;
+    if (!shown_kind(e.kind)) continue;
     const auto h = std::find_if(e.tags.begin(), e.tags.end(), [&](const auto& t) {
       return t.size() > 1 && t[0] == "h" && t[1] == group_id;
     });
@@ -1700,6 +1808,7 @@ std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
 std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
                                             std::string_view text,
                                             const std::string& secret_hex,
+                                            std::string_view page,
                                             std::string* event_id,
                                             std::string* err) {
   auto fail = [&](std::string msg) {
@@ -1707,15 +1816,22 @@ std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
     return std::vector<NostrPublishResult>{};
   };
   const std::string id = ascii_lower(parent_id);
-  if (!is_hex64(id)) return fail("not a Nostr note");
+  if (!is_hex64(id)) return fail("not a Nostr event");
+  // A NIP-29 group lives on its relay: look there and post only there.
+  std::string group_relay, group_id;
+  parse_group_address(strip_nostr_prefix(page), group_relay, group_id);
+  std::vector<std::string> lookup;
+  if (!group_relay.empty()) lookup.push_back(group_relay);
+  for (const auto& r : default_relays())
+    if (r != group_relay) lookup.push_back(r);
   NostrEvent parent;
-  std::string relay;
+  std::string relay = group_relay;
   bool found = false;
   const std::string cached = nostr_cached_event_json(id);
   if (!cached.empty() && parse_event_json(cached, parent) && parent.id == id) {
     found = true;
   } else {
-    for (const auto& r : default_relays()) {
+    for (const auto& r : lookup) {
       WsConn c;
       if (!ws_connect(c, r, nullptr)) continue;
       std::map<std::string, NostrEvent> by_id;
@@ -1732,22 +1848,26 @@ std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
       }
     }
   }
-  if (!found) return fail("the note replied to was not found on the relays");
-  if (parent.kind != 1)
-    return fail("replies to this kind of event (" + std::to_string(parent.kind) +
-                ") are not supported yet");
+  if (!found) return fail("the event replied to was not found on the relays");
   const std::string self = nostr_pubkey_of(secret_hex);
-  auto tags = nostr_reply_tags(parent.id, parent.pubkey, parent.tags, relay, self);
+  NostrReplyPlan plan =
+      nostr_reply_plan(parent.kind, parent.id, parent.pubkey, parent.tags, relay, self);
+  if (!plan.kind) return fail(plan.error);
   for (const auto& pk : nostr_mentioned_pubkeys(text))
-    if (std::none_of(tags.begin(), tags.end(), [&](const auto& t) {
+    if (std::none_of(plan.tags.begin(), plan.tags.end(), [&](const auto& t) {
           return t.size() >= 2 && t[0] == "p" && t[1] == pk;
         }))
-      tags.push_back({"p", pk});
+      plan.tags.push_back({"p", pk});
+  const bool in_group = std::any_of(plan.tags.begin(), plan.tags.end(),
+                                    [](const auto& t) { return t[0] == "h"; });
+  if (in_group && relay.empty())
+    return fail("the group's relay is unknown (reply from the group page)");
   const std::string ev = nostr_sign_event(
-      secret_hex, 1, text, tags, static_cast<int64_t>(std::time(nullptr)));
+      secret_hex, plan.kind, text, plan.tags,
+      static_cast<int64_t>(std::time(nullptr)));
   if (ev.empty()) return fail("the reply could not be signed");
   if (event_id) *event_id = ascii_lower(json_str_field(json_top_level(ev), "id"));
-  return nostr_publish(ev);
+  return in_group ? nostr_publish(ev, {relay}) : nostr_publish(ev);
 }
 
 #endif  // XANATOO_NOSTR

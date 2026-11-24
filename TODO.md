@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Nostr replies to any kind
+
+- `nostr_reply_plan` (unit-tested): kind 1 → NIP-10 kind 1; kind 9 →
+  kind 9 with `q` + group `h`; kind 1111 → comment under the same root;
+  other content kinds (11, articles, …) → NIP-22 kind 1111 (`A` for
+  addressable); profiles / lists / reactions / reposts / deletions / DMs /
+  zaps / ephemeral refused. Group replies go to the group relay only.
+- Threads fetch comments (`#E`) and quoting chat (`#q`); kind 1111 shows as
+  a message in threads, groups and the explorer list.
+- Open: NIP-42 AUTH (closed groups refuse), NIP-29 `previous` tags,
+  "reply to" marks in group timelines, an optimistic local insert.
+
 ## Status (2026-11-24) — Nostr replies
 
 - Reply panel posts for real on Nostr notes: unlocked active account,
@@ -11,8 +23,7 @@
   The panel names the account or says why it cannot send; Nostr shows only
   Quote. Other services keep the mockup. Xvfb: blocker shown, Send disabled.
   Not sent to live relays (public).
-- Open: NIP-22 comments on non-kind-1 events, an optimistic local insert
-  instead of the refetch.
+- Open: see "Nostr replies to any kind" above.
 
 ## Status (2026-11-24) — Nostr signing accounts and posting
 
