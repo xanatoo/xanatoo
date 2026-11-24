@@ -112,6 +112,11 @@ void test_refs() {
   EXPECT_EQ(forum_web_url(ref("bsky:alice.bsky.social/post/3k")),
             "https://bsky.app/profile/alice.bsky.social/post/3k");
   EXPECT_EQ(forum_up_ref(ref("bsky:alice.bsky.social/post/3k")), "bsky:alice.bsky.social");
+  EXPECT_EQ(forum_web_url(ref("bsky:hashtag/caf%C3%A9")), "https://bsky.app/hashtag/caf%C3%A9");
+  EXPECT_EQ(forum_web_url(ref("bsky:bsky.app/feed/whats-hot")),
+            "https://bsky.app/profile/bsky.app/feed/whats-hot");
+  EXPECT_EQ(forum_up_ref(ref("bsky:bsky.app/feed/whats-hot")), "bsky:bsky.app");
+  EXPECT_EQ(forum_up_ref(ref("bsky:hashtag/art")), "");
 
   // Web pages of the fixed-host sites → refs.
   EXPECT_EQ(forum_ref_from_web_url("https://lobste.rs/"), "lobsters:");
@@ -137,6 +142,11 @@ void test_refs() {
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/profile/bsky.app/post/3n2"),
             "bsky:bsky.app/post/3n2");
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/search"), "");
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/profile/bsky.app/feed/whats-hot"),
+            "bsky:bsky.app/feed/whats-hot");
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/hashtag/café"), "bsky:hashtag/caf%C3%A9");
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/hashtag/caf%C3%A9"), "bsky:hashtag/caf%C3%A9");
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/hashtag/"), "");
   // Discourse / Flarum run anywhere: never guessed from a URL.
   EXPECT_EQ(forum_ref_from_web_url("https://discourse.nixos.org/t/x/1"), "");
 }
@@ -395,6 +405,35 @@ void test_bluesky() {
       }
   EXPECT(quoted);
   EXPECT(by);
+
+  // The profile heads an author feed.
+  Json profile = parse(R"({"did":"did:plc:b","handle":"bob.example","displayName":"Bob",
+      "description":"Writes things.","followersCount":12,"followsCount":1,"postsCount":3})");
+  Document fp = bsky_feed_document(feed, ref("bsky:bob.example"), &profile);
+  EXPECT_EQ(fp.meta.title, "Bluesky — Bob (@bob.example)");
+  EXPECT(all_text(fp).find("Writes things.") != std::string::npos);
+  EXPECT(all_text(fp).find("12 followers") != std::string::npos);
+
+  // A custom feed under its generator's name; searchPosts (a hashtag) lists
+  // bare posts with tag facets kept native.
+  Json gen = parse(R"({"displayName":"Discover","description":"Trending","likeCount":5,
+      "creator":{"did":"did:plc:z","handle":"bsky.app","displayName":"Bluesky"}})");
+  Document g = bsky_feed_document(feed, ref("bsky:bsky.app/feed/whats-hot"), &gen);
+  EXPECT_EQ(g.meta.title, "Bluesky — Discover (feed)");
+  EXPECT(has_href(g, "bsky:bsky.app"));
+  EXPECT(has_href(g, "bsky:bsky.app/feed/whats-hot?cursor=2026-11-03T16%3A06%3A41.753Z"));
+  Json found = parse(R"({"cursor":"30","posts":[{
+      "uri":"at://did:plc:a/app.bsky.feed.post/t1","author":{"did":"did:plc:a","handle":"alice.example"},
+      "record":{"text":"hi #café","createdAt":"2026-11-13T22:03:00Z",
+        "facets":[{"index":{"byteStart":3,"byteEnd":9},"features":[{"$type":"app.bsky.richtext.facet#tag","tag":"café"}]}]}}]})");
+  Document h = bsky_feed_document(found, ref("bsky:hashtag/caf%C3%A9"));
+  EXPECT_EQ(h.meta.title, "Bluesky — #café");
+  EXPECT(message(h, "t1") != nullptr);
+  EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9"));
+  EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9?cursor=30"));
+  EXPECT(all_text(h).find("No posts.") == std::string::npos);
+  EXPECT(all_text(bsky_feed_document(parse(R"({"feed":[]})"), ref("bsky:bob.example")))
+             .find("No posts.") != std::string::npos);
 }
 
 void test_flarum() {

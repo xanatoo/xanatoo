@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Bluesky feeds, hashtags, start page
+
+- New refs `bsky:HANDLE/feed/RKEY` (custom feeds, getFeed +
+  getFeedGenerator) and `bsky:hashtag/TAG` (searchPosts on `api.bsky.app`;
+  the public AppView refuses it). bsky.app feed / hashtag addresses and
+  hashtag facets open natively; author feeds show the profile (bio, counts).
+- `examples/services/bluesky.md`: working public feeds, hashtags and
+  accounts by topic (all checked live 2026-11-24); Services → Bluesky opens
+  it instead of `@bsky.app`.
+- Fixed: "No posts." never showed (the thread title counted as a post).
+- Next: lists (`/lists/RKEY`, getListFeed), starter packs, `bsky:search`.
+
 ## Status (2026-11-24) — Digg reader checked against the live server
 
 - The Digg commits were written without access; most field names were

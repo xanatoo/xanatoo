@@ -4,7 +4,8 @@
 // Network side of the forum clients: which API URLs a ref needs, then the
 // pure document mappers of forum_<site>.cpp. One request per page except
 // Stack Exchange questions (question, answers, comments), Bluesky threads
-// by handle (resolveHandle first), Flarum discussions (head + posts) and
+// and custom feeds by handle (resolveHandle first; feeds and profiles also
+// fetch their head), Flarum discussions (head + posts) and
 // LessWrong user / tag pages (the id of the slug first). LessWrong asks
 // its GraphQL API by POST.
 
@@ -202,15 +203,35 @@ std::optional<Document> se_fetch(const ForumRef& ref, std::string* err) {
 std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err) {
   const std::string api = "https://public.api.bsky.app/xrpc/";
   const auto seg = segments(ref.path);
-  if (!name_ok(seg[0])) return bad(ref, err);
-  if (seg.size() == 1) {
-    std::string url = api + "app.bsky.feed.getAuthorFeed?limit=30&actor=" + url_encode(seg[0]);
+  auto with_cursor = [&](std::string url) {
     if (!ref.cursor.empty()) url += "&cursor=" + ref.cursor;  // kept encoded
-    auto reply = get_json(url, err);
+    return url;
+  };
+  if (seg[0] == "hashtag") {
+    // The public AppView refuses searchPosts (403); api.bsky.app answers.
+    const std::string tag = seg.size() == 2 ? percent_decode(seg[1]) : std::string();
+    if (tag.empty() || tag.find_first_of(" #") != std::string::npos) return bad(ref, err);
+    auto reply = get_json(with_cursor("https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+                                      "?sort=top&limit=30&q=" +
+                                      url_encode("#" + tag) + "&tag=" + url_encode(tag)),
+                          err);
     if (!reply) return std::nullopt;
     return bsky_feed_document(*reply, ref);
   }
-  if (seg.size() != 3 || seg[1] != "post" || !name_ok(seg[2])) return bad(ref, err);
+  if (!name_ok(seg[0])) return bad(ref, err);
+  if (seg.size() == 1) {
+    auto reply = get_json(
+        with_cursor(api + "app.bsky.feed.getAuthorFeed?limit=30&actor=" + url_encode(seg[0])),
+        err);
+    if (!reply) return std::nullopt;
+    // The profile only heads the first page; without it the posts still show.
+    std::optional<Json> profile;
+    if (ref.cursor.empty())
+      profile = get_json(api + "app.bsky.actor.getProfile?actor=" + url_encode(seg[0]), nullptr);
+    return bsky_feed_document(*reply, ref, profile ? &*profile : nullptr);
+  }
+  if (seg.size() != 3 || (seg[1] != "post" && seg[1] != "feed") || !name_ok(seg[2]))
+    return bad(ref, err);
   std::string did = seg[0];
   if (!starts_with(did, "did:")) {
     auto who = get_json(api + "com.atproto.identity.resolveHandle?handle=" + url_encode(did), err);
@@ -220,6 +241,15 @@ std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err) {
       if (err) *err = "Bluesky does not know the handle " + seg[0];
       return std::nullopt;
     }
+  }
+  if (seg[1] == "feed") {
+    const std::string uri = url_encode("at://" + did + "/app.bsky.feed.generator/" + seg[2]);
+    auto reply = get_json(with_cursor(api + "app.bsky.feed.getFeed?limit=30&feed=" + uri), err);
+    if (!reply) return std::nullopt;
+    std::optional<Json> gen;
+    if (ref.cursor.empty()) gen = get_json(api + "app.bsky.feed.getFeedGenerator?feed=" + uri, nullptr);
+    const Json* view = gen ? json_get(*gen, "view") : nullptr;
+    return bsky_feed_document(*reply, ref, view);
   }
   auto reply = get_json(api + "app.bsky.feed.getPostThread?depth=10&parentHeight=20&uri=" +
                             url_encode("at://" + did + "/app.bsky.feed.post/" + seg[2]),

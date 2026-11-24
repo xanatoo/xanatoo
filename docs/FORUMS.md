@@ -27,8 +27,10 @@ recorded replies.
 | `fourchan:BOARD/thread/NO` | thread |
 | `stackexchange:HOST` | recent questions of a site (`/questions/tagged/TAG`; `?page=N`) |
 | `stackexchange:HOST/questions/ID[?page=N]` | question, answers by votes, comments |
-| `bsky:HANDLE[?cursor=C]` | author feed (handle or `did:plc:…`) |
+| `bsky:HANDLE[?cursor=C]` | author feed (handle or `did:plc:…`), profile on top |
 | `bsky:HANDLE/post/RKEY` | post thread: parents, the post, replies |
+| `bsky:HANDLE/feed/RKEY[?cursor=C]` | custom feed (feed generator), its name and creator on top |
+| `bsky:hashtag/TAG[?cursor=C]` | top posts with `#TAG` (TAG percent-encoded) |
 | `flarum:HOST` | recent discussions (`?page=N`) |
 | `flarum:HOST/d/ID[-slug][?page=N]` | discussion |
 | `lesswrong:` | frontpage ("magic" sort; `new`, `top`, `curated`, `quicktakes`; `?page=N`) |
@@ -84,8 +86,15 @@ Exchange hosts, bsky.app, lesswrong.com: `/posts/ID/slug?commentId=C` →
   question page (question, answers, comments of all shown posts; a failed
   comment request still shows the page). Anonymous quota is 300 requests
   a day per IP.
-- Bluesky: the public AppView `public.api.bsky.app` (getAuthorFeed,
-  getPostThread; handles resolve through resolveHandle first).
+- Bluesky: the public AppView `public.api.bsky.app` (getAuthorFeed +
+  getProfile, getFeed + getFeedGenerator, getPostThread; handles of posts
+  and feeds resolve through resolveHandle first; the head request is only
+  made on the first page and may fail). Hashtags use searchPosts
+  (`q=#TAG&tag=TAG&sort=top`) on `api.bsky.app`: the public AppView answers
+  searchPosts with 403. Hashtag facets in posts link `bsky:hashtag/…`.
+  Personalised feeds (Following, Popular With Friends) need an account.
+  The Services menu opens `examples/services/bluesky.md` (feeds, hashtags,
+  accounts, checked 2026-11-24).
 - Flarum: JSON:API `/api/discussions` and
   `/api/posts?filter[discussion]=ID&sort=number`, 20 per page; only
   `comment` posts are shown (renames, tag changes are left out).

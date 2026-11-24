@@ -392,7 +392,7 @@ read-only service clients. Every client is read-only: never post or log in.
   needs TLS). Read-only Discourse / Lobsters / 4chan / Stack Exchange /
   Bluesky / Flarum / LessWrong: `discourse:HOST/t/…`, `lobsters:s/ID`,
   `fourchan:B/thread/N`, `stackexchange:HOST/questions/ID`,
-  `bsky:HANDLE/post/RKEY`, `flarum:HOST/d/ID`, `lesswrong:posts/ID`.
+  `bsky:HANDLE/post/RKEY` (also `/feed/RKEY`, `bsky:hashtag/TAG`), `flarum:HOST/d/ID`, `lesswrong:posts/ID`.
   See `docs/FORUMS.md`.
 - LessWrong asks GraphQL by POST (`lw_query` in `forum_fetch.cpp`, a
   GraphQL `errors` reply without `data` becomes the error text); search

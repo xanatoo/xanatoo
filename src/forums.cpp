@@ -232,7 +232,8 @@ std::string forum_web_url(const ForumRef& r) {
       if (r.path.find('/') == std::string::npos) url += "/";
       break;
     case ForumSite::Bluesky:
-      url = "https://bsky.app/profile/" + r.path;
+      url = starts_with(r.path, "hashtag/") ? "https://bsky.app/" + r.path
+                                            : "https://bsky.app/profile/" + r.path;
       break;
     case ForumSite::Digg:
       return forum::digg_web_url(r);
@@ -368,8 +369,11 @@ std::string forum_ref_from_web_url(std::string_view url) {
     r.page = 1;
     if (seg.size() == 2 && seg[0] == "profile")
       r.path = std::string(seg[1]);
-    else if (seg.size() == 4 && seg[0] == "profile" && seg[2] == "post")
-      r.path = std::string(seg[1]) + "/post/" + std::string(seg[3]);
+    else if (seg.size() == 4 && seg[0] == "profile" &&
+             (seg[2] == "post" || seg[2] == "feed"))
+      r.path = std::string(seg[1]) + "/" + std::string(seg[2]) + "/" + std::string(seg[3]);
+    else if (seg.size() == 2 && seg[0] == "hashtag" && !seg[1].empty())
+      r.path = "hashtag/" + forum::url_encode(percent_decode(seg[1]));
     else
       return {};
     return forum_ref_string(r);
@@ -391,7 +395,7 @@ std::string forum_up_ref(const ForumRef& r) {
   }
   if (r.site == ForumSite::Bluesky) {
     const size_t sl = p.find('/');
-    if (sl == std::string::npos) return {};
+    if (sl == std::string::npos || starts_with(p, "hashtag/")) return {};
     up.path = p.substr(0, sl);
     return forum_ref_string(up);
   }

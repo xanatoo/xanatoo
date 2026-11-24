@@ -2,12 +2,15 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
 // Bluesky through the public AppView (public.api.bsky.app, no account):
-// app.bsky.feed.getAuthorFeed → an author's posts, getPostThread → the
-// parents, the post and its reply tree. Post text is plain with "facets"
+// app.bsky.feed.getAuthorFeed → an author's posts (getProfile heads them),
+// getFeed → a custom feed (getFeedGenerator heads it), searchPosts → a
+// hashtag's top posts, getPostThread → the parents, the post and its reply
+// tree. Post text is plain with "facets"
 // (links, mentions, tags) on UTF-8 byte ranges; embeds (images, link cards,
 // quoted posts, video) follow the text.
 
 #include "forum_common.hpp"
+#include "xanatoo/text_escape.hpp"
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
@@ -65,7 +68,7 @@ void add_rich_text(Document& doc, NodeId parent, const std::string& text,
       if (type == "app.bsky.richtext.facet#link") href = str(feat, "uri");
       else if (type == "app.bsky.richtext.facet#mention") href = bsky_ref(str(feat, "did"));
       else if (type == "app.bsky.richtext.facet#tag")
-        href = "https://bsky.app/hashtag/" + url_encode(str(feat, "tag"));
+        href = bsky_ref("hashtag/" + url_encode(str(feat, "tag")));
     }
     if (!href.empty()) ranges.push_back({static_cast<size_t>(a), static_cast<size_t>(b), href});
   }
@@ -210,7 +213,13 @@ void add_replies(Document& doc, NodeId thread, const Json& node,
   }
 }
 
-std::string feed_title(const Json& reply, const ForumRef& ref) {
+std::string feed_title(const Json& reply, const ForumRef& ref, const Json* head) {
+  if (starts_with(ref.path, "hashtag/")) return "#" + percent_decode(ref.path.substr(8));
+  if (ref.path.find("/feed/") != std::string::npos) {
+    const std::string name = head ? str(*head, "displayName") : std::string();
+    return (name.empty() ? ref.path.substr(ref.path.rfind('/') + 1) : name) + " (feed)";
+  }
+  if (head && json_get(*head, "did")) return display_of(*head);
   for (const Json& item : arr(reply, "feed")) {
     const Json* post = json_get(item, "post");
     const Json* author = post ? json_get(*post, "author") : nullptr;
@@ -218,6 +227,34 @@ std::string feed_title(const Json& reply, const ForumRef& ref) {
       return display_of(*author);
   }
   return "@" + ref.path;
+}
+
+// " · 12 follows" after the parts already on `line`.
+void add_count(Document& doc, NodeId line, long long n, std::string_view one,
+               std::string_view many) {
+  add_sep(doc, line);
+  add_meta(doc, line, count(n, one, many));
+}
+
+// The profile (getProfile) or feed generator view above the posts.
+void add_head(Document& doc, NodeId thread, const Json& head, const ForumRef& ref) {
+  if (ref.path.find("/feed/") != std::string::npos) {
+    NodeId by = doc.create(NodeKind::Paragraph, thread);
+    add_meta(doc, by, "Custom feed by ");
+    if (const Json* creator = json_get(head, "creator"))
+      add_link(doc, by, display_of(*creator), bsky_ref(handle_of(*creator)),
+               InlineRole::Metadata);
+    if (const long long likes = num(head, "likeCount"); likes > 0)
+      add_count(doc, by, likes, "like", "likes");
+    add_rich_text(doc, thread, str(head, "description"), arr(head, "descriptionFacets"));
+    return;
+  }
+  const std::string bio = str(head, "description");
+  if (!bio.empty()) append_plain(doc, thread, bio);
+  NodeId stats = doc.create(NodeKind::Paragraph, thread);
+  add_meta(doc, stats, count(num(head, "followersCount"), "follower", "followers"));
+  add_count(doc, stats, num(head, "followsCount"), "follow", "follows");
+  add_count(doc, stats, num(head, "postsCount"), "post", "posts");
 }
 
 // bsky.app links in posts stay native.
@@ -229,14 +266,22 @@ void native_links(Document& doc) {
 
 }  // namespace
 
-Document bsky_feed_document(const Json& reply, const ForumRef& ref) {
+Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* head) {
   Document doc;
-  const std::string title = feed_title(reply, ref);
+  const std::string title = feed_title(reply, ref, head);
   NodeId thread = start_document(doc, "Bluesky — " + title, "Bluesky", {}, "bluesky");
+  if (head) add_head(doc, thread, *head, ref);
+  size_t posts = 0;
+  // searchPosts lists bare post views; the feeds wrap each in an item.
+  for (const Json& found : arr(reply, "posts")) {
+    add_post(doc, thread, found, {}, false);
+    ++posts;
+  }
   for (const Json& item : arr(reply, "feed")) {
     const Json* post = json_get(item, "post");
     if (!post) continue;
     NodeId msg = add_post(doc, thread, *post, {}, false);
+    ++posts;
     const Json* reason = json_get(item, "reason");
     if (reason && str(*reason, "$type") == "app.bsky.feed.defs#reasonRepost") {
       NodeId cap = doc.create(NodeKind::Caption, msg);
@@ -254,7 +299,7 @@ Document bsky_feed_document(const Json& reply, const ForumRef& ref) {
                InlineRole::Metadata);
     }
   }
-  if (doc.get(thread).children.empty()) add_note(doc, doc.root, "No posts.");
+  if (posts == 0) add_note(doc, doc.root, "No posts.");
   if (const std::string cursor = str(reply, "cursor"); !cursor.empty()) {
     ForumRef next = ref;
     next.page = 1;

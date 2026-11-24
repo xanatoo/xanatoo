@@ -7,7 +7,7 @@
 | Platform | Reading without an account | In xanatoo |
 |----------|----------------------------|------------|
 | Mastodon and the Fediverse | RSS per user and per hashtag; public JSON API | ✔ feeds |
-| Bluesky | RSS per profile; open AT-protocol API (`public.api.bsky.app`) | ✔ feeds (API client: later) |
+| Bluesky | RSS per profile; open AT-protocol API (`public.api.bsky.app`) | ✔ native `bsky:` ([start here](../services/bluesky.md)) |
 | Lemmy | RSS per community; JSON API v3 | ✔ native `lemmy:` |
 | Reddit | `.rss` / `.json` (rate limited) | ✔ native `reddit:` |
 | Tumblr | RSS per blog | ✔ feeds |
@@ -35,6 +35,8 @@ feed: most organisations also post to Mastodon, Bluesky or YouTube (see below).
 - [Mastodon project](https://mastodon.social/@Mastodon.rss)
 
 ## Bluesky
+
+Native: [feeds, hashtags and accounts](../services/bluesky.md). As RSS:
 
 - [Bluesky team](https://bsky.app/profile/bsky.app/rss)
 - [NPR](https://bsky.app/profile/npr.org/rss) · [The Onion](https://bsky.app/profile/theonion.com/rss)
