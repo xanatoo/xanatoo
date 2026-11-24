@@ -99,7 +99,9 @@ void test_refs() {
   EXPECT(is_forum_ref("lobsters:"));
   EXPECT(is_forum_ref("fourchan:"));
   EXPECT(!is_forum_ref("discourse:"));  // needs a host
-  EXPECT(!is_forum_ref("bsky:"));       // needs an actor
+  EXPECT_EQ(ref("bsky:").path, "bsky.app/feed/whats-hot");  // Discover
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/"),
+            "bsky:bsky.app/feed/whats-hot");
   EXPECT(!is_forum_ref("discourse:bad host/x"));
   EXPECT(!is_forum_ref("hn:"));
 

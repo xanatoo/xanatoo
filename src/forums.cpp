@@ -47,6 +47,8 @@ const SiteInfo& info(ForumSite s) {
   return kSites[0];
 }
 
+constexpr const char* kBskyHome = "bsky.app/feed/whats-hot";
+
 bool host_ok(std::string_view h) {
   if (h.empty() || h.front() == '.' || h.front() == '-') return false;
   for (char c : h)
@@ -172,7 +174,8 @@ std::optional<ForumRef> parse_forum_ref(std::string_view s) {
     if (!cursor_ok(r.cursor)) r.cursor.clear();
     r.query = decode_query(query_value(query, "query"));
     r.fragment = std::string(frag);
-    if (si.site == ForumSite::Bluesky && r.path.empty()) return std::nullopt;
+    // Bare "bsky:" is the front page: without an account, the Discover feed.
+    if (si.site == ForumSite::Bluesky && r.path.empty()) r.path = kBskyHome;
     if (si.site == ForumSite::Digg && !forum::digg_ref_ok(r)) return std::nullopt;
     return r;
   }
@@ -373,7 +376,9 @@ std::string forum_ref_from_web_url(std::string_view url) {
   if (host == "bsky.app" || host == "www.bsky.app") {
     r.site = ForumSite::Bluesky;
     r.page = 1;
-    if (seg.size() == 2 && seg[0] == "profile")
+    if (seg.empty())
+      r.path = kBskyHome;
+    else if (seg.size() == 2 && seg[0] == "profile")
       r.path = std::string(seg[1]);
     else if (seg.size() == 4 && seg[0] == "profile" &&
              (seg[2] == "post" || seg[2] == "feed"))

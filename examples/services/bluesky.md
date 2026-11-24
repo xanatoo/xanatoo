@@ -11,6 +11,7 @@ no account, read-only.
 
 | Address | Shows |
 |---------|-------|
+| `bsky:` | the Discover feed (also `https://bsky.app/`) |
 | `bsky:HANDLE` | an account's posts and reposts, its profile on top |
 | `bsky:HANDLE/replies` · `/media` · `/feeds` | the same with replies, only pictures and video, or the feeds the account publishes |
 | `bsky:HANDLE/post/RKEY` | a post with the thread above it and every reply |

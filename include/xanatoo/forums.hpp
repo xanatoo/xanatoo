@@ -15,6 +15,7 @@
 //   fourchan:BOARD/thread/NO           thread
 //   stackexchange:HOST                 recent questions (?page=N, /questions/tagged/TAG)
 //   stackexchange:HOST/questions/ID    question, answers and comments
+//   bsky:                              Discover feed   (= bsky.app/feed/whats-hot)
 //   bsky:HANDLE[?cursor=C]             author feed     (handle or did:plc:…)
 //   bsky:HANDLE/{replies,media,feeds}  profile tabs (with replies, media, its feeds)
 //   bsky:HANDLE/post/RKEY              post thread
