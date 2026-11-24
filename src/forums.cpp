@@ -236,6 +236,10 @@ std::string forum_web_url(const ForumRef& r) {
         return "https://bsky.app/search?q=" + forum::url_encode(r.query);
       url = starts_with(r.path, "hashtag/") ? "https://bsky.app/" + r.path
                                             : "https://bsky.app/profile/" + r.path;
+      // Profile tabs have no address of their own on the web.
+      for (const char* tab : {"/replies", "/media", "/feeds"})
+        if (ends_with(url, tab) && std::count(r.path.begin(), r.path.end(), '/') == 1)
+          url.erase(url.size() - std::string_view(tab).size());
       break;
     case ForumSite::Digg:
       return forum::digg_web_url(r);

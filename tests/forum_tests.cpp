@@ -424,6 +424,24 @@ void test_bluesky() {
   EXPECT_EQ(fp.meta.title, "Bluesky — Bob (@bob.example)");
   EXPECT(all_text(fp).find("Writes things.") != std::string::npos);
   EXPECT(all_text(fp).find("12 followers") != std::string::npos);
+  EXPECT(has_href(fp, "bsky:bob.example/replies"));  // profile tabs
+  EXPECT(has_href(fp, "bsky:bob.example/feeds"));
+  Json big = parse(R"({"did":"did:plc:b","handle":"b.example","followersCount":35814333,
+      "followsCount":1234,"postsCount":999})");
+  const std::string bt = all_text(bsky_feed_document(feed, ref("bsky:b.example/media"), &big));
+  EXPECT(bt.find("35.8M followers") != std::string::npos);
+  EXPECT(bt.find("1.2K follows") != std::string::npos);
+  EXPECT(bt.find("999 posts") != std::string::npos);
+  EXPECT_EQ(forum_web_url(ref("bsky:b.example/media")), "https://bsky.app/profile/b.example");
+  EXPECT_EQ(forum_up_ref(ref("bsky:b.example/feeds")), "bsky:b.example");
+  Json feeds = parse(R"({"feeds":[{"uri":"at://did:plc:b/app.bsky.feed.generator/sci",
+      "displayName":"Sci","description":"Science","likeCount":2500,
+      "creator":{"did":"did:plc:b","handle":"b.example"}}]})");
+  Document fl = bsky_feed_document(feeds, ref("bsky:b.example/feeds"));
+  EXPECT(has_href(fl, "bsky:b.example/feed/sci"));
+  EXPECT(all_text(fl).find("2.5K likes") != std::string::npos);
+  EXPECT(all_text(bsky_feed_document(parse(R"({"feeds":[]})"), ref("bsky:b.example/feeds")))
+             .find("No custom feeds.") != std::string::npos);
 
   // A custom feed under its generator's name; searchPosts (a hashtag) lists
   // bare posts with tag facets kept native.

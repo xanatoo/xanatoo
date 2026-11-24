@@ -17,7 +17,11 @@
   (`map_bluesky` removed); bsky.app/search?q= opens natively.
 - Every listed post ends in a "N comments" / "discuss" link to its thread
   (before, only the date led there).
-- Next: lists (`/lists/RKEY`, getListFeed), starter packs.
+- Profile tabs Posts · Replies · Media · Feeds (`bsky:HANDLE/replies`,
+  `/media`, `/feeds`; Posts leaves other people's threads out now),
+  counts as 35.8M / 1.2K.
+- Next: lists (`/lists/RKEY`, getListFeed), starter packs, Top / Latest
+  switch for search and hashtags, avatar in the profile head.
 
 ## Status (2026-11-24) — Digg reader checked against the live server
 

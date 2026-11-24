@@ -16,6 +16,7 @@
 //   stackexchange:HOST                 recent questions (?page=N, /questions/tagged/TAG)
 //   stackexchange:HOST/questions/ID    question, answers and comments
 //   bsky:HANDLE[?cursor=C]             author feed     (handle or did:plc:…)
+//   bsky:HANDLE/{replies,media,feeds}  profile tabs (with replies, media, its feeds)
 //   bsky:HANDLE/post/RKEY              post thread
 //   bsky:HANDLE/feed/RKEY[?cursor=C]   custom feed     (feed generator)
 //   bsky:hashtag/TAG[?cursor=C]        top posts with #TAG (TAG percent-encoded)

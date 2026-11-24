@@ -12,6 +12,7 @@ no account, read-only.
 | Address | Shows |
 |---------|-------|
 | `bsky:HANDLE` | an account's posts and reposts, its profile on top |
+| `bsky:HANDLE/replies` · `/media` · `/feeds` | the same with replies, only pictures and video, or the feeds the account publishes |
 | `bsky:HANDLE/post/RKEY` | a post with the thread above it and every reply |
 | `bsky:HANDLE/feed/RKEY` | a custom feed published by `HANDLE` |
 | `bsky:hashtag/TAG` | the top posts tagged `#TAG` |

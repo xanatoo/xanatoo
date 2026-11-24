@@ -215,6 +215,19 @@ void add_replies(Document& doc, NodeId thread, const Json& node,
   }
 }
 
+// "HANDLE/TAB" → TAB ("replies", "media", "feeds"); "" otherwise.
+std::string profile_tab(const ForumRef& ref) {
+  const size_t sl = ref.path.find('/');
+  if (sl == std::string::npos || starts_with(ref.path, "hashtag/")) return {};
+  const std::string tab = ref.path.substr(sl + 1);
+  return tab == "replies" || tab == "media" || tab == "feeds" ? tab : std::string();
+}
+
+bool is_profile(const ForumRef& ref) {
+  return ref.path != "search" &&
+         (ref.path.find('/') == std::string::npos || !profile_tab(ref).empty());
+}
+
 std::string feed_title(const Json& reply, const ForumRef& ref, const Json* head) {
   if (starts_with(ref.path, "hashtag/")) return "#" + percent_decode(ref.path.substr(8));
   if (ref.path == "search") return "search: " + ref.query;
@@ -223,20 +236,49 @@ std::string feed_title(const Json& reply, const ForumRef& ref, const Json* head)
     return (name.empty() ? ref.path.substr(ref.path.rfind('/') + 1) : name) + " (feed)";
   }
   if (head && json_get(*head, "did")) return display_of(*head);
+  const std::string actor = ref.path.substr(0, ref.path.find('/'));
   for (const Json& item : arr(reply, "feed")) {
     const Json* post = json_get(item, "post");
     const Json* author = post ? json_get(*post, "author") : nullptr;
-    if (author && (handle_of(*author) == ref.path || str(*author, "did") == ref.path))
+    if (author && (handle_of(*author) == actor || str(*author, "did") == actor))
       return display_of(*author);
   }
-  return "@" + ref.path;
+  return "@" + actor;
+}
+
+// "999", "12.3K", "35.8M": profile counts at a glance.
+std::string compact(long long n) {
+  if (n < 1000) return std::to_string(n);
+  const char* unit = n < 1000000 ? "K" : "M";
+  const long long tenths = n < 1000000 ? n / 100 : n / 100000;
+  std::string s = std::to_string(tenths / 10);
+  if (tenths < 1000 && tenths % 10) s += "." + std::to_string(tenths % 10);
+  return s + unit;
+}
+
+std::string compact_count(long long n, std::string_view one, std::string_view many) {
+  return compact(n) + " " + std::string(n == 1 ? one : many);
 }
 
 // " · 12 follows" after the parts already on `line`.
 void add_count(Document& doc, NodeId line, long long n, std::string_view one,
                std::string_view many) {
   add_sep(doc, line);
-  add_meta(doc, line, count(n, one, many));
+  add_meta(doc, line, compact_count(n, one, many));
+}
+
+// A custom feed (generator view) as one entry of a feeds list.
+void add_feed_entry(Document& doc, NodeId thread, const Json& gen) {
+  const Json* creator = json_get(gen, "creator");
+  const std::string uri = str(gen, "uri");
+  NodeId art = doc.create(NodeKind::Article, thread);
+  NodeId title = doc.create(NodeKind::Paragraph, art);
+  std::string name = str(gen, "displayName");
+  if (name.empty()) name = rkey_of(uri);
+  add_link(doc, title, name,
+           bsky_ref((creator ? handle_of(*creator) : str(gen, "did")) + "/feed/" + rkey_of(uri)));
+  add_meta(doc, title, " · " + compact_count(num(gen, "likeCount"), "like", "likes"));
+  add_rich_text(doc, art, str(gen, "description"), arr(gen, "descriptionFacets"));
 }
 
 // The profile (getProfile) or feed generator view above the posts.
@@ -255,7 +297,7 @@ void add_head(Document& doc, NodeId thread, const Json& head, const ForumRef& re
   const std::string bio = str(head, "description");
   if (!bio.empty()) append_plain(doc, thread, bio);
   NodeId stats = doc.create(NodeKind::Paragraph, thread);
-  add_meta(doc, stats, count(num(head, "followersCount"), "follower", "followers"));
+  add_meta(doc, stats, compact_count(num(head, "followersCount"), "follower", "followers"));
   add_count(doc, stats, num(head, "followsCount"), "follow", "follows");
   add_count(doc, stats, num(head, "postsCount"), "post", "posts");
 }
@@ -284,9 +326,23 @@ void native_links(Document& doc) {
 Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* head) {
   Document doc;
   const std::string title = feed_title(reply, ref, head);
-  NodeId thread = start_document(doc, "Bluesky — " + title, "Bluesky", {}, "bluesky");
+  std::vector<NavItem> nav;
+  if (is_profile(ref)) {
+    const std::string actor = ref.path.substr(0, ref.path.find('/'));
+    const std::string tab = profile_tab(ref);
+    for (const auto& [text, t] : {std::pair<const char*, const char*>{"Posts", ""},
+                                  {"Replies", "replies"}, {"Media", "media"},
+                                  {"Feeds", "feeds"}})
+      nav.push_back({text, bsky_ref(*t ? actor + "/" + t : actor), tab == t});
+  }
+  NodeId thread = start_document(doc, "Bluesky — " + title, "Bluesky", nav, "bluesky");
   if (head) add_head(doc, thread, *head, ref);
   size_t posts = 0;
+  // getActorFeeds: the custom feeds an account publishes.
+  for (const Json& gen : arr(reply, "feeds")) {
+    add_feed_entry(doc, thread, gen);
+    ++posts;
+  }
   // searchPosts lists bare post views; the feeds wrap each in an item.
   for (const Json& found : arr(reply, "posts")) {
     add_comments_link(doc, add_post(doc, thread, found, {}, false, true), found);
@@ -315,7 +371,8 @@ Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* 
     }
     add_comments_link(doc, msg, *post);
   }
-  if (posts == 0) add_note(doc, doc.root, "No posts.");
+  if (posts == 0)
+    add_note(doc, doc.root, profile_tab(ref) == "feeds" ? "No custom feeds." : "No posts.");
   if (const std::string cursor = str(reply, "cursor"); !cursor.empty()) {
     ForumRef next = ref;
     next.page = 1;

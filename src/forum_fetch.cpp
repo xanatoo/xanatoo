@@ -225,10 +225,18 @@ std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err) {
     return bsky_feed_document(*reply, ref);
   }
   if (!name_ok(seg[0])) return bad(ref, err);
-  if (seg.size() == 1) {
-    auto reply = get_json(
-        with_cursor(api + "app.bsky.feed.getAuthorFeed?limit=30&actor=" + url_encode(seg[0])),
-        err);
+  // A profile tab: posts (and the author's own threads), replies too,
+  // media, or the custom feeds the account publishes.
+  const std::string tab = seg.size() == 2 ? seg[1] : std::string();
+  if (seg.size() == 1 || tab == "replies" || tab == "media" || tab == "feeds") {
+    const std::string actor = "actor=" + url_encode(seg[0]);
+    const std::string url =
+        tab == "feeds" ? api + "app.bsky.feed.getActorFeeds?limit=50&" + actor
+                       : api + "app.bsky.feed.getAuthorFeed?limit=30&" + actor + "&filter=" +
+                             (tab == "replies" ? "posts_with_replies"
+                              : tab == "media" ? "posts_with_media"
+                                               : "posts_and_author_threads");
+    auto reply = get_json(with_cursor(url), err);
     if (!reply) return std::nullopt;
     // The profile only heads the first page; without it the posts still show.
     std::optional<Json> profile;

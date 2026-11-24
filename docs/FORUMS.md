@@ -27,7 +27,8 @@ recorded replies.
 | `fourchan:BOARD/thread/NO` | thread |
 | `stackexchange:HOST` | recent questions of a site (`/questions/tagged/TAG`; `?page=N`) |
 | `stackexchange:HOST/questions/ID[?page=N]` | question, answers by votes, comments |
-| `bsky:HANDLE[?cursor=C]` | author feed (handle or `did:plc:…`), profile on top |
+| `bsky:HANDLE[?cursor=C]` | author feed (handle or `did:plc:…`), profile on top; posts and the author's own threads |
+| `bsky:HANDLE/replies` · `/media` · `/feeds` | profile tabs: with replies, with pictures or video, the custom feeds it publishes (getActorFeeds) |
 | `bsky:HANDLE/post/RKEY` | post thread: parents, the post, replies |
 | `bsky:HANDLE/feed/RKEY[?cursor=C]` | custom feed (feed generator), its name and creator on top |
 | `bsky:hashtag/TAG[?cursor=C]` | top posts with `#TAG` (TAG percent-encoded) |
