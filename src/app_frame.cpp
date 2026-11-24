@@ -66,7 +66,8 @@ void sync_window_size(App& app) {
   const Pane& last = app.split ? app.panes[1] : app.panes[0];
   if (app.panes[0].x != dock_column_w(app, Dock::Left) +
                               (app.panes[0].sb_left ? kSbW : 0) ||
-      app.panes[0].y !=
+      // The edit strip of an editable document sits above y (head_h).
+      app.panes[0].y - app.panes[0].head_h !=
           static_cast<int>(app.ui_top) + dock_band_h(app, Dock::Top) ||
       last.x + last.w != app.win_w - dock_column_w(app, Dock::Right))
     app.needs_layout = true;
