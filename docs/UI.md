@@ -83,7 +83,8 @@ binary files are not (`pane_read_only`).
 
 Pages of a native service (Hacker News, Lobsters, Discourse, 4chan, Stack
 Exchange, Bluesky, Flarum, LessWrong, Digg, Usenet, Wikipedia, Reddit,
-Lemmy, YouTube, PeerTube / Odysee / Dailymotion / media.ccc.de, Internet
+Lemmy, Matrix, Nostr, YouTube, PeerTube / Odysee / Dailymotion /
+media.ccc.de, Internet
 Archive, Wayback, and Gemini / Gopher / Spartan / Nex / Finger hosts) have
 a **service strip**
 on top of the page, where an editable document has its edit strip
@@ -101,7 +102,9 @@ navigation rows any more.
   web pages (`https://news.ycombinator.com/`, `https://lobste.rs/…`,
   `https://en.wikipedia.org/wiki/…`, via `native_url_for`) get the same
   strip; its links keep the page's form (web pages link to web pages,
-  native views to native refs). Small-net hosts get one strip per host
+  native views to native refs). Matrix: the page's homeserver room
+  directory (plus matrix.org, and the room on an event page); Nostr:
+  Recent, Groups, and the relay's groups on a group page. Small-net hosts get one strip per host
   (name, front page, a colour from the host).
 - Contents: the favicon and name (opens the front page, `home`), a
   separator, the sections with the page's own highlighted (`current`);

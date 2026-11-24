@@ -24,7 +24,10 @@
   Reddit (Popular / All, a subreddit's sorts), Lemmy, YouTube (comment
   order), the video sites, Internet Archive, Wayback ("Live page") and
   small-net hosts. Links keep the page's form (web ↔ native).
-- Later: Matrix, Nostr and feed strips; live strip in unfocused document
+- Matrix strip (homeserver room directory, matrix.org, the room of an
+  event page) and Nostr strip (Recent, Groups, a group's relay).
+- Later: feed strips; a strip search for the Matrix room directory
+  (`matrix:directory/SERVER?q=`, needs a search engine entry); live strip in unfocused document
   windows.
 
 ## Status (2026-11-24) — Editable documents: edit strip on the page, lock

@@ -889,6 +889,23 @@ void test_service_bars() {
             "gemini://geminiprotocol.net/");
   EXPECT(service_bar("gemini://a.example/")->color != 0u);
 
+  // Matrix: the homeserver's room directory; event pages link their room.
+  EXPECT_EQ(service_bar("matrix:r/matrix:matrix.org")->name, "Matrix");
+  EXPECT_EQ(service_bar("matrix:r/rust:mozilla.org")->home,
+            "matrix:directory/mozilla.org");
+  EXPECT_EQ(bar_current("matrix:directory/matrix.org"), "Rooms on matrix.org|");
+  EXPECT(bar_has("matrix:roomid/abc:x.org/e/ev", "matrix:roomid/abc:x.org"));
+  EXPECT_EQ(service_bar("https://matrix.to/#/#matrix:matrix.org")->id, "matrix");
+
+  // Nostr: recent notes and group discovery.
+  EXPECT_EQ(service_bar("nostr:recent")->name, "Nostr");
+  EXPECT_EQ(bar_current("nostr:recent"), "Recent|");
+  EXPECT_EQ(bar_current("nostr:groups"), "Groups|");
+  EXPECT(bar_has("nostr:group@wss://relay.example#6162", "nostr:groups@wss://relay.example"));
+  EXPECT_EQ(bar_current("nostr:groups@wss://relay.example"), "Groups on relay.example|");
+  EXPECT_EQ(service_bar("npub1xyz")->id, "nostr");
+  EXPECT_EQ(bar_current("nostr:npub1xyz"), "");
+
   EXPECT_EQ(bar_current("lobsters:newest"), "Newest|");
   EXPECT_EQ(service_bar("lobsters:s/abc")->home, "lobsters:");
   // A forum's own web pages get its strip as well, with web links.

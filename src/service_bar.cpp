@@ -12,8 +12,10 @@
 #include "xanatoo/archive.hpp"
 #include "xanatoo/forums.hpp"
 #include "xanatoo/hackernews.hpp"
+#include "xanatoo/matrix.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/nntp.hpp"
+#include "xanatoo/nostr.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/video_sites.hpp"
 #include "xanatoo/wayback.hpp"
@@ -161,6 +163,64 @@ std::optional<ServiceBar> video_site_bar(const VsRef& r) {
   return bar;
 }
 
+// Matrix: the room directory of the page's homeserver, and the room of an
+// event page.
+std::optional<ServiceBar> matrix_bar(const MatrixRef& r) {
+  ServiceBar bar;
+  bar.id = "matrix";
+  bar.name = "Matrix";
+  bar.color = 0x0dbd8b;
+  std::string server = r.kind == MatrixRefKind::Directory ? r.id : matrix_id_server(r.id);
+  if (server.empty() && !r.via.empty()) server = matrix_server_name(r.via.front());
+  if (server.empty()) server = "matrix.org";
+  MatrixRef dir;
+  dir.kind = MatrixRefKind::Directory;
+  dir.id = server;
+  bar.home = format_matrix_ref(dir);
+  ServiceRow& row = bar.rows.emplace_back();
+  row.links.push_back({"Rooms on " + server, bar.home,
+                       r.kind == MatrixRefKind::Directory && r.query.empty()});
+  if (server != "matrix.org") {
+    dir.id = "matrix.org";
+    row.links.push_back({"matrix.org", format_matrix_ref(dir), false});
+  }
+  if (r.kind != MatrixRefKind::Directory && r.kind != MatrixRefKind::User &&
+      !r.event.empty()) {
+    MatrixRef room = r;
+    room.event.clear();
+    room.from.clear();
+    row.links.push_back({"Room", format_matrix_ref(room), false});
+  }
+  return bar;
+}
+
+// Nostr: the public sample and NIP-29 group discovery (on the page's relay
+// for group pages).
+std::optional<ServiceBar> nostr_bar(std::string_view ref) {
+  std::string_view t = ref;
+  if (starts_with_ci(t, "nostr:")) t.remove_prefix(6);
+  const std::string low = ascii_lower(t);
+  ServiceBar bar;
+  bar.id = "nostr";
+  bar.name = "Nostr";
+  bar.color = 0x8e30eb;
+  bar.home = "nostr:recent";
+  ServiceRow& row = bar.rows.emplace_back();
+  row.links.push_back({"Recent", "nostr:recent",
+                       low == "recent" || low == "firehose" || low == "latest"});
+  row.links.push_back({"Groups", "nostr:groups", low == "groups"});
+  std::string relay;
+  if (starts_with(low, "groups@")) relay = std::string(t.substr(7));
+  else if (starts_with(low, "group@")) relay = std::string(t.substr(6, t.find('#') - 6));
+  if (!relay.empty()) {
+    const size_t sep = relay.find("://");
+    const std::string host = sep == std::string::npos ? relay : relay.substr(sep + 3);
+    row.links.push_back({"Groups on " + host, "nostr:groups@" + relay,
+                         starts_with(low, "groups@")});
+  }
+  return bar;
+}
+
 // Gemini, Gopher, Spartan, Nex, Finger: one strip per host, in a colour of
 // its own, so capsules are told apart at a glance.
 std::optional<ServiceBar> small_net_bar(std::string_view address) {
@@ -189,6 +249,11 @@ std::optional<ServiceBar> ref_bar(std::string_view a) {
   if (auto r = parse_wikipedia_ref(a)) return wikipedia_bar(*r);
   if (is_reddit_ref(a)) return reddit_bar(a);
   if (is_lemmy_ref(a)) return lemmy_bar(a);
+  if (auto r = parse_matrix_ref(a)) return matrix_bar(*r);
+  // Bare npub1… / note1… open Nostr views too; a bare 64-hex string is
+  // too ambiguous to claim.
+  if (is_nostr_ref(a) && (starts_with_ci(a, "nostr:") || a.size() != 64))
+    return nostr_bar(a);
   if (auto r = parse_youtube_ref(a)) return youtube_bar(*r);
   if (auto r = parse_video_site_ref(a)) return video_site_bar(*r);
   if (parse_ia_ref(a)) {
