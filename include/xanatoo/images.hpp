@@ -30,10 +30,13 @@ struct Image {
 // URLs it is asked for (take_requests) and reports them pending until the
 // fetcher calls remote_done.
 bool is_remote_image(std::string_view src);
-// Download target of a remote image: its URL cache body file.
+// Where a remote image is read from: its URL cache body file; for a
+// snapshot's copy (snap:ID/URL, snapshot.hpp) the kept object, else the
+// URL cache file of URL.
 std::string remote_image_path(std::string_view url);
-// Write the downloaded `bytes` of `url` to its cache file (atomically, via
-// "<path>.part"); false without a cache directory or on a write error.
+// Write the downloaded `bytes` of `url` (a snap: ref: of the picture it
+// wraps) to the URL cache; false without a cache directory or on a write
+// error.
 bool store_remote_image(std::string_view url, std::string_view bytes);
 // File signature of a picture format we decode (PNG, JPEG, GIF, WebP, BMP,
 // TIFF, AVIF, JPEG XL, SVG): for answers without a MIME type (Nex, Gopher).

@@ -16,6 +16,7 @@
 #include <sstream>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/lemmy_directory.hpp"
 #include "xanatoo/matrix_directory.hpp"
 #include "xanatoo/paths.hpp"
@@ -117,6 +118,8 @@ std::string session_text(App& app) {
         const std::string key = std::to_string(pi) + "." + std::to_string(ni);
         out << "nav" << pi << "=" << e.url << "\n";
         out << "navscroll" << key << "=" << e.scroll << "\n";
+        if (xanatoo::is_snapshot_id(e.snapshot))
+          out << "navsnap" << key << "=" << e.snapshot << "\n";
         if (!e.via.href.empty() && e.via.href.find('\n') == std::string::npos &&
             e.via.from_url.find('\n') == std::string::npos) {
           out << "navvia" << key << "=" << e.via.href << "\n";
@@ -289,6 +292,9 @@ void restore_session(App& app) {
           const float scroll = std::stof(*v);
           if (std::isfinite(scroll)) e.scroll = std::max(0.f, scroll);
         }
+        if (const std::string* v = get("navsnap" + key);
+            v && xanatoo::is_snapshot_id(*v))
+          e.snapshot = *v;
         if (const std::string* v = get("navvia" + key)) {
           e.via.href = *v;
           if (const std::string* from = get("navfrom" + key))

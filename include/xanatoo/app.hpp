@@ -699,6 +699,14 @@ struct FetchShared {
   // PDF / DjVu / comic answers may open as pages (set before the worker
   // starts): Navigate / Tab, and Context panel previews.
   bool allow_pages = false;
+  // Page snapshots (snapshot.hpp; set before the worker starts):
+  // `open_snapshot` shows that snapshot instead of loading the page (the
+  // live page when it is gone); `keep_snapshot` keeps what was loaded.
+  std::string open_snapshot;
+  bool keep_snapshot = true;
+  // Set by the worker when `doc` is a snapshot (its time; 0: live).
+  int64_t snapshot_time = 0;
+  bool snapshot_missing = false;  // asked for one that was evicted: live
   std::optional<xanatoo::Document> doc;
   std::optional<std::string> raw_source;
   std::shared_ptr<xanatoo::DownloadProgress> download;
@@ -1367,6 +1375,11 @@ struct App {
   // With `visit_from`: the view returns to that visit (it becomes the
   // current entry's visit) instead of recording a new one.
   bool visit_resume = false;
+  // Page snapshot (snapshot.hpp id) the next remote page load shows instead
+  // of the live page: set right before navigate_to_url by Back / Forward
+  // and the History panel, taken by start_fetch (find_cached_page only
+  // answers with that snapshot meanwhile). '' = the live page.
+  std::string open_snapshot;
   // False while start-up shows stand-in pages (the default document before
   // a session restore replaces it): no visits are recorded then.
   bool record_visits = true;
@@ -2042,6 +2055,9 @@ void update_touch(App& app);
 // ---- nav ----
 // Records `url` as the page view `pi` now shows (its trail + session log).
 void push_nav_history(App& app, int pi, const std::string& url);
+// The current Back / Forward entry of view `pi` remembers the snapshot its
+// page is (NavHistoryEntry::snapshot), when the view shows that page.
+void note_entry_snapshot(App& app, int pi);
 // The page in view `pi` was loaded again (Reload): a Reload visit whose
 // source is the visit it replaces, with the new observation.
 void record_reload_visit(App& app, int pi);

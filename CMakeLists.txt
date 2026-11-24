@@ -214,6 +214,9 @@ add_executable(xanatoo
   src/editor.cpp
   src/images.cpp
   src/url_cache.cpp
+  src/object_store.cpp
+  src/doc_codec.cpp
+  src/snapshot.cpp
   src/ui.cpp
   src/ui_help.cpp
   src/util.cpp
@@ -758,6 +761,7 @@ add_executable(xanatoo_tests
   tests/ui_help_tests.cpp
   tests/sqlite_db_tests.cpp
   tests/history_trail_tests.cpp
+  tests/snapshot_tests.cpp
   tests/audio_tests.cpp
   tests/media_tests.cpp
   src/ui_help.cpp
@@ -844,6 +848,9 @@ add_executable(xanatoo_tests
   src/math_font.cpp
   src/images.cpp
   src/url_cache.cpp
+  src/object_store.cpp
+  src/doc_codec.cpp
+  src/snapshot.cpp
   src/audio.cpp
   src/byte_feed.cpp
   src/audio_codecs.cpp

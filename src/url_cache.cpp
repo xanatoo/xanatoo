@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/url_cache.hpp"
+#include "xanatoo/object_store.hpp"
 #include "xanatoo/paths.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/util.hpp"
 
 #ifndef XANATOO_SQLITE
@@ -57,6 +59,8 @@ const sqlite::Migrations kSteps = {
     "  etag TEXT NOT NULL DEFAULT '', last_modified TEXT NOT NULL DEFAULT '',"
     "  fetched INTEGER NOT NULL, size INTEGER NOT NULL DEFAULT -1);"
     "CREATE INDEX IF NOT EXISTS responses_fetched ON responses(fetched);",
+    // 2: the body's object hash (snapshots keep pictures by it).
+    "ALTER TABLE responses ADD COLUMN body TEXT NOT NULL DEFAULT '';",
 };
 
 std::mutex g_mutex;
@@ -80,11 +84,11 @@ sqlite3* store() {
 void put_row(sqlite3* d, const UrlCacheEntry& e) {
   sqlite::Stmt s(d,
                  "INSERT OR REPLACE INTO responses(url, final_url, status, "
-                 "content_type, etag, last_modified, fetched, size) "
-                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?);");
+                 "content_type, etag, last_modified, fetched, size, body) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);");
   s.bind(1, e.url).bind(2, e.final_url).bind(3, e.status)
       .bind(4, e.content_type).bind(5, e.etag).bind(6, e.last_modified)
-      .bind(7, e.fetched).bind(8, e.size);
+      .bind(7, e.fetched).bind(8, e.size).bind(9, e.body);
   s.run();
 }
 #endif
@@ -113,24 +117,34 @@ bool url_cache_put(UrlCacheEntry e, const std::string_view* body) {
   bool ok = true;
   if (body) {
     e.size = static_cast<int64_t>(body->size());
+    const std::string hash = object_hash(*body);
     for (const std::string& key : {e.url, e.final_url}) {
       const std::string path = url_cache_body_path(key);
       if (path.empty() || !write_body(path, *body)) ok = false;
+      else if (e.body.empty() && object_put_file(path, hash)) e.body = hash;
       if (e.final_url == e.url) break;
     }
   }
 #if XANATOO_SQLITE
-  std::lock_guard<std::mutex> lock(g_mutex);
-  sqlite3* d = store();
-  if (!d) return false;
-  sqlite::Tx tx(d);
-  put_row(d, e);
-  if (e.final_url != e.url) {
-    UrlCacheEntry target = e;
-    target.url = e.final_url;
-    put_row(d, target);
+  {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    sqlite3* d = store();
+    if (!d) return false;
+    sqlite::Tx tx(d);
+    put_row(d, e);
+    if (e.final_url != e.url) {
+      UrlCacheEntry target = e;
+      target.url = e.final_url;
+      put_row(d, target);
+    }
+    if (!tx.commit()) return false;
   }
-  return tx.commit() && ok;
+  // Outside g_mutex: the snapshot store takes its own lock and reads ours.
+  if (!e.body.empty()) {
+    snapshot_note_body(e.url, e.body);
+    if (e.final_url != e.url) snapshot_note_body(e.final_url, e.body);
+  }
+  return ok;
 #else
   return ok;
 #endif
@@ -143,7 +157,7 @@ std::optional<UrlCacheEntry> url_cache_find(std::string_view url) {
   if (!d) return std::nullopt;
   sqlite::Stmt s(d,
                  "SELECT url, final_url, status, content_type, etag, "
-                 "last_modified, fetched, size FROM responses WHERE url = ?;",
+                 "last_modified, fetched, size, body FROM responses WHERE url = ?;",
                  {url});
   if (!s.row()) return std::nullopt;
   UrlCacheEntry e;
@@ -155,6 +169,7 @@ std::optional<UrlCacheEntry> url_cache_find(std::string_view url) {
   e.last_modified = s.text(5);
   e.fetched = s.int64(6);
   e.size = s.int64(7);
+  e.body = s.text(8);
   return e;
 #else
   (void)url;

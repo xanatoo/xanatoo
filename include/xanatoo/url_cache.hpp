@@ -8,7 +8,9 @@
 //   urls/<hash>   the body as received (also the remote image file, see
 //                 remote_image_path), written atomically
 //   urls.sqlite   one row per requested URL: final URL, HTTP status,
-//                 Content-Type, ETag / Last-Modified, time, size
+//                 Content-Type, ETag / Last-Modified, time, size and
+//                 the body's object hash (objects/<sha256>, a hard link
+//                 to the same bytes; object_store.hpp)
 //
 // The metadata answers what an address *is* before it is fetched again:
 // an address named like a picture ("/wiki/File:X.jpg") may serve a web
@@ -32,6 +34,8 @@ struct UrlCacheEntry {
   std::string last_modified;
   int64_t fetched = 0;       // ms since the epoch, UTC
   int64_t size = -1;         // body bytes, -1 unknown / not kept
+  std::string body{};        // object hash of the body (object_store.hpp),
+                             // '' unknown / not kept; set by url_cache_put
 };
 
 // cache_dir()/urls/<FNV-1a of url>; empty without a cache directory.
@@ -39,6 +43,8 @@ std::string url_cache_body_path(std::string_view url);
 
 // Record an answer: its metadata and, with `body`, its bytes. Also keyed
 // by `final_url` when it differs, so the redirect target is known too.
+// The bytes also become an object (hard link) and fill the snapshots that
+// wait for this picture (snapshot_note_body).
 // False when nothing could be written (no cache directory, I/O error).
 bool url_cache_put(UrlCacheEntry entry, const std::string_view* body = nullptr);
 

@@ -2,6 +2,24 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — History as seen: page snapshots
+
+- History is now immutable snapshots of what was shown, not URLs to load
+  again (docs/HISTORY.md "E" Done). New: `object_store` (content-addressed
+  `cache_dir()/objects/`, URL cache bodies hard-linked in), `doc_codec`
+  (lossless binary Document), `snapshot` (`snapshots.sqlite`,
+  `snap:<id>/<address>` refs, pictures per snapshot).
+- Every page shown is kept; Back / Forward / History panel show the
+  snapshot the entry / visit saw (status "As seen DATE"), Reload loads the
+  live page. Evicted snapshot → live page with a note. History → Copy
+  Snapshot Address. Pictures: the snapshot's copy, else the URL cache,
+  which is also restored from snapshot copies instead of re-downloading.
+- Tests: `tests/snapshot_tests.cpp` (codec round trip / fuzz, refs, store,
+  late pictures, restore, eviction) + observation reuse by snapshot.
+- Next: full-text search over snapshots (FTS5 plan in docs/HISTORY.md),
+  bookmarks pinning their snapshot, Wayback fallback for evicted ones,
+  a "snapshots of this page" list (`snapshots_of`) in the History panel.
+
 ## Status (2026-11-24) — Bluesky feeds, hashtags, start page
 
 - New refs `bsky:HANDLE/feed/RKEY` (custom feeds, getFeed +

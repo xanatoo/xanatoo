@@ -74,6 +74,7 @@
 #include <cstdlib>
 #include <iostream>
 #include "xanatoo/transfer_meter.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/url_cache.hpp"
 #include "xanatoo/markdown_body.hpp"
 #include "xanatoo/quote_links.hpp"
@@ -91,6 +92,7 @@ void test_nntp(int& passed, int& failed);
 void test_ui_help(int& passed, int& failed);
 void test_sqlite_db(int& passed, int& failed);
 void test_history_trail(int& passed, int& failed);
+void test_snapshots(int& passed, int& failed);
 void test_audio(int& passed, int& failed);
 void test_media(int& passed, int& failed);
 
@@ -4362,6 +4364,7 @@ void test_url_cache() {
   EXPECT(url_cache_kind(page) == UrlKind::Unknown);
 #endif
   url_cache_close();
+  snapshot_close();
   set_dir_override(DirKind::Cache, {});
   fs::remove_all(cache);
 }
@@ -9414,6 +9417,7 @@ int main() {
   test_ui_help(g_passed, g_failed);
   test_sqlite_db(g_passed, g_failed);
   test_history_trail(g_passed, g_failed);
+  test_snapshots(g_passed, g_failed);
   test_audio(g_passed, g_failed);
   test_media(g_passed, g_failed);
 

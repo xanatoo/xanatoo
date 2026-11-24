@@ -207,7 +207,12 @@ void open_line(App& app, int line, bool invert = false) {
   app.visit_hint = xanatoo::VisitKind::History;
   app.visit_from = h.visits[e.first].id;
   app.visit_resume = rewind;
+  // The page as that visit saw it (snapshot.hpp); the live page when it
+  // was not kept. Reload shows the page now.
+  if (const int64_t obs = h.visits[e.first].observation)
+    if (const auto o = xanatoo::load_observation(obs)) app.open_snapshot = o->snapshot;
   open_address(app, address);
+  app.open_snapshot.clear();
   app.visit_hint.reset();
   app.visit_from = 0;
   app.visit_resume = false;

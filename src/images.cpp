@@ -13,6 +13,7 @@
 #include "xanatoo/image_backend.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/util.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/url_cache.hpp"
 
 #include <algorithm>
@@ -252,7 +253,9 @@ Image ImageCache::load_thumb(const std::string& resolved, int edge) {
 }
 
 bool is_remote_image(std::string_view src) {
-  return has_image_fetch_scheme(src);
+  // A snapshot's copy (snap:ID/URL) is remote like the picture it keeps.
+  return has_image_fetch_scheme(is_snapshot_ref(src) ? live_address(src)
+                                                     : std::string(src));
 }
 
 bool looks_like_image(std::string_view b) {
@@ -277,25 +280,16 @@ bool looks_like_image(std::string_view b) {
 }
 
 bool store_remote_image(std::string_view url, std::string_view bytes) {
-  const std::string path = remote_image_path(url);
-  if (path.empty()) return false;  // no cache directory
-  const std::string tmp = path + ".part";
-  std::error_code ec;
-  fs::create_directories(fs::path(path).parent_path(), ec);
-  {
-    std::ofstream out(tmp, std::ios::binary);
-    out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    if (!out) {
-      std::cerr << "image: cannot write " << tmp << "\n";
-      return false;
-    }
-  }
-  fs::rename(tmp, path, ec);
-  return !ec;
+  // Through the URL cache: the bytes become an object too, and snapshots
+  // waiting for this picture keep it (snapshot_note_body).
+  UrlCacheEntry e;
+  e.url = live_address(url);
+  return url_cache_put(std::move(e), &bytes);
 }
 
 std::string remote_image_path(std::string_view url) {
-  return url_cache_body_path(url);  // the URL cache keeps the bytes
+  // The URL cache keeps the bytes; a snapshot's copy is an object.
+  return snapshot_image_path(url);
 }
 
 void prune_cache_dir(const std::string& dir, uint64_t max_bytes) {
@@ -341,6 +335,9 @@ const Image* ImageCache::remote_placeholder(const std::string& url) {
   const std::string p = remote_image_path(url);
   if (p.empty()) return &kFailed;  // no cache directory to download into
   if (fs::exists(p, ec)) return nullptr;
+  // Pruned from the URL cache, but a snapshot (or the object store) still
+  // has the bytes: no download.
+  if (snapshot_restore_body(url, p)) return nullptr;
   pending_.insert(url);
   requests_.push_back(url);
   return &kPending;

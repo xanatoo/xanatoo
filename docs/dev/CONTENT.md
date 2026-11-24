@@ -502,6 +502,16 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   metadata (final URL, status, Content-Type, ETag, Last-Modified, time,
   size) in `urls.sqlite`, keyed by requested and final URL.
   `url_cache_kind` → Image / Other / Unknown (non-200 answers: Unknown).
+  Each body is also hard-linked into the object store
+  (`object_store.hpp`, `cache_dir()/objects/<sha256>`, `UrlCacheEntry::body`).
+- **Page snapshots** (`snapshot.hpp`, `doc_codec.hpp`, docs/HISTORY.md
+  "E"): every page shown is kept as its document (binary codec), raw source
+  and pictures; `snap:<id>/<address>` shows that copy. Pictures of a
+  snapshot are `snap:<id>/<picture URL>`: `is_remote_image` /
+  `remote_image_path` / `download_image` unwrap them (`live_address`), the
+  path is the kept copy or else the URL cache file. Back / Forward and
+  History open the snapshot they showed (`App::open_snapshot`); Reload
+  loads live.
   - Navigation (`opens_as_image`, app_buffers.cpp): an image-named http(s)
     address skips the fetch only when the cache says image; otherwise the
     web fetcher loads it (`is_web_url` no longer excludes image names) and

@@ -11,9 +11,11 @@
 #include <iostream>
 #include <string_view>
 #include <thread>
+#include <ctime>
 #include <utility>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
@@ -405,12 +407,62 @@ void finish_fetch(FetchShared& out) {
       o.size = static_cast<int64_t>(out.raw_source->size());
     }
     o.text_hash = xanatoo::document_text_hash(*out.doc);
+    // Keep the page as shown (snapshot.hpp, docs/HISTORY.md "E"): remote
+    // pages that answered with content, not error bodies, not one shown
+    // from a local file (pages of a PDF), not one that is a snapshot.
+    const bool http_ok = out.http_status == 0 || out.http_status == 200;
+    if (out.keep_snapshot && out.snapshot_time == 0 && http_ok &&
+        out.error.empty() && out.content_path.empty() &&
+        is_in_app_remote_url(out.final_url) &&
+        !xanatoo::is_snapshot_ref(out.final_url))
+      o.snapshot = xanatoo::snapshot_store(
+          out.final_url, *out.doc,
+          out.raw_source ? &*out.raw_source : nullptr, o.content_type,
+          out.service ? out.service : "");
   }
   out.done.store(true, std::memory_order_release);
 }
 
+// Show snapshot `id` of `url` (live address) instead of loading it; false
+// when it is gone (evicted, never stored), and the page loads live.
+bool load_snapshot(const std::string& id, const std::string& url,
+                   FetchShared& out) {
+  auto snap = xanatoo::snapshot_load(id);
+  if (!snap) return false;
+  // A snap: ref names its page; any other address in it (a picture the
+  // page showed) is not this snapshot.
+  if (!url.empty() && snap->info.url != url) return false;
+  out.service = "Snapshot";
+  out.final_url = snap->info.url;
+  out.doc = std::move(snap->doc);
+  out.raw_source = std::move(snap->raw);
+  out.snapshot_time = snap->info.first_seen;
+  out.observed.content_type = snap->info.content_type;
+  out.observed.snapshot = snap->info.id;
+  return true;
+}
+
 void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
                 bool allow_download) {
+  // Page snapshots: an immutable snap: address, or Back / Forward /
+  // History asking for the page as it was seen. Gone: the live page.
+  if (auto ref = xanatoo::parse_snapshot_ref(url)) {
+    if (load_snapshot(ref->id, ref->url, *out)) {
+      finish_fetch(*out);
+      return;
+    }
+    out->snapshot_missing = true;
+    url = ref->url;
+  } else if (!out->open_snapshot.empty()) {
+    const std::string id = std::exchange(out->open_snapshot, {});
+    if (load_snapshot(id, {}, *out)) {
+      // The address stays the one asked for (Back restores its position).
+      out->final_url = url;
+      finish_fetch(*out);
+      return;
+    }
+    out->snapshot_missing = true;
+  }
   out->final_url = url;
   // Local PDF / DjVu / comic: thumtoo sizes every page on this worker.
   if (xanatoo::is_fixed_layout_path(url)) {
@@ -869,6 +921,19 @@ void finish_tab(App& app, const FetchJob& job) {
   flash_status(app, (r.doc ? "Loaded in tab: " : "Tab failed: ") + path);
 }
 
+// "2026-11-24 14:05" (local time) for a snapshot's time (ms).
+std::string snapshot_when(int64_t ms) {
+  const std::time_t t = static_cast<std::time_t>(ms / 1000);
+  std::tm tm{};
+#ifdef _WIN32
+  localtime_s(&tm, &t);
+#else
+  localtime_r(&t, &tm);
+#endif
+  char s[32];
+  return std::strftime(s, sizeof s, "%Y-%m-%d %H:%M", &tm) ? std::string(s) : "";
+}
+
 void finish_navigate(App& app, const FetchJob& job) {
   FetchShared& r = *job.shared;
   const std::string service = r.service;
@@ -932,11 +997,12 @@ void finish_navigate(App& app, const FetchJob& job) {
     return;
   }
   const bool http_error = r.http_status != 0;
+  const bool from_snapshot = r.snapshot_time != 0;
   if (http_error) {
     add_http_banner(*r.doc, job);
     r.final_url = job.url;  // the address stays the one that failed
-  } else {
-    cache_page(app, job);
+  } else if (!from_snapshot) {
+    cache_page(app, job);  // a snapshot is no answer of the live page
   }
   show_doc_in_pane(app, job.pane, std::move(*r.doc), r.final_url,
                    std::move(r.raw_source), r.content_path, r.observed);
@@ -966,11 +1032,19 @@ void finish_navigate(App& app, const FetchJob& job) {
     app.panes[job.pane].nav.pending_kind.reset();
     record_reload_visit(app, job.pane);
   }
+  note_entry_snapshot(app, job.pane);  // Reload: the entry shows the new one
   char secs[32];
   std::snprintf(secs, sizeof(secs), "  (%.1f s)",
                 static_cast<double>(xanatoo::sdl::ticks() - job.started) / 1000.0);
-  flash_status(app, http_error ? service + ": " + r.error
-                               : "Opened " + r.final_url + secs);
+  if (from_snapshot)
+    flash_status(app, "As seen " + snapshot_when(r.snapshot_time) + ": " +
+                          r.final_url + "  (Reload shows the page now)");
+  else if (r.snapshot_missing && !http_error)
+    flash_status(app, "Snapshot no longer kept, loaded the page now: " +
+                          r.final_url + secs);
+  else
+    flash_status(app, http_error ? service + ": " + r.error
+                                 : "Opened " + r.final_url + secs);
 }
 
 }  // namespace
@@ -980,6 +1054,9 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     if (why) *why = msg;
     return false;
   };
+  // A snapshot needs no network (and when it is gone, the live page is
+  // tried, which reports its own error).
+  if (xanatoo::is_snapshot_ref(url)) return true;
   if (xanatoo::is_search_ref(url)) {
     const auto plan = xanatoo::search_plan(url, xanatoo::load_engines());
     if (!plan) return no("unknown search engine");
@@ -1171,6 +1248,12 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
+  // Snapshots: pages that are shown are kept; Back / Forward / History
+  // ask for the one they showed (App::open_snapshot).
+  job.shared->keep_snapshot = purpose != FetchPurpose::Subscription &&
+                              purpose != FetchPurpose::Download;
+  if (purpose == FetchPurpose::Navigate || purpose == FetchPurpose::Tab)
+    job.shared->open_snapshot = std::exchange(app.open_snapshot, {});
   job.shared->meter.cancel = &job.shared->abandoned;
   job.shared->allow_pages =
       (purpose != FetchPurpose::Preview &&
@@ -1416,8 +1499,13 @@ const FetchJob* pane_fetch(const App& app, int pi) {
 
 const CachedPage* find_cached_page(App& app, const std::string& url) {
   const Uint32 now = xanatoo::sdl::ticks();
+  // Asked for a snapshot: only that one will do (a live answer from a
+  // moment ago may already differ).
+  const std::string& want = app.open_snapshot;
   for (auto it = app.page_cache.rbegin(); it != app.page_cache.rend(); ++it)
-    if (it->url == url && now - it->ticks < kPageCacheTtl) return &*it;
+    if (it->url == url && now - it->ticks < kPageCacheTtl &&
+        (want.empty() || it->observed.snapshot == want))
+      return &*it;
   return nullptr;
 }
 

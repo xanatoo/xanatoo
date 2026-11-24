@@ -47,6 +47,7 @@ struct PageObservation {
   std::string raw_hash;      // "sha256:…" of the body (decoded text)
   std::string text_hash;     // document_text_hash of the imported page
   int64_t size = -1;         // body bytes, -1 unknown
+  std::string snapshot;      // the page as shown (snapshot.hpp id), '' none
   bool empty() const { return time == 0; }
 };
 

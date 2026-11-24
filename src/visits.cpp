@@ -138,23 +138,33 @@ int64_t store_observation(const PageObservation& o) {
   sqlite3* d = writable();
   if (!d || o.empty() || o.url.empty()) return 0;
   sqlite::Tx tx(d);
+  if (!o.snapshot.empty()) {
+    // A snapshot shown again (Back, History): what was seen then.
+    sqlite::Stmt same(d, "SELECT id FROM observations WHERE snapshot = ? "
+                         "ORDER BY time DESC, id DESC LIMIT 1;",
+                      {o.snapshot});
+    if (same.row()) return same.int64(0);
+  }
   {
     sqlite::Stmt last(d, "SELECT id, status, content_type, etag, last_modified, "
-                         "raw_hash, text_hash, size FROM observations "
+                         "raw_hash, text_hash, size, COALESCE(snapshot, '') "
+                         "FROM observations "
                          "WHERE url = ? ORDER BY time DESC, id DESC LIMIT 1;",
                       {o.url});
     if (last.row() && last.int64(1) == o.status && last.text(2) == o.content_type &&
         last.text(3) == o.etag && last.text(4) == o.last_modified &&
         last.text(5) == o.raw_hash && last.text(6) == o.text_hash &&
-        last.int64(7) == o.size)
+        last.int64(7) == o.size && last.text(8) == o.snapshot)
       return last.int64(0);
   }
   sqlite::Stmt s(d, "INSERT INTO observations(url, time, status, content_type, "
-                    "etag, last_modified, raw_hash, text_hash, size) "
-                    "VALUES(?,?,?,?,?,?,?,?,?);");
+                    "etag, last_modified, raw_hash, text_hash, size, snapshot) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?);");
   s.bind(1, o.url).bind(2, o.time).bind(3, o.status).bind(4, o.content_type)
       .bind(5, o.etag).bind(6, o.last_modified).bind(7, o.raw_hash)
       .bind(8, o.text_hash).bind(9, o.size);
+  if (o.snapshot.empty()) s.bind_null(10);
+  else s.bind(10, o.snapshot);
   if (!s.run()) return 0;
   const int64_t id = sqlite3_last_insert_rowid(d);
   return tx.commit() ? id : 0;
@@ -164,8 +174,8 @@ std::optional<PageObservation> load_observation(int64_t id) {
   sqlite3* d = statedb_connection();
   if (!d || id <= 0) return std::nullopt;
   sqlite::Stmt s(d, "SELECT url, time, status, content_type, etag, "
-                    "last_modified, raw_hash, text_hash, size "
-                    "FROM observations WHERE id = ?;");
+                    "last_modified, raw_hash, text_hash, size, "
+                    "COALESCE(snapshot, '') FROM observations WHERE id = ?;");
   s.bind(1, id);
   if (!s.row()) return std::nullopt;
   PageObservation o;
@@ -178,6 +188,7 @@ std::optional<PageObservation> load_observation(int64_t id) {
   o.raw_hash = s.text(6);
   o.text_hash = s.text(7);
   o.size = s.int64(8);
+  o.snapshot = s.text(9);
   return o;
 }
 

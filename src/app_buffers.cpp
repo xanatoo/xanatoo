@@ -15,6 +15,7 @@
 #include <stdexcept>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/fixed_layout.hpp"
 #include "xanatoo/ebooks.hpp"
@@ -204,7 +205,7 @@ static bool web_in_app(std::string_view s) {
 }
 
 bool is_in_app_remote_url(std::string_view s) {
-  return xanatoo::is_gemini_url(s) || xanatoo::is_gopher_url(s) ||
+  return xanatoo::is_snapshot_ref(s) || xanatoo::is_gemini_url(s) || xanatoo::is_gopher_url(s) ||
          xanatoo::is_spartan_url(s) || xanatoo::is_nex_url(s) ||
          xanatoo::is_finger_url(s) || xanatoo::is_nntp_url(s) ||
          xanatoo::is_reddit_ref(s) ||

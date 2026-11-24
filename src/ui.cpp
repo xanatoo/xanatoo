@@ -3614,6 +3614,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                     "Alt+Right");
       if (ImGui::MenuItem("Show History…", "Ctrl+Shift+H", state.history_open))
         cmd = UiCommand::ToggleHistory;
+      // The page as shown, for good (snapshot.hpp): opens as it is now
+      // even when the live page changed.
+      if (ImGui::MenuItem("Copy Snapshot Address", nullptr, false,
+                          !state.snapshot_address.empty())) {
+        cmd = UiCommand::CopyText;
+        result.arg = state.snapshot_address;
+      }
       if (!state.recent_visited.empty()) {
         ImGui::Separator();
         int i = 0;

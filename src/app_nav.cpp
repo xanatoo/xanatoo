@@ -244,6 +244,22 @@ void push_nav_history(App& app, int pi, const std::string& raw) {
   std::swap(hint, h.pending_kind);
   const bool pushed = nav_history_push(h, std::move(e), kMaxNavHistory);
   record_visit(app, pi, pushed, prev, hint);
+  note_entry_snapshot(app, pi);
+}
+
+void note_entry_snapshot(App& app, int pi) {
+  if (pi < 0 || pi >= kMaxViews) return;
+  Pane& p = app.panes[pi];
+  NavHistory& h = p.nav;
+  if (h.pos < 0 || h.pos >= static_cast<int>(h.entries.size())) return;
+  const DocBuffer* b = find_buf(app, p.buf);
+  if (!b || b->placeholder || b->observed.snapshot.empty()) return;
+  NavHistoryEntry& cur = h.entries[static_cast<size_t>(h.pos)];
+  // Selectors and fragments are view state: the page is the base.
+  if (xanatoo::parse_locator(cur.url).base !=
+      xanatoo::parse_locator(pane_address(app, p)).base)
+    return;
+  cur.snapshot = b->observed.snapshot;
 }
 
 void sync_nav_history(App& app) {
@@ -475,7 +491,11 @@ bool nav_go(App& app, int to) {
   const std::string url = h.entries[static_cast<size_t>(to)].url;
   h.restoring = to;
   h.pending_link = {};
-  if (!navigate_to_url(app, url, /*record_history=*/false)) {
+  // The page as it was shown then (snapshot.hpp), not as it is now.
+  app.open_snapshot = h.entries[static_cast<size_t>(to)].snapshot;
+  const bool went = navigate_to_url(app, url, /*record_history=*/false);
+  app.open_snapshot.clear();
+  if (!went) {
     h.restoring = -1;
     return false;
   }

@@ -347,7 +347,7 @@ CREATE INDEX observations_url ON observations(url, time);
 
 ## E. Snapshots: a permanent layer over the mutable Web
 
-Deferred; here is the shape so B and D do not paint it into a corner.
+The original plan (built differently, see "Done" below):
 
 - Storage is `revstore`'s content-addressed `objects` (sha256 → bytes),
   which already holds `document_origins` raw bytes. An observation's
@@ -378,6 +378,81 @@ Open: content negotiation / logged-in pages (snapshots may contain private
 data → the store must be treated as sensitive), dedup of near-identical
 snapshots (text diffs between successive observations?), export format
 (WARC for interop?).
+
+### Done (snapshots, 2026-11-24)
+
+The history is now what the user saw, not a list of URLs to load again.
+It differs from the plan above where the plan was too narrow:
+
+- **Object store** (`object_store.hpp`): `cache_dir()/objects/<sha256>`,
+  plain files, written atomically, never changed, pruned by size (LRU,
+  `kObjectCacheBytes` = 2 GiB, `prune_image_caches` at start-up). It is
+  in the cache, not in `revstore`: snapshots of foreign pages are
+  re-creatable cache data, revisions of the user's own documents are not.
+  The URL cache hard-links every body it writes in (`UrlCacheEntry::body`,
+  `urls.sqlite` migration 2), so a picture costs one copy however many
+  snapshots keep it, and a newer answer (a new file, renamed over the old
+  one) leaves the old object alone.
+- **Document codec** (`doc_codec.hpp`): a lossless binary form of the
+  `Document` as the view showed it ("XDOC" v1, varints); every node and
+  span field, so a service page (HN, Reddit, feeds) with no HTML behind it
+  comes back exactly. The decoder rejects anything malformed or truncated.
+- **Snapshots** (`snapshot.hpp`, `cache_dir()/snapshots.sqlite`): document
+  object + raw source object + type, service, title, first / last seen;
+  `snapshot_resources` lists the pictures it showed and the object each
+  one had. Pictures already in the URL cache are taken at once, later
+  ones when they arrive (`snapshot_note_body` from `url_cache_put`, for
+  snapshots seen within a day, so an old snapshot never takes a newer
+  picture).
+- **Immutable address** `snap:<32 hex>/<address>` instead of
+  `address@observation`: the id is content-addressed (sha256 of
+  "xanatoo-snapshot 1", address and document hash, 128 bits), so the same
+  page with the same content is one snapshot, and the original address is
+  inside the ref, so `live_address` always gives the live page back, also
+  when the snapshot was evicted. Pictures of a shown snapshot are
+  `snap:ID/<picture URL>` (`rewrite_snapshot_images`); `snapshot_image_path`
+  reads the kept copy, else the URL cache file, so the original page and
+  its snapshot share one cache. A pruned URL cache file is put back from a
+  snapshot's copy before anything is downloaded (`snapshot_restore_body` in
+  `remote_placeholder`).
+- **Policy:** every page shown in a view (Navigate / Tab / Preview fetches
+  of in-app remote pages that answered 200) is kept; subscriptions and
+  downloads are not. Size-capped by the object store; `snapshot_prune_missing`
+  drops rows whose document object is gone.
+- **Showing one:** `PageObservation::snapshot` (statedb migration: index
+  on it) ties visit → observation → snapshot; a snapshot shown again reuses
+  the observation it was seen as. `NavHistoryEntry::snapshot` (session key
+  `navsnap<view>.<n>`) remembers the snapshot each Back / Forward entry
+  showed; `nav_go` and the History panel's `open_line` hand it to the next
+  fetch through `App::open_snapshot` (taken by `start_fetch`;
+  `find_cached_page` only answers with that snapshot meanwhile). The
+  worker (`fetch_page`) loads the snapshot instead of the network; the view
+  keeps the original address, the status line says "As seen DATE … (Reload
+  shows the page now)", and Reload loads the live page (the entry then
+  remembers the new snapshot). A snapshot no longer kept falls back to the
+  live page with a note. A `snap:` ref typed or opened directly works the
+  same; History → Copy Snapshot Address copies the ref of the page shown.
+- Not done: bookmarks pinning their snapshot against pruning, Wayback
+  fallback for evicted snapshots, compression, stylesheets / fonts /
+  scripts as resources (pages are imported documents, so only pictures
+  matter today).
+
+### Later: full-text search over cache and history
+
+Planned, not built. A snapshot is the unit to index, since it is the text
+the user saw:
+
+- `snapshots.sqlite` gets an FTS5 table `snapshot_text(id UNINDEXED,
+  title, body)` filled in `snapshot_store` from the document's plain text
+  (the same walk `text_hash` uses), only for new ids; deleted along with
+  the snapshot row (`snapshot_prune_missing`). The SQLite build must have
+  FTS5 (check `sqlite3_compileoption_used("ENABLE_FTS5")`; without it the
+  search falls back to `LIKE` on titles).
+- Query page `history:search?q=…`: matches joined to `snapshots` (url,
+  first_seen) and to observations → visits for the trail; each result opens
+  its snapshot (`snap:` ref), with an FTS `snippet()` as the note.
+- History panel filter gains "search page text" next to the address /
+  title filter.
 
 ## F. History graph view
 

@@ -365,6 +365,20 @@ void test_visits() {
   auto back = load_observation(o1);
   EXPECT(back && back->etag == "\"v1\"" && back->text_hash == a);
   EXPECT(!store_observation(PageObservation{}));
+  // A snapshot shown again is the observation it was seen as, even after
+  // the page changed since.
+  PageObservation snap = o;
+  snap.text_hash = a;
+  snap.snapshot = std::string(32, '1');
+  snap.time = 3000;
+  const int64_t o3 = store_observation(snap);
+  EXPECT(o3 > 0 && o3 != o1 && o3 != o2);
+  EXPECT(load_observation(o3)->snapshot == snap.snapshot);
+  EXPECT(load_observation(o1)->snapshot.empty());
+  o.time = 4000;  // the live page again
+  EXPECT(store_observation(o) != o3);
+  snap.time = 5000;
+  EXPECT_EQ(store_observation(snap), o3);
 
   VisitRecord v;
   v.address = "https://a.example/x";

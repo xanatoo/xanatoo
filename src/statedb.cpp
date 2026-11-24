@@ -156,6 +156,10 @@ const sqlite::Migrations kSteps = {
     // folders exist too).
     "ALTER TABLE bookmarks ADD COLUMN folder TEXT NOT NULL DEFAULT '';"
     "CREATE TABLE bookmark_folders (path TEXT PRIMARY KEY);",
+    // Page snapshots (snapshot.hpp, docs/HISTORY.md E): a snapshot shown
+    // again finds the observation it was seen as.
+    "CREATE INDEX observations_snapshot ON observations(snapshot)"
+    "  WHERE snapshot IS NOT NULL;",
 };
 
 bool imported(sqlite3* d, const std::string& what) {

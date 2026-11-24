@@ -19,6 +19,8 @@
 #include <cmath>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/object_store.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/gemini.hpp"
@@ -50,6 +52,8 @@ constexpr int64_t kUrlCacheRowAgeMs = 180ll * 24 * 3600 * 1000;  // ~6 months
 constexpr uint64_t kThumbCacheBytes = 128ull * 1024 * 1024;
 // Web PDFs / DjVu / comics shown as pages (html_page.cpp `PagesCopy`).
 constexpr uint64_t kDocumentCacheBytes = 1024ull * 1024 * 1024;
+// Snapshot documents, raw sources and the pictures they showed (objects/).
+constexpr uint64_t kObjectCacheBytes = 2048ull * 1024 * 1024;
 
 // The bytes of the small-net image `url` (gemini / spartan / gopher / nex),
 // or false with `err` set (empty when the client is not built in).
@@ -111,8 +115,11 @@ bool fetch_smallnet_image(const std::string& url, std::string& body,
 // Download `url` to its cache file and build the inline thumbnail.
 // `page`: the answer was not a picture (an HTML page named like one,
 // "/wiki/File:X.jpg"); the URL cache remembers it either way.
-bool download_image(const std::string& url, bool& page) {
+bool download_image(const std::string& requested, bool& page) {
   page = false;
+  // A snapshot's picture that was not kept: the live one, stored under its
+  // own address (snapshot_image_path falls back to that file).
+  const std::string url = xanatoo::live_address(requested);
   std::string body;
   std::string err;
   if (!xanatoo::starts_with_ci(url, "http://") &&
@@ -174,7 +181,7 @@ bool download_image(const std::string& url, bool& page) {
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
     return true;
 #else
-    return xanatoo::build_thumb_file(xanatoo::remote_image_path(url),
+    return xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
                                      xanatoo::kRemoteThumbEdge);
 #endif
 #else
@@ -185,7 +192,7 @@ bool download_image(const std::string& url, bool& page) {
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   return true;  // thumtoo builds the thumbnail when layout asks for it
 #else
-  return xanatoo::build_thumb_file(xanatoo::remote_image_path(url),
+  return xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
                                    xanatoo::kRemoteThumbEdge);
 #endif
 }
@@ -406,6 +413,10 @@ void prune_image_caches() {
     prune_cache_dir((fs::path(dir) / "images").string(), 0);
     prune_cache_dir((fs::path(dir) / "thumbs").string(), kThumbCacheBytes);
     prune_cache_dir((fs::path(dir) / "documents").string(), kDocumentCacheBytes);
+    // Snapshots (snapshot.hpp): their objects by size, then the rows whose
+    // document went. Cached bodies are hard links in objects/ too.
+    xanatoo::object_prune(kObjectCacheBytes);
+    xanatoo::snapshot_prune_missing();
   }).detach();
 #endif
 }

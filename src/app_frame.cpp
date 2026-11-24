@@ -37,6 +37,7 @@
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/scrollbar_geometry.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/time.hpp"
 #include "xanatoo/util.hpp"
@@ -365,6 +366,12 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
                            ? std::string("untitled")
                            : pane_address(app, focused_pane(app));
   ui_state.can_nav_back = can_nav_step(app, -1);
+  ui_state.snapshot_address.clear();
+  if (const DocBuffer* b = find_buf(app, focused_pane(app).buf);
+      b && !b->placeholder && !b->observed.snapshot.empty())
+    ui_state.snapshot_address = xanatoo::snapshot_ref_string(
+        b->observed.snapshot,
+        xanatoo::parse_locator(pane_address(app, focused_pane(app))).base);
   build_history_menu(app, ui_state);
   {
     const std::string& path = path_of(app, focused_pane(app));

@@ -31,6 +31,9 @@ struct NavHistoryEntry {
   float scroll = 0.f;
   NavLink via;
   int64_t visit = 0;  // its row in the visit log (visits.hpp), 0 = none
+  // The page as it was shown (snapshot.hpp id): Back / Forward show that,
+  // not the page as it is now. '' = none (local file, not kept).
+  std::string snapshot;
 };
 
 struct NavHistory {

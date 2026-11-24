@@ -598,6 +598,8 @@ struct UiState {
   bool in_stretch = false;
   bool can_nav_back = false;
   bool can_nav_forward = false;
+  // snap:ID/URL of the focused page as shown (snapshot.hpp); '' none.
+  std::string snapshot_address;
   std::vector<HistoryMenuItem> back_history;
   std::vector<HistoryMenuItem> forward_history;
   // Address bar suggestions: open tabs, bookmarks, recent visits, newest first.
