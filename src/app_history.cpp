@@ -519,12 +519,13 @@ void history_action(App& app, const std::string& action) {
 bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
   HistoryPanel& h = app.history;
   const int n = static_cast<int>(h.lines.size());
-  auto step_sel = [&](int delta) {
+  // Moves `delta` rows from `from` (-1: from the outside edge).
+  auto step_sel = [&](int delta, int from) {
     if (n == 0) return;
-    int s = h.sel < 0 ? (delta > 0 ? -1 : n) : h.sel;
+    int s = from < 0 ? (delta > 0 ? -1 : n) : from;
     const int dir = delta > 0 ? 1 : -1;
     int moved = 0;
-    int last_ok = h.sel;
+    int last_ok = from;
     while (moved < std::abs(delta)) {
       s += dir;
       if (s < 0 || s >= n) break;
@@ -534,8 +535,12 @@ bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
       }
     }
     if (last_ok >= 0) {
+      const bool changed = last_ok != h.sel;
       h.sel = last_ok;
       scroll_to_line(app, h.sel);
+      // The selection is the shown page, as with a click (Shift: the
+      // other open mode).
+      if (changed) open_line(app, h.sel, shift);
     }
   };
   auto [cx, cy, cw, ch] = float_client_rect(app, app.history_win);
@@ -551,18 +556,14 @@ bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
         app.key_focus = KeyFocus::Document;
       }
       return true;
-    case SDLK_UP: step_sel(-1); return true;
-    case SDLK_DOWN: step_sel(1); return true;
-    case SDLK_PAGEUP: step_sel(-page); return true;
-    case SDLK_PAGEDOWN: step_sel(page); return true;
-    case SDLK_HOME:
-      h.sel = -1;
-      step_sel(1);
-      return true;
+    case SDLK_UP: step_sel(-1, h.sel); return true;
+    case SDLK_DOWN: step_sel(1, h.sel); return true;
+    case SDLK_PAGEUP: step_sel(-page, h.sel); return true;
+    case SDLK_PAGEDOWN: step_sel(page, h.sel); return true;
+    case SDLK_HOME: step_sel(1, -1); return true;
     case SDLK_END:
       while (h.more) load_more(app);
-      h.sel = -1;
-      step_sel(-1);
+      step_sel(-1, -1);
       return true;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
