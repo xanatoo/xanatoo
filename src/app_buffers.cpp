@@ -258,12 +258,27 @@ bool is_foreign_path(std::string_view path) {
   return !cache.empty() && xanatoo::starts_with(path, cache + "/");
 }
 
+namespace {
+bool buffer_read_only(const App& app, const DocBuffer& b) {
+  return is_foreign_path(b.path) || app.invalid_xml_paths.contains(b.path) ||
+         app.binary_paths.contains(b.path);
+}
+bool buffer_locked(const DocBuffer& b) {
+  return b.lock_set && b.lock_path == b.path ? b.lock_choice
+                                             : default_locked(b.path);
+}
+}  // namespace
+
 bool pane_read_only(App& app, const Pane& p) {
   const DocBuffer* b = find_buf(app, p.buf);
   return b && ((p.source_buf == p.buf && p.source_doc.has_value()) ||
-               is_foreign_path(b->path) ||
-               app.invalid_xml_paths.contains(b->path) ||
-               app.binary_paths.contains(b->path));
+               buffer_read_only(app, *b));
+}
+
+bool buffer_takes_edits(App& app, BufferId id) {
+  const DocBuffer* b = find_buf(app, id);
+  return b && !b->placeholder && !buffer_read_only(app, *b) &&
+         !buffer_locked(*b);
 }
 
 bool focused_read_only(App& app) {
@@ -277,9 +292,7 @@ bool default_locked(std::string_view path) {
 
 bool pane_locked(App& app, const Pane& p) {
   const DocBuffer* b = find_buf(app, p.buf);
-  if (!b) return false;
-  return b->lock_set && b->lock_path == b->path ? b->lock_choice
-                                                : default_locked(b->path);
+  return b && buffer_locked(*b);
 }
 
 void set_pane_locked(App& app, const Pane& p, bool locked) {

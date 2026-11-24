@@ -59,6 +59,10 @@ binary files are not (`pane_read_only`).
   (`DocBuffer::lock_set` / `lock_path` / `lock_choice`); following a link
   to another page falls back to the default. Installed data (`data_dir()`:
   welcome, help, examples) starts locked, everything else unlocked.
+- On the tab strip, the tab of a document that takes edits now (editable
+  and unlocked, `buffer_takes_edits`) is green, with a green overline when
+  selected; read-only and locked documents keep the grey tab and yellow
+  overline (`Palette::doc_tab_edit*`, `UiState::tab_editable`).
 - Centre tiles' strips are the `UiPanelLayer::EditBar` layer (under every
   floating window). A document window shows its strip's tools only while it
   is focused (they draw in its `FindBar` layer as `##find_bar/edit_strip`);

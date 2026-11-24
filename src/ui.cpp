@@ -2911,12 +2911,33 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           ImGui::PushStyleColor(ImGuiCol_Text,
                                 ImVec4(ink.r / 255.f, ink.g / 255.f,
                                        ink.b / 255.f, 1.f));
+          int tab_colors = 1;
+          if (i < static_cast<int>(state.tab_editable.size()) &&
+              state.tab_editable[static_cast<size_t>(i)]) {
+            // An editable, unlocked document: a green tab (docs/UI.md).
+            const theme::Palette& pal = theme::palette();
+            auto col = [](theme::Rgb c) {
+              return ImVec4(c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f);
+            };
+            ImGui::PushStyleColor(ImGuiCol_Tab, col(pal.doc_tab_edit));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmed, col(pal.doc_tab_edit));
+            ImGui::PushStyleColor(ImGuiCol_TabHovered, col(pal.doc_tab_edit_hot));
+            ImGui::PushStyleColor(ImGuiCol_TabSelected,
+                                  col(pal.doc_tab_edit_selected));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected,
+                                  col(pal.doc_tab_edit_selected));
+            ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline,
+                                  col(pal.doc_tab_edit_line));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline,
+                                  col(pal.doc_tab_edit_line));
+            tab_colors += 7;
+          }
           if (ImGui::BeginTabItem(id.c_str(), &open, flags)) {
             ImGui::EndTabItem();
           }
           // TabItemEx reports its label before ItemAdd: the hook misses it.
           note_hover_help("tab", nullptr);
-          ImGui::PopStyleColor();
+          ImGui::PopStyleColor(tab_colors);
           if (icon) {
             const ImVec2 min = ImGui::GetItemRectMin();
             const ImVec2 max = ImGui::GetItemRectMax();

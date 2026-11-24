@@ -1711,6 +1711,8 @@ bool pane_read_only(App& app, const Pane& p);
 bool pane_locked(App& app, const Pane& p);
 bool default_locked(std::string_view path);
 void set_pane_locked(App& app, const Pane& p, bool locked);
+// The buffer's document is editable and unlocked (its tab is tinted).
+bool buffer_takes_edits(App& app, BufferId id);
 // Height of the edit strip above an editable view (0 when it has none).
 int edit_bar_h(App& app, const Pane& p);
 inline constexpr const char* kReadOnlyNotice =

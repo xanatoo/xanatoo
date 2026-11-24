@@ -756,6 +756,7 @@ struct UiState {
   std::vector<std::string> tab_labels;
   std::vector<uint32_t> tab_ids;  // buffer id of each tab (stable ImGui ids)
   std::vector<SDL_Texture*> tab_icons;
+  std::vector<uint8_t> tab_editable;  // 1: editable, unlocked (green tab)
   int active_tab = 0;
   bool has_floating = false;
   std::string status_left;

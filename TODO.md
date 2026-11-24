@@ -19,6 +19,9 @@
   replaces the page in view. New/Open left the editing toolbar.
 - Layers: centre strips are `UiPanelLayer::EditBar`; a focused document
   window's strip draws in its FindBar layer, unfocused ones paint a band.
+- Tab strip: a document that takes edits (editable, unlocked;
+  `buffer_takes_edits`) has a green tab and green overline
+  (`Palette::doc_tab_edit*`, `UiState::tab_editable`).
 - Tests: `tests/edit_bar_tests.cpp` (row wrapping / height),
   ui_panel_layers_tests (strip window names). Checked under Xvfb: lock,
   new document, split with wrapped strips, "+" menu.

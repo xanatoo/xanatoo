@@ -55,6 +55,11 @@ struct Palette {
   Rgb tab_idle_top = rgb(0xEE, 0xF0, 0xEF);
   Rgb tab_idle_bottom = rgb(0xC9, 0xCD, 0xCC);
   Rgb tab_text = rgb(0x2A, 0x24, 0x08);
+  // Document tab strip: a tab whose document takes edits is green.
+  Rgb doc_tab_edit = rgb(0xCF, 0xE6, 0xC4);
+  Rgb doc_tab_edit_hot = rgb(0xEA, 0xF7, 0xE2);
+  Rgb doc_tab_edit_selected = rgb(0xE4, 0xF5, 0xDA);
+  Rgb doc_tab_edit_line = rgb(0x5A, 0xB0, 0x3C);
   // Selection / accent (GNOME 2 blue)
   Rgb accent = rgb(0x4E, 0x88, 0xB8);
   Rgb accent_dark = rgb(0x34, 0x65, 0xA4);
