@@ -5,6 +5,7 @@
 // mapped into Thread / Message document nodes.
 
 #include "xanatoo/nostr.hpp"
+#include "xanatoo/bech32.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/nostr_relays.hpp"
 #include "xanatoo/nostr_nip11.hpp"
@@ -27,6 +28,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #if defined(XANATOO_NOSTR) && XANATOO_NOSTR
@@ -64,96 +66,6 @@ std::string strip_nostr_prefix(std::string_view s) {
   return std::string(s);
 }
 
-// ---- Bech32 (BIP-0173) ----------------------------------------------------
-
-constexpr char kBech32Charset[] = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-
-int bech32_charset_rev(char c) {
-  if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-  const char* p = std::strchr(kBech32Charset, c);
-  return p ? static_cast<int>(p - kBech32Charset) : -1;
-}
-
-uint32_t bech32_polymod(const std::vector<uint8_t>& values) {
-  static const uint32_t GEN[] = {0x3b6a57b2, 0x26508e6d, 0x1ea119fa,
-                                 0x3d4233dd, 0x2a1462b3};
-  uint32_t chk = 1;
-  for (uint8_t v : values) {
-    uint8_t b = static_cast<uint8_t>(chk >> 25);
-    chk = ((chk & 0x1ffffff) << 5) ^ v;
-    for (int i = 0; i < 5; ++i)
-      if ((b >> i) & 1) chk ^= GEN[i];
-  }
-  return chk;
-}
-
-std::vector<uint8_t> bech32_hrp_expand(std::string_view hrp) {
-  std::vector<uint8_t> out;
-  out.reserve(hrp.size() * 2 + 1);
-  for (char c : hrp) out.push_back(static_cast<uint8_t>(c >> 5));
-  out.push_back(0);
-  for (char c : hrp) out.push_back(static_cast<uint8_t>(c & 31));
-  return out;
-}
-
-bool bech32_verify(std::string_view hrp, const std::vector<uint8_t>& data) {
-  auto values = bech32_hrp_expand(hrp);
-  values.insert(values.end(), data.begin(), data.end());
-  // NIP-19 uses bech32 (not bech32m): polymod == 1
-  return bech32_polymod(values) == 1;
-}
-
-bool bech32_decode(std::string_view str, std::string& hrp,
-                   std::vector<uint8_t>& data5) {
-  if (str.size() < 8 || str.size() > 200) return false;
-  for (char c : str)
-    if (c < 33 || c > 126) return false;
-  bool lower = false, upper = false;
-  for (char c : str) {
-    if (c >= 'a' && c <= 'z') lower = true;
-    if (c >= 'A' && c <= 'Z') upper = true;
-  }
-  if (lower && upper) return false;
-
-  std::string s = ascii_lower(str);
-  auto pos = s.rfind('1');
-  if (pos == std::string::npos || pos < 1 || pos + 7 > s.size()) return false;
-  hrp = s.substr(0, pos);
-  data5.clear();
-  for (size_t i = pos + 1; i < s.size(); ++i) {
-    int v = bech32_charset_rev(s[i]);
-    if (v < 0) return false;
-    data5.push_back(static_cast<uint8_t>(v));
-  }
-  if (data5.size() < 6) return false;
-  if (!bech32_verify(hrp, data5)) return false;
-  data5.resize(data5.size() - 6);  // drop checksum
-  return true;
-}
-
-bool convert_bits(const std::vector<uint8_t>& in, int frombits, int tobits,
-                  bool pad, std::vector<uint8_t>& out) {
-  int acc = 0;
-  int bits = 0;
-  const int maxv = (1 << tobits) - 1;
-  out.clear();
-  for (uint8_t value : in) {
-    if (value >> frombits) return false;
-    acc = (acc << frombits) | value;
-    bits += frombits;
-    while (bits >= tobits) {
-      bits -= tobits;
-      out.push_back(static_cast<uint8_t>((acc >> bits) & maxv));
-    }
-  }
-  if (pad) {
-    if (bits) out.push_back(static_cast<uint8_t>((acc << (tobits - bits)) & maxv));
-  } else if (bits >= frombits || ((acc << (tobits - bits)) & maxv)) {
-    return false;
-  }
-  return true;
-}
-
 std::string bytes_to_hex(const uint8_t* p, size_t n) {
   static const char* hexd = "0123456789abcdef";
   std::string o;
@@ -183,19 +95,6 @@ bool parse_nip19_tlvs(const std::vector<uint8_t>& bytes, std::string& event_hex,
     i += len;
   }
   return !event_hex.empty();
-}
-
-std::string bech32_encode(std::string_view hrp, const std::vector<uint8_t>& data5) {
-  auto values = bech32_hrp_expand(hrp);
-  values.insert(values.end(), data5.begin(), data5.end());
-  for (int i = 0; i < 6; ++i) values.push_back(0);
-  uint32_t mod = bech32_polymod(values) ^ 1;
-  std::string out(hrp);
-  out.push_back('1');
-  for (uint8_t d : data5) out.push_back(kBech32Charset[d]);
-  for (int i = 0; i < 6; ++i)
-    out.push_back(kBech32Charset[(mod >> (5 * (5 - i))) & 31]);
-  return out;
 }
 
 }  // namespace
@@ -238,10 +137,8 @@ std::optional<std::string> nostr_decode_event_id(
   if (is_hex64(t)) return ascii_lower(t);
 
   std::string hrp;
-  std::vector<uint8_t> data5;
-  if (!bech32_decode(t, hrp, data5)) return std::nullopt;
   std::vector<uint8_t> data8;
-  if (!convert_bits(data5, 5, 8, false, data8)) return std::nullopt;
+  if (!bech32_decode_bytes(t, hrp, data8)) return std::nullopt;
 
   if (hrp == "note") {
     if (data8.size() != 32) return std::nullopt;
@@ -259,10 +156,8 @@ std::optional<std::string> nostr_decode_pubkey(
     std::string_view ref, std::vector<std::string>* relays) {
   std::string t = strip_nostr_prefix(ref);
   std::string hrp;
-  std::vector<uint8_t> data5;
-  if (!bech32_decode(t, hrp, data5)) return std::nullopt;
   std::vector<uint8_t> data8;
-  if (!convert_bits(data5, 5, 8, false, data8)) return std::nullopt;
+  if (!bech32_decode_bytes(t, hrp, data8)) return std::nullopt;
 
   if (hrp == "npub") {
     if (data8.size() != 32) return std::nullopt;
@@ -283,9 +178,7 @@ std::string nostr_bech32(std::string_view hrp, std::string_view hex) {
     char pair[3] = {hex[i * 2], hex[i * 2 + 1], 0};
     raw[i] = static_cast<uint8_t>(std::strtoul(pair, nullptr, 16));
   }
-  std::vector<uint8_t> data5;
-  if (!convert_bits(raw, 8, 5, true, data5)) return {};
-  return bech32_encode(hrp, data5);
+  return bech32_encode_bytes(hrp, raw);
 }
 
 
@@ -1676,6 +1569,93 @@ std::optional<Document> nostr_fetch_thread(std::string_view ref,
     }
   }
   return doc;
+}
+
+
+std::vector<std::string> nostr_publish_relays() {
+  // The steadier general relays; each keeps its own copy.
+  auto all = default_relays();
+  all.resize(std::min<size_t>(all.size(), 5));
+  return all;
+}
+
+namespace {
+
+// ["OK","<id>",true|false,"<message>"] for `id`: true when it is one.
+bool parse_ok(std::string_view msg, std::string_view id,
+              NostrPublishResult& out) {
+  size_t p = msg.find("\"OK\"");
+  if (p == std::string_view::npos) return false;
+  p = msg.find(id, p);
+  if (p == std::string_view::npos) return false;
+  p += id.size() + 1;  // closing quote
+  while (p < msg.size() && (msg[p] == ',' || msg[p] == ' ')) ++p;
+  out.accepted = msg.compare(p, 4, "true") == 0;
+  const size_t q = msg.find('"', p);
+  if (q != std::string_view::npos) {
+    const size_t end = msg.rfind('"');
+    if (end > q) out.message = json_unescape(msg.substr(q + 1, end - q - 1));
+  }
+  return true;
+}
+
+NostrPublishResult publish_to(const std::string& relay,
+                              const std::string& event_json,
+                              const std::string& id) {
+  NostrPublishResult r;
+  r.relay = relay;
+  WsConn c;
+  std::string err;
+  if (!ws_connect(c, relay, &err)) {
+    r.message = err.empty() ? "cannot connect" : err;
+    return r;
+  }
+  if (!ws_send_text(c, "[\"EVENT\"," + event_json + "]")) {
+    r.message = "send failed";
+    c.close();
+    return r;
+  }
+  std::string carry = std::move(c.carry);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  bool answered = false;
+  while (!answered && std::chrono::steady_clock::now() < deadline) {
+    std::string msg;
+    if (!ws_read_text(c, msg, carry)) break;
+    if (parse_ok(msg, id, r)) answered = true;
+    else if (msg.find("\"NOTICE\"") != std::string::npos && r.message.empty())
+      r.message = msg;
+  }
+  if (!answered && r.message.empty()) r.message = "no answer";
+  c.close();
+  return r;
+}
+
+}  // namespace
+
+std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
+                                              std::vector<std::string> relays) {
+  if (relays.empty()) relays = nostr_publish_relays();
+  const std::string ev(event_json);
+  const std::string id = ascii_lower(json_str_field(json_top_level(ev), "id"));
+  std::vector<NostrPublishResult> out(relays.size());
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < relays.size(); ++i)
+    workers.emplace_back([&, i] {
+      try {
+        out[i] = publish_to(relays[i], ev, id);
+      } catch (...) {
+        out[i].relay = relays[i];
+        out[i].message = "failed";
+      }
+    });
+  for (auto& w : workers) w.join();
+  // Our own note belongs in the local catalogue like any fetched one.
+  for (const auto& r : out)
+    if (r.accepted) {
+      nostr_cache_events({ev}, r.relay);
+      break;
+    }
+  return out;
 }
 
 #endif  // XANATOO_NOSTR

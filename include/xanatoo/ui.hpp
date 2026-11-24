@@ -7,6 +7,7 @@
 #include "xanatoo/sdl.hpp"
 #include "xanatoo/history_menu.hpp"
 #include "xanatoo/urlbar_suggestions.hpp"
+#include "xanatoo/nostr.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/lemmy_directory.hpp"
 #include "xanatoo/matrix.hpp"
@@ -108,6 +109,13 @@ enum class UiCommand {
   NostrSelectIdentity, // arg = saved public key: make it the active account
   NostrIdentityShow,   // arg = saved public key shown in detail (empty: none)
   NostrIdentityRemove, // arg = saved public key
+  NostrCreateKey,      // arg = label + newline + password: new signing account
+  NostrImportKey,      // arg = label + newline + nsec/ncryptsec + newline + password
+  NostrUnlockKey,      // arg = public key + newline + password
+  NostrLockKey,        // arg = public key: forget the unlocked secret
+  NostrDeleteKey,      // arg = public key: delete the signing key for good
+  NostrCopyNsec,       // arg = public key (unlocked): plain nsec to the clipboard
+  NostrPublishNote,    // arg = note text, signed by the active account
   NewAnnotationLayer,     // new local, independently versioned layer
   SelectAnnotationLayer,  // arg = layer id (local owner only)
   ToggleAnnotationLayer,  // arg = layer id; view-only visibility
@@ -514,6 +522,15 @@ struct UiState {
   std::string nostr_selected_identity;  // the active account
   std::string nostr_shown_identity;     // the row shown in detail
   std::string nostr_page_pubkey;  // author of the focused nostr: profile page
+  bool nostr_can_sign = false;    // this build signs (OpenSSL)
+  std::vector<std::string> nostr_key_pubkeys;       // accounts with a key
+  std::vector<std::string> nostr_unlocked_pubkeys;  // … unlocked this session
+  std::string nostr_shown_ncryptsec;  // backup of the shown account's key
+  bool nostr_posting = false;         // a note is on its way to relays
+  std::string nostr_post_status;
+  std::string nostr_post_note;        // nostr:note1… of the last note
+  std::vector<NostrPublishResult> nostr_post_results;
+  uint64_t nostr_post_sent = 0;       // bumped per posted note
   struct AnnotationLayerItem {
     std::string id, name, owner;
     bool visible = true;
@@ -1024,6 +1041,17 @@ private:
   char nostr_identity_pubkey_[256] = {};
   char nostr_identity_rename_[160] = {};
   std::string nostr_identity_rename_for_;  // pubkey the rename field holds
+  // Signing keys: password / import fields (wiped after use), the armed
+  // reveal and delete buttons, the note being written.
+  char nostr_key_password_[256] = {};
+  char nostr_key_password2_[256] = {};
+  char nostr_key_import_[512] = {};
+  char nostr_unlock_password_[256] = {};
+  int nostr_new_mode_ = 0;  // 0 create, 1 import, 2 watch-only
+  std::string nostr_delete_key_armed_;
+  std::string nostr_reveal_armed_;
+  char nostr_note_[4096] = {};
+  uint64_t nostr_note_sent_seen_ = 0;
   // Tab the panel was last told to show (SetSelected once per change).
   IdentitySection identity_section_shown_ = IdentitySection::Gemini;
   bool identity_section_init_ = false;

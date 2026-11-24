@@ -249,6 +249,9 @@ add_executable(xanatoo
   src/gemini_identity.cpp
   src/nostr.cpp
   src/nostr_verify.cpp
+  src/nostr_sign.cpp
+  src/nostr_keys.cpp
+  src/bech32.cpp
   src/nostr_store.cpp
   src/reddit.cpp
   src/reddit_credentials.cpp
@@ -833,6 +836,9 @@ add_executable(xanatoo_tests
   src/native.cpp
   src/nostr.cpp
   src/nostr_verify.cpp
+  src/nostr_sign.cpp
+  src/nostr_keys.cpp
+  src/bech32.cpp
   src/nostr_store.cpp
   src/gemini.cpp
   src/gemini_tofu.cpp
@@ -914,7 +920,8 @@ add_test(NAME nostr_relay_tests COMMAND xanatoo_nostr_relay_tests)
 # Parser/integrity tests run independently of SDL. OpenSSL builds additionally
 # exercise the BIP-340 secp256k1 verifier with upstream positive/negative vectors.
 add_executable(xanatoo_nostr_verify_tests
-  tests/nostr_verify_tests.cpp src/nostr_verify.cpp src/util.cpp)
+  tests/nostr_verify_tests.cpp src/nostr_verify.cpp src/nostr_sign.cpp
+  src/bech32.cpp src/util.cpp)
 target_include_directories(xanatoo_nostr_verify_tests PRIVATE include)
 # Keep this cryptography regression independent of the full SDL document app;
 # util.cpp also contains unrelated document helpers that this target never uses.
@@ -954,7 +961,7 @@ endif()
 if(XANATOO_SQLITE AND XANATOO_NEED_OPENSSL AND XANATOO_TLS STREQUAL "openssl")
   add_executable(xanatoo_nostr_group_store_tests
     tests/nostr_group_store_tests.cpp
-    src/nostr_store.cpp src/nostr_verify.cpp src/nostr.cpp src/sqlite_db.cpp
+    src/nostr_store.cpp src/nostr_verify.cpp src/nostr.cpp src/bech32.cpp src/sqlite_db.cpp
     src/util.cpp src/paths.cpp)
   target_include_directories(xanatoo_nostr_group_store_tests PRIVATE
     include ${SDL2_INCLUDE_DIRS})
@@ -1009,6 +1016,11 @@ add_executable(xanatoo_gemini_tofu_tests
   tests/gemini_tofu_tests.cpp src/gemini_tofu.cpp)
 target_include_directories(xanatoo_gemini_tofu_tests PRIVATE include)
 add_test(NAME gemini_tofu_tests COMMAND xanatoo_gemini_tofu_tests)
+add_executable(xanatoo_nostr_keys_tests
+  tests/nostr_keys_tests.cpp src/nostr_keys.cpp)
+target_include_directories(xanatoo_nostr_keys_tests PRIVATE include)
+add_test(NAME nostr_keys_tests COMMAND xanatoo_nostr_keys_tests)
+
 add_executable(xanatoo_gemini_identity_tests
   tests/gemini_identity_tests.cpp src/gemini_identity.cpp src/gemini.cpp)
 target_include_directories(xanatoo_gemini_identity_tests PRIVATE include)

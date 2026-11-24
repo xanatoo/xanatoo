@@ -6,7 +6,10 @@
 #include <algorithm>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/nostr.hpp"
+#include "xanatoo/nostr_keys.hpp"
 #include "xanatoo/nostr_store.hpp"
+#include "xanatoo/paths.hpp"
 
 namespace xanatoo::app {
 
@@ -29,7 +32,16 @@ void refresh_nostr_catalogue(App& app) {
 }
 
 void refresh_nostr_identities(App& app) {
+  app.nostr_keys = nostr_keys_list(state_dir());
   app.nostr_identities = nostr_local_identities();
+  // A key whose label went missing (cleared cache) gets one back.
+  bool relabelled = false;
+  for (const auto& k : app.nostr_keys)
+    if (std::none_of(app.nostr_identities.begin(), app.nostr_identities.end(),
+                     [&](const auto& i) { return i.pubkey == k.pubkey; }))
+      relabelled |= nostr_add_watch_identity(
+          nostr_bech32("npub", k.pubkey).substr(0, 16) + "…", k.pubkey);
+  if (relabelled) app.nostr_identities = nostr_local_identities();
   if (!app.nostr_active_identity.empty() &&
       std::none_of(app.nostr_identities.begin(), app.nostr_identities.end(),
                    [&](const auto& i) { return i.pubkey == app.nostr_active_identity; }))

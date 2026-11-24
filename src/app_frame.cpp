@@ -1630,6 +1630,13 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::NostrSelectIdentity:
     case C::NostrIdentityShow:
     case C::NostrIdentityRemove:
+    case C::NostrCreateKey:
+    case C::NostrImportKey:
+    case C::NostrUnlockKey:
+    case C::NostrLockKey:
+    case C::NostrDeleteKey:
+    case C::NostrCopyNsec:
+    case C::NostrPublishNote:
     case C::IdentitySelect:
     case C::IdentityCreate:
     case C::IdentityCreateHere:
@@ -5717,6 +5724,7 @@ void run_frame(App& app) {
   update_sitemap(app);
   poll_search_engine_adds(app);
   update_related_sites(app);
+  update_nostr_post(app);
   update_page_panel(app);
   sync_window_size(app);
   relayout_if_needed(app);

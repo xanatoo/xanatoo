@@ -7,16 +7,23 @@
 // A page that asks for a certificate (status 60/61/62) opens the panel on
 // itself. The store and scope matching live in gemini_identity.cpp;
 // certificates are made in the TLS backend (tls_make_client_identity).
-// Nostr: watch-only accounts (public keys, no signing) in nostr_store; one is
-// the active account. The tab follows the focused page's protocol.
+// Nostr: accounts are labels in nostr_store (one is the active account);
+// some also have a signing key (nostr_keys, NIP-49 encrypted), unlocked with
+// its password for the session. An unlocked active account posts kind-1
+// notes (nostr_sign + nostr_publish on a worker). The tab follows the
+// focused page's protocol.
 
 #include <ctime>
 #include <iostream>
+#include <thread>
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/gemini_identity.hpp"
+#include "xanatoo/json_min.hpp"
 #include "xanatoo/nostr.hpp"
+#include "xanatoo/nostr_keys.hpp"
+#include "xanatoo/nostr_sign.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/paths.hpp"
 #include "xanatoo/tls.hpp"
@@ -72,6 +79,100 @@ const NostrLocalIdentity* nostr_account(const App& app, const std::string& pk) {
   return nullptr;
 }
 
+const xanatoo::NostrKey* nostr_key(const App& app, const std::string& pk) {
+  for (const auto& k : app.nostr_keys)
+    if (k.pubkey == pk) return &k;
+  return nullptr;
+}
+
+std::string today();
+
+// Refused when signing accounts cannot be made or kept: why, else empty.
+std::string nostr_key_blocker() {
+  if (!xanatoo::nostr_signing_available())
+    return "This build cannot sign Nostr events (it needs OpenSSL)";
+  if (xanatoo::no_save()) return "--no-save: a signing key could not be kept";
+  if (xanatoo::state_dir().empty()) return "No state directory to keep the key in";
+  return {};
+}
+
+// Keeps `secret` as account `label`: encrypted key in the key store (the
+// ncryptsec given, or one made with `password`), a label, active, unlocked.
+bool nostr_keep_key(App& app, std::string label, std::string secret,
+                    const std::string& password, std::string ncryptsec) {
+  const std::string pk = xanatoo::nostr_pubkey_of(secret);
+  if (pk.empty()) {
+    app.identities.error = "Not a valid secret key";
+    return false;
+  }
+  if (nostr_key(app, pk)) {
+    app.identities.error = "This account has its key here already";
+    return false;
+  }
+  if (ncryptsec.empty())
+    ncryptsec = xanatoo::nostr_ncryptsec_encrypt(secret, password);
+  std::string err;
+  if (ncryptsec.empty() ||
+      !xanatoo::nostr_keys_put(xanatoo::state_dir(), {pk, ncryptsec, today()},
+                               &err)) {
+    app.identities.error = err.empty() ? "The key could not be encrypted" : err;
+    return false;
+  }
+  if (label.empty()) {
+    const NostrLocalIdentity* known = nostr_account(app, pk);
+    label = known ? known->label :
+        xanatoo::nostr_bech32("npub", pk).substr(0, 16) + "…";
+  }
+  nostr_add_watch_identity(label, pk);
+  nostr_set_active_local_identity(pk);
+  app.nostr_active_identity = pk;
+  app.nostr_unlocked[pk] = std::move(secret);
+  app.identities.nostr_shown = pk;
+  refresh_nostr_identities(app);
+  return true;
+}
+
+void nostr_lock(App& app, const std::string& pk) {
+  auto it = app.nostr_unlocked.find(pk);
+  if (it == app.nostr_unlocked.end()) return;
+  xanatoo::nostr_wipe(it->second);
+  app.nostr_unlocked.erase(it);
+}
+
+void nostr_post_note(App& app, const std::string& text) {
+  NostrPost& post = app.nostr_post;
+  if (post.pending) return;
+  const std::string pk = app.nostr_active_identity;
+  auto it = app.nostr_unlocked.find(pk);
+  if (it == app.nostr_unlocked.end()) {
+    app.identities.error = "Unlock the active account to post";
+    return;
+  }
+  if (text.find_first_not_of(" \t\r\n") == std::string::npos) return;
+#if defined(XANATOO_NOSTR) && XANATOO_NOSTR
+  std::vector<std::vector<std::string>> tags;
+  for (const auto& p : xanatoo::nostr_mentioned_pubkeys(text))
+    tags.push_back({"p", p});
+  const std::string ev = xanatoo::nostr_sign_event(
+      it->second, 1, text, tags, static_cast<int64_t>(std::time(nullptr)));
+  if (ev.empty()) {
+    app.identities.error = "The note could not be signed";
+    return;
+  }
+  post.event_id = xanatoo::json_str_field(xanatoo::json_top_level(ev), "id");
+  post.results.clear();
+  post.status = "Sending to relays…";
+  auto job = std::make_shared<NostrPostJob>();
+  post.pending = job;
+  std::thread([job, ev] {
+    job->results = xanatoo::nostr_publish(ev);
+    job->done.store(true, std::memory_order_release);
+  }).detach();
+#else
+  app.identities.error = "Nostr needs a build with -DXANATOO_NOSTR=ON";
+#endif
+}
+
 void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   using C = xanatoo::UiCommand;
   app.identities.error.clear();
@@ -110,6 +211,10 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.identities.nostr_shown = arg;
       break;
     case C::NostrIdentityRemove:
+      if (nostr_key(app, arg)) {
+        app.identities.error = "Delete its signing key first";
+        break;
+      }
       if (!nostr_remove_local_identity(arg)) {
         app.identities.error = "Nostr account not removed";
         flash_status(app, app.identities.error);
@@ -119,6 +224,108 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       if (app.identities.nostr_shown == arg) app.identities.nostr_shown.clear();
       refresh_nostr_identities(app);
       flash_status(app, "Removed the Nostr account (only its local label)");
+      break;
+    case C::NostrCreateKey: {
+      auto [label, password] = split_arg(arg);
+      app.identities.error = nostr_key_blocker();
+      if (app.identities.error.empty() && password.empty())
+        app.identities.error = "Choose a password for the key";
+      std::string secret;
+      if (app.identities.error.empty()) {
+        secret = xanatoo::nostr_generate_secret();
+        if (secret.empty()) app.identities.error = "No random key available";
+      }
+      const bool ok = app.identities.error.empty() &&
+          nostr_keep_key(app, label, secret, password, {});
+      xanatoo::nostr_wipe(secret);
+      xanatoo::nostr_wipe(password);
+      if (ok)
+        flash_status(app, "Created a Nostr account; copy its backup key now");
+      else
+        flash_status(app, "No account created: " + app.identities.error);
+      break;
+    }
+    case C::NostrImportKey: {
+      auto [label, rest] = split_arg(arg);
+      auto [key, password] = split_arg(rest);
+      xanatoo::nostr_wipe(rest);
+      while (!key.empty() && (key.back() == ' ' || key.back() == '\t'))
+        key.pop_back();
+      while (!key.empty() && (key.front() == ' ' || key.front() == '\t'))
+        key.erase(key.begin());
+      app.identities.error = nostr_key_blocker();
+      std::string secret, ncryptsec;
+      if (!app.identities.error.empty()) {
+      } else if (password.empty()) {
+        app.identities.error = "Enter the key's password (or choose one)";
+      } else if (xanatoo::is_ncryptsec(key)) {
+        std::string err;
+        if (auto sk = xanatoo::nostr_ncryptsec_decrypt(key, password, &err)) {
+          secret = std::move(*sk);
+          ncryptsec = key;  // kept as given
+        } else {
+          app.identities.error = "Cannot open the key: " + err;
+        }
+      } else if (auto sk = xanatoo::nostr_decode_nsec(key)) {
+        secret = std::move(*sk);
+      } else {
+        app.identities.error = "Not a secret key (nsec1… or ncryptsec1…)";
+      }
+      const bool ok = app.identities.error.empty() &&
+          nostr_keep_key(app, label, secret, password, ncryptsec);
+      xanatoo::nostr_wipe(secret);
+      xanatoo::nostr_wipe(key);
+      xanatoo::nostr_wipe(password);
+      flash_status(app, ok ? std::string("Imported the Nostr key") :
+                             "No key imported: " + app.identities.error);
+      break;
+    }
+    case C::NostrUnlockKey: {
+      auto [pk, password] = split_arg(arg);
+      const xanatoo::NostrKey* k = nostr_key(app, pk);
+      std::string err;
+      auto sk = k ? xanatoo::nostr_ncryptsec_decrypt(k->ncryptsec, password, &err)
+                  : std::nullopt;
+      xanatoo::nostr_wipe(password);
+      if (!k) {
+        app.identities.error = "No signing key for this account";
+      } else if (!sk) {
+        app.identities.error = "Not unlocked: " + err;
+      } else if (xanatoo::nostr_pubkey_of(*sk) != pk) {
+        app.identities.error = "The stored key belongs to another account";
+        xanatoo::nostr_wipe(*sk);
+      } else {
+        nostr_lock(app, pk);
+        app.nostr_unlocked[pk] = std::move(*sk);
+        flash_status(app, "Unlocked the Nostr account for this session");
+      }
+      break;
+    }
+    case C::NostrLockKey:
+      nostr_lock(app, arg);
+      break;
+    case C::NostrDeleteKey: {
+      std::string err;
+      if (!xanatoo::nostr_keys_remove(xanatoo::state_dir(), arg, &err)) {
+        app.identities.error = "Key not deleted: " + err;
+        break;
+      }
+      nostr_lock(app, arg);
+      refresh_nostr_identities(app);
+      flash_status(app, "Deleted the signing key; the account is watch-only now");
+      break;
+    }
+    case C::NostrCopyNsec: {
+      auto it = app.nostr_unlocked.find(arg);
+      if (it == app.nostr_unlocked.end()) break;
+      std::string nsec = xanatoo::nostr_nsec(it->second);
+      SDL_SetClipboardText(nsec.c_str());
+      xanatoo::nostr_wipe(nsec);
+      flash_status(app, "Copied the secret key (nsec); anyone with it can post as you");
+      break;
+    }
+    case C::NostrPublishNote:
+      nostr_post_note(app, arg);
       break;
     default:
       break;
@@ -210,6 +417,24 @@ void use_identity(App& app, const std::string& sha, const std::string& scope) {
 
 }  // namespace
 
+void update_nostr_post(App& app) {
+  NostrPost& post = app.nostr_post;
+  if (!post.pending || !post.pending->done.load(std::memory_order_acquire))
+    return;
+  post.results = std::move(post.pending->results);
+  post.pending.reset();
+  size_t ok = 0;
+  for (const auto& r : post.results) ok += r.accepted;
+  if (ok) {
+    post.status = "Posted to " + std::to_string(ok) + " of " +
+                  std::to_string(post.results.size()) + " relays";
+    ++post.sent;
+  } else {
+    post.status = "Not posted: no relay took the note";
+  }
+  flash_status(app, post.status);
+}
+
 void refresh_identities(App& app) {
   app.identities.error.clear();
   app.identities.ids = xanatoo::gemini_identities_list(xanatoo::state_dir(),
@@ -276,6 +501,13 @@ void identity_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) 
     case C::NostrSelectIdentity:
     case C::NostrIdentityShow:
     case C::NostrIdentityRemove:
+    case C::NostrCreateKey:
+    case C::NostrImportKey:
+    case C::NostrUnlockKey:
+    case C::NostrLockKey:
+    case C::NostrDeleteKey:
+    case C::NostrCopyNsec:
+    case C::NostrPublishNote:
       nostr_command(app, cmd, arg);
       break;
     case C::IdentitySelect:
@@ -362,6 +594,22 @@ void identity_ui_state(App& app, xanatoo::UiState& st) {
   st.identity_section = app.identities.section;
   if (!app.identities.open) return;
   st.nostr_shown_identity = app.identities.nostr_shown;
+  st.nostr_can_sign = xanatoo::nostr_signing_available();
+  st.nostr_key_pubkeys.clear();
+  st.nostr_shown_ncryptsec.clear();
+  for (const auto& k : app.nostr_keys) {
+    st.nostr_key_pubkeys.push_back(k.pubkey);
+    if (k.pubkey == app.identities.nostr_shown) st.nostr_shown_ncryptsec = k.ncryptsec;
+  }
+  st.nostr_unlocked_pubkeys.clear();
+  for (const auto& [pk, sk] : app.nostr_unlocked)
+    st.nostr_unlocked_pubkeys.push_back(pk);
+  st.nostr_posting = app.nostr_post.pending != nullptr;
+  st.nostr_post_status = app.nostr_post.status;
+  st.nostr_post_note = app.nostr_post.event_id.empty() ? std::string{} :
+      "nostr:" + xanatoo::nostr_bech32("note", app.nostr_post.event_id);
+  st.nostr_post_results = app.nostr_post.results;
+  st.nostr_post_sent = app.nostr_post.sent;
   st.nostr_page_pubkey.clear();
   if (kind == 2)
     if (auto pk = xanatoo::nostr_decode_pubkey(path_of(app, app.panes[app.focus])))

@@ -188,6 +188,12 @@ void append_json_string(std::string& out, std::string_view value) {
 
 }  // namespace
 
+std::string nostr_json_string(std::string_view value) {
+  std::string out;
+  append_json_string(out, value);
+  return out;
+}
+
 std::optional<std::string> nostr_event_id(std::string_view event_json) {
   const std::string top = json_top_level(event_json);
   const std::string pubkey = json_str_field(top, "pubkey");

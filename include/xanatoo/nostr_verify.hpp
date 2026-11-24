@@ -17,6 +17,10 @@ enum class NostrVerification { Invalid, HashOnly, SignatureValid };
 std::optional<std::string> nostr_event_id(std::string_view event_json);
 NostrVerification nostr_verify_event(std::string_view event_json);
 
+// `value` as a quoted JSON string with NIP-01's escapes (the canonical form
+// event ids are hashed over).
+std::string nostr_json_string(std::string_view value);
+
 // BIP-340 testable separately against the upstream official vectors.
 // Returns false on builds without an approved secp256k1 crypto backend.
 bool nostr_verify_bip340(std::string_view pubkey_hex,

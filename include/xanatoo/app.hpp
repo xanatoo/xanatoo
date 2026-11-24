@@ -35,6 +35,8 @@
 #include "xanatoo/locator.hpp"
 #include "xanatoo/minibuffer.hpp"
 #include "xanatoo/nav_history.hpp"
+#include "xanatoo/nostr.hpp"
+#include "xanatoo/nostr_keys.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/paginate.hpp"
 #include "xanatoo/quote_links.hpp"
@@ -1163,6 +1165,21 @@ struct IdentityPanel {
 
 // Related Sites panel (app_related.cpp): similar websites of the
 // focused page's site, asked once per domain on a worker thread.
+// A note being sent to relays by a worker (app_identity.cpp).
+struct NostrPostJob {
+  std::atomic<bool> done{false};
+  std::vector<xanatoo::NostrPublishResult> results;
+};
+
+// The last note posted from the Nostr tab and what the relays said.
+struct NostrPost {
+  std::shared_ptr<NostrPostJob> pending;  // set while it is being sent
+  std::string event_id;                   // hex id of the last note
+  std::string status;                     // summary line
+  std::vector<xanatoo::NostrPublishResult> results;
+  uint64_t sent = 0;  // bumped when a note went out (the UI clears its draft)
+};
+
 struct RelatedLoad {
   std::atomic<bool> done{false};
   xanatoo::RelatedResult result;
@@ -1376,6 +1393,12 @@ struct App {
   std::vector<NostrCachedGroup> nostr_groups;
   std::vector<NostrLocalIdentity> nostr_identities;
   std::string nostr_active_identity;
+  // Signing keys (nostr_keys.hpp, encrypted) and, per public key, the
+  // secret unlocked with its password for this session only (wiped on
+  // lock). Never written anywhere in plain form.
+  std::vector<xanatoo::NostrKey> nostr_keys;
+  std::unordered_map<std::string, std::string> nostr_unlocked;
+  NostrPost nostr_post;
   std::string revision_document_key;
   std::string revision_working, revision_published, revision_selected;
   std::vector<xanatoo::ObjectRevision> revision_history;
@@ -1643,6 +1666,8 @@ struct App {
 void refresh_nostr_catalogue(App& app);
 // Just the saved accounts and the active one (Identities panel).
 void refresh_nostr_identities(App& app);
+// Collect relay answers to a note being posted (each frame).
+void update_nostr_post(App& app);
 
 // Write state_dir()/session.conf (at shutdown); restore it at startup when
 // no document was named on the command line; put the saved scroll back once

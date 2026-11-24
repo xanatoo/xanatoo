@@ -281,19 +281,24 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   or uniformly authenticated Nostr directory. See `docs/NOSTR.md`.
 - Panels → **Nostr Explorer** (native dockable `FloatWindow`, ImGui only for
   the controls inside the native frame) searches local events/people and shows
-  observed counts. Named *watch-only* public keys (`local_identities` in
+  observed counts. Named public keys (`local_identities` in
   `nostr.sqlite`) live on the **Nostr tab of the Identities panel**
   (`app_identity.cpp`; Services → Nostr Accounts opens that tab): save / rename
   (also "Save this author" on an npub page), make active, view profile, copy
-  npub, remove (`nostr_remove_local_identity`, only the local label). No
-  private keys; signing waits for NIP-46 / NIP-49. Explorer also has a NIP-29
+  npub, remove (`nostr_remove_local_identity`, only the local label).
+  Signing keys: `nostr_keys.cpp` (`state_dir()/nostr-keys`, 0600, only
+  NIP-49 ncryptsec), crypto in `nostr_sign.cpp` (OpenSSL: BIP-340 sign,
+  nsec / ncryptsec, scrypt + XChaCha20-Poly1305, `nostr_sign_event`),
+  Bech32 shared in `bech32.cpp`. `App::nostr_unlocked` holds secrets for
+  the session only (wiped on lock). `nostr_publish` (nostr.cpp) sends
+  `["EVENT",…]` to `nostr_publish_relays()` in parallel and collects `OK`;
+  the panel posts on a detached worker (`NostrPostJob`, polled by
+  `update_nostr_post`). Explorer also has a NIP-29
   Groups tab, with `(relay,group ID)` identity, `kind:39000` metadata and
   `h`-tagged event counts. `nostr:groups@wss://relay` discovers public group
   metadata; clicking a group opens its relay-specific timeline. NIP-11 relay
   master-key binding, membership and private groups remain unimplemented.
-  No signing-capable accounts, private-key input or outbound publication exist
-  yet; add NIP-46/NIP-49 key management before offering actual identity
-  creation or posting.
+  Posting is kind-1 notes only; replies, NIP-46 and NIP-65 are open.
 - Opens `note1` / `nevent1` / `nostr:…` / 64-hex via Ctrl+L → Thread+Message layout.
 - `npub1` / `nprofile1` open the author's profile + recent notes. Message
   headers link the author (`nostr:npub1…`) and date (`nostr:note1…`) via

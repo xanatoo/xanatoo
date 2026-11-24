@@ -6473,10 +6473,14 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                                         "Select an identity to see it.");
         }
       } else {
-        // Nostr: watch-only accounts (public keys); nothing here can sign.
-        ImGui::TextWrapped("A Nostr account is a public key (npub). These "
-                           "are watch-only: xanatoo holds no private key, so "
-                           "it cannot sign or post as them.");
+        // Nostr: accounts are public keys; those with a signing key here
+        // (NIP-49 encrypted, unlocked per session) can post.
+        ImGui::TextWrapped("A Nostr account is a key pair. With its secret "
+                           "key here (kept encrypted by a password) you post "
+                           "as it; without, it is watch-only.");
+        if (!state.nostr_can_sign)
+          ImGui::TextDisabled("This build cannot sign (it needs OpenSSL): "
+                              "accounts are watch-only.");
         if (state.identity_no_save)
           ImGui::TextDisabled("--no-save: no accounts can be saved.");
         if (!state.identity_error.empty())
@@ -6486,6 +6490,17 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             if (i.pubkey == pk) return &i;
           return nullptr;
         };
+        auto listed = [](const std::vector<std::string>& v,
+                         const std::string& pk) {
+          return std::find(v.begin(), v.end(), pk) != v.end();
+        };
+        auto has_key = [&](const std::string& pk) {
+          return listed(state.nostr_key_pubkeys, pk);
+        };
+        auto unlocked = [&](const std::string& pk) {
+          return listed(state.nostr_unlocked_pubkeys, pk);
+        };
+        auto wipe = [](char* buf, size_t n) { std::memset(buf, 0, n); };
         if (!state.nostr_page_pubkey.empty()) {
           const NostrLocalIdentity* known = account(state.nostr_page_pubkey);
           ImGui::TextDisabled("This page: %s",
@@ -6502,29 +6517,136 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           }
         }
 
-        // Add: a label and a public key.
-        ImGui::Separator();
+        // Post: a kind-1 note as the active account.
         const float field_w = std::min(ImGui::GetContentRegionAvail().x,
                                        220.f * scale_);
+        if (nostr_note_sent_seen_ != state.nostr_post_sent) {
+          nostr_note_sent_seen_ = state.nostr_post_sent;
+          nostr_note_[0] = '\0';  // went out: start a fresh note
+        }
+        const NostrLocalIdentity* poster = account(state.nostr_selected_identity);
+        ImGui::Separator();
+        if (poster && unlocked(poster->pubkey)) {
+          ImGui::TextDisabled("Post a note as %s", poster->label.c_str());
+          ImGui::InputTextMultiline(
+              "##nostr_note", nostr_note_, sizeof nostr_note_,
+              ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 4.5f));
+          const bool blank = std::string_view(nostr_note_)
+              .find_first_not_of(" \t\r\n") == std::string_view::npos;
+          ImGui::BeginDisabled(blank || state.nostr_posting);
+          if (classic_button(state.nostr_posting ? "Posting…" : "Post"))
+            pick(UiCommand::NostrPublishNote, nostr_note_);
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Signs the note and sends it to public relays; "
+                              "a posted note cannot be taken back.");
+        } else if (poster && has_key(poster->pubkey)) {
+          ImGui::TextDisabled("Unlock %s below to post as it.",
+                              poster->label.c_str());
+        } else if (poster) {
+          ImGui::TextDisabled("%s is watch-only: it cannot post.",
+                              poster->label.c_str());
+        } else {
+          ImGui::TextDisabled("Create or import an account to post.");
+        }
+        if (!state.nostr_post_status.empty()) {
+          ImGui::TextWrapped("%s", state.nostr_post_status.c_str());
+          if (!state.nostr_posting && !state.nostr_post_note.empty() &&
+              state.nostr_post_sent > 0) {
+            same_line_if_fits("View note");
+            if (classic_button("View note"))
+              pick(UiCommand::NavigateUrl, state.nostr_post_note);
+          }
+          for (const auto& r : state.nostr_post_results) {
+            const std::string line = r.relay + (r.accepted ? "  ok" : "  failed") +
+                (r.message.empty() ? std::string{} : ": " + r.message);
+            if (r.accepted)
+              ImGui::TextDisabled("%s", line.c_str());
+            else
+              ImGui::TextColored(warn, "%s", line.c_str());
+          }
+        }
+
+        // Add an account: a new key, an imported one, or a public key only.
+        ImGui::Separator();
+        ImGui::RadioButton("New key", &nostr_new_mode_, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Import key", &nostr_new_mode_, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("Watch only", &nostr_new_mode_, 2);
+        const bool can_keep = state.nostr_can_sign && !state.identity_no_save;
         ImGui::SetNextItemWidth(field_w);
         ImGui::InputTextWithHint("##nostr_new_label", "Label",
                                  nostr_identity_label_,
                                  sizeof nostr_identity_label_);
-        ImGui::SetNextItemWidth(field_w);
-        ImGui::InputTextWithHint("##nostr_new_key", "npub1… or hex key",
-                                 nostr_identity_pubkey_,
-                                 sizeof nostr_identity_pubkey_);
-        same_line_if_fits("Save account");
-        ImGui::BeginDisabled(nostr_identity_pubkey_[0] == '\0' ||
-                             state.identity_no_save);
-        if (classic_button("Save account")) {
-          pick(UiCommand::NostrAddWatchIdentity,
-               std::string(nostr_identity_label_) + "\n" +
-                   nostr_identity_pubkey_);
-          nostr_identity_label_[0] = '\0';
-          nostr_identity_pubkey_[0] = '\0';
+        if (nostr_new_mode_ == 0) {
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputTextWithHint("##nostr_pw", "Password",
+                                   nostr_key_password_,
+                                   sizeof nostr_key_password_,
+                                   ImGuiInputTextFlags_Password);
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputTextWithHint("##nostr_pw2", "Password again",
+                                   nostr_key_password2_,
+                                   sizeof nostr_key_password2_,
+                                   ImGuiInputTextFlags_Password);
+          const bool same = std::strcmp(nostr_key_password_,
+                                        nostr_key_password2_) == 0;
+          if (!same && nostr_key_password2_[0] != '\0')
+            ImGui::TextColored(warn, "The passwords differ.");
+          ImGui::BeginDisabled(!can_keep || nostr_key_password_[0] == '\0' ||
+                               !same);
+          if (classic_button("Create account")) {
+            pick(UiCommand::NostrCreateKey, std::string(nostr_identity_label_) +
+                                                "\n" + nostr_key_password_);
+            nostr_identity_label_[0] = '\0';
+            wipe(nostr_key_password_, sizeof nostr_key_password_);
+            wipe(nostr_key_password2_, sizeof nostr_key_password2_);
+          }
+          ImGui::EndDisabled();
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Makes a new key pair. The password encrypts "
+                              "the key here; it cannot be recovered.");
+        } else if (nostr_new_mode_ == 1) {
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputTextWithHint("##nostr_import", "nsec1… or ncryptsec1…",
+                                   nostr_key_import_, sizeof nostr_key_import_,
+                                   ImGuiInputTextFlags_Password);
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputTextWithHint("##nostr_import_pw", "Password",
+                                   nostr_key_password_,
+                                   sizeof nostr_key_password_,
+                                   ImGuiInputTextFlags_Password);
+          if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("An ncryptsec's own password, or a new one to "
+                              "encrypt an nsec with.");
+          ImGui::BeginDisabled(!can_keep || nostr_key_import_[0] == '\0' ||
+                               nostr_key_password_[0] == '\0');
+          if (classic_button("Import key")) {
+            pick(UiCommand::NostrImportKey,
+                 std::string(nostr_identity_label_) + "\n" +
+                     nostr_key_import_ + "\n" + nostr_key_password_);
+            nostr_identity_label_[0] = '\0';
+            wipe(nostr_key_import_, sizeof nostr_key_import_);
+            wipe(nostr_key_password_, sizeof nostr_key_password_);
+          }
+          ImGui::EndDisabled();
+        } else {
+          ImGui::SetNextItemWidth(field_w);
+          ImGui::InputTextWithHint("##nostr_new_key", "npub1… or hex key",
+                                   nostr_identity_pubkey_,
+                                   sizeof nostr_identity_pubkey_);
+          ImGui::BeginDisabled(nostr_identity_pubkey_[0] == '\0' ||
+                               state.identity_no_save);
+          if (classic_button("Save account")) {
+            pick(UiCommand::NostrAddWatchIdentity,
+                 std::string(nostr_identity_label_) + "\n" +
+                     nostr_identity_pubkey_);
+            nostr_identity_label_[0] = '\0';
+            nostr_identity_pubkey_[0] = '\0';
+          }
+          ImGui::EndDisabled();
         }
-        ImGui::EndDisabled();
 
         const NostrLocalIdentity* nsel = account(state.nostr_shown_identity);
         ImGui::Separator();
@@ -6545,6 +6667,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             for (const auto& acc : state.nostr_identities) {
               ImGui::PushID(acc.pubkey.c_str());
               std::string label = acc.label;
+              if (unlocked(acc.pubkey)) label += "  (unlocked)";
+              else if (has_key(acc.pubkey)) label += "  (locked)";
               if (acc.pubkey == state.nostr_selected_identity)
                 label += "  (active)";
               if (acc.pubkey == state.nostr_page_pubkey) label += "  (this page)";
@@ -6590,24 +6714,92 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             pick(UiCommand::NostrSelectIdentity, nsel->pubkey);
           ImGui::EndDisabled();
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("The account follows, bookmarks and posting "
-                              "will go with once signing exists.");
+            ImGui::SetTooltip("The account notes are posted as.");
+          const bool keyed = has_key(nsel->pubkey);
           same_line_if_fits("Remove");
-          ImGui::BeginDisabled(state.identity_no_save);
+          ImGui::BeginDisabled(state.identity_no_save || keyed);
           if (classic_button("Remove"))
             pick(UiCommand::NostrIdentityRemove, nsel->pubkey);
           ImGui::EndDisabled();
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Forget the label here; the account itself "
-                              "is not touched.");
+            ImGui::SetTooltip("%s", keyed ?
+                "Delete its signing key first." :
+                "Forget the label here; the account itself is not touched.");
+          if (keyed) {
+            const bool open = unlocked(nsel->pubkey);
+            ImGui::Separator();
+            ImGui::TextDisabled("%s", open ?
+                "Signing key: unlocked for this session" :
+                "Signing key: locked");
+            if (!open) {
+              ImGui::SetNextItemWidth(field_w);
+              const bool enter = ImGui::InputTextWithHint(
+                  "##nostr_unlock_pw", "Password", nostr_unlock_password_,
+                  sizeof nostr_unlock_password_,
+                  ImGuiInputTextFlags_Password |
+                      ImGuiInputTextFlags_EnterReturnsTrue);
+              same_line_if_fits("Unlock");
+              ImGui::BeginDisabled(nostr_unlock_password_[0] == '\0');
+              if ((classic_button("Unlock") || enter) &&
+                  nostr_unlock_password_[0] != '\0') {
+                pick(UiCommand::NostrUnlockKey,
+                     nsel->pubkey + "\n" + nostr_unlock_password_);
+                wipe(nostr_unlock_password_, sizeof nostr_unlock_password_);
+              }
+              ImGui::EndDisabled();
+            } else if (classic_button("Lock")) {
+              pick(UiCommand::NostrLockKey, nsel->pubkey);
+              nostr_reveal_armed_.clear();
+            }
+            if (!state.nostr_shown_ncryptsec.empty()) {
+              same_line_if_fits("Copy backup key");
+              if (classic_button("Copy backup key"))
+                ImGui::SetClipboardText(state.nostr_shown_ncryptsec.c_str());
+              if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("The encrypted key (ncryptsec1…). Keep it "
+                                  "somewhere safe; with its password it "
+                                  "restores the account anywhere.");
+            }
+            if (open) {
+              if (nostr_reveal_armed_ != nsel->pubkey) {
+                same_line_if_fits("Copy nsec…");
+                if (classic_button("Copy nsec…"))
+                  nostr_reveal_armed_ = nsel->pubkey;
+              } else {
+                ImGui::PushStyleColor(ImGuiCol_Text, warn);
+                ImGui::TextWrapped("The nsec is the plain secret key: anyone "
+                                   "who sees it can post as you, for good.");
+                ImGui::PopStyleColor();
+                if (classic_button("Copy nsec")) {
+                  pick(UiCommand::NostrCopyNsec, nsel->pubkey);
+                  nostr_reveal_armed_.clear();
+                }
+                ImGui::SameLine();
+                if (classic_button("Cancel")) nostr_reveal_armed_.clear();
+              }
+            }
+            if (nostr_delete_key_armed_ != nsel->pubkey) {
+              same_line_if_fits("Delete key…");
+              if (classic_button("Delete key…"))
+                nostr_delete_key_armed_ = nsel->pubkey;
+            } else {
+              ImGui::PushStyleColor(ImGuiCol_Text, warn);
+              ImGui::TextWrapped("Without a backup key the account is lost "
+                                 "for good: nobody can post as it again. "
+                                 "It stays here as watch-only.");
+              ImGui::PopStyleColor();
+              if (classic_button("Delete key for good")) {
+                pick(UiCommand::NostrDeleteKey, nsel->pubkey);
+                nostr_delete_key_armed_.clear();
+              }
+              ImGui::SameLine();
+              if (classic_button("Keep")) nostr_delete_key_armed_.clear();
+            }
+          }
           ImGui::PopID();
         } else if (!state.nostr_identities.empty()) {
           ImGui::TextDisabled("Select an account to see it.");
         }
-        ImGui::Separator();
-        ImGui::TextWrapped("Signing accounts (a NIP-46 remote signer or a "
-                           "NIP-49 encrypted key) come later; no private "
-                           "keys are accepted here.");
       }
     }
     ImGui::End();

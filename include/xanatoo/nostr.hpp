@@ -54,6 +54,13 @@ void nostr_append_content(Document& doc, NodeId parent, std::string_view content
 // Hex pubkeys of the nostr:npub1… / nostr:nprofile1… mentions in a note.
 std::vector<std::string> nostr_mentioned_pubkeys(std::string_view content);
 
+// What one relay said to a published event (nostr_publish).
+struct NostrPublishResult {
+  std::string relay;
+  bool accepted = false;
+  std::string message;  // the relay's reason, or the connection error
+};
+
 #if defined(XANATOO_NOSTR) && XANATOO_NOSTR
 // Fetch a root note and kind-1 replies from public relays (blocking, short
 // timeout), or for npub/nprofile refs the author's profile and recent notes.
@@ -62,6 +69,13 @@ std::vector<std::string> nostr_mentioned_pubkeys(std::string_view content);
 // On failure returns nullopt and sets *err.
 std::optional<Document> nostr_fetch_thread(std::string_view ref,
                                            std::string* err = nullptr);
+
+// Send a signed event to relays (default: nostr_publish_relays()) in
+// parallel and collect their NIP-01 OK answers (blocking, ~10 s at most).
+// An accepted event is also cached locally.
+std::vector<std::string> nostr_publish_relays();
+std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
+                                              std::vector<std::string> relays = {});
 #endif
 
 }  // namespace xanatoo

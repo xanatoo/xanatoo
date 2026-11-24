@@ -2,6 +2,28 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Nostr signing accounts and posting
+
+- Identities → Nostr tab: New key / Import key (nsec or ncryptsec) / Watch
+  only. Keys live only as NIP-49 ncryptsec in `state_dir()/nostr-keys`
+  (0600 S-expression, `nostr_keys.cpp`), locked at start, unlocked by
+  password for the session; Lock, Copy backup key, Copy nsec (confirmed),
+  Delete key (confirmed; account stays watch-only). Remove refuses while a
+  key exists; a key without a label gets one back.
+- `nostr_sign.cpp` (OpenSSL): BIP-340 signing (self-verified), key
+  generation, nsec, NIP-49 (scrypt + hand-rolled HChaCha20 over
+  `EVP_chacha20_poly1305`), `nostr_sign_event`. Bech32 moved to
+  `bech32.cpp` (also fixes a shift overflow). mbedTLS builds cannot sign.
+- Posting: note box for the unlocked active account → kind-1 with `p` tags
+  for mentions → `nostr_publish` to 5 default relays in parallel, OK per
+  relay, cached when accepted; View note opens it.
+- Tests: BIP-340 vectors 0–3, NIP-19 nsec, NIP-49 spec vector + wrong
+  password + tamper, sign→verify (`nostr_verify_tests`); key store
+  (`nostr_keys_tests`). Under Xvfb: create, lock, wrong / right password.
+  Not tried against live relays (posting is public).
+- Open: replies via the Reply panel, NIP-46 remote signer, NIP-65 relay
+  list, kind 0 profile editing, kind 5 deletion, NFKC passwords.
+
 ## Status (2026-11-24) — Social markup: mentions and hashtags
 
 - Links carry `rel="mention"` (href = account ref) or `rel="tag"` (href =
@@ -369,7 +391,7 @@
 - Tests: store remove in `unit_tests`, panel layers, help keys; checked
   under Xvfb (tabs both ways, row detail, session migration).
 - Open: signing accounts (NIP-46 remote signer, NIP-49 `ncryptsec`), then
-  per-account follows / relays.
+  per-account follows / relays. (NIP-49 keys and posting: 2026-11-24.)
 
 ## Status (2026-11-21) — Colour emoji and missing-glyph boxes
 

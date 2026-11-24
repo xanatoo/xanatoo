@@ -3,6 +3,8 @@
 // Official BIP-340 vectors and NIP-01 serialization smoke tests.
 #include "xanatoo/nostr_verify.hpp"
 #include "xanatoo/nostr_nip11.hpp"
+#include "xanatoo/nostr_sign.hpp"
+#include "xanatoo/json_min.hpp"
 #include <cassert>
 #include <iostream>
 #include <string>
@@ -90,5 +92,90 @@ int main() {
                         "\",\"created_at\":1,\"kind\":1,\"content\":\"tags\",\"tags\":[]}"));
   assert(!nostr_event_id("{\"pubkey\":\"" + std::string(64, 'a') +
                           "\",\"created_at\":1.5,\"kind\":1,\"content\":\"x\",\"tags\":[]}"));
+
+  // ---- Signing (nostr_sign.hpp) ----
+  // nsec round trip (NIP-19 example key) needs no crypto backend.
+  const std::string nip19_sk =
+      "67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa";
+  assert(nostr_nsec(nip19_sk) ==
+         "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5");
+  assert(nostr_decode_nsec("nostr:nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5") ==
+         nip19_sk);
+  assert(!nostr_decode_nsec("npub1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5"));
+  const std::string nip49 =
+      "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p";
+  assert(is_ncryptsec(nip49) && !is_ncryptsec(nip19_sk));
+#if XANATOO_NOSTR_VERIFY_OPENSSL
+  assert(nostr_signing_available());
+  // Official BIP-340 signing vectors 0..3 (secret key, aux, message, sig).
+  struct Vec { const char *sk, *pk, *aux, *msg, *sig; };
+  const Vec vecs[] = {
+      {"0000000000000000000000000000000000000000000000000000000000000003",
+       "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+       "0000000000000000000000000000000000000000000000000000000000000000",
+       "0000000000000000000000000000000000000000000000000000000000000000",
+       "e907831f80848d1069a5371b402410364bdf1c5f8307b0084c55f1ce2dca8215"
+       "25f66a4a85ea8b71e482a74f382d2ce5ebeee8fdb2172f477df4900d310536c0"},
+      {"B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF",
+       "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659",
+       "0000000000000000000000000000000000000000000000000000000000000001",
+       "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+       "6896bd60eeae296db48a229ff71dfe071bde413e6d43f917dc8dcf8c78de3341"
+       "8906d11ac976abccb20b091292bff4ea897efcb639ea871cfa95f6de339e4b0a"},
+      {"C90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B14E5C9",
+       "dd308afec5777e13121fa72b9cc1b7cc0139715309b086c960e18fd969774eb8",
+       "C87AA53824B4D7AE2EB035A2B5BBBCCC080E76CDC6D1692C4B0B62D798E6D906",
+       "7E2D58D8B3BCDF1ABADEC7829054F90DDA9805AAB56C77333024B9D0A508B75C",
+       "5831aaeed7b44bb74e5eab94ba9d4294c49bcf2a60728d8b4c200f50dd313c1b"
+       "ab745879a5ad954a72c45a91c3a51d3c7adea98d82f8481e0e1e03674a6f3fb7"},
+      {"0B432B2677937381AEF05BB02A66ECD012773062CF3FA2549E44F58ED2401710",
+       "25d1dff95105f5253c4022f628a996ad3a0d95fbf21d468a1b33f8c160d8f517",
+       "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+       "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+       "7eb0509757e246f19449885651611cb965ecc1a187dd51b64fda1edc9637d5ec"
+       "97582b9cb13db3933705b32ba982af5af25fd78881ebb32771fc5922efc66ea3"},
+  };
+  for (const Vec& v : vecs) {
+    assert(nostr_pubkey_of(v.sk) == v.pk);
+    assert(nostr_sign_bip340(v.sk, v.msg, v.aux) == v.sig);
+  }
+  assert(nostr_pubkey_of(std::string(64, '0')).empty());
+  assert(nostr_pubkey_of(  // the curve order n is not a key
+             "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+             .empty());
+
+  // Fresh keys sign events the verifier accepts.
+  const std::string sk = nostr_generate_secret();
+  assert(sk.size() == 64 && sk != nostr_generate_secret());
+  const std::string pk = nostr_pubkey_of(sk);
+  const std::string ev = nostr_sign_event(
+      sk, 1, "hello \"nostr\"\nfrom xanatoo ✓", {{"t", "xanatoo"}, {"client", "x"}},
+      1700000000);
+  assert(!ev.empty());
+  assert(nostr_verify_event(ev) == NostrVerification::SignatureValid);
+  assert(json_str_field(ev, "pubkey") == pk);
+  assert(json_str_field(ev, "content") == "hello \"nostr\"\nfrom xanatoo ✓");
+  std::string forged = ev;
+  forged.replace(forged.find("hello"), 5, "jello");
+  assert(nostr_verify_event(forged) == NostrVerification::Invalid);
+
+  // NIP-49 spec vector, then a round trip (cheap log_n for the test).
+  std::string err;
+  assert(nostr_ncryptsec_decrypt(nip49, "nostr", &err) ==
+         "3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683");
+  assert(!nostr_ncryptsec_decrypt(nip49, "nostR", &err) && err == "wrong password");
+  const std::string enc = nostr_ncryptsec_encrypt(sk, "pässwörd", 4, 1);
+  assert(is_ncryptsec(enc) && enc.size() > 150);
+  assert(enc != nostr_ncryptsec_encrypt(sk, "pässwörd", 4, 1));  // fresh salt
+  assert(nostr_ncryptsec_decrypt(enc, "pässwörd") == sk);
+  assert(!nostr_ncryptsec_decrypt(enc, "password"));
+  std::string tampered = enc;
+  tampered[tampered.size() - 10] = tampered[tampered.size() - 10] == 'q' ? 'p' : 'q';
+  assert(!nostr_ncryptsec_decrypt(tampered, "pässwörd"));
+#else
+  assert(!nostr_signing_available());
+  assert(nostr_generate_secret().empty());
+  assert(!nostr_ncryptsec_decrypt(nip49, "nostr"));
+#endif
   std::cout << "NIP-01/BIP-340 verifier smoke: PASS\n";
 }

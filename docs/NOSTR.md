@@ -101,24 +101,46 @@ cache writes and schema migration.
 
 ### Nostr accounts
 
-Watch-only accounts are on the **Nostr tab of the Identities panel**
+Accounts are on the **Nostr tab of the Identities panel**
 (Services → Nostr Accounts, or Panels → Identities). It shares the panel with
 Gemini client certificates but not the data: the keys do not carry over
 between protocols. A page's author can be saved from there; an account can be
 renamed, made active, opened as a profile, copied as npub, or removed (only
 its local label).
 
-- Multiple labelled local identities, each with a public key, explicit
-  signer association and separate follows/bookmarks/publishing preferences.
-- Watch-only identities are useful immediately. They **cannot sign** and
-  must never be presented as posting-capable accounts.
-- For creation/import of usable signing identities, prefer NIP-46 remote
-  signers or password-encrypted NIP-49 `ncryptsec` storage with deliberate
-  backup/recovery UI. Do **not** silently store plaintext `nsec` values in
-  config or SQLite. Key generation requires audited secp256k1/BIP-340
-  operations and a secure signer/key-store design.
-- Relay preferences (NIP-65), profile editing (kind 0), follow list (kind 3),
-  private messaging and publication come **after** signing works.
+An account is either **watch-only** (just the public key) or has its
+**signing key** here:
+
+- **New key** makes a key pair (OpenSSL `RAND_priv_bytes`); **Import key**
+  takes an `nsec1…` (encrypted with the password given) or an
+  `ncryptsec1…` (opened with its own password and kept unchanged).
+- Keys are kept **only** as NIP-49 `ncryptsec` (scrypt log N 16, r 8, p 1;
+  XChaCha20-Poly1305; key-security byte 2 "unknown") in
+  `$XDG_STATE_HOME/xanatoo/nostr-keys`, an owner-only (0600) S-expression
+  file apart from the `nostr.sqlite` cache, so clearing the cache never
+  loses a key. No plain `nsec` is ever written.
+- A key is **locked** after start; its password unlocks it for the session
+  (Lock forgets the secret, which is wiped). The panel shows each account as
+  locked / unlocked.
+- Backup: **Copy backup key** (the ncryptsec), and behind a confirmation
+  **Copy nsec** for other clients. **Delete key** (also confirmed) leaves the
+  account watch-only; without a backup it is lost for good.
+- Passwords are not NFKC-normalized (NIP-49 asks for it): ASCII and
+  precomposed text give the same bytes, odd decompositions may not open in
+  other clients.
+- `--no-save` and builds without OpenSSL (mbedTLS) cannot create or import
+  keys; the panel says so.
+
+**Posting:** with the active account unlocked, the tab shows a note box.
+Post signs a kind-1 event (BIP-340, `nostr_sign.cpp`; `p` tags for the
+`nostr:npub…` mentions in the text) and sends it on a worker to the first
+five default relays in parallel (`nostr_publish`), each answer (NIP-01
+`OK`) listed per relay. An accepted note goes into the local cache and can
+be opened with View note.
+
+Not yet: replies (the Reply panel is still a mock), NIP-46 remote signers,
+relay preferences (NIP-65), profile editing (kind 0), follow lists
+(kind 3), deletion requests (kind 5), private messages.
 
 ## Groups, channels, forums and categorization
 

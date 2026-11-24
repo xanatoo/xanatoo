@@ -66,7 +66,7 @@ struct NostrCachedGroup {
 struct NostrLocalIdentity {
   std::string pubkey;
   std::string label;
-  // Only watch-only identities for now: no local private keys are stored.
+  // The label only; a signing key, if any, is in nostr_keys.hpp.
 };
 
 // Cache the exact event JSONs returned by a relay, including kind-0 profiles.
@@ -97,8 +97,8 @@ std::vector<std::string> nostr_cached_thread_json(std::string_view event_id);
 std::vector<std::string> nostr_cached_author_json(std::string_view pubkey);
 std::vector<std::string> nostr_cached_recent_json();
 
-// Local *watch-only* profiles, not signing accounts. Adding one cannot
-// publish events; a NIP-46/NIP-49 signer workflow is future work.
+// Labelled local accounts (public keys). Their signing keys, if any, are
+// kept apart in nostr_keys.hpp; this store never holds a secret.
 std::vector<NostrLocalIdentity> nostr_local_identities();
 // Adds a key, or renames one already saved (same key, new label).
 bool nostr_add_watch_identity(std::string_view label, std::string_view npub_or_hex);
