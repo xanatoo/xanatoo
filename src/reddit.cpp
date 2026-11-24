@@ -191,6 +191,90 @@ RedditVideo reddit_video(std::string_view data) {
   return {};
 }
 
+namespace {
+
+bool reddit_name_char(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-';
+}
+
+// A Reddit user page (www/old/… host, /u/NAME or /user/NAME, nothing after
+// but a slash).
+bool is_reddit_user_url(std::string_view u) {
+  if (starts_with_ci(u, "https://")) u.remove_prefix(8);
+  else if (starts_with_ci(u, "http://")) u.remove_prefix(7);
+  else return false;
+  const size_t slash = u.find('/');
+  if (slash == std::string_view::npos || !host_is_reddit(u.substr(0, slash)))
+    return false;
+  std::string_view path = u.substr(slash + 1);
+  if (starts_with(path, "u/")) path.remove_prefix(2);
+  else if (starts_with(path, "user/")) path.remove_prefix(5);
+  else return false;
+  if (!path.empty() && path.back() == '/') path.remove_suffix(1);
+  return !path.empty() &&
+         std::all_of(path.begin(), path.end(), reddit_name_char);
+}
+
+// Split the text spans of `n` at "u/NAME" (start of text or after a
+// non-name character, optionally with a leading "/").
+void link_users(Node& n) {
+  std::vector<InlineSpan> out;
+  for (InlineSpan& sp : n.spans) {
+    if (sp.kind == InlineKind::Link && sp.rel.empty() &&
+        is_reddit_user_url(sp.href))
+      sp.rel = std::string(kRelMention);
+    if (sp.kind != InlineKind::Text || sp.role != InlineRole::Normal) {
+      out.push_back(std::move(sp));
+      continue;
+    }
+    const std::string& t = sp.text;
+    size_t from = 0, i = 0;
+    while ((i = t.find("u/", i)) != std::string::npos) {
+      size_t start = i;
+      if (start > 0 && t[start - 1] == '/') --start;
+      const bool boundary = start == 0 || !(reddit_name_char(t[start - 1]) ||
+                                            t[start - 1] == '/');
+      size_t end = i + 2;
+      while (end < t.size() && reddit_name_char(t[end])) ++end;
+      const size_t len = end - (i + 2);
+      if (!boundary || len < 3 || len > 20) {
+        i += 2;
+        continue;
+      }
+      if (start > from) {
+        InlineSpan before = sp;
+        before.text = t.substr(from, start - from);
+        out.push_back(std::move(before));
+      }
+      InlineSpan link = sp;
+      link.kind = InlineKind::Link;
+      link.text = t.substr(start, end - start);
+      link.href = "https://www.reddit.com/user/" + t.substr(i + 2, len);
+      link.rel = std::string(kRelMention);
+      out.push_back(std::move(link));
+      from = i = end;
+    }
+    if (from == 0) {
+      out.push_back(std::move(sp));
+    } else if (from < t.size()) {
+      InlineSpan rest = sp;
+      rest.text = t.substr(from);
+      out.push_back(std::move(rest));
+    }
+  }
+  n.spans = std::move(out);
+}
+
+}  // namespace
+
+void reddit_mark_users(Document& doc, NodeId node) {
+  if (node == INVALID_NODE) return;
+  Node& n = doc.get(node);
+  if (n.kind != NodeKind::CodeBlock) link_users(n);
+  for (NodeId c : std::vector<NodeId>(doc.get(node).children))
+    reddit_mark_users(doc, c);
+}
+
 #if defined(XANATOO_REDDIT) && XANATOO_REDDIT
 
 namespace {
@@ -369,7 +453,11 @@ void append_post_message(Document& doc, NodeId thread, const RedditPost& post,
   replace_all(body, "&quot;", "\"");
 
   if (!body.empty()) {
+    // Only the body: the title line before it is not Markdown.
+    const size_t first = doc.get(msg).children.size();
     append_foreign_markdown(doc, msg, body, "https://www.reddit.com/");
+    const auto& kids = doc.get(msg).children;
+    for (size_t k = first; k < kids.size(); ++k) reddit_mark_users(doc, kids[k]);
   } else if (!is_comment && !post.is_self && !post.url.empty()) {
     NodeId para = doc.create(NodeKind::Paragraph, msg);
     InlineSpan link;

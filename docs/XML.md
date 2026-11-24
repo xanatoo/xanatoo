@@ -101,6 +101,31 @@ marks="em">two</strong>`, or a link inside bold text as
 `<a href="…" marks="strong">`. XML import also
 doesn't attempt to read arbitrary SVG, XHTML or generic XML vocabularies.
 
+### Social markup
+
+Mentions, hashtags and scores are ordinary spans with a `rel` token
+(`types.hpp` `kRelMention` / `kRelTag` / `kRelScore`, tested with
+`rel_has`; `rel` is a space-separated list):
+
+```xml
+<p><a href="bsky:did:plc:b" rel="mention">@bob</a> likes
+<a href="bsky:hashtag/xanadu" rel="tag">#xanadu</a></p>
+<span role="metadata" rel="score">42 points</span>
+```
+
+- `mention`: the href is the account on its service (`bsky:DID`,
+  `nostr:npub…`, `https://www.reddit.com/user/NAME`, a fediverse profile).
+- `tag`: the href is that service's feed for the tag.
+- `score`: a snapshot of the vote count when the page was fetched, not a
+  live value; there are no voting actions.
+- Readers mark only what the source marks (Bluesky facets, Nostr `nostr:`
+  references, fediverse `class="mention"` / `rel="tag"` HTML, Reddit's
+  `u/NAME` Markdown). Plain `@word` / `#word` text is never guessed.
+- Markdown keeps the token as `[@bob](bsky:did:plc:b){rel=mention}`. The
+  style sheet roles `mention` and `hashtag` colour them
+  (`docs/STYLESHEETS.md`). The link context menu adds Copy Handle /
+  Copy Hashtag.
+
 ## Editing and round trips
 
 Open a `.xml` file, or use **File → Export as XML…**. Saving an

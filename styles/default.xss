@@ -75,6 +75,11 @@
   ;; Links to pages visited before. After `link`: a later link colour drops
   ;; it, and without one visited links fade the link colour towards the paper.
   (role visited-link (color "#80408c"))
+  ;; Links of social posts: accounts (rel="mention") and hashtags
+  ;; (rel="tag"); colour and font over the link's, underline the link's.
+  ;; Unset here, so they look like any other link:
+  ;; (role mention (color "#1e5ab4"))
+  ;; (role hashtag (color "#1e5ab4"))
   (role cite   (color "#5a328c") (underline #t))
   (role footnote-ref (color "#1e5ab4"))
   (role code   (color "#82371e") (background (rgba 245 235 220 200)))

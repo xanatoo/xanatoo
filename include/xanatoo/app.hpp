@@ -1562,6 +1562,10 @@ struct App {
   std::string context_link;
   std::string context_link_href;  // as written in the page (new tab)
   bool context_link_web = false;
+  // A mention / hashtag link (rel, types.hpp kRel*): its text as shown,
+  // "@alice.example" / "#tag", for Copy Handle / Copy Hashtag.
+  std::string context_link_rel;
+  std::string context_link_text;
   // Blocks around the right-click (xanatoo::cut_blocks), innermost first,
   // in view `context_blocks_pane` showing `context_blocks_buf`; the one
   // whose menu item is hovered is washed in the page.

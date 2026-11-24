@@ -172,6 +172,11 @@ const std::vector<UiHelpTopic> kTopics = {
      "clipboard."},
     {"copy link address", "Copy link address",
      "Copies the target address of the link under the pointer."},
+    {"copy handle", "Copy handle",
+     "On a mention of an account (Bluesky, Nostr, Mastodon, Reddit): copies "
+     "its handle as shown, such as `@alice.bsky.social`."},
+    {"copy hashtag", "Copy hashtag",
+     "On a hashtag link: copies the tag as shown, such as `#xanadu`."},
     {"copy web permalink", "Copy web permalink",
      "Copies the address of this item on its web site, for sharing with "
      "people who use a browser."},

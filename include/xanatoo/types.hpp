@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <optional>
 
@@ -113,6 +114,20 @@ struct InlineSpan {
   // InlineKind::Math only (the TeX source is in `src`).
   bool display = false;
 };
+
+// Typed relations of social posts (InlineSpan::rel, docs/XML.md "Social
+// markup"). They label what a service already marks; plain "@word" /
+// "#word" text is never guessed into one.
+//   mention: a Link to an account (href = the service's profile ref)
+//   tag:     a Link to a hashtag (href = that service's tag feed)
+//   score:   a Metadata text span counting likes / points / replies, a
+//            snapshot from when the page was fetched
+inline constexpr std::string_view kRelMention = "mention";
+inline constexpr std::string_view kRelTag = "tag";
+inline constexpr std::string_view kRelScore = "score";
+
+// True when `rel` (space-separated tokens, as in HTML) holds `token`.
+bool rel_has(std::string_view rel, std::string_view token);
 
 // All faces of a span: its marks plus the one its kind implies.
 inline uint8_t span_marks(const InlineSpan& s) {

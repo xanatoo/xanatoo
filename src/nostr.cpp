@@ -377,12 +377,13 @@ struct NoteLinker {
       doc.append_text(para, std::string(t));
   }
 
-  void link(std::string label, std::string href) {
+  void link(std::string label, std::string href, std::string_view rel = {}) {
     if (para == INVALID_NODE) para = doc.create(NodeKind::Paragraph, parent);
     InlineSpan l;
     l.kind = InlineKind::Link;
     l.text = std::move(label);
     l.href = std::move(href);
+    l.rel = std::string(rel);
     doc.get(para).spans.push_back(std::move(l));
   }
 
@@ -438,7 +439,7 @@ struct NoteLinker {
   bool mention(const std::string& pk) {
     auto it = names.find(pk);
     link("@" + (it != names.end() ? it->second : short_npub(pk)),
-         "nostr:" + nostr_bech32("npub", pk));
+         "nostr:" + nostr_bech32("npub", pk), kRelMention);
     return true;
   }
 

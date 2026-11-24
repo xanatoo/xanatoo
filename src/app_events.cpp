@@ -815,6 +815,8 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
       app.context_link.clear();
       app.context_link_href.clear();
       app.context_link_web = false;
+      app.context_link_rel.clear();
+      app.context_link_text.clear();
       // A link in the footnote strip, else on the page.
       const bool in_strip = in_footnote_overlay(app, app.focus, lx, my);
       if (auto hit = in_strip ? footnote_overlay_link(app, app.focus, lx, my)
@@ -826,6 +828,16 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
            doc_of(app, p).get(hit->node).kind != xanatoo::NodeKind::Stretch)) {
         const LinkTarget t = resolve_link(app, app.focus, hit->href);
         app.context_link_href = hit->href;
+        const xanatoo::Document& hd = doc_of(app, p);
+        for (std::string_view rel : {xanatoo::kRelMention, xanatoo::kRelTag})
+          if (!in_strip && xanatoo::rel_has(hit->rel, rel) &&
+              hd.get(hit->node).spans.size() > hit->span_index) {
+            std::string_view text = hd.get(hit->node).spans[hit->span_index].text;
+            xanatoo::trim_ascii(text);
+            app.context_link_rel = std::string(rel);
+            app.context_link_text = std::string(text);
+            break;
+          }
         if (t.kind == LinkKind::Remote || t.kind == LinkKind::External) {
           app.context_link = t.url;
           app.context_link_web = xanatoo::starts_with_ci(t.url, "https://") ||

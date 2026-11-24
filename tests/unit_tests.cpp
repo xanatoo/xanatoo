@@ -1229,7 +1229,10 @@ void test_nostr_content() {
   const Node& p1 = doc.get(kids[0]);
   std::vector<std::string> links;
   for (const auto& sp : p1.spans)
-    if (sp.kind == InlineKind::Link) links.push_back(sp.text + "|" + sp.href);
+    if (sp.kind == InlineKind::Link) {
+      links.push_back(sp.text + "|" + sp.href);
+      EXPECT_EQ(sp.rel, sp.text[0] == '@' ? "mention" : "");
+    }
   EXPECT_EQ(links.size(), size_t(4));
   if (links.size() == 4) {
     EXPECT_EQ(links[0], "@Alice|nostr:" + npub);
@@ -2528,6 +2531,11 @@ void test_style_sheets_shipped() {
   }
   EXPECT(def.metadata.has_color == builtin.metadata.has_color);
   EXPECT(def.metadata.color == builtin.metadata.color);
+  for (auto [a, b] : {std::pair{&def.mention, &builtin.mention},
+                      std::pair{&def.hashtag, &builtin.hashtag}})
+    EXPECT(a->has_color == b->has_color && a->has_font == b->has_font &&
+           (!a->has_color || a->color == b->color) &&
+           (!a->has_font || a->font == b->font));
   EXPECT(def.metadata.has_font == builtin.metadata.has_font);
   EXPECT(def.metadata.font == builtin.metadata.font);
   EXPECT(def.visited.has_color == builtin.visited.has_color);
@@ -4983,6 +4991,91 @@ const xanatoo::Node* first_of_kind(const xanatoo::Document& doc,
   for (const auto& n : doc.nodes)
     if (n.id != xanatoo::INVALID_NODE && n.kind == kind) return &n;
   return nullptr;
+}
+
+// Social markup (types.hpp kRel*): mentions and hashtags are links with a
+// rel, from what each service marks; nothing is guessed from plain text.
+void test_social_markup() {
+  using namespace xanatoo;
+  EXPECT(rel_has("mention", kRelMention));
+  EXPECT(rel_has("nofollow  tag", kRelTag));
+  EXPECT(!rel_has("tagged", kRelTag));
+  EXPECT(!rel_has("", kRelTag));
+
+  // Mastodon / fediverse HTML: h-card mentions and rel="tag" hashtags.
+  Document doc;
+  NodeId root = doc.create(NodeKind::Document);
+  HtmlOptions opt;
+  opt.base_url = "https://social.example/@alice/1";
+  html_append_blocks(
+      doc, root,
+      "<p><span class=\"h-card\"><a href=\"https://social.example/@bob\" "
+      "class=\"u-url mention\">@<span>bob</span></a></span> hi "
+      "<a href=\"https://social.example/tags/xanadu\" class=\"mention hashtag\" "
+      "rel=\"tag\">#<span>xanadu</span></a> "
+      "<a href=\"https://x.org/\" rel=\"nofollow noopener\">x.org</a></p>",
+      opt);
+  std::vector<std::string> got;
+  for (const Node& n : doc.nodes)
+    for (const InlineSpan& sp : n.spans)
+      if (sp.kind == InlineKind::Link) got.push_back(sp.text + "|" + sp.rel);
+  EXPECT_EQ(got.size(), 3u);
+  if (got.size() == 3) {
+    EXPECT_EQ(got[0], "@bob|mention");
+    EXPECT_EQ(got[1], "#xanadu|tag");
+    EXPECT_EQ(got[2], "x.org|");  // other rel values are not kept
+  }
+
+  // Reddit: "u/name" is Reddit Markdown for a user link.
+  Document rd;
+  NodeId rr = rd.create(NodeKind::Document);
+  NodeId rp = rd.create(NodeKind::Paragraph, rr);
+  rd.append_text(rp, "thanks u/Some_One and /u/abc, not bu/xyz or u/ab");
+  InlineSpan ul;
+  ul.kind = InlineKind::Link;
+  ul.text = "her";
+  ul.href = "https://old.reddit.com/user/her_name/";
+  rd.get(rp).spans.push_back(ul);
+  NodeId rc = rd.create(NodeKind::CodeBlock, rr);
+  rd.append_text(rc, "u/inside_code");
+  reddit_mark_users(rd, rr);
+  std::vector<std::string> users;
+  for (const InlineSpan& sp : rd.get(rp).spans)
+    if (sp.kind == InlineKind::Link)
+      users.push_back(sp.text + "|" + sp.href + "|" + sp.rel);
+  EXPECT_EQ(users.size(), 3u);
+  if (users.size() == 3) {
+    EXPECT_EQ(users[0], "u/Some_One|https://www.reddit.com/user/Some_One|mention");
+    EXPECT_EQ(users[1], "/u/abc|https://www.reddit.com/user/abc|mention");
+    EXPECT_EQ(users[2], "her|https://old.reddit.com/user/her_name/|mention");
+  }
+  EXPECT_EQ(plain_text(rd, rp),
+            "thanks u/Some_One and /u/abc, not bu/xyz or u/abher");
+  EXPECT_EQ(rd.get(rc).spans.size(), 1u);
+
+  // XML and Markdown keep the rel.
+  const std::string xml = serialize_xml(doc);
+  EXPECT(xml.find("rel=\"mention\"") != std::string::npos);
+  EXPECT(xml.find("rel=\"tag\"") != std::string::npos);
+  const Document md = parse_document(serialize_markup(doc), "x.md");
+  int tags = 0;
+  for (const Node& n : md.nodes)
+    for (const InlineSpan& sp : n.spans) tags += sp.rel == "tag";
+  EXPECT_EQ(tags, 1);
+
+  // Style roles: colour and font over the link's.
+  DocStyle st = builtin_style();
+  EXPECT(st.social("mention") == &st.mention);
+  EXPECT(st.social("tag") == &st.hashtag);
+  EXPECT(st.social("glossary") == nullptr);
+  const Rgba link = st.text_color(BlockRole::Paragraph, InlineKind::Link);
+  EXPECT(st.text_color(BlockRole::Paragraph, InlineKind::Link,
+                       InlineRole::Normal, "tag") == link);
+  apply_style_source(st, "(stylesheet (role hashtag (color \"#102030\") (font bold)))");
+  EXPECT(st.text_color(BlockRole::Paragraph, InlineKind::Link,
+                       InlineRole::Normal, "tag") == (Rgba{16, 32, 48, 255}));
+  EXPECT(st.hashtag.has_font && st.hashtag.font == FontRole::BodyBold);
+  EXPECT(st.warnings.empty());
 }
 
 void test_html_min() {
@@ -9337,6 +9430,7 @@ void test_examples_xml_round_trip() {
 }
 
 int main() {
+  test_social_markup();
   test_examples_xml_round_trip();
   test_touch_gutter_between();
   test_touch_span_axis();

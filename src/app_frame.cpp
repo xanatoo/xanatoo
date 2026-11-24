@@ -283,6 +283,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_link = app.context_link;
   ui_state.context_link_href = app.context_link_href;
   ui_state.context_link_web = app.context_link_web;
+  ui_state.context_link_rel = app.context_link_rel;
+  ui_state.context_link_text = app.context_link_text;
   ui_state.context_blocks.clear();
   ui_state.context_article = ui_state.context_section = -1;
   if (find_buf(app, app.context_blocks_buf) && app.context_blocks_pane >= 0 &&

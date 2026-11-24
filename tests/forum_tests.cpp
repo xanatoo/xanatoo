@@ -388,14 +388,16 @@ void test_bluesky() {
          pics[0].src == "https://cdn.example/f@jpeg");
   // Parent first, then the post, then replies.
   if (root && post && reply) EXPECT(root->id < post->id && post->id < reply->id);
-  std::string mention, link;
+  std::string mention, link, mention_rel, link_rel = "?";
   for (const Node& n : d.nodes)
     for (const InlineSpan& s : n.spans) {
-      if (s.href == "bsky:did:plc:b") mention = s.text;
-      if (s.href == "https://x.org/") link = s.text;
+      if (s.href == "bsky:did:plc:b") mention = s.text, mention_rel = s.rel;
+      if (s.href == "https://x.org/") link = s.text, link_rel = s.rel;
     }
   EXPECT_EQ(mention, "@bob");
+  EXPECT_EQ(mention_rel, "mention");
   EXPECT_EQ(link, "x.org");
+  EXPECT_EQ(link_rel, "");
   EXPECT(has_href(d, "bsky:alice.example/post/3k"));  // bsky.app link made native
   bool image = false;
   for (const Node& n : d.nodes)
@@ -483,6 +485,11 @@ void test_bluesky() {
   EXPECT_EQ(h.meta.title, "Bluesky — #café");
   EXPECT(message(h, "t1") != nullptr);
   EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9"));
+  bool tag = false;
+  for (const Node& n : h.nodes)
+    for (const InlineSpan& s : n.spans)
+      tag |= s.text == "#café" && s.rel == "tag" && s.href == "bsky:hashtag/caf%C3%A9";
+  EXPECT(tag);
   EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9?cursor=30"));
   EXPECT(all_text(h).find("No posts.") == std::string::npos);
   EXPECT(all_text(h).find("4 replies") == std::string::npos);  // not in the header

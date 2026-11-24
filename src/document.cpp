@@ -104,6 +104,18 @@ bool Document::insert_after(NodeId after, NodeId child) {
 
 namespace xanatoo {
 
+bool rel_has(std::string_view rel, std::string_view token) {
+  size_t i = 0;
+  while (i < rel.size()) {
+    while (i < rel.size() && (rel[i] == ' ' || rel[i] == '\t')) ++i;
+    size_t j = i;
+    while (j < rel.size() && rel[j] != ' ' && rel[j] != '\t') ++j;
+    if (j > i && rel.substr(i, j - i) == token) return true;
+    i = j;
+  }
+  return false;
+}
+
 InlineSpan inline_image(std::string src, std::string alt, int width,
                         int height) {
   InlineSpan s;

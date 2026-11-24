@@ -358,6 +358,14 @@ class SheetReader {
       inline_props(f, style_.visited);
       return;
     }
+    if (name == "mention") {
+      inline_props(f, style_.mention);
+      return;
+    }
+    if (name == "hashtag") {
+      inline_props(f, style_.hashtag);
+      return;
+    }
     warn("unknown role " + name);
   }
 
@@ -826,6 +834,8 @@ void copy_style_group(DocStyle& dst, const DocStyle& src, unsigned groups) {
   for (size_t i = 0; i < kInlineKindCount; ++i) inl(dst.inl[i], src.inl[i]);
   inl(dst.metadata, src.metadata);
   inl(dst.visited, src.visited);
+  inl(dst.mention, src.mention);
+  inl(dst.hashtag, src.hashtag);
 }
 
 bool load_style(const StyleChoice& choice, DocStyle& out, std::string* error) {

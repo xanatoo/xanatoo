@@ -55,6 +55,7 @@ void add_rich_text(Document& doc, NodeId parent, const std::string& text,
   struct Range {
     size_t start, end;
     std::string href;
+    std::string_view rel;
   };
   std::vector<Range> ranges;
   for (const Json& f : facets) {
@@ -63,14 +64,22 @@ void add_rich_text(Document& doc, NodeId parent, const std::string& text,
     const long long a = num(*idx, "byteStart"), b = num(*idx, "byteEnd");
     if (a < 0 || b <= a || static_cast<size_t>(b) > text.size()) continue;
     std::string href;
+    std::string_view rel;
     for (const Json& feat : arr(f, "features")) {
       const std::string type = str(feat, "$type");
-      if (type == "app.bsky.richtext.facet#link") href = str(feat, "uri");
-      else if (type == "app.bsky.richtext.facet#mention") href = bsky_ref(str(feat, "did"));
-      else if (type == "app.bsky.richtext.facet#tag")
+      if (type == "app.bsky.richtext.facet#link") {
+        href = str(feat, "uri");
+        rel = {};
+      } else if (type == "app.bsky.richtext.facet#mention") {
+        href = bsky_ref(str(feat, "did"));
+        rel = kRelMention;
+      } else if (type == "app.bsky.richtext.facet#tag") {
         href = bsky_ref("hashtag/" + url_encode(str(feat, "tag")));
+        rel = kRelTag;
+      }
     }
-    if (!href.empty()) ranges.push_back({static_cast<size_t>(a), static_cast<size_t>(b), href});
+    if (!href.empty())
+      ranges.push_back({static_cast<size_t>(a), static_cast<size_t>(b), href, rel});
   }
   std::sort(ranges.begin(), ranges.end(),
             [](const Range& x, const Range& y) { return x.start < y.start; });
@@ -95,6 +104,7 @@ void add_rich_text(Document& doc, NodeId parent, const std::string& text,
         if (r.start > at) doc.append_text(out(), text.substr(at, r.start - at));
         const size_t stop = std::min(r.end, end);
         add_link(doc, out(), text.substr(r.start, stop - r.start), r.href);
+        doc.get(out()).spans.back().rel = std::string(r.rel);
         at = stop;
       } else {
         doc.append_text(out(), text.substr(at, end - at));

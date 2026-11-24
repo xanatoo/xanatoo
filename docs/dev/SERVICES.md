@@ -20,6 +20,16 @@ read-only service clients. Every client is read-only: never post or log in.
 - `include/xanatoo/transfer_meter.hpp` — thread-local byte meter for the loading indicator: fetch workers install one (`TransferMeterScope`), network readers call `meter_bytes` / `meter_expect`; a new raw reader loop should feed it too. The meter also carries the job's cancel flag (`TransferMeter::cancel` → `FetchShared::abandoned`, set by Stop / Esc / navigating away): every reader loop (HTTP(S) in `https.cpp`, Gemini, Gopher, Spartan, Nex, Finger) checks `transfer_cancelled()` per block and fails with `transfer_cancelled_error()`, so a new reader loop must check it too.
 - `include/xanatoo/json_min.hpp` — tiny JSON field/object helpers for read-only API clients (header-only). The `*_field` lookups are flat (first match anywhere): use `json_top_level(obj)` when nested objects repeat a key.
 
+## Social markup (mentions, hashtags)
+
+Format: `docs/XML.md` "Social markup". Sources of `rel="mention"` /
+`rel="tag"` links: Bluesky facets (`add_rich_text`, `forum_bluesky.cpp`),
+Nostr `NoteLinker::mention` (hashtags stay plain: no tag-feed ref yet),
+fediverse / Mastodon HTML in feeds and web pages (`html_social_rel` in
+`html_min.cpp`: `rel="tag"`, `class="hashtag"`, `class="mention"`; other
+rel values are dropped), Reddit `reddit_mark_users`. Context menu:
+`App::context_link_rel` / `context_link_text` → Copy Handle / Copy Hashtag.
+
 ## Service refs (`native.hpp`)
 
 - `hn:` / `reddit:` / `lemmy:` / `digg:` refs select the native Thread + Message
@@ -154,6 +164,9 @@ read-only service clients. Every client is read-only: never post or log in.
 - `reddit:r/<sub>/…` refs (the reddit.com path); https links open as web pages.
 - Maps posts/comments to Thread + Message nodes; bodies (selftext / comment
   Markdown) go through `append_foreign_markdown` (`markdown_body.hpp`).
+- `reddit_mark_users` (pure, outside `XANATOO_REDDIT`, tested): user-page
+  links and `u/NAME` / `/u/NAME` in post and comment bodies become
+  `rel="mention"` links (not in code blocks). `r/sub` is not linked yet.
 - Optional OAuth: `XANATOO_REDDIT_CLIENT_ID` + `XANATOO_REDDIT_CLIENT_SECRET` (script app) when anonymous `.json` returns 403.
 - Optional UA override: `XANATOO_REDDIT_USER_AGENT`.
 - When a native `reddit:` fetch receives HTTP 403, the error document offers a

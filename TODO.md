@@ -2,6 +2,20 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Social markup: mentions and hashtags
+
+- Links carry `rel="mention"` (href = account ref) or `rel="tag"` (href =
+  tag feed); scores stay `role=metadata rel="score"` snapshots. Helpers
+  `kRel*` / `rel_has` (types.hpp). Format: `docs/XML.md` "Social markup".
+- Sources: Bluesky facets, Nostr mentions, fediverse HTML (`html_min`),
+  Reddit `u/NAME` + user links (`reddit_mark_users`). Nothing guessed from
+  plain text.
+- Style roles `mention` / `hashtag` (colour, font; underline stays the
+  link's), commented in `styles/default.xss`. Context menu: Copy Handle /
+  Copy Hashtag. Test `test_social_markup` plus Bluesky / Nostr asserts.
+- Open: Nostr `#t` hashtags (no tag-feed ref), Reddit `r/sub` links,
+  Mastodon API client, per-rel underline.
+
 ## Status (2026-11-24) — XML is the canonical format; `.sexp` read only
 
 - The S-expression writer is gone (`serialize_sexpr`, Export as
@@ -19,10 +33,6 @@
 - `examples/semantic.sexp` → `examples/semantic.xml`; `sample.sexp` stays
   as the read-only legacy sample. Test `test_examples_xml_round_trip`
   round-trips every example through XML via the lossless doc_codec.
-- Next: social markup — `rel="mention"` / `rel="tag"` links, `rel="score"`
-  metadata spans, `mention` / `hashtag` style roles, context menu entries,
-  used by Bluesky, Nostr, Mastodon, Reddit. XML first, Markdown where
-  natural; no voting actions, no guessing `@word` in plain text.
 
 ## Status (2026-11-24) — Service strips for native services
 

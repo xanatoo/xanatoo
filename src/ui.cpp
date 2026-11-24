@@ -4181,6 +4181,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::CopyText;
         result.arg = state.context_link;
       }
+      if (!state.context_link_text.empty() &&
+          ImGui::MenuItem(state.context_link_rel == "tag" ? "Copy Hashtag"
+                                                          : "Copy Handle")) {
+        cmd = UiCommand::CopyText;
+        result.arg = state.context_link_text;
+      }
       if (ImGui::MenuItem("Download Link", nullptr, false,
                           state.context_link_web)) {
         cmd = UiCommand::DownloadUrl;

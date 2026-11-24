@@ -3310,6 +3310,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     if (inl.has_font) r = inl.font;
     if (span.role == InlineRole::Metadata && style_->metadata.has_font)
       r = style_->metadata.font;
+    if (const InlineStyle* so = style_->social(span.rel); so && so->has_font)
+      r = so->font;
     return r;
   };
 
@@ -3701,12 +3703,15 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       pg.kind = c.kind;
       pg.marks = node.spans[c.span_idx].marks;
       pg.font = c.role;
-      const InlineRole semantic = node.spans[c.span_idx].role;
+      const InlineSpan& cspan = node.spans[c.span_idx];
+      const InlineRole semantic = cspan.role;
+      const InlineStyle* social = style_->social(cspan.rel);
       pg.color = ctx_color && !(*style_)[c.kind].has_color &&
                              !(semantic == InlineRole::Metadata &&
-                               style_->metadata.has_color)
+                               style_->metadata.has_color) &&
+                             !(social && social->has_color)
                      ? (*style_)[ctx_role_].color
-                     : style_->text_color(block, c.kind, semantic);
+                     : style_->text_color(block, c.kind, semantic, cspan.rel);
       const Atom* atom = atom_of(c);
       if (atom && atom->math) {
         // Formula: drawn from its box at the baseline; the glyph is its

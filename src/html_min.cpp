@@ -30,6 +30,17 @@ bool is_space(char c) {
   return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
 }
 
+// The social relation of an <a> (types.hpp kRel*): Mastodon and other
+// fediverse servers mark hashtags `rel="tag"` / `class="… hashtag"` and
+// accounts `class="… mention"` (microformats h-card).
+std::string_view html_social_rel(std::string_view attrs) {
+  const std::string rel = ascii_lower(html_attr(attrs, "rel"));
+  const std::string cls = ascii_lower(html_attr(attrs, "class"));
+  if (rel_has(rel, kRelTag) || rel_has(cls, "hashtag")) return kRelTag;
+  if (rel_has(rel, kRelMention) || rel_has(cls, "mention")) return kRelMention;
+  return {};
+}
+
 template <size_t N>
 bool one_of(std::string_view t, const std::array<std::string_view, N>& set) {
   return std::find(set.begin(), set.end(), t) != set.end();
@@ -232,7 +243,8 @@ class Builder {
   void finalize(NodeId n);
   void add_break();
   void push_text(NodeId t, InlineKind kind, std::string s,
-                 const std::string& href = {}, uint8_t marks = 0);
+                 const std::string& href = {}, uint8_t marks = 0,
+                 std::string_view rel = {});
   void emit(std::string s);
   void pop();
   void finish_row_group(NodeId table);
@@ -263,6 +275,7 @@ class Builder {
   NodeId para_ = INVALID_NODE;
   int em_ = 0, strong_ = 0, code_ = 0, strike_ = 0;
   std::vector<std::string> links_;  // "" = <a> without href
+  std::vector<std::string_view> link_rels_;  // social rel of each <a>
   std::vector<std::string> times_;  // <time datetime="…">, independent of links
   bool pre_start_ = false;          // drop the newline right after <pre>
 };
@@ -367,12 +380,14 @@ void Builder::close_para() {
 }
 
 void Builder::push_text(NodeId t, InlineKind kind, std::string s,
-                        const std::string& href, uint8_t marks) {
+                        const std::string& href, uint8_t marks,
+                        std::string_view rel) {
   auto& spans = doc_.get(t).spans;
   const std::string_view dt = times_.empty() ? std::string_view{}
                                               : std::string_view(times_.back());
   if (!spans.empty() && spans.back().kind == kind && spans.back().href == href &&
-      spans.back().marks == marks && spans.back().datetime == dt) {
+      spans.back().marks == marks && spans.back().datetime == dt &&
+      spans.back().rel == rel) {
     spans.back().text += s;
     return;
   }
@@ -382,6 +397,7 @@ void Builder::push_text(NodeId t, InlineKind kind, std::string s,
   span.href = href;
   span.marks = marks;
   span.datetime = dt;
+  span.rel = std::string(rel);
   spans.push_back(std::move(span));
 }
 
@@ -402,9 +418,11 @@ void Builder::emit(std::string s) {
   NodeId t = ensure_target();
   if (t == INVALID_NODE) return;
   std::string href;
-  for (auto it = links_.rbegin(); it != links_.rend(); ++it)
-    if (!it->empty()) {
-      href = *it;
+  std::string_view rel;
+  for (size_t i = links_.size(); i-- > 0;)
+    if (!links_[i].empty()) {
+      href = links_[i];
+      rel = link_rels_[i];
       break;
     }
   InlineKind kind = InlineKind::Text;
@@ -423,8 +441,9 @@ void Builder::emit(std::string s) {
     if (strike_ > 0) marks |= kMarkStrike;
     marks &= static_cast<uint8_t>(~kind_mark(kind));
   }
-  push_text(t, kind, std::move(s), kind == InlineKind::Link ? href : std::string{},
-            marks);
+  const bool link = kind == InlineKind::Link;
+  push_text(t, kind, std::move(s), link ? href : std::string{}, marks,
+            link ? rel : std::string_view{});
 }
 
 void Builder::text(std::string_view raw) {
@@ -676,6 +695,7 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
         href.erase(0, page.size());
     }
     links_.push_back(std::move(href));
+    link_rels_.push_back(html_social_rel(attrs));
     return;
   }
   if (tag == "time") {
@@ -1016,7 +1036,10 @@ void Builder::close(const std::string& tag) {
     return;
   }
   if (tag == "a") {
-    if (!links_.empty()) links_.pop_back();
+    if (!links_.empty()) {
+      links_.pop_back();
+      link_rels_.pop_back();
+    }
     return;
   }
   if (tag == "time") {

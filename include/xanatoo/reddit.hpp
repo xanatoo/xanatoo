@@ -32,6 +32,12 @@ struct RedditVideo {
 };
 RedditVideo reddit_video(std::string_view post_data_json);
 
+// Reddit's Markdown links "u/name" and "/u/name" to the user's page; in
+// the body blocks under `node` such text becomes a Link (rel mention, href
+// https://www.reddit.com/user/NAME), and links that already go to a user
+// page get rel mention. Text inside code spans or links stays as it is.
+void reddit_mark_users(Document& doc, NodeId node);
+
 #if defined(XANATOO_REDDIT) && XANATOO_REDDIT
 // Fetch a subreddit listing or post+comments via the public .json API.
 // Builds a Document with Thread + Message nodes (read-only).

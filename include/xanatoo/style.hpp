@@ -155,6 +155,10 @@ struct DocStyle {
   BlockStyle block[kBlockRoleCount];
   InlineStyle inl[kInlineKindCount];
   InlineStyle metadata;  // semantic inline role, can also apply to links
+  // Links of social posts by their rel (types.hpp kRelMention / kRelTag):
+  // colour and font over the link's; underline stays the link's.
+  InlineStyle mention;
+  InlineStyle hashtag;
   // Links whose page was visited before (`visited-link`). Without a colour
   // the link colour is faded towards the paper (visited_link_color).
   InlineStyle visited;
@@ -173,9 +177,19 @@ struct DocStyle {
   const InlineStyle& operator[](InlineKind k) const {
     return inl[static_cast<size_t>(k)];
   }
+  // The mention / hashtag style of a span with `rel`, or nullptr.
+  const InlineStyle* social(std::string_view rel) const {
+    if (rel.empty()) return nullptr;
+    if (rel_has(rel, kRelMention)) return &mention;
+    if (rel_has(rel, kRelTag)) return &hashtag;
+    return nullptr;
+  }
   // Glyph colour for inline `k` inside a block of role `r`.
   Rgba text_color(BlockRole r, InlineKind k,
-                  InlineRole role = InlineRole::Normal) const {
+                  InlineRole role = InlineRole::Normal,
+                  std::string_view rel = {}) const {
+    if (const InlineStyle* so = social(rel); so && so->has_color)
+      return so->color;
     if (role == InlineRole::Metadata && metadata.has_color)
       return metadata.color;
     const InlineStyle& is = (*this)[k];

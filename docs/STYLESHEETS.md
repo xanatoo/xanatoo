@@ -274,6 +274,13 @@ metadata role's `font` and `color` override the inline-kind and block
 styles; otherwise those existing styles apply. The built-in style gives
 metadata small, muted text.
 
+**Mentions and hashtags:** `(role mention …)` styles links to an account
+(`rel="mention"`), `(role hashtag …)` links to a hashtag feed
+(`rel="tag"`), as Bluesky, Nostr, Mastodon / fediverse HTML and Reddit
+mark them (docs/XML.md "Social markup"). Their `color` and `font` override
+the link's (and metadata's); underline stays the link's. The built-in style
+sets neither, so they look like ordinary links.
+
 **Visited links:** `(role visited-link (color "#80408c"))` colours links
 whose page is in the visit log (or was shown this session). Only `color`
 is used. A later `link` colour — in the same sheet or in a sheet that

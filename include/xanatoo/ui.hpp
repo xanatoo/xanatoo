@@ -600,6 +600,8 @@ struct UiState {
   std::string context_link;       // right-clicked link target, if any
   std::string context_link_href;  // … as written in the page
   bool context_link_web = false;  // … and it is http(s): can be downloaded
+  std::string context_link_rel;   // "mention" / "tag" (social links), or ""
+  std::string context_link_text;  // … its text: "@alice", "#tag"
   // Blocks around the right-click, innermost first ("Article · Title"), and
   // the innermost Article / Section among them (-1 = none).
   std::vector<std::string> context_blocks;
