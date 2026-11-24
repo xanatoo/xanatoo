@@ -942,10 +942,12 @@ void finish_navigate(App& app, const FetchJob& job) {
     NavHistory& h = app.panes[job.pane].nav;
     const NavLink via = std::exchange(h.pending_link, {});
     const auto hint = std::exchange(h.pending_kind, std::nullopt);
+    const int64_t from = std::exchange(h.pending_from, 0);
+    const bool resume = std::exchange(h.pending_resume, false);
     h.restoring = -1;
     const std::string url = !r.final_url.empty() ? r.final_url : job.url;
     if (play_audio(app, url, r.download->mime, r.download->name))
-      record_media_visit(app, job.pane, url, hint, 0, via);
+      record_media_visit(app, job.pane, url, hint, from, via, resume);
     // A stand-in page (the address given at startup) has nothing to keep:
     // a page about what plays takes its place.
     if (const DocBuffer* b = find_buf(app, app.panes[job.pane].buf); b && b->placeholder)

@@ -792,6 +792,10 @@
   (`history`, source = picked visit), leave times.
 - Known: the visit title is the file name; tag titles arrive later and
   are not written back.
+- 2026-11-24: replaying from the History panel no longer adds a row: the
+  player takes the picked visit (`visit_resume`, as pages do), also for
+  streams found playable by the fetch; Shift / new tab still record a
+  `history` visit.
 
 ## Status (2026-11-19) — .txt keeps its lines
 

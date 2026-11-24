@@ -203,7 +203,11 @@ storing it (with step 4, the panel rewrite).
   command line; no observation. The view's entry keeps its visit. Its id
   is `AudioPlayer::visit`; `close_player` (stop, another file, quit) sets
   its `leave_time`. The address also joins `App::visited` (History menu)
-  and the URL ring.
+  and the URL ring. Played again from the History panel (`visit_resume`,
+  also for streams found playable by the fetch, `finish_navigate`), the
+  player takes the picked visit instead of recording a new one, like a
+  page the view goes back to; the other mode (Shift, new tab) records a
+  `history` visit.
 
 Observations: the fetch worker fills `FetchShared::observed` in
 `finish_fetch` (URL after redirects, time, status, and for web pages

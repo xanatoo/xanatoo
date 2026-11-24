@@ -2067,9 +2067,13 @@ void record_reload_visit(App& app, int pi);
 // `url` went to the Media panel (play_audio) from view `pi` (-1: none,
 // e.g. the command line): a visit of its own, reached from the page the
 // view shows (which stays), so the History panel lists what was played.
+// `resume` (App::visit_resume, with a `history` hint and `from`): played
+// again from the History panel, the player takes the picked visit `from`
+// instead of recording a new one.
 void record_media_visit(App& app, int pi, const std::string& url,
                         std::optional<xanatoo::VisitKind> hint,
-                        int64_t from = 0, const NavLink& via = {});
+                        int64_t from = 0, const NavLink& via = {},
+                        bool resume = false);
 // Keep the current history stop's view position up to date; also finish
 // restores deferred until an asynchronously fetched page arrives.
 void sync_nav_history(App& app);

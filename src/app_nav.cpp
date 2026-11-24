@@ -185,12 +185,19 @@ void note_visited_address(App& app, const std::string& url) {
 
 void record_media_visit(App& app, int pi, const std::string& url,
                         std::optional<xanatoo::VisitKind> hint, int64_t from,
-                        const NavLink& via) {
+                        const NavLink& via, bool resume) {
   using xanatoo::VisitKind;
   if (url.empty()) return;
   const std::string address = canonical_media_address(url);
   note_visited_address(app, address);
   if (xanatoo::no_save() || !app.record_visits) return;
+  if (resume && from && hint == VisitKind::History && via.href.empty()) {
+    // Played again from the History panel: that visit, no new row (like a
+    // page the view goes back to, record_visit).
+    app.audio.visit = from;
+    history_changed(app);
+    return;
+  }
   const bool in_view = pi >= 0 && pi < kMaxViews;
   const int64_t prev = in_view ? current_visit(app.panes[pi]) : 0;
   xanatoo::VisitRecord v;
@@ -1165,7 +1172,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
         : media.start            ? xanatoo::media_time_address(media.base, *media.start)
                                  : media.base;
     if (!play_audio(app, addr)) return false;
-    if (record_history) record_media_visit(app, pi, addr, hint, from, via);
+    if (record_history) record_media_visit(app, pi, addr, hint, from, via, resume);
     return true;
   }
   Pane& p = app.panes[pi];
