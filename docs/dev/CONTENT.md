@@ -468,7 +468,12 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `poll_images` (app_images.cpp) downloads it on 4 workers
   (`https_get_follow_pooled`: kept-alive connections, or the small-net
   client in `fetch_smallnet_image`), stores it with `store_remote_image`
-  and calls `remote_done`.
+  and calls `remote_done` (with the failure's reason).
+- `Image::error` says why a picture is not ok: "file not found", the
+  decoder's reason (`decode_error`), or the download's (HTTP status,
+  connect error, "not an image (text/html)"). The `//gallery` viewer and
+  the Context panel show it centred under "Cannot load image" and the
+  address (`draw_image_wait`, app_gallery.cpp).
 - Queue order: document order (layout asks for every image of a page), but
   waiting images that are drawn (`draw_image_loading`, the `//gallery`
   viewer) call `want_image_now`, and the next `poll_images` moves them to

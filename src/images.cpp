@@ -71,11 +71,14 @@ namespace {
 // Downloaded files are untrusted: refuse absurd dimensions before decoding.
 constexpr long long kMaxPixels = 64ll * 1024 * 1024;
 
-unsigned char* load_rgba(const std::string& path, int& w, int& h) {
+unsigned char* load_rgba(const std::string& path, int& w, int& h,
+                         std::string& error) {
   int comp = 0;
   if (stbi_info(path.c_str(), &w, &h, &comp) &&
       static_cast<long long>(w) * h > kMaxPixels) {
     std::cerr << "image too large: " << path << " (" << w << "x" << h << ")\n";
+    error = "too large (" + std::to_string(w) + "×" + std::to_string(h) +
+            " pixels)";
     return nullptr;
   }
   if (auto* pixels = stbi_load(path.c_str(), &w, &h, &comp, 4)) return pixels;
@@ -110,7 +113,32 @@ unsigned char* load_rgba(const std::string& path, int& w, int& h) {
 
 }  // namespace
 
+namespace {
+
+// stb_image's terse reasons, said for people.
+std::string decode_error(const char* reason) {
+  const std::string_view r = reason ? reason : "";
+  if (r.empty()) return "cannot decode";
+  if (r == "can't fopen") return "cannot open file";
+  if (r == "unknown image type") return "unknown or unsupported image format";
+  if (r == "outofmem") return "out of memory";
+  return "cannot decode (" + std::string(r) + ")";
+}
+
+}  // namespace
+
 Image ImageCache::load(const std::string& resolved_path) {
+  std::error_code ec;
+  if (resolved_path.empty() || !fs::exists(resolved_path, ec)) {
+    Image missing;
+    missing.error = "file not found";
+    return missing;
+  }
+  if (fs::is_directory(resolved_path, ec)) {
+    Image dir;
+    dir.error = "is a directory";
+    return dir;
+  }
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   if (backend_) {
     std::vector<unsigned char> px;
@@ -120,11 +148,15 @@ Image ImageCache::load(const std::string& resolved_path) {
   }
 #endif
   int w = 0, h = 0;
-  unsigned char* data = load_rgba(resolved_path, w, h);
+  std::string error;
+  unsigned char* data = load_rgba(resolved_path, w, h, error);
   if (!data) {
+    const char* reason = stbi_failure_reason();
     std::cerr << "image load failed: " << resolved_path
-              << " (" << stbi_failure_reason() << ")\n";
-    return {};
+              << " (" << (reason ? reason : "unknown") << ")\n";
+    Image failed;
+    failed.error = !error.empty() ? error : decode_error(reason);
+    return failed;
   }
   Image img = to_texture(data, w, h);
   stbi_image_free(data);
@@ -179,8 +211,9 @@ namespace {
 // Decoded thumbnail pixels of `resolved` (longer edge ≤ edge), or empty.
 std::vector<unsigned char> thumb_pixels(const std::string& resolved, int edge,
                                         int& tw, int& th) {
+  std::string error;
   int w = 0, h = 0;
-  unsigned char* data = load_rgba(resolved, w, h);
+  unsigned char* data = load_rgba(resolved, w, h, error);
   if (!data) {
     std::cerr << "thumbnail: cannot load " << resolved << " ("
               << stbi_failure_reason() << ")\n";
@@ -323,19 +356,24 @@ std::vector<std::string> ImageCache::take_requests() {
   return std::exchange(requests_, {});
 }
 
-void ImageCache::remote_done(const std::string& url, bool ok) {
+void ImageCache::remote_done(const std::string& url, bool ok,
+                             const std::string& error) {
   pending_.erase(url);
-  if (!ok) failed_.insert(url);
+  if (ok) return;
+  Image& f = failed_[url];
+  f.error = !error.empty() ? error : "download failed";
 }
 
 const Image* ImageCache::remote_placeholder(const std::string& url) {
-  static const Image kPending{nullptr, 0, 0, false, true};
-  static const Image kFailed{};
-  if (failed_.count(url)) return &kFailed;
+  static const Image kPending{nullptr, 0, 0, false, true, {}};
+  static const Image kNoCache{nullptr, 0, 0, false, false,
+                              "no cache directory to download into"};
+  // unordered_map keeps element addresses across rehashing.
+  if (auto it = failed_.find(url); it != failed_.end()) return &it->second;
   if (pending_.count(url)) return &kPending;
   std::error_code ec;
   const std::string p = remote_image_path(url);
-  if (p.empty()) return &kFailed;  // no cache directory to download into
+  if (p.empty()) return &kNoCache;
   if (fs::exists(p, ec)) return nullptr;
   // Pruned from the URL cache, but a snapshot (or the object store) still
   // has the bytes: no download.
@@ -368,7 +406,7 @@ const Image& ImageCache::thumb(const std::string& path, const std::string& base,
   if (it != cache_.end()) return it->second;
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   if (backend_) {
-    static const Image kBuilding{nullptr, 0, 0, false, true};
+    static const Image kBuilding{nullptr, 0, 0, false, true, {}};
     if (thumb_pending_.insert(key).second)
       image_backend_request_thumb(*backend_, key, resolved, edge);
     return kBuilding;

@@ -114,8 +114,10 @@ bool fetch_smallnet_image(const std::string& url, std::string& body,
 
 // Download `url` to its cache file and build the inline thumbnail.
 // `page`: the answer was not a picture (an HTML page named like one,
-// "/wiki/File:X.jpg"); the URL cache remembers it either way.
-bool download_image(const std::string& requested, bool& page) {
+// "/wiki/File:X.jpg"); the URL cache remembers it either way. `why`: the
+// reason when it fails, for the placeholder.
+bool download_image(const std::string& requested, bool& page,
+                    std::string& why) {
   page = false;
   // A snapshot's picture that was not kept: the live one, stored under its
   // own address (snapshot_image_path falls back to that file).
@@ -126,8 +128,8 @@ bool download_image(const std::string& requested, bool& page) {
       !xanatoo::starts_with_ci(url, "https://")) {
     const bool got = fetch_smallnet_image(url, body, err);
     if (!got || body.empty()) {
-      std::cerr << "image: " << url << ": "
-                << (!err.empty() ? err : got ? "no image" : "no client") << "\n";
+      why = !err.empty() ? err : got ? "no image" : "no client for this scheme";
+      std::cerr << "image: " << url << ": " << why << "\n";
       return false;
     }
   } else {
@@ -160,40 +162,56 @@ bool download_image(const std::string& requested, bool& page) {
       const std::string type = xanatoo::ascii_lower(
           r->content_type.substr(0, r->content_type.find(';')));
       page = type == "text/html" || type == "application/xhtml+xml";
+      why = "not an image (" +
+            (r->content_type.empty() ? std::string("no type") : type) + ")";
       return false;
     }
     if (!r || r->status != 200 || r->body.empty()) {
-      std::cerr << "image: " << url << ": "
-                << (r ? http_status_error(r->status) : err) << "\n";
+      why = !r                    ? (!err.empty() ? err : "no response")
+            : r->status != 200    ? http_status_error(r->status)
+                                  : "empty answer";
+      std::cerr << "image: " << url << ": " << why << "\n";
       return false;
     }
     // https_request stops reading at 12 MiB: anything that size is cut off.
     if (r->body.size() >= 12 * 1024 * 1024) {
-      std::cerr << "image: " << url << ": too large\n";
+      why = "too large (over 12 MiB)";
+      std::cerr << "image: " << url << ": " << why << "\n";
       return false;
     }
     // The URL cache writes the bytes where ImageCache reads them.
     const std::string_view bytes = r->body;
     const xanatoo::UrlCacheEntry entry = cache_entry(url, final_url, *r);
-    if (!xanatoo::url_cache_put(entry,
-                                &bytes))
+    if (!xanatoo::url_cache_put(entry, &bytes)) {
+      why = "cannot write to the cache";
       return false;
+    }
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
     return true;
 #else
-    return xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
-                                     xanatoo::kRemoteThumbEdge);
+    if (xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
+                                  xanatoo::kRemoteThumbEdge))
+      return true;
+    why = "cannot decode the downloaded image";
+    return false;
 #endif
 #else
+    why = "built without HTTPS support";
     return false;
 #endif
   }
-  if (!xanatoo::store_remote_image(url, body)) return false;
+  if (!xanatoo::store_remote_image(url, body)) {
+    why = "cannot write to the cache";
+    return false;
+  }
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   return true;  // thumtoo builds the thumbnail when layout asks for it
 #else
-  return xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
-                                   xanatoo::kRemoteThumbEdge);
+  if (xanatoo::build_thumb_file(xanatoo::remote_image_path(requested),
+                                xanatoo::kRemoteThumbEdge))
+    return true;
+  why = "cannot decode the downloaded image";
+  return false;
 #endif
 }
 
@@ -214,21 +232,24 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
     }
     bool ok = false;
     bool page = false;
+    std::string why;
     {
       xanatoo::TransferMeterScope scope(meter.get());
       try {
-        ok = download_image(url, page);
+        ok = download_image(url, page, why);
       } catch (const std::exception& ex) {
-        std::cerr << "image: " << url << ": " << ex.what() << "\n";
+        why = ex.what();
+        std::cerr << "image: " << url << ": " << why << "\n";
       } catch (...) {
         // A decoder error must not escape this detached worker thread.
-        std::cerr << "image: " << url << ": unexpected decoder exception\n";
+        why = "unexpected decoder exception";
+        std::cerr << "image: " << url << ": " << why << "\n";
       }
     }
     std::lock_guard<std::mutex> lock(sh->mutex);
     sh->active.erase(url);
     if (page) sh->pages.push_back(url);
-    sh->done.emplace_back(std::move(url), ok);
+    sh->done.push_back({std::move(url), ok, std::move(why)});
   }
 }
 #endif
@@ -240,13 +261,13 @@ void want_image_now(App& app, const std::string& url) {
 }
 
 void poll_images(App& app) {
-  std::vector<std::pair<std::string, bool>> done;
+  std::vector<ImageFetchDone> done;
   std::vector<std::string> pages;  // "images" that were web pages
 #ifdef __EMSCRIPTEN__
   // No network or pthreads in the offline web edition. Complete queued
   // remote requests as unavailable without scheduling any workers.
   for (std::string& url : app.images.take_requests())
-    done.emplace_back(std::move(url), false);
+    done.push_back({std::move(url), false, "no network in the web edition"});
   app.images_on_screen.clear();
 #else
   ImageFetchShared& sh = *app.image_fetch;
@@ -275,7 +296,8 @@ void poll_images(App& app) {
   }
 #endif
   const bool thumbs = app.images.poll();
-  for (const auto& [url, ok] : done) app.images.remote_done(url, ok);
+  for (const ImageFetchDone& d : done)
+    app.images.remote_done(d.url, d.ok, d.error);
   for (const std::string& url : pages) gallery_image_was_page(app, url);
   if (!done.empty() || thumbs) app.image_relayout_due = true;
   if (!app.image_relayout_due) return;

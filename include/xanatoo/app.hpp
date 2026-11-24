@@ -751,10 +751,17 @@ struct FetchShared {
 // fetched by a few worker threads into the URL cache (cache_dir()/urls/).
 struct PageTiles;  // app_pagetiles.cpp
 
+// A finished remote image download; `error` says why it failed.
+struct ImageFetchDone {
+  std::string url;
+  bool ok = false;
+  std::string error;
+};
+
 struct ImageFetchShared {
   std::mutex mutex;
   std::deque<std::string> queue;
-  std::vector<std::pair<std::string, bool>> done;  // url, ok
+  std::vector<ImageFetchDone> done;
   // Of those, the ones that answered with something other than a picture
   // (a web page): views showing them switch to the page (poll_images).
   std::vector<std::string> pages;

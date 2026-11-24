@@ -21,6 +21,9 @@ struct Image {
   int height = 0;
   bool ok = false;
   bool pending = false;  // remote source downloading / thumbnail building
+  // Why it is not ok (not pending): "file not found", the decoder's or the
+  // download's reason. Empty when unknown.
+  std::string error;
 };
 
 // Remote (http(s) / gemini / spartan / gopher / nex) image sources are downloaded by the app's image
@@ -90,8 +93,10 @@ public:
 
   // Remote URLs requested since the last call (each URL once).
   std::vector<std::string> take_requests();
-  // The fetcher finished `url`: its file is in place (ok) or never will be.
-  void remote_done(const std::string& url, bool ok);
+  // The fetcher finished `url`: its file is in place (ok) or never will be
+  // (`error` says why).
+  void remote_done(const std::string& url, bool ok,
+                   const std::string& error = {});
 
   // Thumbnails finished in the background → textures. True when any
   // arrived (their size changed from the placeholder: relayout).
@@ -106,7 +111,7 @@ private:
   std::string base_dir_;
   std::unordered_map<std::string, Image> cache_;
   std::unordered_set<std::string> pending_;  // remote URLs being fetched
-  std::unordered_set<std::string> failed_;   // remote URLs that failed
+  std::unordered_map<std::string, Image> failed_;  // remote URL → reason
   std::vector<std::string> requests_;
 
   // Remote `url` not ready yet: the pending / failed placeholder, else null.

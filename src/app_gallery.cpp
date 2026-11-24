@@ -561,41 +561,101 @@ bool gallery_key(App& app, SDL_Keycode key, bool ctrl, bool alt, bool shift) {
 
 namespace {
 
-// A picture not drawable yet: "Loading …" with the download's progress, or
-// "Cannot load …", across the middle of `all`.
-void draw_image_wait(App& app, const SDL_Rect& all, int pad,
-                     const std::string& src, const xanatoo::Image& img) {
+// Greedy word wrap of `text` into at most `max_lines` lines of `max_w`
+// pixels; the last line is cut with an ellipsis when text remains.
+std::vector<std::string> wrap_words(xanatoo::Font& font,
+                                    const std::string& text, int max_w,
+                                    int max_lines) {
+  std::vector<std::string> lines;
+  std::string cur;
+  size_t i = 0;
+  while (i < text.size()) {
+    while (i < text.size() && text[i] == ' ') ++i;
+    if (i >= text.size()) break;
+    size_t j = text.find(' ', i);
+    if (j == std::string::npos) j = text.size();
+    const std::string word = text.substr(i, j - i);
+    const std::string joined = cur.empty() ? word : cur + " " + word;
+    if (cur.empty() || font.measure(joined) <= max_w) {
+      cur = joined;
+      i = j;
+      continue;
+    }
+    if (static_cast<int>(lines.size()) + 1 == max_lines) {
+      // No room for another line: the rest goes onto this one, cut.
+      cur += " " + text.substr(i);
+      break;
+    }
+    lines.push_back(fit_text(font, cur, max_w));
+    cur.clear();
+  }
+  if (!cur.empty()) lines.push_back(fit_text(font, cur, max_w));
+  return lines;
+}
+
+// A picture not drawable yet, centred in `box`: "Loading image" with the
+// address and the download's progress, or "Cannot load image" with the
+// address and the reason.
+void draw_image_wait(App& app, const SDL_Rect& box, const std::string& src,
+                     const xanatoo::Image& img) {
   xanatoo::Font& font = app.ui_font;
-  const int avail_w = all.w - 2 * pad;
+  const int line = font.line_height();
+  const int gap = std::max(2, static_cast<int>(6.f * app.ui_scale));
+  const int avail_w = std::max(1, box.w);
   const bool remote = xanatoo::is_remote_image(src);
   if (img.pending && remote) want_image_now(app, src);
   const ImageLoadState st = img.pending && remote ? image_load_state(app, src)
                                                   : ImageLoadState{};
-  std::string head = !img.pending  ? "Cannot load "
-                     : !remote     ? "Preparing "
-                     : st.queued   ? "Waiting to load "
-                                   : "Loading ";
-  const std::string msg = fit_text(font, head + src, avail_w);
-  const int msg_y = all.y + all.h / 2;
-  if (img.pending)
-    app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                           static_cast<float>(msg_y), msg, 200, 200, 205);
-  else
-    app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                           static_cast<float>(msg_y), msg, 220, 120, 120);
+  const std::string head = !img.pending  ? "Cannot load image"
+                           : !remote     ? "Preparing image"
+                           : st.queued   ? "Waiting to load image"
+                                         : "Loading image";
+  const std::string where = fit_text(font, src, avail_w);
+
+  // What goes below the address.
+  const int bar_h = std::max(4, static_cast<int>(5.f * app.ui_scale));
+  const int bar_w = std::min(avail_w, static_cast<int>(480.f * app.ui_scale));
+  std::string bytes;
+  std::vector<std::string> reason;
   if (img.pending) {
-    const int bar_h = std::max(4, static_cast<int>(5.f * app.ui_scale));
-    const int bw = std::min(avail_w, static_cast<int>(480.f * app.ui_scale));
-    const int bar_y = msg_y - font.descender() + pad / 2;
-    draw_image_progress_bar(app, SDL_Rect{all.x + pad, bar_y, bw, bar_h}, st,
-                            xanatoo::Rgba{60, 60, 66, 255});
-    const std::string bytes =
-        xanatoo::transfer_label(st.received, st.expected, 0);
-    if (!bytes.empty())
-      app.renderer.draw_text(font, static_cast<float>(all.x + pad),
-                             static_cast<float>(bar_y + bar_h + pad / 2 +
-                                                font.ascender()),
-                             bytes, 160, 160, 168);
+    bytes = xanatoo::transfer_label(st.received, st.expected, 0);
+  } else {
+    const std::string why = img.error.empty() ? "unknown error" : img.error;
+    reason = wrap_words(font, why, avail_w, 4);
+  }
+  int block_h = 2 * line + gap;  // heading, address
+  if (img.pending)
+    block_h += gap + bar_h + (bytes.empty() ? 0 : gap + line);
+  else
+    block_h += gap + static_cast<int>(reason.size()) * line;
+
+  auto centred = [&](const std::string& s, int top, Uint8 r, Uint8 g,
+                     Uint8 b) {
+    const int w = font.measure(s);
+    app.renderer.draw_text(font, static_cast<float>(box.x + (box.w - w) / 2),
+                           static_cast<float>(top + font.ascender()), s, r, g,
+                           b);
+  };
+  int y = box.y + std::max(0, (box.h - block_h) / 2);
+  if (img.pending)
+    centred(head, y, 215, 215, 220);
+  else
+    centred(head, y, 230, 125, 125);
+  y += line + gap;
+  centred(where, y, 150, 150, 158);
+  y += line + gap;
+  if (img.pending) {
+    draw_image_progress_bar(app,
+                            SDL_Rect{box.x + (box.w - bar_w) / 2, y, bar_w,
+                                     bar_h},
+                            st, xanatoo::Rgba{60, 60, 66, 255});
+    y += bar_h + gap;
+    if (!bytes.empty()) centred(bytes, y, 160, 160, 168);
+  } else {
+    for (const std::string& l : reason) {
+      centred(l, y, 205, 180, 180);
+      y += line;
+    }
   }
 }
 
@@ -636,7 +696,11 @@ void draw_context_image(App& app, const SDL_Rect& all, const std::string& src,
                std::to_string(img.height) + " · " +
                std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%)";
   } else {
-    draw_image_wait(app, all, pad, src, img);
+    draw_image_wait(app,
+                    SDL_Rect{all.x + pad, all.y + pad,
+                             std::max(1, all.w - 2 * pad),
+                             std::max(1, all.h - 2 * pad - line)},
+                    src, img);
   }
   caption = fit_text(font, caption, all.w - 2 * pad);
   const int cap_w = font.measure(caption);
@@ -685,7 +749,9 @@ void draw_gallery_image(App& app, int pi) {
     dims = std::to_string(img.width) + "×" + std::to_string(img.height) +
            " · " + std::to_string(static_cast<int>(sc * 100.f + 0.5f)) + "%";
   } else {
-    draw_image_wait(app, all, pad, item->src, img);
+    const Area area = picture_area(app, p);
+    draw_image_wait(app, SDL_Rect{area.x, area.y, area.w, area.h}, item->src,
+                    img);
   }
 
   const std::string counter = std::to_string(gv.index + 1) + " / " +
