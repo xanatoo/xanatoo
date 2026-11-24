@@ -286,6 +286,11 @@ bool app_init(App& app) {
       push_nav_history(app, pi, b->path);
     }
   app.record_visits = true;
+  app.split = app.buffers.size() > 1;  // auto-split when two files given
+  // The views get their rects now: a passage scrolls to its spot in a
+  // layout of the window's width, not of an unplaced (zero-width) view.
+  place_windows(app);
+  place_centre_rows(app);
   // A remote URL or passage given on the command line loads through the navigator
   // (the pane's buffer starts as a "Loading…" placeholder).
   for (int pi = 0; pi < (app.buffers.size() > 1 ? 2 : 1); ++pi) {
@@ -305,7 +310,6 @@ bool app_init(App& app) {
     break;
   }
   app.focus = 0;
-  app.split = app.buffers.size() > 1;  // auto-split when two files given
   if (app.opt.file_path.empty() && !app.opt.new_session) restore_session(app);
   app.session_live = true;
   {
