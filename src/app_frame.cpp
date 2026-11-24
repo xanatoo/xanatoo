@@ -14,6 +14,7 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <stdexcept>
 
 #include "xanatoo/app.hpp"
