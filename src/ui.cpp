@@ -4403,12 +4403,48 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::TextWrapped("%s", label);
         ImGui::PopStyleColor();
       };
-      std::string title = "Reply to ";
-      title += state.reply_author.empty() ? "comment" : "@" + state.reply_author;
-      ImGui::TextWrapped("%s", title.c_str());
-      if (!state.reply_label.empty() &&
-          ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Comment: %s", state.reply_label.c_str());
+      // What is being answered: whose message, its first words (quoted,
+      // with a bar like the Quote style) and a button to scroll to it.
+      const std::string who =
+          state.reply_author.empty() ? "a message" : state.reply_author;
+      const char* show = "Show";
+      const float show_w = ImGui::CalcTextSize(show).x +
+                           2.f * ImGui::GetStyle().FramePadding.x;
+      const float right_edge = ImGui::GetWindowContentRegionMax().x;
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextUnformatted("Replying to");
+      ImGui::SameLine(0.f, ImGui::CalcTextSize(" ").x);
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.12f, 0.33f, 0.62f, 1.f));
+      ImGui::TextUnformatted(who.c_str());
+      ImGui::PopStyleColor();
+      if (!state.reply_label.empty()) {
+        const float x = right_edge - show_w;
+        if (ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x +
+                ImGui::GetStyle().ItemSpacing.x < x)
+          ImGui::SameLine(x);
+        if (classic_button(show)) cmd = UiCommand::ShowReplyTarget;
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+          ImGui::SetTooltip("Scroll to the message being answered");
+      }
+      if (!state.reply_excerpt.empty()) {
+        const ImVec2 top = ImGui::GetCursorScreenPos();
+        const float bar = 3.f * scale_;
+        ImGui::Indent(bar + 6.f * scale_);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%s", state.reply_excerpt.c_str());
+        ImGui::PopStyleColor();
+        if (!state.reply_label.empty() &&
+            ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+          ImGui::SetTooltip("Message id: %s", state.reply_label.c_str());
+        ImGui::Unindent(bar + 6.f * scale_);
+        const float bottom = ImGui::GetItemRectMax().y;
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            top, ImVec2(top.x + bar, bottom), IM_COL32(220, 140, 40, 200));
+      }
+      if (state.reply_nostr)
+        muted_wrapped(("Threaded under this message; " + who +
+                       " and the people it tags are notified.").c_str());
       if (!state.reply_nostr) {
         muted_wrapped("Markdown · preview only, no account connected");
       } else if (state.reply_blocker.empty()) {

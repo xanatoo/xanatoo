@@ -1863,8 +1863,10 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
           r.text = "reply to ";
           r.text += who;
         } else {
+          // Parent not on the page: a long id (Nostr: 64 hex) is cut short.
           r.text = "reply to #";
-          r.text += node.alt;
+          r.text += node.alt.size() > 16 ? node.alt.substr(0, 12) + "…"
+                                         : node.alt;
         }
         if (const InlineSpan* l = header_link(2)) {
           r.kind = InlineKind::Link;

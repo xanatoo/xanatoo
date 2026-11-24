@@ -387,6 +387,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.reply_author = app.reply.author;
   ui_state.reply_page = app.reply.page;
   ui_state.reply_label = app.reply.label;
+  ui_state.reply_excerpt = app.reply.excerpt;
   ui_state.reply_text = app.reply.text;
   reply_ui_state(app, ui_state);
   if (app.reply.open) {
@@ -1039,6 +1040,40 @@ static bool changes_document(xanatoo::UiCommand cmd) {
 
 // Apply one toolbar / menu command to the world. `arg` is the optional
 // payload (URL, tab index, virtual key, example name).
+namespace {
+
+// The start of a message's own text (not its header or nested replies),
+// whitespace folded, cut to about two lines for the Reply panel.
+std::string message_excerpt(const xanatoo::Document& d, xanatoo::NodeId msg) {
+  std::string out;
+  for (xanatoo::NodeId c : d.get(msg).children) {
+    if (d.get(c).kind == xanatoo::NodeKind::Message) continue;
+    for (char ch : xanatoo::plain_text(d, c)) {
+      const bool space = ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r';
+      if (space) {
+        if (!out.empty() && out.back() != ' ') out.push_back(' ');
+      } else {
+        out.push_back(ch);
+      }
+    }
+    if (!out.empty() && out.back() != ' ') out.push_back(' ');
+    if (out.size() > 200) break;
+  }
+  while (!out.empty() && out.back() == ' ') out.pop_back();
+  if (out.size() > 160) {
+    out.resize(160);
+    while (!out.empty() &&
+           (static_cast<unsigned char>(out.back()) & 0xc0) == 0x80)
+      out.pop_back();
+    if (!out.empty() && static_cast<unsigned char>(out.back()) >= 0xc0)
+      out.pop_back();  // a lead byte whose continuation was cut
+    out += "…";
+  }
+  return out;
+}
+
+}  // namespace
+
 void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   using C = xanatoo::UiCommand;
   auto& p = focused_pane(app);
@@ -1097,6 +1132,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.reply.page = path_of(app, p);
       app.reply.label = message.label;
       app.reply.author = message.src;
+      app.reply.excerpt = message_excerpt(d, id);
       app.reply.text.clear();
       if (!app.nostr_reply.pending) app.nostr_reply.status.clear();
       app.reply.anchor_y = app.context_reply_y;
@@ -1107,6 +1143,25 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       place_windows(app);
       break;
     }
+    case C::ShowReplyTarget:
+      if (app.reply.open && !app.reply.label.empty()) {
+        int target = -1;
+        for (int vi : live_views(app))
+          if (app.panes[vi].buf == app.reply.buffer &&
+              (target < 0 || vi == app.focus))
+            target = vi;
+        Pane* p = target >= 0 ? &app.panes[target] : nullptr;
+        auto dest = p ? xanatoo::jump_to_href(doc_of(app, *p), "#id:" + app.reply.label)
+                      : std::nullopt;
+        if (dest) {
+          reveal_hit(app, *p, dest->node);
+          p->sel = xanatoo::Selection{*dest, *dest};
+          scroll_caret_into_view(app, *p);
+        } else {
+          flash_status(app, "The message is not on a page shown now");
+        }
+      }
+      break;
     case C::EditReply:
       if (app.reply.open) app.reply.text = arg;
       break;

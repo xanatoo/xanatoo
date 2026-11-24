@@ -583,6 +583,7 @@ struct ReplyDraft {
   BufferId buffer = kNoBuffer;
   xanatoo::NodeId node = xanatoo::INVALID_NODE;
   std::string page, label, author, text;
+  std::string excerpt;  // the start of the message's text, one line
   float anchor_y = -1.f;  // track position while the card is virtualised away
   uint64_t generation = 0;  // new target: reset ImGui's text/selection state
 };

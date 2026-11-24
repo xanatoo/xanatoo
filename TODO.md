@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Reply panel head, Nostr reply links
+
+- Reply panel: "Replying to <author>", an excerpt of the message under an
+  amber quote bar, Show (scrolls to it), and on Nostr who is notified.
+- Nostr "reply to …" is a link: in-page `#id:` when the parent is shown,
+  else `nostr:note1…`; long ids cut in the label (layout.cpp, all
+  services); group timelines now thread replies. Checked under Xvfb.
+
 ## Status (2026-11-24) — Nostr replies to any kind
 
 - `nostr_reply_plan` (unit-tested): kind 1 → NIP-10 kind 1; kind 9 →
@@ -12,7 +20,7 @@
 - Threads fetch comments (`#E`) and quoting chat (`#q`); kind 1111 shows as
   a message in threads, groups and the explorer list.
 - Open: NIP-42 AUTH (closed groups refuse), NIP-29 `previous` tags,
-  "reply to" marks in group timelines, an optimistic local insert.
+  an optimistic local insert.
 
 ## Status (2026-11-24) — Nostr replies
 

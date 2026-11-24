@@ -150,10 +150,11 @@ enum class UiCommand {
   MediaAction,     // arg = action of the Media panel's seek bar menu
                    // (App::media_menu): bookmark-time / unbookmark-time /
                    // bookmark-file / unbookmark-file / seek / copy-time
-  OpenReply,       // right-clicked Message: start a mock reply draft
+  OpenReply,       // right-clicked Message: start a reply draft
   JumpQuote,       // context menu quote link; arg = index into the items
   ContextJump,     // Context panel: jump to hovered quote source
   EditReply,       // arg = Markdown currently in the reply editor
+  ShowReplyTarget, // scroll a view to the message being answered
   SendReply,       // posts to Nostr (unlocked account); a mockup elsewhere
   // Tabs / MDI
   NewTab,          // new empty buffer + tab
@@ -643,6 +644,7 @@ struct UiState {
   unsigned shaded_panels = 0;
   uint64_t reply_generation = 0;
   std::string reply_author, reply_page, reply_label, reply_text;
+  std::string reply_excerpt;     // start of the message being answered
   bool reply_nostr = false;      // the target is a Nostr note: Send posts
   std::string reply_account;     // unlocked active Nostr account, or empty
   std::string reply_blocker;     // why Send cannot post now

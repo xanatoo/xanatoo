@@ -138,6 +138,11 @@ five default relays in parallel (`nostr_publish`), each answer (NIP-01
 `OK`) listed per relay. An accepted note goes into the local cache and can
 be opened with View note.
 
+**Reply links:** a message's "reply to …" header field is a link: to the
+parent's card (`#id:<hex>`) when it is on the page, else to the parent's
+thread (`nostr:note1…`, `link_reply_targets`). Long ids are cut short in
+the label. Group timelines mark replies too.
+
 **Replies:** right-click a message → Reply… posts as the unlocked active
 account (`nostr_reply_plan`, `nostr_reply`; see `docs/REPLIES.md`): kind-1
 notes get NIP-10 kind-1 replies, NIP-29 / NIP-C7 chat (kind 9) gets a kind-9

@@ -12,6 +12,12 @@ When a dragged panel snaps to the window edge, its editor follows the same
 snapped geometry as the frame. Labels and controls wrap in narrow side docks;
 a short panel can scroll to reach the Send button.
 
+- The panel's head says what is being answered: "Replying to <author>",
+  the start of the message's own text under an amber quote bar (the same
+  colour as the target's wash; its tooltip has the message id) and **Show**,
+  which scrolls a view of that page to the message (`ShowReplyTarget`).
+  On Nostr a line adds that the reply is threaded under that message and
+  that its author and the people it tags are notified.
 - The composer accepts multiline text and has **Bold**, **Italic**, **Code**,
   **Link**, and **Quote** buttons. They insert Markdown delimiters around
   the selected text, or at the cursor if nothing is selected.

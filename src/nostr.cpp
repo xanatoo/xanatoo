@@ -950,6 +950,14 @@ void add_note_message(Document& doc, NodeId thread, const NostrEvent& e,
         d.text = n.summary;
         d.href = "nostr:" + note;
         n.spans.push_back(std::move(d));
+        // "reply to …" (header field 2): the parent's card when it is on
+        // the page, else its thread (link_reply_targets decides).
+        if (!n.alt.empty()) {
+          InlineSpan r;
+          r.kind = InlineKind::Link;
+          r.href = "#id:" + n.alt;
+          n.spans.push_back(std::move(r));
+        }
       }
     }
   }
@@ -957,6 +965,19 @@ void add_note_message(Document& doc, NodeId thread, const NostrEvent& e,
   // the Message's own spans are just the header links above.
   nostr_append_content(doc, msg, e.content.empty() ? "(empty)" : e.content,
                        e.tags, profiles);
+}
+
+// Points "reply to" links whose parent is not on the page at the parent's
+// own thread instead of a dead in-page anchor.
+void link_reply_targets(Document& doc, NodeId thread) {
+  std::set<std::string> on_page;
+  for (NodeId c : doc.get(thread).children) on_page.insert(doc.get(c).label);
+  for (NodeId c : doc.get(thread).children) {
+    Node& m = doc.get(c);
+    if (m.spans.size() < 3 || m.alt.empty() || on_page.count(m.alt)) continue;
+    const std::string note = nostr_bech32("note", m.alt);
+    if (!note.empty()) m.spans[2].href = "nostr:" + note;
+  }
 }
 
 Document events_to_document(const std::string& root_id,
@@ -992,6 +1013,7 @@ Document events_to_document(const std::string& root_id,
   for (const auto& e : events)
     if (shown_kind(e.kind))
       add_note_message(doc, thread, e, profiles, true);
+  link_reply_targets(doc, thread);
 
   if (doc.get(thread).children.empty()) {
     NodeId msg = doc.create(NodeKind::Message, thread);
@@ -1461,7 +1483,8 @@ Document group_timeline_document(std::string_view relay, std::string_view group_
   });
   const std::map<std::string, std::string> no_profiles;
   for (const auto& e : events)
-    add_note_message(doc, thread, e, no_profiles, false);
+    add_note_message(doc, thread, e, no_profiles, true);
+  link_reply_targets(doc, thread);
   if (events.empty()) {
     NodeId p = doc.create(NodeKind::Paragraph, root);
     doc.append_text(p,
