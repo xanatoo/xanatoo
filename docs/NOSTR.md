@@ -116,14 +116,22 @@ An account is either **watch-only** (just the public key) or has its
   `/dev/urandom` with libsecp256k1); **Import key**
   takes an `nsec1…` (encrypted with the password given) or an
   `ncryptsec1…` (opened with its own password and kept unchanged).
-- Keys are kept **only** as NIP-49 `ncryptsec` (scrypt log N 16, r 8, p 1;
+- Keys are kept as NIP-49 `ncryptsec` (scrypt log N 16, r 8, p 1;
   XChaCha20-Poly1305; key-security byte 2 "unknown") in
   `$XDG_STATE_HOME/xanatoo/nostr-keys`, an owner-only (0600) S-expression
   file apart from the `nostr.sqlite` cache, so clearing the cache never
-  loses a key. No plain `nsec` is ever written.
-- A key is **locked** after start; its password unlocks it for the session
-  (Lock forgets the secret, which is wiped). The panel shows each account as
-  locked / unlocked.
+  loses a key.
+- **No password** (a checkbox on New key, and on Import key for an nsec):
+  the key is written as a plain `(nsec "nsec1…")` entry instead, guarded
+  only by the file's permissions. It needs no unlocking and can post from
+  the start of every session; anyone who can read the file can post as it.
+  Nothing else writes a plain nsec.
+- A key with a password is **locked** after start; its password unlocks it
+  for the session (Lock forgets the secret, which is wiped). The panel shows
+  each account as locked / unlocked / no password.
+- While a key is open, **Change password…** (or **Set password…** for a
+  password-less key) re-encrypts it with a new password; **Remove password**
+  keeps it plain from then on. A new password makes a new backup key.
 - Backup: **Copy backup key** (the ncryptsec), and behind a confirmation
   **Copy nsec** for other clients. **Delete key** (also confirmed) leaves the
   account watch-only; without a backup it is lost for good.

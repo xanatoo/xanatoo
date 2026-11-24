@@ -9,7 +9,10 @@
 // certificates are made in the TLS backend (tls_make_client_identity).
 // Nostr: accounts are labels in nostr_store (one is the active account);
 // some also have a signing key (nostr_keys, NIP-49 encrypted), unlocked with
-// its password for the session. An unlocked active account posts kind-1
+// its password for the session, or kept without a password (a plain nsec in
+// the owner-only key file, open in every session). The password can be set,
+// changed or removed while the key is unlocked. An unlocked active account
+// posts kind-1
 // notes (nostr_sign + nostr_publish on a worker). The tab follows the
 // focused page's protocol.
 
@@ -97,8 +100,21 @@ std::string nostr_key_blocker() {
   return {};
 }
 
-// Keeps `secret` as account `label`: encrypted key in the key store (the
-// ncryptsec given, or one made with `password`), a label, active, unlocked.
+// Key store record of `secret`: encrypted with `password`, or the plain
+// nsec when the password is empty. False when it cannot be encrypted.
+bool nostr_key_record(xanatoo::NostrKey& k, const std::string& pk,
+                      const std::string& secret, const std::string& password) {
+  k = {pk, {}, today(), {}};
+  if (password.empty())
+    k.nsec = xanatoo::nostr_nsec(secret);
+  else
+    k.ncryptsec = xanatoo::nostr_ncryptsec_encrypt(secret, password);
+  return !k.nsec.empty() || !k.ncryptsec.empty();
+}
+
+// Keeps `secret` as account `label`: key in the key store (the ncryptsec
+// given, one made with `password`, or plain without one), a label, active,
+// unlocked.
 bool nostr_keep_key(App& app, std::string label, std::string secret,
                     const std::string& password, std::string ncryptsec) {
   const std::string pk = xanatoo::nostr_pubkey_of(secret);
@@ -110,12 +126,17 @@ bool nostr_keep_key(App& app, std::string label, std::string secret,
     app.identities.error = "This account has its key here already";
     return false;
   }
+  xanatoo::NostrKey record;
+  bool made = true;
   if (ncryptsec.empty())
-    ncryptsec = xanatoo::nostr_ncryptsec_encrypt(secret, password);
+    made = nostr_key_record(record, pk, secret, password);
+  else
+    record = {pk, ncryptsec, today(), {}};
   std::string err;
-  if (ncryptsec.empty() ||
-      !xanatoo::nostr_keys_put(xanatoo::state_dir(), {pk, ncryptsec, today()},
-                               &err)) {
+  const bool kept = made &&
+      xanatoo::nostr_keys_put(xanatoo::state_dir(), record, &err);
+  xanatoo::nostr_wipe(record.nsec);
+  if (!kept) {
     app.identities.error = err.empty() ? "The key could not be encrypted" : err;
     return false;
   }
@@ -229,8 +250,6 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::NostrCreateKey: {
       auto [label, password] = split_arg(arg);
       app.identities.error = nostr_key_blocker();
-      if (app.identities.error.empty() && password.empty())
-        app.identities.error = "Choose a password for the key";
       std::string secret;
       if (app.identities.error.empty()) {
         secret = xanatoo::nostr_generate_secret();
@@ -238,10 +257,13 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       }
       const bool ok = app.identities.error.empty() &&
           nostr_keep_key(app, label, secret, password, {});
+      const bool none = password.empty();
       xanatoo::nostr_wipe(secret);
       xanatoo::nostr_wipe(password);
       if (ok)
-        flash_status(app, "Created a Nostr account; copy its backup key now");
+        flash_status(app, none ? "Created a Nostr account without a password; "
+                                 "back up its nsec now" :
+                                 "Created a Nostr account; copy its backup key now");
       else
         flash_status(app, "No account created: " + app.identities.error);
       break;
@@ -257,8 +279,8 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.identities.error = nostr_key_blocker();
       std::string secret, ncryptsec;
       if (!app.identities.error.empty()) {
-      } else if (password.empty()) {
-        app.identities.error = "Enter the key's password (or choose one)";
+      } else if (xanatoo::is_ncryptsec(key) && password.empty()) {
+        app.identities.error = "Enter the key's password";
       } else if (xanatoo::is_ncryptsec(key)) {
         std::string err;
         if (auto sk = xanatoo::nostr_ncryptsec_decrypt(key, password, &err)) {
@@ -279,6 +301,34 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       xanatoo::nostr_wipe(password);
       flash_status(app, ok ? std::string("Imported the Nostr key") :
                              "No key imported: " + app.identities.error);
+      break;
+    }
+    case C::NostrSetKeyPassword: {
+      auto [pk, password] = split_arg(arg);
+      auto it = app.nostr_unlocked.find(pk);
+      app.identities.error = nostr_key_blocker();
+      xanatoo::NostrKey record;
+      std::string err;
+      if (!app.identities.error.empty()) {
+      } else if (!nostr_key(app, pk) || it == app.nostr_unlocked.end()) {
+        app.identities.error = "Unlock the key first";
+      } else if (!nostr_key_record(record, pk, it->second, password)) {
+        app.identities.error = "The key could not be encrypted";
+      } else {
+        if (const auto* old = nostr_key(app, pk)) record.created = old->created;
+        if (!xanatoo::nostr_keys_put(xanatoo::state_dir(), record, &err))
+          app.identities.error = "Key not saved: " + err;
+      }
+      xanatoo::nostr_wipe(record.nsec);
+      const bool none = password.empty();
+      xanatoo::nostr_wipe(password);
+      if (!app.identities.error.empty()) {
+        flash_status(app, "Password not changed: " + app.identities.error);
+        break;
+      }
+      refresh_nostr_identities(app);
+      flash_status(app, none ? "The key is kept without a password now" :
+                               "Changed the key's password; copy its new backup key");
       break;
     }
     case C::NostrUnlockKey: {
@@ -303,7 +353,10 @@ void nostr_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::NostrLockKey:
-      nostr_lock(app, arg);
+      if (const auto* k = nostr_key(app, arg); k && xanatoo::nostr_key_plain(*k))
+        app.identities.error = "This key has no password: set one to lock it";
+      else
+        nostr_lock(app, arg);
       break;
     case C::NostrDeleteKey: {
       std::string err;
@@ -601,6 +654,7 @@ void identity_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) 
     case C::NostrIdentityRemove:
     case C::NostrCreateKey:
     case C::NostrImportKey:
+    case C::NostrSetKeyPassword:
     case C::NostrUnlockKey:
     case C::NostrLockKey:
     case C::NostrDeleteKey:
@@ -694,9 +748,11 @@ void identity_ui_state(App& app, xanatoo::UiState& st) {
   st.nostr_shown_identity = app.identities.nostr_shown;
   st.nostr_can_sign = xanatoo::nostr_signing_available();
   st.nostr_key_pubkeys.clear();
+  st.nostr_plain_pubkeys.clear();
   st.nostr_shown_ncryptsec.clear();
   for (const auto& k : app.nostr_keys) {
     st.nostr_key_pubkeys.push_back(k.pubkey);
+    if (xanatoo::nostr_key_plain(k)) st.nostr_plain_pubkeys.push_back(k.pubkey);
     if (k.pubkey == app.identities.nostr_shown) st.nostr_shown_ncryptsec = k.ncryptsec;
   }
   st.nostr_unlocked_pubkeys.clear();

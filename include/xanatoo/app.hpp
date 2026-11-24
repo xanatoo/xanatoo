@@ -1396,9 +1396,10 @@ struct App {
   std::vector<NostrCachedGroup> nostr_groups;
   std::vector<NostrLocalIdentity> nostr_identities;
   std::string nostr_active_identity;
-  // Signing keys (nostr_keys.hpp, encrypted) and, per public key, the
-  // secret unlocked with its password for this session only (wiped on
-  // lock). Never written anywhere in plain form.
+  // Signing keys (nostr_keys.hpp; the nsec of a password-less key is wiped
+  // once loaded) and, per public key, the secret unlocked with its password
+  // for this session only (wiped on lock), or open from the start for a
+  // password-less key.
   std::vector<xanatoo::NostrKey> nostr_keys;
   std::unordered_map<std::string, std::string> nostr_unlocked;
   NostrPost nostr_post;

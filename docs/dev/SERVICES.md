@@ -295,8 +295,11 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   (`app_identity.cpp`; Services → Nostr Accounts opens that tab): save / rename
   (also "Save this author" on an npub page), make active, view profile, copy
   npub, remove (`nostr_remove_local_identity`, only the local label).
-  Signing keys: `nostr_keys.cpp` (`state_dir()/nostr-keys`, 0600, only
-  NIP-49 ncryptsec), crypto in `nostr_sign.cpp` (either backend: BIP-340 sign,
+  Signing keys: `nostr_keys.cpp` (`state_dir()/nostr-keys`, 0600, NIP-49
+  ncryptsec, or a plain `(nsec …)` for a password-less key:
+  `nostr_key_plain`; `refresh_nostr_identities` opens those into
+  `nostr_unlocked` and wipes the nsec from `App::nostr_keys`;
+  `NostrSetKeyPassword` sets / changes / removes a password), crypto in `nostr_sign.cpp` (either backend: BIP-340 sign,
   nsec / ncryptsec, scrypt + XChaCha20-Poly1305, `nostr_sign_event`),
   Bech32 shared in `bech32.cpp`. `App::nostr_unlocked` holds secrets for
   the session only (wiped on lock). `nostr_publish` (nostr.cpp) sends

@@ -3,10 +3,11 @@
 #pragma once
 
 // Signing keys of the user's own Nostr accounts: state_dir()/nostr-keys, an
-// owner-only S-expression file. It holds only NIP-49 ncryptsec (password-
-// encrypted) keys, never a plain nsec; the label and the active account stay
-// in nostr.sqlite (nostr_store.hpp). Kept apart from that cache so clearing
-// the cache never loses a key.
+// owner-only S-expression file. Each key is either NIP-49 ncryptsec
+// (password-encrypted) or, for a key the user chose to keep without a
+// password, a plain nsec (protected only by the file's permissions); the
+// label and the active account stay in nostr.sqlite (nostr_store.hpp). Kept
+// apart from that cache so clearing the cache never loses a key.
 
 #include <optional>
 #include <string>
@@ -17,9 +18,13 @@ namespace xanatoo {
 
 struct NostrKey {
   std::string pubkey;     // 64 lower-case hex
-  std::string ncryptsec;  // ncryptsec1…
+  std::string ncryptsec;  // ncryptsec1…, or empty for a password-less key
   std::string created;    // YYYY-MM-DD
+  std::string nsec;       // nsec1… of a password-less key (else empty)
 };
+
+// Without a password: the store holds the plain nsec.
+inline bool nostr_key_plain(const NostrKey& k) { return k.ncryptsec.empty(); }
 
 std::string nostr_keys_serialize(const std::vector<NostrKey>& keys);
 std::optional<std::vector<NostrKey>> nostr_keys_parse(std::string_view text,

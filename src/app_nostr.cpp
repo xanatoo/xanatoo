@@ -8,6 +8,7 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/nostr_keys.hpp"
+#include "xanatoo/nostr_sign.hpp"
 #include "xanatoo/nostr_store.hpp"
 #include "xanatoo/paths.hpp"
 
@@ -33,6 +34,19 @@ void refresh_nostr_catalogue(App& app) {
 
 void refresh_nostr_identities(App& app) {
   app.nostr_keys = nostr_keys_list(state_dir());
+  // Password-less keys need no unlocking; the plain nsec is not kept around.
+  for (auto& k : app.nostr_keys) {
+    if (!nostr_key_plain(k)) continue;
+    if (!app.nostr_unlocked.count(k.pubkey)) {
+      if (auto sk = nostr_decode_nsec(k.nsec)) {
+        if (nostr_pubkey_of(*sk) == k.pubkey)
+          app.nostr_unlocked[k.pubkey] = std::move(*sk);
+        else
+          nostr_wipe(*sk);
+      }
+    }
+    nostr_wipe(k.nsec);
+  }
   app.nostr_identities = nostr_local_identities();
   // A key whose label went missing (cleared cache) gets one back.
   bool relabelled = false;

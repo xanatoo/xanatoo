@@ -25,6 +25,13 @@ bool fail(std::string* err, std::string msg) {
   return false;
 }
 
+// Exactly one of the two forms of the secret.
+bool well_formed(const NostrKey& k) {
+  const bool enc = k.ncryptsec.rfind("ncryptsec1", 0) == 0 && k.nsec.empty();
+  const bool plain = k.ncryptsec.empty() && k.nsec.rfind("nsec1", 0) == 0;
+  return enc || plain;
+}
+
 bool is_hex64(std::string_view s) {
   return s.size() == 64 &&
          std::all_of(s.begin(), s.end(), [](unsigned char c) {
@@ -117,16 +124,22 @@ void quote(std::string& out, std::string_view s) {
 
 std::string nostr_keys_serialize(const std::vector<NostrKey>& keys) {
   std::string out =
-      "; xanatoo Nostr signing keys, NIP-49 encrypted (ncryptsec).\n"
-      "; Each needs its password; without this file and the password the\n"
-      "; account is lost. Keep a backup somewhere safe.\n";
+      "; xanatoo Nostr signing keys: NIP-49 encrypted (ncryptsec), each\n"
+      "; opened by its password, or a plain nsec for a key kept without one\n"
+      "; (anyone who reads an nsec can post as that account). Without this\n"
+      "; file the accounts are lost. Keep a backup somewhere safe.\n";
   for (const auto& k : keys) {
     out += "(key\n  (pubkey ";
     quote(out, k.pubkey);
     out += ")\n  (created ";
     quote(out, k.created);
-    out += ")\n  (ncryptsec ";
-    quote(out, k.ncryptsec);
+    if (nostr_key_plain(k)) {
+      out += ")\n  (nsec ";
+      quote(out, k.nsec);
+    } else {
+      out += ")\n  (ncryptsec ";
+      quote(out, k.ncryptsec);
+    }
     out += "))\n";
   }
   return out;
@@ -145,8 +158,9 @@ std::optional<std::vector<NostrKey>> nostr_keys_parse(std::string_view text,
       if (is_form(f, "pubkey")) k.pubkey = value;
       else if (is_form(f, "created")) k.created = value;
       else if (is_form(f, "ncryptsec")) k.ncryptsec = value;
+      else if (is_form(f, "nsec")) k.nsec = value;
     }
-    if (!is_hex64(k.pubkey) || k.ncryptsec.rfind("ncryptsec1", 0) != 0) {
+    if (!is_hex64(k.pubkey) || !well_formed(k)) {
       fail(err, "malformed key entry");
       return std::nullopt;
     }
@@ -171,7 +185,7 @@ std::vector<NostrKey> nostr_keys_list(std::string_view directory,
 
 bool nostr_keys_put(std::string_view directory, NostrKey key, std::string* err) {
   if (directory.empty()) return fail(err, "no state directory to keep the key in");
-  if (!is_hex64(key.pubkey) || key.ncryptsec.rfind("ncryptsec1", 0) != 0)
+  if (!is_hex64(key.pubkey) || !well_formed(key))
     return fail(err, "malformed key");
   const std::lock_guard guard(store_mutex());
   std::vector<NostrKey> keys;

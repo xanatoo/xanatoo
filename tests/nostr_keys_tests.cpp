@@ -38,7 +38,22 @@ int main() {
           "bad pubkey rejected");
     check(!nostr_keys_parse("(key (pubkey \"" + std::string(64, 'a') +
                             "\") (ncryptsec \"nsec1abc\"))"),
-          "plain nsec rejected");
+          "nsec in the ncryptsec field rejected");
+    // Password-less keys: a plain (nsec …), never both forms.
+    NostrKey plain{std::string(64, 'c'), "", "2026-11-25", "nsec1cqqqq"};
+    auto with_plain = nostr_keys_parse(nostr_keys_serialize({make('a'), plain}));
+    check(with_plain && with_plain->size() == 2 &&
+              nostr_key_plain((*with_plain)[1]) &&
+              (*with_plain)[1].nsec == "nsec1cqqqq" &&
+              !nostr_key_plain((*with_plain)[0]), "plain key round trip");
+    check(!nostr_keys_parse("(key (pubkey \"" + std::string(64, 'a') +
+                            "\") (ncryptsec \"ncryptsec1q\") (nsec \"nsec1q\"))"),
+          "both forms rejected");
+    check(!nostr_keys_parse("(key (pubkey \"" + std::string(64, 'a') +
+                            "\") (nsec \"ncryptsec1q\"))"),
+          "ncryptsec in the nsec field rejected");
+    check(!nostr_keys_parse("(key (pubkey \"" + std::string(64, 'a') + "\"))"),
+          "no secret rejected");
     check(!nostr_keys_parse(nostr_keys_serialize({make('a'), make('a')})),
           "duplicate rejected");
 
@@ -54,6 +69,21 @@ int main() {
     check(nostr_keys_put(d, replaced), "replace a");
     auto keys = nostr_keys_list(d);
     check(keys.size() == 2 && keys[0].ncryptsec == "ncryptsec1zzzz", "replaced");
+    // A key's password removed, then set again: replaced in place.
+    auto unprotected = make('b');
+    unprotected.ncryptsec.clear();
+    unprotected.nsec = "nsec1bqqqq";
+    check(nostr_keys_put(d, unprotected), "put b without password");
+    keys = nostr_keys_list(d);
+    check(keys.size() == 2 && nostr_key_plain(keys[1]) &&
+              keys[1].nsec == "nsec1bqqqq", "b password-less");
+    check(nostr_keys_put(d, make('b')), "b with password again");
+    keys = nostr_keys_list(d);
+    check(keys.size() == 2 && !nostr_key_plain(keys[1]) && keys[1].nsec.empty(),
+          "b encrypted again");
+    auto both = make('b');
+    both.nsec = "nsec1bqqqq";
+    check(!nostr_keys_put(d, both), "both forms refused");
 #ifndef _WIN32
     const auto perms = fs::status(dir / "nostr-keys").permissions();
     check((perms & (fs::perms::group_all | fs::perms::others_all)) ==

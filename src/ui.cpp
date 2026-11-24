@@ -6533,10 +6533,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         }
       } else {
         // Nostr: accounts are public keys; those with a signing key here
-        // (NIP-49 encrypted, unlocked per session) can post.
+        // (NIP-49 encrypted and unlocked per session, or kept without a
+        // password) can post.
         ImGui::TextWrapped("A Nostr account is a key pair. With its secret "
-                           "key here (kept encrypted by a password) you post "
-                           "as it; without, it is watch-only.");
+                           "key here (kept encrypted by a password, or "
+                           "without one) you post as it; without, it is "
+                           "watch-only.");
         if (!state.nostr_can_sign)
           ImGui::TextDisabled("This build cannot sign (no secp256k1 library): "
                               "accounts are watch-only.");
@@ -6559,6 +6561,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         auto unlocked = [&](const std::string& pk) {
           return listed(state.nostr_unlocked_pubkeys, pk);
         };
+        auto plain = [&](const std::string& pk) {
+          return listed(state.nostr_plain_pubkeys, pk);
+        };
+        const char* const no_password_tip =
+            "The key is kept unencrypted (only the file's permissions guard "
+            "it): no unlocking, but anyone who can read your files can post "
+            "as this account.";
         auto wipe = [](char* buf, size_t n) { std::memset(buf, 0, n); };
         if (!state.nostr_page_pubkey.empty()) {
           const NostrLocalIdentity* known = account(state.nostr_page_pubkey);
@@ -6639,52 +6648,71 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                                  nostr_identity_label_,
                                  sizeof nostr_identity_label_);
         if (nostr_new_mode_ == 0) {
-          ImGui::SetNextItemWidth(field_w);
-          ImGui::InputTextWithHint("##nostr_pw", "Password",
-                                   nostr_key_password_,
-                                   sizeof nostr_key_password_,
-                                   ImGuiInputTextFlags_Password);
-          ImGui::SetNextItemWidth(field_w);
-          ImGui::InputTextWithHint("##nostr_pw2", "Password again",
-                                   nostr_key_password2_,
-                                   sizeof nostr_key_password2_,
-                                   ImGuiInputTextFlags_Password);
-          const bool same = std::strcmp(nostr_key_password_,
-                                        nostr_key_password2_) == 0;
-          if (!same && nostr_key_password2_[0] != '\0')
-            ImGui::TextColored(warn, "The passwords differ.");
-          ImGui::BeginDisabled(!can_keep || nostr_key_password_[0] == '\0' ||
-                               !same);
+          ImGui::Checkbox("No password", &nostr_no_password_);
+          if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", no_password_tip);
+          bool same = true;
+          if (!nostr_no_password_) {
+            ImGui::SetNextItemWidth(field_w);
+            ImGui::InputTextWithHint("##nostr_pw", "Password",
+                                     nostr_key_password_,
+                                     sizeof nostr_key_password_,
+                                     ImGuiInputTextFlags_Password);
+            ImGui::SetNextItemWidth(field_w);
+            ImGui::InputTextWithHint("##nostr_pw2", "Password again",
+                                     nostr_key_password2_,
+                                     sizeof nostr_key_password2_,
+                                     ImGuiInputTextFlags_Password);
+            same = std::strcmp(nostr_key_password_, nostr_key_password2_) == 0;
+            if (!same && nostr_key_password2_[0] != '\0')
+              ImGui::TextColored(warn, "The passwords differ.");
+          }
+          ImGui::BeginDisabled(!can_keep || !same ||
+                               (!nostr_no_password_ &&
+                                nostr_key_password_[0] == '\0'));
           if (classic_button("Create account")) {
-            pick(UiCommand::NostrCreateKey, std::string(nostr_identity_label_) +
-                                                "\n" + nostr_key_password_);
+            pick(UiCommand::NostrCreateKey,
+                 std::string(nostr_identity_label_) + "\n" +
+                     (nostr_no_password_ ? "" : nostr_key_password_));
             nostr_identity_label_[0] = '\0';
             wipe(nostr_key_password_, sizeof nostr_key_password_);
             wipe(nostr_key_password2_, sizeof nostr_key_password2_);
           }
           ImGui::EndDisabled();
           if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Makes a new key pair. The password encrypts "
-                              "the key here; it cannot be recovered.");
+            ImGui::SetTooltip("%s", nostr_no_password_ ?
+                "Makes a new key pair, kept here without a password." :
+                "Makes a new key pair. The password encrypts the key here; "
+                "it cannot be recovered.");
         } else if (nostr_new_mode_ == 1) {
           ImGui::SetNextItemWidth(field_w);
           ImGui::InputTextWithHint("##nostr_import", "nsec1… or ncryptsec1…",
                                    nostr_key_import_, sizeof nostr_key_import_,
                                    ImGuiInputTextFlags_Password);
-          ImGui::SetNextItemWidth(field_w);
-          ImGui::InputTextWithHint("##nostr_import_pw", "Password",
-                                   nostr_key_password_,
-                                   sizeof nostr_key_password_,
-                                   ImGuiInputTextFlags_Password);
-          if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("An ncryptsec's own password, or a new one to "
-                              "encrypt an nsec with.");
+          // An ncryptsec needs its own password; an nsec may stay plain.
+          const bool encrypted = std::string_view(nostr_key_import_)
+              .find("ncryptsec1") != std::string_view::npos;
+          const bool bare = !encrypted && nostr_no_password_;
+          if (!encrypted) {
+            ImGui::Checkbox("No password", &nostr_no_password_);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", no_password_tip);
+          }
+          if (!bare) {
+            ImGui::SetNextItemWidth(field_w);
+            ImGui::InputTextWithHint("##nostr_import_pw", "Password",
+                                     nostr_key_password_,
+                                     sizeof nostr_key_password_,
+                                     ImGuiInputTextFlags_Password);
+            if (ImGui::IsItemHovered())
+              ImGui::SetTooltip("An ncryptsec's own password, or a new one to "
+                                "encrypt an nsec with.");
+          }
           ImGui::BeginDisabled(!can_keep || nostr_key_import_[0] == '\0' ||
-                               nostr_key_password_[0] == '\0');
+                               (!bare && nostr_key_password_[0] == '\0'));
           if (classic_button("Import key")) {
             pick(UiCommand::NostrImportKey,
                  std::string(nostr_identity_label_) + "\n" +
-                     nostr_key_import_ + "\n" + nostr_key_password_);
+                     nostr_key_import_ + "\n" +
+                     (bare ? "" : nostr_key_password_));
             nostr_identity_label_[0] = '\0';
             wipe(nostr_key_import_, sizeof nostr_key_import_);
             wipe(nostr_key_password_, sizeof nostr_key_password_);
@@ -6726,7 +6754,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             for (const auto& acc : state.nostr_identities) {
               ImGui::PushID(acc.pubkey.c_str());
               std::string label = acc.label;
-              if (unlocked(acc.pubkey)) label += "  (unlocked)";
+              if (plain(acc.pubkey)) label += "  (no password)";
+              else if (unlocked(acc.pubkey)) label += "  (unlocked)";
               else if (has_key(acc.pubkey)) label += "  (locked)";
               if (acc.pubkey == state.nostr_selected_identity)
                 label += "  (active)";
@@ -6786,11 +6815,16 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                 "Forget the label here; the account itself is not touched.");
           if (keyed) {
             const bool open = unlocked(nsel->pubkey);
+            const bool bare = plain(nsel->pubkey);
             ImGui::Separator();
-            ImGui::TextDisabled("%s", open ?
-                "Signing key: unlocked for this session" :
-                "Signing key: locked");
-            if (!open) {
+            ImGui::TextDisabled("%s", bare ? "Signing key: no password" :
+                                open ? "Signing key: unlocked for this session" :
+                                       "Signing key: locked");
+            if (bare && ImGui::IsItemHovered())
+              ImGui::SetTooltip("%s", no_password_tip);
+            if (bare) {
+              // Nothing to unlock or lock.
+            } else if (!open) {
               ImGui::SetNextItemWidth(field_w);
               const bool enter = ImGui::InputTextWithHint(
                   "##nostr_unlock_pw", "Password", nostr_unlock_password_,
@@ -6809,6 +6843,57 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             } else if (classic_button("Lock")) {
               pick(UiCommand::NostrLockKey, nsel->pubkey);
               nostr_reveal_armed_.clear();
+            }
+            if (open && nostr_change_pw_for_ != nsel->pubkey) {
+              const char* what = bare ? "Set password…" : "Change password…";
+              same_line_if_fits(what);
+              if (classic_button(what)) {
+                nostr_change_pw_for_ = nsel->pubkey;
+                wipe(nostr_new_password_, sizeof nostr_new_password_);
+                wipe(nostr_new_password2_, sizeof nostr_new_password2_);
+              }
+            }
+            if (open && nostr_change_pw_for_ == nsel->pubkey) {
+              auto done = [&] {
+                nostr_change_pw_for_.clear();
+                wipe(nostr_new_password_, sizeof nostr_new_password_);
+                wipe(nostr_new_password2_, sizeof nostr_new_password2_);
+              };
+              ImGui::SetNextItemWidth(field_w);
+              ImGui::InputTextWithHint("##nostr_new_pw", "New password",
+                                       nostr_new_password_,
+                                       sizeof nostr_new_password_,
+                                       ImGuiInputTextFlags_Password);
+              ImGui::SetNextItemWidth(field_w);
+              ImGui::InputTextWithHint("##nostr_new_pw2", "New password again",
+                                       nostr_new_password2_,
+                                       sizeof nostr_new_password2_,
+                                       ImGuiInputTextFlags_Password);
+              const bool same = std::strcmp(nostr_new_password_,
+                                            nostr_new_password2_) == 0;
+              if (!same && nostr_new_password2_[0] != '\0')
+                ImGui::TextColored(warn, "The passwords differ.");
+              ImGui::BeginDisabled(!same || nostr_new_password_[0] == '\0' ||
+                                   state.identity_no_save);
+              if (classic_button("Set password")) {
+                pick(UiCommand::NostrSetKeyPassword,
+                     nsel->pubkey + "\n" + nostr_new_password_);
+                done();
+              }
+              ImGui::EndDisabled();
+              if (!bare) {
+                same_line_if_fits("Remove password");
+                ImGui::BeginDisabled(state.identity_no_save);
+                if (classic_button("Remove password")) {
+                  pick(UiCommand::NostrSetKeyPassword, nsel->pubkey + "\n");
+                  done();
+                }
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                  ImGui::SetTooltip("%s", no_password_tip);
+              }
+              ImGui::SameLine();
+              if (classic_button("Cancel##pw")) done();
             }
             if (!state.nostr_shown_ncryptsec.empty()) {
               same_line_if_fits("Copy backup key");

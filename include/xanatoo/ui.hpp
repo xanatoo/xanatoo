@@ -109,8 +109,10 @@ enum class UiCommand {
   NostrSelectIdentity, // arg = saved public key: make it the active account
   NostrIdentityShow,   // arg = saved public key shown in detail (empty: none)
   NostrIdentityRemove, // arg = saved public key
-  NostrCreateKey,      // arg = label + newline + password: new signing account
+  NostrCreateKey,      // arg = label + newline + password (empty: none)
   NostrImportKey,      // arg = label + newline + nsec/ncryptsec + newline + password
+  NostrSetKeyPassword, // arg = public key (unlocked) + newline + new password
+                       // (empty: keep the key without a password)
   NostrUnlockKey,      // arg = public key + newline + password
   NostrLockKey,        // arg = public key: forget the unlocked secret
   NostrDeleteKey,      // arg = public key: delete the signing key for good
@@ -525,6 +527,7 @@ struct UiState {
   std::string nostr_page_pubkey;  // author of the focused nostr: profile page
   bool nostr_can_sign = false;    // this build signs (OpenSSL)
   std::vector<std::string> nostr_key_pubkeys;       // accounts with a key
+  std::vector<std::string> nostr_plain_pubkeys;     // … kept without password
   std::vector<std::string> nostr_unlocked_pubkeys;  // … unlocked this session
   std::string nostr_shown_ncryptsec;  // backup of the shown account's key
   bool nostr_posting = false;         // a note is on its way to relays
@@ -1055,6 +1058,11 @@ private:
   char nostr_key_password2_[256] = {};
   char nostr_key_import_[512] = {};
   char nostr_unlock_password_[256] = {};
+  bool nostr_no_password_ = false;  // create / import without a password
+  // Set / change / remove the shown key's password (armed per public key).
+  std::string nostr_change_pw_for_;
+  char nostr_new_password_[256] = {};
+  char nostr_new_password2_[256] = {};
   int nostr_new_mode_ = 0;  // 0 create, 1 import, 2 watch-only
   std::string nostr_delete_key_armed_;
   std::string nostr_reveal_armed_;

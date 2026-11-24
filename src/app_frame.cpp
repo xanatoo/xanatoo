@@ -1690,6 +1690,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::NostrIdentityRemove:
     case C::NostrCreateKey:
     case C::NostrImportKey:
+    case C::NostrSetKeyPassword:
     case C::NostrUnlockKey:
     case C::NostrLockKey:
     case C::NostrDeleteKey:

@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Password-less Nostr keys
+
+- New / imported nsec keys can be kept without a password ("No password"
+  checkbox): stored as a plain `(nsec …)` entry in the 0600 `nostr-keys`
+  file (no fake empty-password ncryptsec), opened on load, never locked.
+- `NostrSetKeyPassword`: set, change or remove an open key's password
+  (Identities → Nostr, account details).
+- Tests: `nostr_keys_tests` (plain round trip, both forms / none rejected,
+  encrypted ↔ plain replacement). The panel flows were not driven in a GUI.
+
 ## Status (2026-11-24) — Nostr signing on Android (libsecp256k1)
 
 - Second secp256k1 backend `XANATOO_NOSTR_SECP256K1`: libsecp256k1
