@@ -4642,6 +4642,9 @@ void test_bookmark_lines() {
   in.folder = "Video/YouTube";
   b = xanatoo::parse_bookmark_line(xanatoo::format_bookmark_line(in));
   EXPECT(b && b->folder == "Video/YouTube");
+  in.snapshot = std::string(32, 'a');
+  b = xanatoo::parse_bookmark_line(xanatoo::format_bookmark_line(in));
+  EXPECT(b && b->snapshot == in.snapshot && b->folder == "Video/YouTube");
   b = xanatoo::parse_bookmark_line("a.md\tfolder= x // y /");
   EXPECT(b && b->folder == "x/y");
 }

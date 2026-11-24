@@ -255,6 +255,7 @@ void test_statedb() {
 
   // Single-row changes; the bookmarks file is rewritten as an export.
   Bookmark c{"https://c.example/", "C", "", "2026-11-18"};
+  c.snapshot = std::string(32, 'c');  // the page as bookmarked
   marks.push_back(c);
   EXPECT(xanatoo::store_bookmark_add(c, marks));
   EXPECT(xanatoo::store_bookmark_remove("https://a.example/", marks));
@@ -263,6 +264,8 @@ void test_statedb() {
   if (marks.size() == 2) {
     EXPECT_EQ(marks[0].title, "B");
     EXPECT_EQ(marks[1].title, "C");
+    EXPECT_EQ(marks[1].snapshot, c.snapshot);
+    EXPECT(marks[0].snapshot.empty());
   }
   const std::string exported = slurp(dir / "bookmarks");
   EXPECT(exported.find("https://c.example/\ttitle=C") != std::string::npos);

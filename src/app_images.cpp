@@ -415,7 +415,8 @@ void prune_image_caches() {
     prune_cache_dir((fs::path(dir) / "documents").string(), kDocumentCacheBytes);
     // Snapshots (snapshot.hpp): their objects by size, then the rows whose
     // document went. Cached bodies are hard links in objects/ too.
-    xanatoo::object_prune(kObjectCacheBytes);
+    // Pinned ones (bookmarks) stay whatever the size.
+    xanatoo::object_prune(kObjectCacheBytes, xanatoo::snapshot_pinned_objects());
     xanatoo::snapshot_prune_missing();
   }).detach();
 #endif

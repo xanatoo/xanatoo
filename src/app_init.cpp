@@ -189,6 +189,7 @@ bool app_init(App& app) {
     if (layer.owner == "local" && app.active_annotation_layer.empty())
       app.active_annotation_layer = layer.id;
   load_download_history(app);
+  sync_bookmark_pins(app);  // before pruning: bookmarked snapshots stay
   prune_image_caches();
 
   {

@@ -160,6 +160,8 @@ const sqlite::Migrations kSteps = {
     // again finds the observation it was seen as.
     "CREATE INDEX observations_snapshot ON observations(snapshot)"
     "  WHERE snapshot IS NOT NULL;",
+    // The snapshot a bookmark was made on (snapshot.hpp, pinned).
+    "ALTER TABLE bookmarks ADD COLUMN snapshot TEXT NOT NULL DEFAULT '';",
 };
 
 bool imported(sqlite3* d, const std::string& what) {
@@ -183,10 +185,10 @@ void import_text_files(sqlite3* d) {
     std::vector<std::string> folders;
     for (const Bookmark& b : read_bookmarks_file(&folders)) {
       sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmarks"
-                        "(address, title, quote, created, time, folder) "
-                        "VALUES(?,?,?,?,?,?);");
+                        "(address, title, quote, created, time, folder, snapshot) "
+                        "VALUES(?,?,?,?,?,?,?);");
       s.bind(1, b.address).bind(2, b.title).bind(3, b.quote)
-          .bind(4, b.created).bind(5, t).bind(6, b.folder).run();
+          .bind(4, b.created).bind(5, t).bind(6, b.folder).bind(7, b.snapshot).run();
     }
     for (const std::string& f : folders) {
       sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmark_folders(path) VALUES(?);",
@@ -267,7 +269,7 @@ std::vector<Bookmark> stored_bookmarks() {
 #if XANATOO_SQLITE
   if (sqlite3* d = db()) {
     std::vector<Bookmark> out;
-    sqlite::Stmt s(d, "SELECT address, title, quote, created, folder "
+    sqlite::Stmt s(d, "SELECT address, title, quote, created, folder, snapshot "
                       "FROM bookmarks ORDER BY id;");
     while (s.row()) {
       Bookmark b;
@@ -276,6 +278,7 @@ std::vector<Bookmark> stored_bookmarks() {
       b.quote = s.text(2);
       b.created = s.text(3);
       b.folder = s.text(4);
+      b.snapshot = s.text(5);
       out.push_back(std::move(b));
     }
     return out;
@@ -291,10 +294,11 @@ bool store_bookmark_add(const Bookmark& b, const std::vector<Bookmark>& all) {
     sqlite::Tx tx(d);
     if (!tx.ok()) return false;
     sqlite::Stmt s(d, "INSERT OR IGNORE INTO bookmarks"
-                      "(address, title, quote, created, time, folder) "
-                      "VALUES(?,?,?,?,?,?);");
+                      "(address, title, quote, created, time, folder, snapshot) "
+                      "VALUES(?,?,?,?,?,?,?);");
     if (!s.bind(1, b.address).bind(2, b.title).bind(3, b.quote)
-             .bind(4, b.created).bind(5, now_ms()).bind(6, b.folder).run())
+             .bind(4, b.created).bind(5, now_ms()).bind(6, b.folder)
+             .bind(7, b.snapshot).run())
       return false;
     for (std::string f = b.folder; !f.empty(); f = bookmark_folder_parent(f)) {
       sqlite::Stmt fst(d, "INSERT OR IGNORE INTO bookmark_folders(path) VALUES(?);",

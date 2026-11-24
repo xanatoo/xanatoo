@@ -212,6 +212,7 @@ std::optional<Bookmark> parse_bookmark_line(std::string_view line) {
     else if (key == "quote") b.quote = value;
     else if (key == "at") b.created = value;
     else if (key == "folder") b.folder = normalize_bookmark_folder(value);
+    else if (key == "snap") b.snapshot = value;
   }
   return b;
 }
@@ -229,7 +230,8 @@ std::string format_bookmark_line(const Bookmark& b) {
     return value.empty() ? std::string() : out;
   };
   return b.address + field("title", b.title) + field("quote", b.quote) +
-         field("at", b.created) + field("folder", b.folder);
+         field("at", b.created) + field("folder", b.folder) +
+         field("snap", b.snapshot);
 }
 
 std::string normalize_bookmark_folder(std::string_view path) {

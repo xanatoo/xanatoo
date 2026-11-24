@@ -53,8 +53,10 @@ constexpr int kInlineThumbEdge = 512;
 bool build_thumb_file(const std::string& resolved, int edge);
 
 // Delete the oldest files (by mtime) under `dir` until it holds at most
-// `max_bytes`. For cache directories only.
-void prune_cache_dir(const std::string& dir, uint64_t max_bytes);
+// `max_bytes`. For cache directories only. Files named in `keep` are
+// neither deleted nor counted.
+void prune_cache_dir(const std::string& dir, uint64_t max_bytes,
+                     const std::unordered_set<std::string>& keep = {});
 
 // Loads and caches images by path. Paths are resolved relative to a base
 // directory (typically the document's parent folder).

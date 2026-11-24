@@ -93,6 +93,11 @@ const sqlite::Migrations kSteps = {
     "  PRIMARY KEY (snapshot, url));"
     "CREATE INDEX IF NOT EXISTS snapshot_resources_url"
     "  ON snapshot_resources(url);",
+    // Pins (bookmarks): no foreign key, a pin outlives an evicted snapshot
+    // and holds again should the same content come back.
+    "CREATE TABLE snapshot_pins ("
+    "  owner TEXT NOT NULL, snapshot TEXT NOT NULL,"
+    "  PRIMARY KEY (owner, snapshot));",
 };
 
 std::mutex g_mutex;
@@ -467,6 +472,67 @@ void snapshot_prune_missing() {
   }
   g_generation.fetch_add(1);
 #endif
+}
+
+void snapshot_set_pins(std::string_view owner,
+                       const std::vector<std::string>& ids) {
+#if XANATOO_SQLITE
+  std::lock_guard<std::mutex> lock(g_mutex);
+  sqlite3* d = store();
+  if (!d) return;
+  sqlite::Tx tx(d);
+  if (!tx.ok()) return;
+  {
+    sqlite::Stmt del(d, "DELETE FROM snapshot_pins WHERE owner = ?;", {owner});
+    if (!del.run()) return;
+  }
+  sqlite::Stmt put(d, "INSERT OR IGNORE INTO snapshot_pins(owner, snapshot) "
+                      "VALUES(?, ?);");
+  for (const std::string& id : ids) {
+    if (!is_snapshot_id(id)) continue;
+    put.bind(1, owner).bind(2, id);
+    if (!put.run()) return;
+    put.reset();
+  }
+  tx.commit();
+#else
+  (void)owner;
+  (void)ids;
+#endif
+}
+
+std::vector<std::string> snapshot_pins(std::string_view owner) {
+  std::vector<std::string> out;
+#if XANATOO_SQLITE
+  std::lock_guard<std::mutex> lock(g_mutex);
+  sqlite3* d = store();
+  if (!d) return out;
+  sqlite::Stmt s(d, "SELECT snapshot FROM snapshot_pins WHERE owner = ? "
+                    "ORDER BY snapshot;", {owner});
+  while (s.row()) out.push_back(s.text(0));
+#else
+  (void)owner;
+#endif
+  return out;
+}
+
+std::unordered_set<std::string> snapshot_pinned_objects() {
+  std::unordered_set<std::string> out;
+#if XANATOO_SQLITE
+  std::lock_guard<std::mutex> lock(g_mutex);
+  sqlite3* d = store();
+  if (!d) return out;
+  sqlite::Stmt s(d, "SELECT doc, raw FROM snapshots WHERE id IN "
+                    "(SELECT snapshot FROM snapshot_pins);");
+  while (s.row())
+    for (int c = 0; c < 2; ++c)
+      if (std::string h = s.text(c); is_object_hash(h)) out.insert(std::move(h));
+  sqlite::Stmt r(d, "SELECT object FROM snapshot_resources WHERE snapshot IN "
+                    "(SELECT snapshot FROM snapshot_pins);");
+  while (r.row())
+    if (std::string h = r.text(0); is_object_hash(h)) out.insert(std::move(h));
+#endif
+  return out;
 }
 
 void snapshot_close() {

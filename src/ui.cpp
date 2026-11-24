@@ -3,6 +3,8 @@
 
 #include "xanatoo/examples.hpp"
 #include "xanatoo/ui.hpp"
+#include "xanatoo/snapshot.hpp"
+#include "xanatoo/locator.hpp"
 #include "xanatoo/theme.hpp"
 #include "xanatoo/view_settings.hpp"
 #include <cmath>
@@ -1777,6 +1779,13 @@ void Ui::bookmarks_panel(const UiState& state, UiCommand& cmd, std::string& arg)
         if (ImGui::MenuItem("Open in New Tab")) {
           cmd = UiCommand::OpenLinkInTab;
           arg = b.address;
+        }
+        // The page as it was when bookmarked (its pinned snapshot).
+        if (ImGui::MenuItem("Open as Bookmarked", nullptr, false,
+                            !b.snapshot.empty())) {
+          cmd = UiCommand::NavigateUrl;
+          arg = xanatoo::snapshot_ref_string(
+              b.snapshot, xanatoo::parse_locator(b.address).base);
         }
         if (ImGui::MenuItem("Rename…"))
           start_edit("b:" + b.address, b.title.empty() ? label : b.title);

@@ -290,6 +290,32 @@ void test_snapshot_store() {
   snapshot_prune_missing();
   EXPECT(!snapshot_find(id));
   EXPECT(snapshot_find(id2).has_value());
+
+  // Pinned (a bookmark): pruning to nothing keeps it and its pictures.
+  snapshot_set_pins("bookmark", {id2, "bogus", id2});
+  EXPECT(snapshot_pins("bookmark") == std::vector<std::string>{id2});
+  EXPECT(snapshot_pins("other").empty());
+  const auto info2 = snapshot_find(id2);
+  const auto keep = snapshot_pinned_objects();
+  EXPECT(info2 && keep.count(info2->doc) == 1);
+  EXPECT(keep.count(object_hash(png)) == 1);
+  const std::string stray = object_put("not pinned");
+  EXPECT(object_exists(stray));
+  object_prune(0, keep);
+  EXPECT(!object_exists(stray));
+  EXPECT(info2 && object_exists(info2->doc));
+  EXPECT(object_exists(object_hash(png)));
+  const auto back = snapshot_load(id2);
+  EXPECT(back && back->doc.nodes[1].spans[0].text == "changed");
+  EXPECT_EQ(remote_image_path(snapshot_ref_string(id2, small)),
+            object_path(object_hash(png)));
+  // Unpinned: the next prune may take it.
+  snapshot_set_pins("bookmark", {});
+  EXPECT(snapshot_pins("bookmark").empty() && snapshot_pinned_objects().empty());
+  object_prune(0, snapshot_pinned_objects());
+  EXPECT(info2 && !object_exists(info2->doc));
+  snapshot_prune_missing();
+  EXPECT(!snapshot_find(id2));
 #endif
   snapshot_close();
   url_cache_close();

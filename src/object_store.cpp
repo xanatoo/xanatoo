@@ -142,9 +142,10 @@ void object_touch(std::string_view hash) {
   fs::last_write_time(path, fs::file_time_type::clock::now(), ec);
 }
 
-void object_prune(uint64_t max_bytes) {
+void object_prune(uint64_t max_bytes,
+                  const std::unordered_set<std::string>& keep) {
   const std::string dir = objects_dir();
-  if (!dir.empty()) prune_cache_dir(dir, max_bytes);
+  if (!dir.empty()) prune_cache_dir(dir, max_bytes, keep);
 }
 
 }  // namespace xanatoo

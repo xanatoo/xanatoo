@@ -292,7 +292,8 @@ std::string remote_image_path(std::string_view url) {
   return snapshot_image_path(url);
 }
 
-void prune_cache_dir(const std::string& dir, uint64_t max_bytes) {
+void prune_cache_dir(const std::string& dir, uint64_t max_bytes,
+                     const std::unordered_set<std::string>& keep) {
   std::error_code ec;
   struct Entry {
     fs::path path;
@@ -303,6 +304,7 @@ void prune_cache_dir(const std::string& dir, uint64_t max_bytes) {
   uint64_t total = 0;
   for (const auto& de : fs::directory_iterator(dir, ec)) {
     if (!de.is_regular_file(ec)) continue;
+    if (!keep.empty() && keep.count(de.path().filename().string())) continue;
     Entry e{de.path(), de.last_write_time(ec), de.file_size(ec)};
     if (ec) continue;
     total += e.size;

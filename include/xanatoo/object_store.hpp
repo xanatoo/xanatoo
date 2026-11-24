@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace xanatoo {
 
@@ -45,8 +46,10 @@ std::optional<std::string> object_read(std::string_view hash);
 // Marks the object as used now (pruning keeps recently used ones).
 void object_touch(std::string_view hash);
 
-// Everything under objects/ beyond `max_bytes`, least recently used first.
-// For a background thread at start-up.
-void object_prune(uint64_t max_bytes);
+// Everything under objects/ beyond `max_bytes`, least recently used first;
+// the objects in `keep` (pinned, snapshot_pinned_objects) stay and do not
+// count. For a background thread at start-up.
+void object_prune(uint64_t max_bytes,
+                  const std::unordered_set<std::string>& keep = {});
 
 }  // namespace xanatoo

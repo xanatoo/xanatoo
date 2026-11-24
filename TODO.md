@@ -16,9 +16,13 @@
   which is also restored from snapshot copies instead of re-downloading.
 - Tests: `tests/snapshot_tests.cpp` (codec round trip / fuzz, refs, store,
   late pictures, restore, eviction) + observation reuse by snapshot.
-- Next: full-text search over snapshots (FTS5 plan in docs/HISTORY.md),
-  bookmarks pinning their snapshot, Wayback fallback for evicted ones,
-  a "snapshots of this page" list (`snapshots_of`) in the History panel.
+- Bookmarks pin the snapshot they were made on (`snapshot_pins`, kept by
+  `object_prune` whatever the cache size); Bookmarks panel → "Open as
+  Bookmarked".
+- Later: full-text search over snapshots (FTS5 plan in docs/HISTORY.md),
+  Wayback fallback for evicted snapshots, a "snapshots of this page" list
+  (`snapshots_of`) in the History panel, compression, pages' stylesheets /
+  fonts as resources.
 
 ## Status (2026-11-24) — Bluesky feeds, hashtags, start page
 

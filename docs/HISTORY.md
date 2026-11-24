@@ -432,8 +432,16 @@ It differs from the plan above where the plan was too narrow:
   remembers the new snapshot). A snapshot no longer kept falls back to the
   live page with a note. A `snap:` ref typed or opened directly works the
   same; History → Copy Snapshot Address copies the ref of the page shown.
-- Not done: bookmarks pinning their snapshot against pruning, Wayback
-  fallback for evicted snapshots, compression, stylesheets / fonts /
+- **Bookmarks pin their snapshot:** a new bookmark takes the snapshot of
+  the page as a view shows it (`Bookmark::snapshot`, `bookmarks.snapshot`
+  column, `snap=` in the export file). `sync_bookmark_pins` (start-up
+  before pruning, add / remove, changes from another process) makes those
+  the `snapshot_pins` rows of owner "bookmark"; `object_prune` keeps every
+  object `snapshot_pinned_objects` names (document, raw source, pictures)
+  and does not count them against the size cap. A pin has no foreign key,
+  so it holds again should the same content come back after a cache wipe.
+  Bookmarks panel → "Open as Bookmarked" opens the `snap:` ref.
+- Not done: Wayback fallback for evicted snapshots, compression, stylesheets / fonts /
   scripts as resources (pages are imported documents, so only pictures
   matter today).
 

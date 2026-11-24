@@ -2058,6 +2058,9 @@ void push_nav_history(App& app, int pi, const std::string& url);
 // The current Back / Forward entry of view `pi` remembers the snapshot its
 // page is (NavHistoryEntry::snapshot), when the view shows that page.
 void note_entry_snapshot(App& app, int pi);
+// The snapshots bookmarks were made on are pinned against cache pruning
+// (snapshot_set_pins "bookmark"): after app.bookmarks changed.
+void sync_bookmark_pins(App& app);
 // The page in view `pi` was loaded again (Reload): a Reload visit whose
 // source is the visit it replaces, with the new observation.
 void record_reload_visit(App& app, int pi);

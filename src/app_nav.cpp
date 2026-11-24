@@ -33,6 +33,7 @@
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/sidestore.hpp"
+#include "xanatoo/snapshot.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/statedb.hpp"
 #include "xanatoo/util.hpp"
@@ -559,6 +560,34 @@ bool is_bookmarked(App& app, const std::string& url) {
   return !url.empty() && bookmark_it(app, url) != app.bookmarks.end();
 }
 
+void sync_bookmark_pins(App& app) {
+  std::vector<std::string> ids;
+  for (const xanatoo::Bookmark& b : app.bookmarks)
+    if (!b.snapshot.empty()) ids.push_back(b.snapshot);
+  xanatoo::snapshot_set_pins("bookmark", ids);
+}
+
+namespace {
+// The snapshot of the page `address` as a view shows it now (the focused
+// view first), '' when none shows it or it was not kept.
+std::string shown_snapshot(App& app, const std::string& address) {
+  const std::string base =
+      xanatoo::parse_locator(xanatoo::live_address(address)).base;
+  std::vector<int> order = {app.focus};
+  for (int pi : live_views(app))
+    if (pi != app.focus) order.push_back(pi);
+  for (int pi : order) {
+    if (pi < 0 || pi >= kMaxViews) continue;
+    Pane& p = app.panes[pi];
+    const DocBuffer* b = find_buf(app, p.buf);
+    if (!b || b->placeholder || b->observed.snapshot.empty()) continue;
+    if (xanatoo::parse_locator(pane_address(app, p)).base == base)
+      return b->observed.snapshot;
+  }
+  return {};
+}
+}  // namespace
+
 void add_bookmark(App& app, xanatoo::Bookmark b) {
   if (b.address.empty()) {
     flash_status(app, "Nothing to bookmark (no path/URL)");
@@ -568,9 +597,15 @@ void add_bookmark(App& app, xanatoo::Bookmark b) {
     flash_status(app, "Already bookmarked");
     return;
   }
+  // The page as it is now stays with the bookmark (kept from pruning).
+  if (b.snapshot.empty()) {
+    if (const auto ref = xanatoo::parse_snapshot_ref(b.address)) b.snapshot = ref->id;
+    else b.snapshot = shown_snapshot(app, b.address);
+  }
   const std::string what = b.quote.empty() ? b.address : "“" + b.quote + "”";
   app.bookmarks.push_back(b);
   ++app.bookmarks_gen;
+  sync_bookmark_pins(app);
   if (xanatoo::store_bookmark_add(b, app.bookmarks))
     flash_status(app, "Bookmarked " + what);
   else
@@ -587,6 +622,7 @@ void remove_bookmark(App& app, const std::string& url) {
   const std::string stored = it->address;
   app.bookmarks.erase(it);
   ++app.bookmarks_gen;
+  sync_bookmark_pins(app);
   if (xanatoo::store_bookmark_remove(stored, app.bookmarks))
     flash_status(app, "Removed bookmark");
   else
@@ -677,7 +713,8 @@ void poll_shared_state(App& app) {
   std::vector<xanatoo::Bookmark> marks = xanatoo::stored_bookmarks();
   auto same = [](const xanatoo::Bookmark& a, const xanatoo::Bookmark& b) {
     return a.address == b.address && a.title == b.title &&
-           a.quote == b.quote && a.created == b.created && a.folder == b.folder;
+           a.quote == b.quote && a.created == b.created && a.folder == b.folder &&
+           a.snapshot == b.snapshot;
   };
   std::vector<std::string> folders = xanatoo::stored_bookmark_folders();
   if (!std::equal(marks.begin(), marks.end(), app.bookmarks.begin(),
@@ -686,6 +723,7 @@ void poll_shared_state(App& app) {
     app.bookmarks = std::move(marks);
     app.bookmark_folders = std::move(folders);
     ++app.bookmarks_gen;
+    sync_bookmark_pins(app);
   }
   app.minibuf_hist_url = xanatoo::stored_input_history("url");
   app.minibuf_hist_path = xanatoo::stored_input_history("path");

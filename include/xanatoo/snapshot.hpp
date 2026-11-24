@@ -25,6 +25,9 @@
 //                       service, title, first and last time seen
 //   snapshot_resources  (snapshot, picture URL) → object, '' while not yet
 //                       loaded; filled when the URL cache stores the bytes
+//   snapshot_pins       (owner, snapshot): kept whatever the cache size
+//                       (owner "bookmark": the snapshots bookmarks were
+//                       made on)
 //
 // Safe from any thread (one connection behind a mutex). Without
 // XANATOO_SQLITE refs still parse, but nothing is stored or found.
@@ -33,6 +36,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "xanatoo/types.hpp"
@@ -120,6 +124,14 @@ std::string snapshot_latest_copy(std::string_view url);
 // of its snapshot isn't there, so restore the plain picture. True when
 // `path` exists afterwards.
 bool snapshot_restore_body(std::string_view url, const std::string& path);
+
+// Pins: the snapshots `ids` of `owner` ("bookmark") are all it pins now
+// (the owner's earlier pins go). Pinned snapshots survive cache pruning.
+void snapshot_set_pins(std::string_view owner, const std::vector<std::string>& ids);
+std::vector<std::string> snapshot_pins(std::string_view owner);
+// Every object a pinned snapshot needs (document, raw source, pictures):
+// what object_prune must keep.
+std::unordered_set<std::string> snapshot_pinned_objects();
 
 // Forget snapshots whose document object was pruned (after object_prune;
 // a background thread at start-up).

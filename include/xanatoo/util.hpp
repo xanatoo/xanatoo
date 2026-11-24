@@ -132,10 +132,13 @@ struct Bookmark {
   std::string quote;    // the passage text then (display, re-anchoring)
   std::string created;  // YYYY-MM-DD
   std::string folder;   // "/"-separated folder path, "" = top level
+  // The page as it was when bookmarked (snapshot.hpp id, pinned against
+  // cache pruning); '' = none (local file, not kept).
+  std::string snapshot{};
 };
 
 // File line: the address, then optional tab-separated key=value fields
-// (title, quote, at, folder), so plain one-URL-per-line files stay valid.
+// (title, quote, at, folder, snap), so plain one-URL-per-line files stay valid.
 // Bookmark folders: paths like "Video/YouTube". Every folder the user made
 // is listed explicitly (empty ones too); a bookmark's folder and its
 // ancestors are always in that list (bookmark_folder_list).
