@@ -76,7 +76,7 @@ Search is an address, not a widget in the document and not a panel.
 | `archive` | Internet Archive | `advancedsearch … output=json`, most downloaded first → `ia:` links (`docs/ARCHIVE.md`) |
 | `gutendex` | Project Gutenberg | Gutendex JSON → `gutenberg.org/ebooks/N` (opens as epub) |
 | `lemmy` | Lemmy (lemmy.world) | `/api/v3/search` → `lemmy:host/post/N` |
-| `bluesky` | Bluesky | `searchPosts` → one card per post, link to bsky.app |
+| `bluesky` | Bluesky | page kind: `bsky:search?query=…`, the native post list (docs/FORUMS.md) |
 | `page` | PeerTube (`pt`, sepiasearch), Odysee (`od`), Dailymotion (`dm`), media.ccc.de (`ccc`) | `peertube:` / `odysee:` / `dailymotion:` / `mediaccc:` search refs (`docs/VIDEO_SITES.md`) |
 | `feed` | arXiv, Reddit, Mastodon hashtag, Flickr tags | the feed path |
 | `page` | YouTube (`youtube:results?…`, native InnerTube search), Digg (`digg`, `digg:search?query=…`), LessWrong (`lw`), Standard Ebooks, Marginalia, Wiby, DuckDuckGo (html), Grokipedia (`gk`) | the native service / web / ebook path |

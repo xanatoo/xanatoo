@@ -12,7 +12,12 @@
   accounts by topic (all checked live 2026-11-24); Services → Bluesky opens
   it instead of `@bsky.app`.
 - Fixed: "No posts." never showed (the thread title counted as a post).
-- Next: lists (`/lists/RKEY`, getListFeed), starter packs, `bsky:search`.
+- `bsky:search?query=Q` (searchPosts, newest first): the `bluesky` search
+  engine (`bs`) now renders natively instead of its Markdown result list
+  (`map_bluesky` removed); bsky.app/search?q= opens natively.
+- Every listed post ends in a "N comments" / "discuss" link to its thread
+  (before, only the date led there).
+- Next: lists (`/lists/RKEY`, getListFeed), starter packs.
 
 ## Status (2026-11-24) — Digg reader checked against the live server
 

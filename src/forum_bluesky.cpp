@@ -171,9 +171,10 @@ void add_embed(Document& doc, NodeId parent, const Json& embed) {
 }
 
 // One post as a Message; `reply_to` is the label of the post it answers
-// when that one is shown in the same document.
+// when that one is shown in the same document. `listed`: in a list of
+// posts, whose replies are behind a comments link instead of the header.
 NodeId add_post(Document& doc, NodeId thread, const Json& post,
-                const std::string& reply_to, bool indent) {
+                const std::string& reply_to, bool indent, bool listed = false) {
   const Json* author = json_get(post, "author");
   const std::string handle = author ? handle_of(*author) : std::string();
   const std::string rkey = rkey_of(str(post, "uri"));
@@ -188,7 +189,8 @@ NodeId add_post(Document& doc, NodeId thread, const Json& post,
   h.reply_to = reply_to;
   h.indent = indent;
   std::string score = count(num(post, "likeCount"), "like", "likes");
-  if (long long r = num(post, "replyCount"); r > 0) score += " · " + count(r, "reply", "replies");
+  if (long long r = num(post, "replyCount"); r > 0 && !listed)
+    score += " · " + count(r, "reply", "replies");
   if (long long r = num(post, "repostCount"); r > 0) score += " · " + count(r, "repost", "reposts");
   h.score = score;
   NodeId msg = add_message(doc, thread, h);
@@ -215,6 +217,7 @@ void add_replies(Document& doc, NodeId thread, const Json& node,
 
 std::string feed_title(const Json& reply, const ForumRef& ref, const Json* head) {
   if (starts_with(ref.path, "hashtag/")) return "#" + percent_decode(ref.path.substr(8));
+  if (ref.path == "search") return "search: " + ref.query;
   if (ref.path.find("/feed/") != std::string::npos) {
     const std::string name = head ? str(*head, "displayName") : std::string();
     return (name.empty() ? ref.path.substr(ref.path.rfind('/') + 1) : name) + " (feed)";
@@ -257,6 +260,18 @@ void add_head(Document& doc, NodeId thread, const Json& head, const ForumRef& re
   add_count(doc, stats, num(head, "postsCount"), "post", "posts");
 }
 
+// "N comments" (or "discuss") under a post of a listing: its thread page,
+// where the replies are. The listing's header leaves the reply count out.
+void add_comments_link(Document& doc, NodeId msg, const Json& post) {
+  const Json* author = json_get(post, "author");
+  if (!author) return;
+  const long long n = num(post, "replyCount");
+  add_link(doc, doc.create(NodeKind::Caption, msg),
+           n > 0 ? count(n, "comment", "comments") : "discuss",
+           bsky_ref(handle_of(*author) + "/post/" + rkey_of(str(post, "uri"))),
+           InlineRole::Metadata);
+}
+
 // bsky.app links in posts stay native.
 void native_links(Document& doc) {
   map_links(doc, [](std::string& href) {
@@ -274,13 +289,13 @@ Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* 
   size_t posts = 0;
   // searchPosts lists bare post views; the feeds wrap each in an item.
   for (const Json& found : arr(reply, "posts")) {
-    add_post(doc, thread, found, {}, false);
+    add_comments_link(doc, add_post(doc, thread, found, {}, false, true), found);
     ++posts;
   }
   for (const Json& item : arr(reply, "feed")) {
     const Json* post = json_get(item, "post");
     if (!post) continue;
-    NodeId msg = add_post(doc, thread, *post, {}, false);
+    NodeId msg = add_post(doc, thread, *post, {}, false, true);
     ++posts;
     const Json* reason = json_get(item, "reason");
     if (reason && str(*reason, "$type") == "app.bsky.feed.defs#reasonRepost") {
@@ -298,6 +313,7 @@ Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* 
                bsky_ref(handle_of(*pa) + "/post/" + rkey_of(str(*parent, "uri"))),
                InlineRole::Metadata);
     }
+    add_comments_link(doc, msg, *post);
   }
   if (posts == 0) add_note(doc, doc.root, "No posts.");
   if (const std::string cursor = str(reply, "cursor"); !cursor.empty()) {
@@ -305,7 +321,9 @@ Document bsky_feed_document(const Json& reply, const ForumRef& ref, const Json* 
     next.page = 1;
     next.cursor = url_encode(cursor);
     next.fragment.clear();
-    add_link(doc, doc.create(NodeKind::Paragraph, doc.root), "Older posts →",
+    // Top posts of a hashtag are not in time order.
+    add_link(doc, doc.create(NodeKind::Paragraph, doc.root),
+             starts_with(ref.path, "hashtag/") ? "More posts →" : "Older posts →",
              forum_ref_string(next));
   }
   native_links(doc);

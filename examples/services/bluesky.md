@@ -15,10 +15,13 @@ no account, read-only.
 | `bsky:HANDLE/post/RKEY` | a post with the thread above it and every reply |
 | `bsky:HANDLE/feed/RKEY` | a custom feed published by `HANDLE` |
 | `bsky:hashtag/TAG` | the top posts tagged `#TAG` |
+| `bsky:search?query=WORDS` | posts found, newest first |
 
 Links to `bsky.app` profiles, posts, feeds and hashtags open natively, and so
 do the mentions and hashtags inside posts. To search all posts, use the search
-keyword `bs` (see [Search](../directory/search.md)). Every account also has an
+keyword `bs` (see [Search](../directory/search.md)) —
+[search: “hypertext”](bsky:search?query=hypertext). Replies to a post are
+behind its *comments* link. Every account also has an
 RSS feed at `https://bsky.app/profile/HANDLE/rss`.
 
 ## Feeds

@@ -232,6 +232,8 @@ std::string forum_web_url(const ForumRef& r) {
       if (r.path.find('/') == std::string::npos) url += "/";
       break;
     case ForumSite::Bluesky:
+      if (r.path == "search")
+        return "https://bsky.app/search?q=" + forum::url_encode(r.query);
       url = starts_with(r.path, "hashtag/") ? "https://bsky.app/" + r.path
                                             : "https://bsky.app/profile/" + r.path;
       break;
@@ -374,8 +376,14 @@ std::string forum_ref_from_web_url(std::string_view url) {
       r.path = std::string(seg[1]) + "/" + std::string(seg[2]) + "/" + std::string(seg[3]);
     else if (seg.size() == 2 && seg[0] == "hashtag" && !seg[1].empty())
       r.path = "hashtag/" + forum::url_encode(percent_decode(seg[1]));
+    else if (seg.size() == 1 && seg[0] == "search")
+      r.path = "search";
     else
       return {};
+    if (r.path == "search") {
+      r.query = decode_query(query_value(query, "q"));
+      if (r.query.empty()) return {};
+    }
     return forum_ref_string(r);
   }
   return {};

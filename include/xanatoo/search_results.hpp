@@ -3,7 +3,7 @@
 #pragma once
 
 // JSON search engines (search.hpp kinds wikipedia, hn, archive, lemmy,
-// bluesky, gutendex): the answer of the service's API becomes a result
+// gutendex, …): the answer of the service's API becomes a result
 // document whose links point at native pages — wikipedia: articles,
 // hn:item?id= threads, lemmy:host/post/N, Gutenberg ebooks — so a click
 // stays in xanatoo's own views. Each mapper writes Markdown, which the

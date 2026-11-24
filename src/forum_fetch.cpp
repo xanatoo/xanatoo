@@ -207,14 +207,20 @@ std::optional<Document> bsky_fetch(const ForumRef& ref, std::string* err) {
     if (!ref.cursor.empty()) url += "&cursor=" + ref.cursor;  // kept encoded
     return url;
   };
+  // The public AppView refuses searchPosts (403); api.bsky.app answers.
+  const std::string search = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?limit=30";
   if (seg[0] == "hashtag") {
-    // The public AppView refuses searchPosts (403); api.bsky.app answers.
     const std::string tag = seg.size() == 2 ? percent_decode(seg[1]) : std::string();
     if (tag.empty() || tag.find_first_of(" #") != std::string::npos) return bad(ref, err);
-    auto reply = get_json(with_cursor("https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
-                                      "?sort=top&limit=30&q=" +
-                                      url_encode("#" + tag) + "&tag=" + url_encode(tag)),
+    auto reply = get_json(with_cursor(search + "&sort=top&q=" + url_encode("#" + tag) +
+                                      "&tag=" + url_encode(tag)),
                           err);
+    if (!reply) return std::nullopt;
+    return bsky_feed_document(*reply, ref);
+  }
+  if (seg[0] == "search") {
+    if (seg.size() != 1 || ref.query.empty()) return bad(ref, err);
+    auto reply = get_json(with_cursor(search + "&sort=latest&q=" + url_encode(ref.query)), err);
     if (!reply) return std::nullopt;
     return bsky_feed_document(*reply, ref);
   }

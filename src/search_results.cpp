@@ -260,35 +260,6 @@ std::string map_lemmy(const SearchPlan& plan, std::string_view json) {
   return md;
 }
 
-// ---- Bluesky: app.bsky.feed.searchPosts ----------------------------------
-
-std::string map_bluesky(const SearchPlan& plan, std::string_view json) {
-  const auto posts = json_object_array_after_key(json, "posts");
-  if (posts.empty()) return no_results("Bluesky", plan);
-  std::string md = header("Bluesky", plan);
-  for (const std::string& p : posts) {
-    const std::string top = json_top_level(p);
-    const std::string uri = json_str_field(top, "uri");
-    const std::string author = std::string(json_object_after_key(p, "author"));
-    const std::string handle = json_str_field(json_top_level(author), "handle");
-    const std::string record = json_top_level(std::string(json_object_after_key(p, "record")));
-    const std::string text = json_str_field(record, "text");
-    if (handle.empty() || text.empty()) continue;
-    std::string name = json_str_field(json_top_level(author), "displayName");
-    if (name.empty()) name = handle;
-    const size_t slash = uri.rfind('/');
-    md += "## " + search_md_escape(one_line(name)) + " @" + search_md_escape(handle) +
-          " · " + date_of(json_str_field(record, "createdAt")) + "\n\n";
-    md += search_md_escape(text) + "\n\n";
-    if (slash != std::string::npos)
-      md += link("Open on Bluesky", "https://bsky.app/profile/" + handle +
-                                        "/post/" + uri.substr(slash + 1));
-    md += " · " + plural(json_int_field(top, "replyCount"), "reply", "replies") +
-          " · " + plural(json_int_field(top, "likeCount"), "like", "likes") + "\n\n";
-  }
-  return md;
-}
-
 // ---- Project Gutenberg: Gutendex -----------------------------------------
 
 std::string map_gutendex(const SearchPlan& plan, std::string_view json) {
@@ -924,7 +895,6 @@ std::string search_results_markdown(const SearchPlan& plan, std::string_view jso
   if (plan.kind == "hn") return map_hn(plan, json);
   if (plan.kind == "archive") return map_archive(plan, json);
   if (plan.kind == "lemmy") return map_lemmy(plan, json);
-  if (plan.kind == "bluesky") return map_bluesky(plan, json);
   if (plan.kind == "gutendex") return map_gutendex(plan, json);
   if (plan.kind == "openlibrary") return map_openlibrary(plan, json);
   if (plan.kind == "tvmaze") return map_tvmaze(plan, json);

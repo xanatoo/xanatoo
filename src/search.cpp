@@ -247,10 +247,8 @@ std::vector<SearchEngine> builtin_table() {
        "https://lemmy.world/api/v3/search?q=%s&type_=Posts&limit=30", "lemmy",
        "+",
        {"lemmy:", "lemmy.world"}},
-      {"bluesky", "Bluesky", "bs", "Bs",
-       "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=%s&limit=30",
-       "bluesky", "+",
-       {"bsky.app", "bsky.social"}},
+      {"bluesky", "Bluesky", "bs", "Bs", "bsky:search?query=%s", "page", "+",
+       {"bsky:", "bsky.app", "bsky.social"}},
       {"mastodon-tag", "Mastodon hashtag", "mt", "#",
        "https://mastodon.social/tags/%s.rss", "feed", "",
        {"mastodon.social"}},
@@ -402,7 +400,7 @@ std::optional<uint32_t> parse_hex_color(std::string_view s) {
 
 bool is_json_search_kind(std::string_view kind) {
   return kind == "wikipedia" || kind == "hn" || kind == "archive" ||
-         kind == "lemmy" || kind == "bluesky" || kind == "gutendex" ||
+         kind == "lemmy" || kind == "gutendex" ||
          kind == "openlibrary" || kind == "tvmaze" ||
          kind == "musicbrainz" || kind == "wikidata" ||
          kind == "openalex" || kind == "crossref" || kind == "steam" ||

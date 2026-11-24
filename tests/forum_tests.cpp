@@ -142,6 +142,11 @@ void test_refs() {
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/profile/bsky.app/post/3n2"),
             "bsky:bsky.app/post/3n2");
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/search"), "");
+  EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/search?q=open+web"),
+            "bsky:search?query=open%20web");
+  EXPECT_EQ(forum_web_url(ref("bsky:search?query=open+web")),
+            "https://bsky.app/search?q=open%20web");
+  EXPECT_EQ(forum_up_ref(ref("bsky:search?query=x")), "");
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/profile/bsky.app/feed/whats-hot"),
             "bsky:bsky.app/feed/whats-hot");
   EXPECT_EQ(forum_ref_from_web_url("https://bsky.app/hashtag/café"), "bsky:hashtag/caf%C3%A9");
@@ -390,6 +395,12 @@ void test_bluesky() {
   Document f = bsky_feed_document(feed, ref("bsky:bob.example"));
   EXPECT(has_href(f, "bsky:bob.example?cursor=2026-11-03T16%3A06%3A41.753Z"));
   EXPECT(has_href(f, "bsky:bob.example"));  // reposted by
+  // Replies are behind a classic comments link at the bottom of each post.
+  bool discuss = false;
+  for (const Node& n : f.nodes)
+    for (const InlineSpan& s : n.spans)
+      discuss |= s.text == "discuss" && s.href == "bsky:alice.example/post/p1";
+  EXPECT(discuss);
   const Node* p1 = message(f, "p1");
   size_t paras = 0;
   if (p1)
@@ -422,7 +433,7 @@ void test_bluesky() {
   EXPECT_EQ(g.meta.title, "Bluesky — Discover (feed)");
   EXPECT(has_href(g, "bsky:bsky.app"));
   EXPECT(has_href(g, "bsky:bsky.app/feed/whats-hot?cursor=2026-11-03T16%3A06%3A41.753Z"));
-  Json found = parse(R"({"cursor":"30","posts":[{
+  Json found = parse(R"({"cursor":"30","posts":[{"replyCount":4,
       "uri":"at://did:plc:a/app.bsky.feed.post/t1","author":{"did":"did:plc:a","handle":"alice.example"},
       "record":{"text":"hi #café","createdAt":"2026-11-13T22:03:00Z",
         "facets":[{"index":{"byteStart":3,"byteEnd":9},"features":[{"$type":"app.bsky.richtext.facet#tag","tag":"café"}]}]}}]})");
@@ -432,6 +443,14 @@ void test_bluesky() {
   EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9"));
   EXPECT(has_href(h, "bsky:hashtag/caf%C3%A9?cursor=30"));
   EXPECT(all_text(h).find("No posts.") == std::string::npos);
+  EXPECT(all_text(h).find("4 replies") == std::string::npos);  // not in the header
+  bool comments = false;
+  for (const Node& n : h.nodes)
+    for (const InlineSpan& s : n.spans)
+      comments |= s.text == "4 comments" && s.href == "bsky:alice.example/post/t1";
+  EXPECT(comments);
+  EXPECT_EQ(bsky_feed_document(found, ref("bsky:search?query=caf%C3%A9")).meta.title,
+            "Bluesky — search: café");
   EXPECT(all_text(bsky_feed_document(parse(R"({"feed":[]})"), ref("bsky:bob.example")))
              .find("No posts.") != std::string::npos);
 }

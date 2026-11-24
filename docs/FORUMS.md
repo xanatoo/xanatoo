@@ -31,6 +31,7 @@ recorded replies.
 | `bsky:HANDLE/post/RKEY` | post thread: parents, the post, replies |
 | `bsky:HANDLE/feed/RKEY[?cursor=C]` | custom feed (feed generator), its name and creator on top |
 | `bsky:hashtag/TAG[?cursor=C]` | top posts with `#TAG` (TAG percent-encoded) |
+| `bsky:search?query=Q[&cursor=C]` | posts found, newest first (search engine `bluesky`, keyword `bs`) |
 | `flarum:HOST` | recent discussions (`?page=N`) |
 | `flarum:HOST/d/ID[-slug][?page=N]` | discussion |
 | `lesswrong:` | frontpage ("magic" sort; `new`, `top`, `curated`, `quicktakes`; `?page=N`) |
@@ -89,9 +90,11 @@ Exchange hosts, bsky.app, lesswrong.com: `/posts/ID/slug?commentId=C` →
 - Bluesky: the public AppView `public.api.bsky.app` (getAuthorFeed +
   getProfile, getFeed + getFeedGenerator, getPostThread; handles of posts
   and feeds resolve through resolveHandle first; the head request is only
-  made on the first page and may fail). Hashtags use searchPosts
-  (`q=#TAG&tag=TAG&sort=top`) on `api.bsky.app`: the public AppView answers
-  searchPosts with 403. Hashtag facets in posts link `bsky:hashtag/…`.
+  made on the first page and may fail). Hashtags and search use searchPosts
+  (`q=#TAG&tag=TAG&sort=top`; `q=Q&sort=latest`) on `api.bsky.app`: the
+  public AppView answers searchPosts with 403. In every list of posts the
+  reply count is a "N comments" / "discuss" link to the thread at the
+  bottom of the post, not part of its header. Hashtag facets in posts link `bsky:hashtag/…`.
   Personalised feeds (Following, Popular With Friends) need an account.
   The Services menu opens `examples/services/bluesky.md` (feeds, hashtags,
   accounts, checked 2026-11-24).
@@ -149,5 +152,4 @@ web page extraction), offline, shaped after live replies (2026-11-24).
 - public-inbox (lore.kernel.org). Usenet / NNTP is its own client:
   `docs/NNTP.md`.
 - Subscriptions for forum listings; search engines for them except
-  LessWrong and Digg (the existing `bluesky` search engine still links
-  bsky.app web pages).
+  LessWrong, Digg and Bluesky.

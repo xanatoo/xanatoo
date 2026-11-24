@@ -16,7 +16,7 @@ accepts `<keyword> <words>` as well; `?` is an alias for the default engine
 | `ia` | Internet Archive | items and collections, most downloaded first |
 | `pg` | Project Gutenberg | books by download count; a click downloads and opens the book |
 | `l` | Lemmy (lemmy.world) | posts that open as native `lemmy:` threads |
-| `bs` | Bluesky | recent posts, newest matching first |
+| `bs` | Bluesky | recent posts, newest matching first, with pictures and comments links |
 | `ax` | arXiv | a feed in relevance order; every word must match |
 | `se` | Standard Ebooks | the catalogue list |
 | `r` | Reddit | a feed of posts |

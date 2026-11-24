@@ -5946,7 +5946,7 @@ void test_search() {
            starts_with(e.url, "peertube:") || starts_with(e.url, "odysee:") ||
            starts_with(e.url, "mediaccc:") ||
            starts_with(e.url, "dailymotion:") || starts_with(e.url, "lesswrong:") ||
-           starts_with(e.url, "digg:"));
+           starts_with(e.url, "digg:") || starts_with(e.url, "bsky:"));
     const size_t at = e.url.find("%s");
     EXPECT(at != std::string::npos && e.url.find("%s", at + 2) == std::string::npos);
     EXPECT(is_search_ref(search_ref(e.id, "x")));
@@ -5962,6 +5962,9 @@ void test_search() {
   EXPECT_EQ(engine_for_address("lesswrong:posts/abc", eng), "lesswrong");
   EXPECT_EQ(search_target("search:lesswrong:rss+feed", eng),
             "lesswrong:search?query=rss+feed");
+  EXPECT_EQ(engine_for_address("bsky:bsky.app", eng), "bluesky");
+  EXPECT_EQ(search_target("search:bluesky:xanadu+docs", eng),
+            "bsky:search?query=xanadu+docs");
   EXPECT_EQ(engine_for_address("wikipedia:de:Xanadu", eng), "wikipedia-de");
   EXPECT_EQ(engine_for_address("https://de.wikipedia.org/wiki/X", eng), "wikipedia-de");
   EXPECT_EQ(engine_for_address("https://fr.wikipedia.org/wiki/X", eng), "wikipedia");
@@ -6117,17 +6120,6 @@ void test_search_results() {
       "\"counts\":{\"score\":120,\"comments\":33}}]}");
   EXPECT(has(lm, "[Fedora 45 is out](lemmy:lemmy.world/post/53943997)"));
   EXPECT(has(lm, "c/linux · 120 points · 33 comments · alice"));
-
-  // Bluesky: text kept (escaped), link to the post from the at:// uri.
-  const std::string bs = search_results_markdown(
-      plan("bluesky", "https://api.bsky.app/x", "xanadu"),
-      "{\"posts\":[{\"uri\":\"at://did:plc:abc/app.bsky.feed.post/3mzg\","
-      "\"author\":{\"handle\":\"rick.bsky.social\",\"displayName\":\"Rick\"},"
-      "\"record\":{\"createdAt\":\"2026-11-03T16:05:51.375Z\",\"text\":\"#xanadu * rules\\nline 2\"},"
-      "\"replyCount\":2,\"likeCount\":5}]}");
-  EXPECT(has(bs, "## Rick @rick.bsky.social · 2026-11-03"));
-  EXPECT(has(bs, "\\#xanadu \\* rules\nline 2"));
-  EXPECT(has(bs, "(https://bsky.app/profile/rick.bsky.social/post/3mzg) · 2 replies · 5 likes"));
 
   // Media catalogs: stable record links, and malformed record rejection.
   EXPECT(has(search_results_markdown(

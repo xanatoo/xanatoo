@@ -19,6 +19,7 @@
 //   bsky:HANDLE/post/RKEY              post thread
 //   bsky:HANDLE/feed/RKEY[?cursor=C]   custom feed     (feed generator)
 //   bsky:hashtag/TAG[?cursor=C]        top posts with #TAG (TAG percent-encoded)
+//   bsky:search?query=Q[&cursor=C]     posts found, newest first
 //   flarum:HOST                        recent discussions (?page=N)
 //   flarum:HOST/d/ID[-slug][?page=N]   discussion
 //   lesswrong:                         frontpage       (new, top, curated, quicktakes)
@@ -54,7 +55,8 @@ struct ForumRef {
   std::string host;  // Discourse / Stack Exchange / Flarum: site host
   // Path after the host (no leading '/', no query / fragment), e.g.
   // "t/slug/123", "s/abc", "g/thread/1", "questions/42", "alice/post/3k".
-  // Bluesky: "HANDLE", "HANDLE/post/RKEY", "HANDLE/feed/RKEY", "hashtag/TAG".
+  // Bluesky: "HANDLE", "HANDLE/post/RKEY", "HANDLE/feed/RKEY", "hashtag/TAG",
+  // "search" (with query).
   std::string path;
   int page = 1;          // ?page=N
   std::string cursor;    // ?cursor=C (Bluesky and Digg lists)
@@ -91,7 +93,7 @@ Document fourchan_thread_document(const Json& reply, const ForumRef& ref);
 Document se_list_document(const Json& reply, const ForumRef& ref);
 Document se_question_document(const Json& question, const Json& answers,
                               const Json* comments, const ForumRef& ref);
-// Bluesky AppView: getAuthorFeed, getFeed or searchPosts (a hashtag) — a
+// Bluesky AppView: getAuthorFeed, getFeed or searchPosts (hashtag, search) — a
 // list of posts; `head` (may be null) is the getProfile reply or the
 // generator view of getFeedGenerator, shown above them. getPostThread.
 Document bsky_feed_document(const Json& reply, const ForumRef& ref,
