@@ -9,6 +9,12 @@ int main() {
   using xanatoo::UiPanelLayer;
   using xanatoo::ui_panel_layer;
   assert(ui_panel_layer("##reply_editor") == UiPanelLayer::Reply);
+  // Centre edit strips have their own layer; a document window's strip
+  // draws with that window's find bar.
+  assert(ui_panel_layer("##edit_bar/v0") == UiPanelLayer::EditBar);
+  assert(ui_panel_layer("##edit_bar/v1") == UiPanelLayer::EditBar);
+  assert(ui_panel_layer("##find_bar/edit_strip") == UiPanelLayer::FindBar);
+  assert(ui_panel_layer("##edit_barx") == UiPanelLayer::Chrome);
   assert(ui_panel_layer("##bookmarks_panel_body") == UiPanelLayer::Bookmarks);
   assert(ui_panel_layer("##styles_panel_body") == UiPanelLayer::Styles);
   assert(ui_panel_layer("##context_panel_body") == UiPanelLayer::Context);

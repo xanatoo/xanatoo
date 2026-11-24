@@ -2,6 +2,30 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Editable documents: edit strip on the page, lock
+
+- No global edit mode any more (`App::edit_mode` removed). Non-foreign
+  documents are editable; each view of one gets an **edit strip** on top of
+  its page (`Pane::head_h`, `edit_bar.hpp`, `Ui::edit_bars`), so the main
+  toolbar and tab strip never change height or contents with the page.
+  Tools moved out of the old edit row (find, split, trail, outline, view
+  tools) stay on the main toolbar for every page.
+- Lock instead of mode: padlock on the strip / F2 / View → Lock Document
+  (`UiCommand::ToggleLock`, `pane_locked` / `set_pane_locked`). Per buffer,
+  keyed to its path; installed data (`data_dir()`) starts locked. A locked
+  page keeps its strip (tools greyed), so it does not move.
+- New Document (Ctrl+N, tab-strip page button, "+" right-click menu) opens
+  a blank `db:` document in a new tab with the title selected; it no longer
+  replaces the page in view. New/Open left the editing toolbar.
+- Layers: centre strips are `UiPanelLayer::EditBar`; a focused document
+  window's strip draws in its FindBar layer, unfocused ones paint a band.
+- Tests: `tests/edit_bar_tests.cpp` (row wrapping / height),
+  ui_panel_layers_tests (strip window names). Checked under Xvfb: lock,
+  new document, split with wrapped strips, "+" menu.
+- Later: a strip for unfocused document windows with live tools (needs its
+  own layer per window), maybe hide Save while a `db:` document autosaves,
+  default-lock rules beyond `data_dir()` (e.g. per-path memory).
+
 ## Status (2026-11-24) — History as seen: page snapshots
 
 - History is now immutable snapshots of what was shown, not URLs to load

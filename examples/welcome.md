@@ -13,7 +13,7 @@ Inspired by *Xanadu*, **HyperCard**, and the *Canon Cat*.
 2. **Enter** splits a paragraph; **Ctrl+Z** undoes.
 3. Click a stretchtext marker (▸ / ▾) to expand or collapse.
 4. Follow blue links: internal `#anchors`, other example files, or `gemini://`.
-5. **F1** opens the full keyboard reference · **F2** toggles browse (read-only) mode.
+5. **F1** opens the full keyboard reference · **F2** locks / unlocks the document.
 
 :::stretch summary="Essential keys (expand for more)"
 | Key | Action |

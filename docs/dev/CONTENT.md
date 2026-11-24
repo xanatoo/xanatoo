@@ -261,12 +261,13 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - `web_fetch` dispatches on Content-Type; bodies go through
   `detect_charset` / `to_utf8` (util.hpp) first.
 - `external:<url>` hrefs force the system browser (`open_external_url`).
-- Browsing is the default: `App::edit_mode` starts false and F2 / the Edit
-  toolbar toggle opts into editing. Foreign content is read-only:
-  `is_foreign_path` (remote URL, `.html`, any `is_pandoc_path` file,
-  anything under `cache_dir()`) makes `browsing(app)` true even with
-  `app.edit_mode` set. Gate document edits on `browsing(app)`, never on
-  `app.edit_mode` alone. Edit toggle is disabled for foreign content.
+- There is no edit mode: non-foreign documents are editable, each with an
+  edit strip on its page and a per-buffer lock (docs/UI.md "Editable
+  documents"). Foreign content is read-only: `is_foreign_path` (remote URL,
+  `.html`, any `is_pandoc_path` file, anything under `cache_dir()`) makes
+  `pane_read_only` and so `browsing(app)` true; a locked document
+  (`pane_locked`) is browsing too. Gate document edits on `browsing(app)`.
+  The lock is disabled for read-only content.
 - Local files: `load_doc` (app_buffers.cpp) is the one reader. It sniffs
   the first 8 KiB with `looks_like_binary` (util.hpp: a NUL byte, or over
   10 % control bytes) and shows a short "binary data" page instead of the

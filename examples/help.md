@@ -149,17 +149,25 @@ A **heading** is the title of the enclosing unit. Outline depth follows
 nesting. **Enter** on a heading starts a body paragraph (not another title).
 See **Examples → Article / section / heading**.
 
-## Browse mode and gamepad
+## Editable documents, locking and gamepad
 
-**Browse mode is the default** (read-only). Typing, edits, paste, and
-structure changes are blocked (menus/toolbar included); the status bar turns
-green. Press **F2**, use View → **Edit Mode**, or click the pencil toolbar
-button to enable editing (the pencil stays pressed while on). Press F2 again
-to return to browsing. The edit toolbar, Format / Insert menus and editing
-context-menu entries appear only in edit mode; Find, Split pane, Heading
-outline and View tools (line spacing, text width, style sheet) move into the
-browse toolbar otherwise. Foreign pages remain read-only until saved as an
-editable local copy.
+There is no separate edit mode. Your own documents (local files, local
+database documents, new documents) are **editable**: their page carries an
+**edit strip** with the lock, save, undo / redo, clipboard, formatting,
+structure, list and insert tools. Web pages and other foreign content are
+read-only and have no strip; save one as a local copy to edit it.
+
+The **padlock** at the left of the strip (or **F2**, or View → **Lock
+Document**) locks a document against edits: the tools grey out and typing,
+paste and structure changes are blocked, but the page keeps its strip and
+does not move. Click the padlock or press F2 again to unlock. The bundled
+pages (welcome, this help, the examples) start locked.
+
+**New document** (Ctrl+N, File → New Document, or the page button next to
+**+** on the tab strip) opens a blank document in a new tab, stored in the
+local database at once (File → Local documents lists it); type its title
+over the selected heading. Right-click **+** for New Tab, New Document,
+Open File… and Local Documents.
 
 **F11** (gamepad **X**) toggles **Content only**: menu bar, toolbars, tabs
 and the status line disappear and only the page is left. Prompts
@@ -189,7 +197,7 @@ default for views not switched themselves. See `docs/PAGED.md`.
 - **Home** / **End** — top / bottom of the page
 - **Space** or **Enter** — expand/collapse stretch or follow link under caret
 - **Ctrl+[** / **Ctrl+]** — collapse / expand all stretches and lists (summaries / full texts)
-- **F2** — toggle editing (only on editable local documents)
+- **F2** — lock / unlock the document (only on editable documents)
 - **F8** — paged reading (ebook style pages instead of scrolling)
 - **F9** — reader mode (hide navigation, sidebars and footers of web pages)
 - **F11** — content only (hide menus, toolbars, tabs, status line)
@@ -206,7 +214,7 @@ default for views not switched themselves. See `docs/PAGED.md`.
 | **LT / RT** | Page up / page down |
 | Left stick | Scroll |
 | Stick click L/R | Collapse all / expand all |
-| **Back** | Toggle edit mode (when no navigation history is available) |
+| **Back** | Lock / unlock the document (when no navigation history is available) |
 | **Start** | Help |
 
 ## Navigation (history & bookmarks)
@@ -216,8 +224,8 @@ default for views not switched themselves. See `docs/PAGED.md`.
   tab's trail along); the History panel lists every page of the session
 - **Alt+Up** (read-only pages) — Up one level: parent directory, URL path, subreddit
 - **Alt+Home** — Home page (`welcome.md`; toolbar house button)
-- **Browse toolbar** — Back, Forward, Up, Home, Reload, Native view (web page ↔ `wikipedia:` / `hn:` / `reddit:` / `lemmy:` form; pressed while native), Reader mode (F9, pressed while on), location field, Bookmark, display menus, History, Edit Mode toggle; in browse mode Find, Split pane, Heading outline and View tools instead of the display menus
-- **Edit toolbar** (not in browse mode) — file, clipboard, bold/italic/link; menus for more format, structure, lists, insert; Find, Split pane and Heading outline toggles, and view tools
+- **Toolbar** — Back, Forward, Up, Home, Reload, Native view (web page ↔ `wikipedia:` / `hn:` / `reddit:` / `lemmy:` form; pressed while native), Reader mode (F9, pressed while on), location field, Bookmark, Find, Split pane, Trail, Heading outline, View tools (line spacing, text width, style sheet), History, Downloads; the same for every page
+- **Edit strip** (on the page of each editable document) — lock, save, undo, redo; clipboard; bold/italic/link; menus for more format, structure, lists, insert
 - **Services menu** — front pages of the built-in clients: Wikipedia, Hacker News, Reddit, Lemmy, Nostr, Gemini, Standard Ebooks, books and feeds
 - **Ctrl+Shift+H** / **View → History** — session history panel (click to open)
 - **Ctrl+Shift+B** — Bookmark or un-bookmark the current page

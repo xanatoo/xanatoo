@@ -272,7 +272,7 @@ enum class UiCommand {
   OpenTranscludeOther,  // open include target in the other pane
   ToggleDiff,
   ToggleStructure,
-  ToggleEdit,  // opt-in editing mode; browsing is the default
+  ToggleLock,  // lock / unlock the focused editable document (F2)
   ToggleChrome,  // content only: hide menu bar, toolbars, tabs, status line
   ToggleNative,  // web page ↔ its native xanatoo form (wikipedia:, hn:, …)
   ToggleArchive,  // web page ↔ its nearest Wayback Machine snapshot
@@ -362,6 +362,20 @@ struct UiSearchEngine {
 // the list yet.
 struct UiOfferedEngine {
   std::string url, title;
+};
+
+// The edit strip on top of one editable view (docs/UI.md "Editable
+// documents"): its rect in window pixels and what its buttons need.
+struct UiEditBar {
+  int view = 0;
+  int x = 0, y = 0, w = 0, h = 0;
+  bool focused = false;  // the focused view: its rows reflect the caret
+  bool floating = false;  // in a document window (drawn with its frame)
+  bool locked = false;
+  bool dirty = false;
+  bool selection = false;
+  bool on_list_item = false;
+  bool in_stretch = false;
 };
 
 struct UiState {
@@ -576,6 +590,8 @@ struct UiState {
   std::vector<std::string> context_blocks;
   int context_article = -1;
   int context_section = -1;
+  // Edit strips of the editable views shown.
+  std::vector<UiEditBar> edit_bars;
   // Find bar of the focused view (App::prompt).
   bool find_open = false, find_replace = false;
   int find_x = 0, find_y = 0, find_w = 0, find_h = 0;
@@ -769,6 +785,9 @@ struct UiFrameResult {
   // Index into UiState::context_blocks whose menu item is under the
   // pointer (the block is washed in the page), -1 = none.
   int context_block_hot = -1;
+  // View whose edit strip `cmd` came from (-1 = elsewhere): it is focused
+  // before the command runs.
+  int edit_bar_view = -1;
 };
 
 class Ui {
@@ -867,6 +886,7 @@ private:
                    UiCommand c, UiCommand& out, bool enabled = true,
                    bool* right_clicked = nullptr, bool latched = false);
   void find_bar(const UiState& state, UiCommand& cmd, std::string& arg);
+  void edit_bars(const UiState& state, UiFrameResult& result, UiCommand& cmd);
   bool tool_menu_begin(const char* id, const char* icon_name, const char* tip);
   void toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd);
   void draw_url_suggestions(const UiState& state, UiFrameResult& result,

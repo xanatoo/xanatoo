@@ -258,8 +258,7 @@ bool is_foreign_path(std::string_view path) {
   return !cache.empty() && xanatoo::starts_with(path, cache + "/");
 }
 
-bool focused_read_only(App& app) {
-  const Pane& p = focused_pane(app);
+bool pane_read_only(App& app, const Pane& p) {
   const DocBuffer* b = find_buf(app, p.buf);
   return b && ((p.source_buf == p.buf && p.source_doc.has_value()) ||
                is_foreign_path(b->path) ||
@@ -267,7 +266,38 @@ bool focused_read_only(App& app) {
                app.binary_paths.contains(b->path));
 }
 
-bool browsing(App& app) { return !app.edit_mode || focused_read_only(app); }
+bool focused_read_only(App& app) {
+  return pane_read_only(app, focused_pane(app));
+}
+
+bool default_locked(std::string_view path) {
+  const std::string data = xanatoo::data_dir();
+  return !data.empty() && xanatoo::starts_with(path, data + "/");
+}
+
+bool pane_locked(App& app, const Pane& p) {
+  const DocBuffer* b = find_buf(app, p.buf);
+  if (!b) return false;
+  return b->lock_set && b->lock_path == b->path ? b->lock_choice
+                                                : default_locked(b->path);
+}
+
+void set_pane_locked(App& app, const Pane& p, bool locked) {
+  DocBuffer* b = find_buf(app, p.buf);
+  if (!b) return;
+  b->lock_set = true;
+  b->lock_path = b->path;
+  b->lock_choice = locked;
+}
+
+const char* no_edit_notice(App& app) {
+  return focused_read_only(app) ? kReadOnlyNotice : kLockedNotice;
+}
+
+bool browsing(App& app) {
+  const Pane& p = focused_pane(app);
+  return pane_read_only(app, p) || pane_locked(app, p);
+}
 
 xanatoo::Document load_doc_or_placeholder(App& app, const std::string& path) {
   if (is_in_app_remote_url(path)) {

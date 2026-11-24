@@ -94,7 +94,7 @@ panel uses native docking, resize, close, session restore and UI scaling.
 Local file editing switches to a native document when the first edit occurs;
 Ctrl+S on a file/page also imports it rather than writing it back to disk.
 For read-only remote pages File → **Edit local copy** explicitly imports the
-fetched page and switches into edit mode, provided the response bytes are
+fetched page and opens it as an editable document, provided the response bytes are
 available. File and URL source names are aliases of the database copy: opening
 the same source again returns the existing working head. Command-line file
 opening and the Open File dialog follow those aliases, too.

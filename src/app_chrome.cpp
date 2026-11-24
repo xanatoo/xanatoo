@@ -579,11 +579,11 @@ StatusLine compute_status(App& app) {
   } else if (browsing(app)) {
     label = app.gamepad
                 ? "Browse · R-stick pointer · A click · LB+A caret · "
-                  "D-pad nav · L-stick scroll · Start help · F2 edit"
+                  "D-pad nav · L-stick scroll · Start help · F2 unlock"
                 : focused_read_only(app)
                 ? "Read-only page — arrows move · Enter open · Ctrl+S copy as "
                   "Markdown · F1 help"
-                : "Browse mode — arrows move · Enter open · F2 edit · F1 help";
+                : "Locked — arrows move · Enter open · F2 unlocks · F1 help";
     tone = StatusTone::Browse;
   } else {
     label =

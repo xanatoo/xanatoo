@@ -613,8 +613,10 @@ std::optional<UiPanelLayer> float_layer_at(App& app, int x, int y) {
 }
 
 UiPanelLayer float_ui_layer(App& app, const FloatWindow& w) {
+  // The focused document window's find bar and edit strip ("##find_bar/…").
   if (w.role == WindowRole::Document && w.view == app.focus &&
-      find_bar_shown(app))
+      (find_bar_shown(app) ||
+       (view_live(app, w.view) && app.panes[w.view].head_h > 0)))
     return UiPanelLayer::FindBar;
   return embedded_panel_layer(w.role);
 }
@@ -1091,8 +1093,20 @@ static void draw_soft_window(App& app, FloatWindow& sw) {
   fill_doc_paper(app, clip);
   draw_pane(app, sw.view);
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
-  if (sw.view == app.focus)
+  if (sw.view == app.focus) {
     app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::FindBar);
+  } else if (p.head_h > 0) {
+    // An unfocused window's edit strip is a plain band (its tools appear
+    // once the window has focus), so the page does not move.
+    namespace th = xanatoo::theme;
+    const th::Palette& pal = th::palette();
+    const int bx = p.x - (p.sb_left ? kSbW : 0);
+    const SDL_Rect band{bx, p.y - p.head_h, p.w + (p.sb_left ? kSbW : 0),
+                        p.head_h};
+    th::fill(app.sdl, band, pal.face);
+    th::fill(app.sdl, SDL_Rect{band.x, band.y + band.h - 1, band.w, 1},
+             pal.shadow);
+  }
 }
 
 void draw_floats(App& app) {

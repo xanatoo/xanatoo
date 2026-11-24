@@ -3,6 +3,7 @@
 
 #include "xanatoo/examples.hpp"
 #include "xanatoo/ui.hpp"
+#include "xanatoo/edit_bar.hpp"
 #include "xanatoo/snapshot.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/theme.hpp"
@@ -480,7 +481,7 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::ToggleOutline: return "outline";
     case UiCommand::ToggleStructure: return "structure";
     case UiCommand::ToggleDiff: return "diff";
-    case UiCommand::ToggleEdit: return "edit";
+    case UiCommand::ToggleLock: return "lock";
     case UiCommand::ToggleNative: return "native";
     case UiCommand::ToggleArchive: return "archive";
     case UiCommand::ToggleReader: return "reader";
@@ -727,7 +728,7 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "olist", "quote", "image", "split", "join", "find", "help", "cut",
       "strike", "cite", "h1", "h2", "h3", "para", "task", "table",
       "figure", "note", "replace", "outline", "paste", "copy", "new", "open",
-      "zoomin", "zoomout", "structure", "diff",
+      "lock", "lock-open", "zoomin", "zoomout", "structure", "diff",
       "back", "forward", "up", "home", "reload", "stop", "bookmark", "bookmark-outline", "history", "downloads", "edit", "native", "reader", "sitemap", "navigation",
       "linespacing", "measure", "style", "gemini", "gemini-changed",
       "site-file", "site-folder", "site-about", "site-store", "site-web",
@@ -830,6 +831,7 @@ bool Ui::tool_button(const char* id, const char* icon_name, const char* tip,
         {"linespacing", "≡↕"}, {"measure", "▣|"},
         {"format", "Aa▾"},
         {"insert", "+▾"}, {"view", "View▾"}, {"lists", "List▾"},
+        {"lock", "Lock"}, {"lock-open", "Unlk"},
         {"new", "New"}, {"open", "Open"}, {"save", "Save"}, {"undo", "Undo"},
         {"redo", "Redo"}, {"cut", "Cut"}, {"copy", "Copy"}, {"paste", "Paste"},
         {"bold", "B"}, {"italic", "I"}, {"link", "Link"}, {"find", "Find"},
@@ -869,6 +871,193 @@ bool Ui::tool_button(const char* id, const char* icon_name, const char* tip,
 }
 
 
+
+static bool menu_item_cmd(const char* label, UiCommand c, UiCommand& out,
+                          bool enabled = true, const char* shortcut = nullptr);
+
+// The edit strip of each editable view, on top of its text (docs/UI.md
+// "Editable documents"). The groups wrap as edit_bar_rows() predicts, so
+// the height the app reserved fits. A locked document keeps its strip (and
+// layout) with every tool but the lock disabled.
+void Ui::edit_bars(const UiState& state, UiFrameResult& result,
+                   UiCommand& cmd) {
+  constexpr ImGuiWindowFlags flags =
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse |
+      ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoFocusOnAppearing;
+  const float row_h = edit_bar_row_h(scale_);
+  const float step = edit_bar_button_step(scale_);
+  for (const UiEditBar& bar : state.edit_bars) {
+    if (bar.w <= 0 || bar.h <= 0) continue;
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(bar.x),
+                                   static_cast<float>(bar.y)));
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(bar.w),
+                                    static_cast<float>(bar.h)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.f, 1.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                        ImVec2(kEditBarPadX, kEditBarPadY));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                        ImVec2(ImGui::GetStyle().ItemSpacing.x,
+                               edit_bar_row_gap(scale_)));
+    // A document window's strip draws with that window's other embedded
+    // ImGui (FindBar layer); a centre tile's lies under every window.
+    char name[40];
+    if (bar.floating)
+      std::snprintf(name, sizeof name, "##find_bar/edit_strip");
+    else
+      std::snprintf(name, sizeof name, "##edit_bar/v%d", bar.view);
+    const UiCommand before = cmd;
+    if (ImGui::Begin(name, nullptr, flags)) {
+      const ImVec2 at = ImGui::GetWindowPos();
+      const float width = ImGui::GetWindowWidth();
+      ImGui::GetWindowDrawList()->AddLine(
+          ImVec2(at.x, at.y + static_cast<float>(bar.h) - 1.f),
+          ImVec2(at.x + width, at.y + static_cast<float>(bar.h) - 1.f),
+          ImGui::GetColorU32(ImGuiCol_Border));
+      const float avail_w = width - 2.f * kEditBarPadX;
+      const bool on = !bar.locked;
+      const bool sel = on && bar.focused && bar.selection;
+      bool line_has_group = false;
+      bool wrap_inside_group = false;
+      bool line_has_item = false;
+      auto separator = [&] {
+        ImGui::SameLine(0.f, 4.f);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            ImVec2(p.x + 3.f, p.y + 4.f), ImVec2(p.x + 3.f, p.y + row_h - 4.f),
+            ImGui::GetColorU32(ImGuiCol_Separator));
+        ImGui::Dummy(ImVec2(7.f, row_h));
+        ImGui::SameLine(0.f, 4.f);
+      };
+      auto start_group = [&](int count) {
+        const float group_w = static_cast<float>(count) * step;
+        if (line_has_group && ImGui::GetContentRegionAvail().x <
+                                  kEditBarSeparatorStep + group_w) {
+          ImGui::NewLine();
+          line_has_group = false;
+        }
+        if (line_has_group) separator();
+        wrap_inside_group = group_w > avail_w;
+        line_has_item = false;
+        line_has_group = true;
+      };
+      auto before_item = [&] {
+        if (wrap_inside_group && line_has_item &&
+            ImGui::GetContentRegionAvail().x < step) {
+          ImGui::NewLine();
+          line_has_item = false;
+        }
+        line_has_item = true;
+      };
+      auto button = [&](const char* id, const char* icon, const char* tip,
+                        UiCommand action, bool enabled) {
+        before_item();
+        tool_button(id, icon, tip, action, cmd, enabled);
+      };
+      auto menu_begin = [&](const char* id, const char* icon, const char* tip) {
+        before_item();
+        ImGui::BeginDisabled(!on);
+        const bool open = tool_menu_begin(id, icon, tip);
+        if (!open) ImGui::EndDisabled();
+        return open;
+      };
+      auto menu_end = [&] {
+        tool_menu_end();
+        ImGui::EndDisabled();
+      };
+
+      // Lock, file, history
+      start_group(kEditBarGroups[0]);
+      before_item();
+      tool_button("eb_lock", bar.locked ? "lock" : "lock-open",
+                  bar.locked ? "Locked — click to allow editing (F2)"
+                             : "Editable — click to lock (F2)",
+                  UiCommand::ToggleLock, cmd, true, nullptr, bar.locked);
+      button("eb_save", "save",
+             bar.dirty ? "Save (Ctrl+S) — unsaved changes" : "Save (Ctrl+S)",
+             UiCommand::Save, on);
+      button("eb_undo", "undo", "Undo (Ctrl+Z)", UiCommand::Undo, on);
+      button("eb_redo", "redo", "Redo (Ctrl+Y)", UiCommand::Redo, on);
+
+      // Clipboard
+      start_group(kEditBarGroups[1]);
+      button("eb_cut", "cut", "Cut (Ctrl+X)", UiCommand::Cut, sel);
+      button("eb_copy", "copy", "Copy (Ctrl+C)", UiCommand::Copy,
+             bar.focused && bar.selection);
+      button("eb_paste", "paste", "Paste (Ctrl+V)", UiCommand::Paste, on);
+
+      // Common inline styles
+      start_group(kEditBarGroups[2]);
+      button("eb_bold", "bold", "Bold (Ctrl+B)", UiCommand::Bold, sel);
+      button("eb_italic", "italic", "Italic (Ctrl+I)", UiCommand::Italic, sel);
+      button("eb_link", "link", "Link (Ctrl+Shift+K)", UiCommand::Link, sel);
+      if (menu_begin("eb_format", "format", "More formatting")) {
+        menu_item_cmd("Code", UiCommand::Code, cmd, sel, "Ctrl+`");
+        menu_item_cmd("Strikethrough", UiCommand::Strike, cmd, sel,
+                      "Ctrl+Shift+X");
+        menu_item_cmd("Citation…", UiCommand::Cite, cmd, sel, "Ctrl+Shift+C");
+        menu_end();
+      }
+
+      start_group(kEditBarGroups[3]);
+      if (menu_begin("eb_structure", "structure", "Structure")) {
+        menu_item_cmd("Heading", UiCommand::MakeHeader, cmd, true, "Ctrl+1");
+        menu_item_cmd("Wrap Section", UiCommand::WrapSection, cmd, true,
+                      "Ctrl+Shift+1");
+        menu_item_cmd("Wrap Article", UiCommand::WrapArticle, cmd, true,
+                      "Ctrl+Shift+2");
+        menu_item_cmd("Promote Section", UiCommand::PromoteSection, cmd, true,
+                      "Ctrl+Alt+]");
+        menu_item_cmd("Demote Section", UiCommand::DemoteSection, cmd, true,
+                      "Ctrl+Alt+[");
+        menu_item_cmd("Paragraph", UiCommand::ParagraphLevel, cmd, true,
+                      "Ctrl+0");
+        ImGui::Separator();
+        menu_item_cmd("Wrap Stretch…", UiCommand::WrapStretch, cmd, true,
+                      "Ctrl+E");
+        menu_item_cmd("Unwrap Stretch", UiCommand::UnwrapStretch, cmd,
+                      bar.focused && bar.in_stretch, "Ctrl+Shift+U");
+        menu_end();
+      }
+
+      start_group(kEditBarGroups[4]);
+      if (menu_begin("eb_lists", "lists", "Lists & blocks")) {
+        menu_item_cmd("Unordered list", UiCommand::ToggleUnorderedList, cmd);
+        menu_item_cmd("Ordered list", UiCommand::ToggleOrderedList, cmd);
+        menu_item_cmd("Task item", UiCommand::ToggleTask, cmd, true,
+                      "Ctrl+Shift+T");
+        menu_item_cmd("Block quote", UiCommand::ToggleBlockQuote, cmd);
+        ImGui::Separator();
+        menu_item_cmd("Indent", UiCommand::IndentList, cmd,
+                      bar.focused && bar.on_list_item);
+        menu_item_cmd("Outdent", UiCommand::OutdentList, cmd,
+                      bar.focused && bar.on_list_item);
+        menu_end();
+      }
+
+      start_group(kEditBarGroups[5]);
+      if (menu_begin("eb_insert", "insert", "Insert")) {
+        menu_item_cmd("Table", UiCommand::InsertTable, cmd);
+        menu_item_cmd("Image…", UiCommand::InsertImage, cmd, true,
+                      "Ctrl+Shift+I");
+        menu_item_cmd("Figure…", UiCommand::InsertFigure, cmd);
+        menu_item_cmd("Note", UiCommand::InsertNote, cmd);
+        menu_item_cmd("Code block", UiCommand::InsertCodeBlock, cmd);
+        menu_item_cmd("Horizontal rule", UiCommand::InsertHr, cmd);
+        menu_item_cmd("Columns (2)", UiCommand::InsertColumns, cmd);
+        menu_item_cmd("Transclude…", UiCommand::InsertTransclude, cmd);
+        menu_item_cmd("Bibliography entry", UiCommand::InsertBiblioEntry, cmd);
+        menu_end();
+      }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(5);
+    if (cmd != before) result.edit_bar_view = bar.view;
+  }
+}
 
 // A copied-in field of the find bar: `buf` follows `text` whenever the app
 // changed it, and is left alone while it holds typing the app has not seen.
@@ -1466,7 +1655,7 @@ void Ui::open_history_menu(float x, float y) {
 }
 
 static bool menu_item_cmd(const char* label, UiCommand c, UiCommand& out,
-                          bool enabled = true, const char* shortcut = nullptr) {
+                          bool enabled, const char* shortcut) {
   if (menu_item_with_icon(label, menu_icon_for(c), shortcut, false, enabled)) {
     out = c;
     return true;
@@ -1571,12 +1760,11 @@ static void menu_structure_items(const UiState& state, UiCommand& cmd) {
                 "Ctrl+0");
 }
 
-// Toolbar "View tools" menu. While browsing it also holds the display
-// menus (line spacing, text width, style sheet) of the browse row, which
-// is then the only toolbar row.
+// Toolbar "View tools" menu: also the display menus (line spacing, text
+// width, style sheet).
 static void view_tools_items(const UiState& state, UiCommand& cmd,
                              std::string& arg) {
-  if (state.browse) {
+  {
     if (ImGui::BeginMenu("Line spacing")) {
       fill_line_spacing_items(state, cmd);
       ImGui::EndMenu();
@@ -1589,9 +1777,9 @@ static void view_tools_items(const UiState& state, UiCommand& cmd,
       ImGui::EndMenu();
     }
     fill_style_menus(state, cmd, arg);
-  } else {
-    menu_item_cmd("Replace…", UiCommand::Replace, cmd, true, "Ctrl+H");
   }
+  if (!state.browse)
+    menu_item_cmd("Replace…", UiCommand::Replace, cmd, true, "Ctrl+H");
   ImGui::Separator();
   if (ImGui::MenuItem("Backlinks", "Ctrl+Alt+B", state.backlinks))
     cmd = UiCommand::ToggleBacklinks;
@@ -1944,7 +2132,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
     tool_button(id, icon, tip, c, cmd, true, nullptr, on);
   };
 
-  // ---- Two toolbars: browse (navigation) then edit ----
+  // ---- The toolbar (navigation); editing has a strip on each page ----
   // An icon button is 28·s plus 4·s frame padding above and below.
   const float tool_button_h = 36.f * scale_;
   ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -1953,17 +2141,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse |
       ImGuiWindowFlags_NoScrollWithMouse;
-  auto toolbar_separator = [&] {
-    ImGui::SameLine(0.f, 4.f);
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float row_h = tool_button_h;
-    ImGui::GetWindowDrawList()->AddLine(
-        ImVec2(p.x + 3.f, p.y + 4.f),
-        ImVec2(p.x + 3.f, p.y + row_h - 4.f),
-        ImGui::GetColorU32(ImGuiCol_Separator));
-    ImGui::Dummy(ImVec2(7.f, row_h));
-    ImGui::SameLine(0.f, 4.f);
-  };
+
 
   // -- Browse / navigation row (browser chrome) --
   // Icon row, then the location row (its field is centred in 32·s + 6),
@@ -2639,63 +2817,27 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                            : UiCommand::AddBookmark,
                   cmd, state.has_path || !state.doc_label.empty());
     }
-    if (state.browse) {
-      // The edit row is hidden: its reading tools move here, the display
-      // menus into View tools so the row does not grow.
-      tool_button("tb_find", "find", "Find (Ctrl+F)", UiCommand::Find, cmd);
-      tool_button("tb_split", state.split && !state.trail && !state.diff
-                                    ? "join" : "split",
-                    state.split && !state.trail && !state.diff
-                        ? "Join panes (keep left, Ctrl+\\)"
-                        : "Independent split panes (Ctrl+\\)",
-                    UiCommand::ToggleSplit, cmd);
-      toggle_button("tb_trail", "history", "Linked navigation trail",
-                    UiCommand::ToggleTrail, state.trail);
-      toggle_button("tb_outline", "outline", "Heading outline (Ctrl+Shift+O)",
-                    UiCommand::ToggleOutline, state.outline);
-      if (tool_menu_begin("tb_viewmenu", "view", "View tools")) {
-        view_tools_items(state, cmd, result.arg);
-        tool_menu_end();
-      }
-    } else {
-      // Display: line spacing + measure (view-only, not document format)
-      if (tool_menu_begin("tb_linespacing", "linespacing",
-                          "Line spacing (view)")) {
-        fill_line_spacing_items(state, cmd);
-        tool_menu_end();
-      }
-      if (tool_menu_begin("tb_measure", "measure",
-                          "Text width / margins (view)")) {
-        fill_measure_items(state, cmd, result.arg);
-        ImGui::Separator();
-        ImGui::TextDisabled("Margins");
-        fill_margins_items(state, cmd, result.arg);
-        tool_menu_end();
-      }
-      if (tool_menu_begin("tb_style", "style", "Style sheet (view)")) {
-        fill_style_items(state, cmd, result.arg);
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Colours")) {
-          fill_style_layer_items(state, true, cmd, result.arg);
-          ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Fonts")) {
-          fill_style_layer_items(state, false, cmd, result.arg);
-          ImGui::EndMenu();
-        }
-        tool_menu_end();
-      }
+    // The same tools whatever the page: editing has its strip on the page.
+    tool_button("tb_find", "find", "Find (Ctrl+F)", UiCommand::Find, cmd);
+    tool_button("tb_split", state.split && !state.trail && !state.diff
+                                  ? "join" : "split",
+                  state.split && !state.trail && !state.diff
+                      ? "Join panes (keep left, Ctrl+\\)"
+                      : "Independent split panes (Ctrl+\\)",
+                  UiCommand::ToggleSplit, cmd);
+    toggle_button("tb_trail", "history", "Linked navigation trail",
+                  UiCommand::ToggleTrail, state.trail);
+    toggle_button("tb_outline", "outline",
+                  "Heading outline (Ctrl+Shift+O; Ctrl+Alt+O docks it)",
+                  UiCommand::ToggleOutline, state.outline);
+    if (tool_menu_begin("tb_viewmenu", "view", "View tools")) {
+      view_tools_items(state, cmd, result.arg);
+      tool_menu_end();
     }
     toggle_button("tb_history", "history", "Session history (Ctrl+Shift+H)",
                   UiCommand::ToggleHistory, state.history_open);
     toggle_button("tb_downloads", "downloads", "Downloads",
                   UiCommand::ToggleDownloads, state.downloads_open);
-    tool_button("tb_edit", "edit",
-                !state.can_edit ? "Read-only page — editing unavailable"
-                : state.browse ? "Edit mode (F2)"
-                               : "Edit mode on — F2 to browse",
-                UiCommand::ToggleEdit, cmd, state.can_edit, nullptr,
-                !state.browse);
     // tool_button ends with SameLine, so the cursor sits after the group.
     {
       const float row_y = field_row_y;
@@ -2707,195 +2849,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   ImGui::End();
   ImGui::PopStyleVar(2);
   result.top_reserved += browse_h;
-
-  // -- Edit row (compact: primary icons + dropdown groups) --
-  // Not while browsing: its reading tools are on the browse row then.
-  if (!state.browse) {
-    constexpr int kEditGroups[] = {5, 3, 4, 1, 1, 1, 4};
-    const float button_step = 32.f * scale_ + 10.f;
-    const float separator_step = 15.f;
-    const float edit_width = std::max(1.f, vp->Size.x - 14.f);
-    int edit_rows = 1;
-    float row_used = 0.f;
-    for (int count : kEditGroups) {
-      const float group_width = count * button_step;
-      if (row_used > 0.f &&
-          (group_width > edit_width ||
-           row_used + separator_step + group_width > edit_width)) {
-        ++edit_rows;
-        row_used = 0.f;
-      } else if (row_used > 0.f) {
-        row_used += separator_step;
-      }
-      if (group_width <= edit_width) {
-        row_used += group_width;
-      } else {
-        for (int i = 0; i < count; ++i) {
-          if (row_used > 0.f && row_used + button_step > edit_width) {
-            ++edit_rows;
-            row_used = 0.f;
-          }
-          row_used += button_step;
-        }
-      }
-    }
-    // Window padding (4 + 4), the button rows and the spacing between them.
-    const float edit_h = edit_rows * tool_button_h +
-                         (edit_rows - 1) * ImGui::GetStyle().ItemSpacing.y + 8.f;
-    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + result.top_reserved));
-    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, edit_h));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.f, 4.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
-    if (ImGui::Begin("##toolbar_edit", nullptr, tb_flags)) {
-      bool line_has_group = false;
-      bool wrap_inside_group = false;
-      bool line_has_item = false;
-      auto start_group = [&](int count) {
-        const float group_width = count * button_step;
-        if (line_has_group &&
-            ImGui::GetContentRegionAvail().x <
-                separator_step + group_width) {
-          ImGui::NewLine();
-          line_has_group = false;
-        }
-        if (line_has_group) {
-          toolbar_separator();
-        }
-        wrap_inside_group = group_width > edit_width;
-        line_has_item = false;
-        line_has_group = true;
-      };
-      auto before_group_item = [&] {
-        if (wrap_inside_group && line_has_item &&
-            ImGui::GetContentRegionAvail().x < button_step) {
-          ImGui::NewLine();
-          line_has_item = false;
-        }
-        line_has_item = true;
-      };
-      auto edit_button = [&](const char* id, const char* icon, const char* tip,
-                             UiCommand action, bool enabled = true) {
-        before_group_item();
-        tool_button(id, icon, tip, action, cmd, enabled);
-      };
-      auto edit_menu_begin = [&](const char* id, const char* icon,
-                                 const char* tip) {
-        before_group_item();
-        return tool_menu_begin(id, icon, tip);
-      };
-
-      // File
-      start_group(5);
-      edit_button("tb_new", "new", "New document (Ctrl+N)",
-                  UiCommand::NewDocument);
-      edit_button("tb_open", "open", "Open… (Ctrl+O)",
-                  UiCommand::OpenDocument);
-      edit_button("tb_save", "save", "Save (Ctrl+S)", UiCommand::Save);
-      edit_button("tb_undo", "undo", "Undo (Ctrl+Z)", UiCommand::Undo);
-      edit_button("tb_redo", "redo", "Redo (Ctrl+Y)", UiCommand::Redo);
-
-      // Clipboard
-      start_group(3);
-      edit_button("tb_cut", "cut", "Cut (Ctrl+X)", UiCommand::Cut,
-                  state.selection);
-      edit_button("tb_copy", "copy", "Copy (Ctrl+C)", UiCommand::Copy,
-                  state.selection);
-      edit_button("tb_paste", "paste", "Paste (Ctrl+V)", UiCommand::Paste);
-
-      // Common inline styles
-      start_group(4);
-      edit_button("tb_bold", "bold", "Bold (Ctrl+B)", UiCommand::Bold,
-                  state.selection);
-      edit_button("tb_italic", "italic", "Italic (Ctrl+I)", UiCommand::Italic,
-                  state.selection);
-      edit_button("tb_link", "link", "Link (Ctrl+Shift+K)", UiCommand::Link,
-                  state.selection);
-
-      // More format styles
-      if (edit_menu_begin("tb_format", "format", "More formatting")) {
-        menu_item_cmd("Code", UiCommand::Code, cmd, state.selection, "Ctrl+`");
-        menu_item_cmd("Strikethrough", UiCommand::Strike, cmd, state.selection,
-                      "Ctrl+Shift+X");
-        menu_item_cmd("Citation…", UiCommand::Cite, cmd, state.selection,
-                      "Ctrl+Shift+C");
-        tool_menu_end();
-      }
-
-      // Structure group
-      start_group(1);
-      if (edit_menu_begin("tb_structmenu", "structure", "Structure")) {
-        menu_item_cmd("Heading", UiCommand::MakeHeader, cmd, true, "Ctrl+1");
-        menu_item_cmd("Wrap Section", UiCommand::WrapSection, cmd, true,
-                      "Ctrl+Shift+1");
-        menu_item_cmd("Wrap Article", UiCommand::WrapArticle, cmd, true,
-                      "Ctrl+Shift+2");
-        menu_item_cmd("Promote Section", UiCommand::PromoteSection, cmd, true,
-                      "Ctrl+Alt+]");
-        menu_item_cmd("Demote Section", UiCommand::DemoteSection, cmd, true,
-                      "Ctrl+Alt+[");
-        menu_item_cmd("Paragraph", UiCommand::ParagraphLevel, cmd, true, "Ctrl+0");
-        ImGui::Separator();
-        menu_item_cmd("Wrap Stretch…", UiCommand::WrapStretch, cmd, true, "Ctrl+E");
-        menu_item_cmd("Unwrap Stretch", UiCommand::UnwrapStretch, cmd, state.in_stretch,
-                      "Ctrl+Shift+U");
-        tool_menu_end();
-      }
-
-      // Lists / blocks group
-      start_group(1);
-      if (edit_menu_begin("tb_lists", "lists", "Lists & blocks")) {
-        menu_item_cmd("Unordered list", UiCommand::ToggleUnorderedList, cmd);
-        menu_item_cmd("Ordered list", UiCommand::ToggleOrderedList, cmd);
-        menu_item_cmd("Task item", UiCommand::ToggleTask, cmd, true, "Ctrl+Shift+T");
-        menu_item_cmd("Block quote", UiCommand::ToggleBlockQuote, cmd);
-        ImGui::Separator();
-        menu_item_cmd("Indent", UiCommand::IndentList, cmd, state.on_list_item);
-        menu_item_cmd("Outdent", UiCommand::OutdentList, cmd, state.on_list_item);
-        tool_menu_end();
-      }
-
-      // Insert group
-      start_group(1);
-      if (edit_menu_begin("tb_insert", "insert", "Insert")) {
-        menu_item_cmd("Table", UiCommand::InsertTable, cmd);
-        menu_item_cmd("Image…", UiCommand::InsertImage, cmd, true, "Ctrl+Shift+I");
-        menu_item_cmd("Figure…", UiCommand::InsertFigure, cmd);
-        menu_item_cmd("Note", UiCommand::InsertNote, cmd);
-        menu_item_cmd("Code block", UiCommand::InsertCodeBlock, cmd);
-        menu_item_cmd("Horizontal rule", UiCommand::InsertHr, cmd);
-        menu_item_cmd("Columns (2)", UiCommand::InsertColumns, cmd);
-        menu_item_cmd("Transclude…", UiCommand::InsertTransclude, cmd);
-        menu_item_cmd("Bibliography entry", UiCommand::InsertBiblioEntry, cmd);
-        tool_menu_end();
-      }
-
-      start_group(4);
-      edit_button("tb_find", "find", "Find (Ctrl+F)", UiCommand::Find);
-      before_group_item();
-      tool_button("tb_split", state.split && !state.trail && !state.diff
-                                    ? "join" : "split",
-                    state.split && !state.trail && !state.diff
-                        ? "Join panes (keep left, Ctrl+\\)"
-                        : "Independent split panes (Ctrl+\\)",
-                    UiCommand::ToggleSplit, cmd);
-      before_group_item();
-      toggle_button("tb_trail", "history", "Linked navigation trail",
-                    UiCommand::ToggleTrail, state.trail);
-      before_group_item();
-      toggle_button("tb_outline", "outline",
-                    "Heading outline (Ctrl+Shift+O; Ctrl+Alt+O docks it)",
-                    UiCommand::ToggleOutline, state.outline);
-      if (edit_menu_begin("tb_viewmenu", "view", "View tools")) {
-        view_tools_items(state, cmd, result.arg);
-        tool_menu_end();
-      }
-
-    }
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-
-    result.top_reserved += edit_h;
-  }
 
   // ---- Document tab strip (browser-style) ----
   if (!state.tab_labels.empty()) {
@@ -2925,7 +2878,9 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       const float strip_top = vp->Pos.y + result.top_reserved;
       const float button_w = 26.f * scale_;
       const float available = ImGui::GetContentRegionAvail().x;
-      const float tabs_w = std::max(1.f, available - button_w - 4.f * scale_);
+      // "+" (new tab) and the new-document button after the tabs.
+      const float tabs_w =
+          std::max(1.f, available - 2.f * button_w - 6.f * scale_);
       ImGui::BeginChild("##tab-scroll-area", ImVec2(tabs_w, tab_h - 6.f * scale_), false,
                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
       if (ImGui::BeginTabBar("##doctabs",
@@ -3074,11 +3029,47 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       }
       ImGui::SameLine();
       const int button_colors = push_toolbar_button_style();
-      if (ImGui::Button("+##new-tab", ImVec2(button_w, tab_h - 6.f * scale_)))
+      const float tab_button_h = tab_h - 6.f * scale_;
+      if (ImGui::Button("+##new-tab", ImVec2(button_w, tab_button_h)))
         cmd = UiCommand::NewTab;
       draw_toolbar_hover_face();
-      if (ImGui::IsItemHovered()) ImGui::SetTooltip("New tab (Ctrl+T)");
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("New tab (Ctrl+T) · right-click for more");
+      if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("##new-tab-menu");
+      ImGui::SameLine(0.f, 2.f * scale_);
+      // New document: a blank local (database) document in a new tab, ready
+      // to type into; it is listed under Local documents at once.
+      bool new_doc = false;
+      if (const Icon* ic = icon("new")) {
+        const float pad = 2.f * scale_;
+        const float side = std::max(1.f, tab_button_h - 2.f * pad);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                            ImVec2((button_w - side) * 0.5f, pad));
+        new_doc = ImGui::ImageButton(
+            "##new-doc", reinterpret_cast<ImTextureID>(ic->texture),
+            ImVec2(side, side));
+        ImGui::PopStyleVar();
+      } else {
+        new_doc = ImGui::Button("New##new-doc", ImVec2(button_w, tab_button_h));
+      }
+      if (new_doc) cmd = UiCommand::NewDocument;
+      draw_toolbar_hover_face();
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("New document (Ctrl+N)");
+      if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("##new-tab-menu");
       ImGui::PopStyleVar(2);
+      if (ImGui::BeginPopup("##new-tab-menu")) {
+        menu_item_cmd("New Tab", UiCommand::NewTab, cmd, true, "Ctrl+T");
+        menu_item_cmd("New Document", UiCommand::NewDocument, cmd, true,
+                      "Ctrl+N");
+        ImGui::Separator();
+        menu_item_cmd("Open File…", UiCommand::OpenDocument, cmd, true,
+                      "Ctrl+O");
+        menu_item_cmd("Local Documents", UiCommand::OpenStoredDocuments, cmd);
+        ImGui::EndPopup();
+      }
       ImGui::PopStyleColor(button_colors);
     }
     ImGui::End();
@@ -3273,7 +3264,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
 
     force_menu("File");
     if (bar_menu("File")) {
-      menu_item_cmd("New", UiCommand::NewDocument, cmd, true, "Ctrl+N");
+      menu_item_cmd("New Document", UiCommand::NewDocument, cmd, true, "Ctrl+N");
       menu_item_cmd("Open…", UiCommand::OpenDocument, cmd, true, "Ctrl+O");
       menu_item_cmd("Open URL…", UiCommand::OpenUrlBar, cmd, true, "Ctrl+L");
       menu_item_cmd("New Tab", UiCommand::NewTab, cmd, true, "Ctrl+T");
@@ -3407,8 +3398,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleSectionFocus;
       if (ImGui::MenuItem("Structure Highlight", "Ctrl+Shift+L", state.structure))
         cmd = UiCommand::ToggleStructure;
-      if (ImGui::MenuItem("Edit Mode", "F2", !state.browse, state.can_edit))
-        cmd = UiCommand::ToggleEdit;
+      if (ImGui::MenuItem("Lock Document", "F2",
+                          state.can_edit && state.browse, state.can_edit))
+        cmd = UiCommand::ToggleLock;
       menu_item_cmd("Content Only (hide menus, toolbars)",
                     UiCommand::ToggleChrome, cmd, true, "F11");
       ImGui::Separator();
@@ -4137,6 +4129,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   }
 
   find_bar(state, cmd, result.arg);
+  edit_bars(state, result, cmd);
 
   // ---- Reply composer: custom floating/dockable frame underneath, ImGui
   // text widget and Markdown tools above it. Nothing here sends a request.

@@ -305,6 +305,28 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_quote_items.clear();
   for (const auto& q : app.context_quotes)
     ui_state.context_quote_items.push_back(q.label);
+  // Edit strips: every centre tile with one, and the focused document
+  // window's (an unfocused window paints a plain band, draw_soft_window).
+  ui_state.edit_bars.clear();
+  for (const int vi : live_views(app)) {
+    const Pane& ep = app.panes[vi];
+    if (ep.head_h <= 0) continue;
+    if (vi >= kCentreViews && vi != app.focus) continue;
+    const DocBuffer* eb = find_buf(app, ep.buf);
+    if (!eb) continue;
+    xanatoo::UiEditBar bar;
+    bar.view = vi;
+    bar.x = ep.x - (ep.sb_left ? kSbW : 0);
+    bar.y = ep.y - ep.head_h;
+    bar.w = ep.w + (ep.sb_left ? kSbW : 0);
+    bar.h = ep.head_h;
+    bar.focused = vi == app.focus;
+    bar.floating = vi >= kCentreViews;
+    bar.locked = pane_locked(app, ep);
+    bar.dirty = eb->dirty;
+    bar.selection = bar.focused && !ep.sel.empty();
+    ui_state.edit_bars.push_back(bar);
+  }
   ui_state.find_open = find_bar_shown(app) && !media_fullscreen(app);
   if (ui_state.find_open) {
     const SDL_Rect r = find_bar_rect(app);
@@ -361,6 +383,11 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         nid_ok && fd.get(nid).kind == xanatoo::NodeKind::ListItem;
     ui_state.in_stretch =
         nid_ok && xanatoo::enclosing_stretch(fd, nid) != xanatoo::INVALID_NODE;
+  }
+  for (auto& bar : ui_state.edit_bars) {
+    if (!bar.focused) continue;
+    bar.on_list_item = ui_state.on_list_item;
+    bar.in_stretch = ui_state.in_stretch;
   }
   ui_state.doc_label = path_of(app, focused_pane(app)).empty()
                            ? std::string("untitled")
@@ -940,7 +967,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
 static bool changes_document(xanatoo::UiCommand cmd) {
   using C = xanatoo::UiCommand;
   switch (cmd) {
-    case C::NewDocument: case C::RevertToSaved:
+    case C::RevertToSaved:
     case C::Undo: case C::Redo: case C::Cut: case C::Paste:
     case C::Replace: case C::ReplaceOne: case C::ReplaceAll:
     case C::VirtualKey:
@@ -976,7 +1003,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
 
   // Browse mode: ignore commands that change the document.
   if (browsing(app) && changes_document(cmd)) {
-    flash_status(app, "Browse mode — F2 to edit");
+    flash_status(app, no_edit_notice(app));
     cmd = C::None;
   }
 
@@ -1048,27 +1075,40 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::Quit:
       if (stash_all_or_confirm(app)) app.running = false;
       break;
-    case C::NewDocument: {
-      if (!stash_or_confirm(app, p.buf)) break;
-      buf(app, p.buf).doc =
-          xanatoo::parse_document(xanatoo::fallback_document(), {});
-      path_of(app, p).clear();
-      buf(app, p.buf).dirty = false;
-      attach_draft(app, p.buf);  // forget the old file's doc key
-      const bool saved_locally = save_stored_buffer(app, p.buf);
-      xanatoo::ensure_valid_caret(buf(app, p.buf).doc,
-                                  p.sel.focus);
-      p.sel.anchor = p.sel.focus;
-      p.scroll_y = 0.f;
-      p.layout = {};
-      drop_height_hints_for_buf(app, p.buf);
-      buf(app, p.buf).history.reset(
-          buf(app, p.buf).doc, p.sel);
-      refresh_views_of_buf(app, p.buf, app.focus, true);
+    case C::NewDocument:
+    case C::NewTab: {
+      // Both open a blank, editable document in a new tab, never over the
+      // page in view. New Tab leaves it to the address bar (type a URL, or
+      // click into the page and write); New Document puts it in Local
+      // documents at once and selects the title to type over.
+      const bool document = cmd == C::NewDocument;
+      const BufferId bi =
+          add_buffer(app, xanatoo::parse_document("# Untitled\n", {}), {});
+      app.tab_order.push_back(bi);
+      Pane& np = app.panes[app.centre_focus];
+      if (app.focus != app.centre_focus) focus_view(app, app.centre_focus);
+      np.buf = bi;
+      np.sel = {};
+      np.scroll_y = 0.f;
+      np.layout = {};
+      xanatoo::Document& nd = buf(app, bi).doc;
+      xanatoo::ensure_valid_caret(nd, np.sel.focus);
+      np.sel.anchor = np.sel.focus;
+      if (document && np.sel.focus.node != xanatoo::INVALID_NODE)
+        xanatoo::select_node(nd, np.sel, np.sel.focus.node);
+      buf(app, bi).history.reset(nd, np.sel);
       app.needs_layout = true;
+      if (document) {
+        const bool stored = save_stored_buffer(app, bi);
+        app.key_focus = KeyFocus::Document;
+        flash_status(app, stored ? "New local document — type its title"
+                                 : "Local database unavailable; document "
+                                   "remains in memory");
+      } else {
+        app.ui.focus_url_bar();
+        flash_status(app, "New tab — type an address, or write here");
+      }
       update_title(app);
-      flash_status(app, saved_locally ? "New local document" :
-                  "Local database unavailable; document remains in memory");
       break;
     }
     case C::OpenDocument:
@@ -1197,23 +1237,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         flash_status(app, "Already at the top");
       else
         navigate_to_url(app, up);
-      break;
-    }
-    case C::NewTab: {
-      const BufferId bi = add_buffer(
-          app, xanatoo::parse_document(xanatoo::fallback_document(), {}), {});
-      app.tab_order.push_back(bi);
-      app.panes[app.focus].buf = bi;
-      app.panes[app.focus].sel = {};
-      xanatoo::ensure_valid_caret(buf(app, bi).doc,
-                                  app.panes[app.focus].sel.focus);
-      app.panes[app.focus].sel.anchor = app.panes[app.focus].sel.focus;
-      app.panes[app.focus].scroll_y = 0.f;
-      buf(app, bi).history.reset(
-          buf(app, bi).doc, app.panes[app.focus].sel);
-      app.needs_layout = true;
-      update_title(app);
-      flash_status(app, "New tab");
       break;
     }
     case C::CloseTab: {
@@ -2716,23 +2739,22 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       flash_status(app, app.structure_mode ? "Structure highlight on"
                                            : "Structure highlight off");
       break;
-    case C::ToggleEdit:
+    case C::ToggleLock: {
       if (focused_read_only(app)) {
         flash_status(app, kReadOnlyNotice);
         break;
       }
-      app.edit_mode = !app.edit_mode;
-      if (browsing(app)) {
+      const bool lock = !pane_locked(app, p);
+      set_pane_locked(app, p, lock);
+      if (lock) {
         // Clear any status prompts so they do not trap keys
         leave_prompt(app);
-        flash_status(
-            app,
-            "Browse mode — read-only · F2 edits · gamepad: D-pad move, "
-            "A open, B collapse, LB/RB headers, LT/RT page");
+        flash_status(app, "Locked — read only · F2 unlocks");
       } else {
-        flash_status(app, "Edit mode");
+        flash_status(app, "Unlocked — editing");
       }
       break;
+    }
     case C::ToggleChrome:
       toggle_chrome(app);
       break;
@@ -2750,8 +2772,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ToggleVirtualKeyboard:
       app.virtual_keyboard = !app.virtual_keyboard;
       if (app.virtual_keyboard && browsing(app) && !focused_read_only(app)) {
-        app.edit_mode = true;
-        flash_status(app, "Virtual keyboard — edit mode");
+        set_pane_locked(app, p, false);
+        flash_status(app, "Virtual keyboard — unlocked for editing");
       } else {
         flash_status(app, app.virtual_keyboard ? "Virtual keyboard on"
                                                : "Virtual keyboard off");
@@ -2759,7 +2781,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::VirtualKey: {
       if (browsing(app)) {
-        flash_status(app, "Browse mode — F2 to edit");
+        flash_status(app, no_edit_notice(app));
         break;
       }
       if (arg.empty()) break;
@@ -3163,6 +3185,11 @@ void run_chrome(App& app) {
   ui_state.pointer_native_top = float_layer_at(
       app, static_cast<int>(ui_state.pointer_x),
       static_cast<int>(ui_state.pointer_y));
+  for (const auto& bar : ui_state.edit_bars)
+    if (!bar.floating) {
+      ui_state.native_panel_order.push_back(xanatoo::UiPanelLayer::EditBar);
+      break;
+    }
   if (ui_state.find_open && app.focus < kCentreViews)
     ui_state.native_panel_order.push_back(xanatoo::UiPanelLayer::FindBar);
   for (const FloatWindow* w : float_stack(app)) {
@@ -3191,6 +3218,12 @@ void run_chrome(App& app) {
   } else if (app.tab_drag_preview) {
     app.tab_drag_preview = false;
     app.dock_preview = Dock::None;
+  }
+  // A tool on another view's edit strip acts on that view.
+  if (ui_frame.edit_bar_view >= 0 && ui_frame.edit_bar_view != app.focus &&
+      view_live(app, ui_frame.edit_bar_view)) {
+    focus_view(app, ui_frame.edit_bar_view);
+    app.key_focus = KeyFocus::Document;
   }
   execute_command(app, ui_frame.cmd, ui_frame.arg);
   // The find bar keeps the keys in its field.
@@ -5679,6 +5712,8 @@ void run_frame(App& app) {
   // Freeze ImGui's draw lists before painting native frames. Rich panel forms
   // now composite inside float_stack rather than across everything at the end.
   app.ui.prepare_render();
+  if (!media_fullscreen(app))
+    app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::EditBar);
   if (app.focus < kCentreViews && !media_fullscreen(app))
     app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::FindBar);
   draw_floats(app);

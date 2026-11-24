@@ -14,6 +14,7 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/diff_overview.hpp"
+#include "xanatoo/edit_bar.hpp"
 #include "xanatoo/epub_import.hpp"
 #include "xanatoo/gemini.hpp"
 #include "xanatoo/lemmy.hpp"
@@ -461,13 +462,15 @@ void place_centre_rows(App& app) {
         app.tile_axis == TileAxis::Columns && area.view == 0;
     const int x = area.rect.x + (left_scroll ? kSbW : 0);
     const int w = std::max(1, area.rect.w - (left_scroll ? kSbW : 0));
-    const int h = std::max(1, area.rect.h - pane_foot_h(app, p));
-    if (p.w != w || p.h != h) app.needs_layout = true;
+    const int old_w = p.w, old_h = p.h;
     p.sb_left = left_scroll;
     p.x = x;
-    p.y = area.rect.y;
     p.w = w;
-    p.h = h;
+    // The edit strip of an editable document sits on top of its text.
+    p.head_h = std::min(edit_bar_h(app, p), area.rect.h / 2);
+    p.y = area.rect.y + p.head_h;
+    p.h = std::max(1, area.rect.h - p.head_h - pane_foot_h(app, p));
+    if (old_w != p.w || old_h != p.h) app.needs_layout = true;
   }
   if (!app.split) {
     // The hidden second view keeps its document state but draws nothing.
@@ -476,8 +479,17 @@ void place_centre_rows(App& app) {
     p.x = dock;
     p.y = top;
     p.w = 0;
+    p.head_h = 0;
     p.h = std::max(1, view_h - pane_foot_h(app, p));
   }
+}
+
+int edit_bar_h(App& app, const Pane& p) {
+  const int width = p.w + (p.sb_left ? kSbW : 0);
+  if (width <= 0 || app.chrome_hidden || media_fullscreen(app)) return 0;
+  const DocBuffer* b = find_buf(app, p.buf);
+  if (!b || b->placeholder || pane_read_only(app, p)) return 0;
+  return xanatoo::edit_bar_height(static_cast<float>(width), app.ui_scale);
 }
 
 int tile_gutter_size(const App& app) {
@@ -489,10 +501,10 @@ SDL_Rect tile_divider_rect(const App& app) {
   if (!app.split) return SDL_Rect{};
   const int gap = tile_gutter_size(app);
   if (app.tile_axis == TileAxis::Rows)
-    return SDL_Rect{app.panes[0].x, app.panes[1].y - gap,
+    return SDL_Rect{app.panes[0].x, app.panes[1].y - app.panes[1].head_h - gap,
                     app.panes[0].w, gap};
-  return SDL_Rect{app.panes[1].x - gap, app.panes[0].y,
-                  gap, app.panes[0].h};
+  return SDL_Rect{app.panes[1].x - gap, app.panes[0].y - app.panes[0].head_h,
+                  gap, app.panes[0].h + app.panes[0].head_h};
 }
 
 SDL_Rect tile_mode_button_rect(const App& app) {
@@ -1134,7 +1146,8 @@ int pane_at(App& app, float mx, float my) {
   }
   if (!app.split) return 0;
   if (app.tile_axis == TileAxis::Rows)
-    return (my >= static_cast<float>(app.panes[1].y)) ? 1 : 0;
+    return (my >= static_cast<float>(app.panes[1].y - app.panes[1].head_h))
+               ? 1 : 0;
   return (mx >= static_cast<float>(app.panes[1].x)) ? 1 : 0;
 }
 

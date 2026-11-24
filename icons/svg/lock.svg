@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f3dfa2"/><stop offset=".48" stop-color="#d9b76b"/><stop offset="1" stop-color="#af8748"/></linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f5f6f2"/><stop offset=".45" stop-color="#c8d0cf"/><stop offset="1" stop-color="#8b9695"/></linearGradient>
+  </defs>
+  <path d="M6.2 9V6.6a3.8 3.8 0 0 1 7.6 0V9" fill="none" stroke="#505957" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M6.2 9V6.6a3.8 3.8 0 0 1 7.6 0V9" fill="none" stroke="url(#metal)" stroke-width="1.3" stroke-linecap="round"/>
+  <rect x="3.8" y="8.8" width="12.4" height="8.6" rx="1.4" fill="url(#gold)" stroke="#505957" stroke-width=".75" stroke-linejoin="round"/>
+  <path d="M5 10.1h10" stroke="#fffdf3" stroke-width=".7" stroke-linecap="round" opacity=".82"/>
+  <circle cx="10" cy="12.4" r="1.2" fill="#59615f"/><path d="M10 13v2.2" stroke="#59615f" stroke-width="1" stroke-linecap="round"/>
+</svg>

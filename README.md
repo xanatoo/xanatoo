@@ -171,7 +171,7 @@ read-only, with Save As offering an editable Markdown copy.
 | Outline / page navigation panel | **Ctrl+Shift+O** / **Ctrl+Alt+P** |
 | Bookmark a selection or page | **Ctrl+Shift+B** |
 | Paged reading / web reader mode | **F8** / **F9** |
-| Browse/edit mode | **F2** |
+| Lock / unlock document | **F2** |
 | Save / Save As / undo | **Ctrl+S** / **Ctrl+Shift+S** / **Ctrl+Z** |
 | Keyboard reference | **F1** |
 

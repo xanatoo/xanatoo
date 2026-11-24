@@ -36,13 +36,47 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
   second Trail tile it acts like a click; from the other independent tile or a
   document window that page moves to the first tile first.
 
+## Editable documents
+
+There is no global edit mode. A document is editable or not by what it is:
+local files, `db:` documents and untitled buffers are; foreign content (web
+pages, HTML, pandoc imports, cached pages), source views, invalid XML and
+binary files are not (`pane_read_only`).
+
+- Every view showing an editable document has an **edit strip** on top of
+  its page, inside the tile or document window (`Pane::head_h`, reserved by
+  `place_centre_rows` / the document-window layout from `edit_bar_h`). The
+  main toolbar and tab strip never change with the page, so nothing above
+  the page jumps when an editable document opens; the strip itself marks
+  the page as editable.
+- Strip groups (`edit_bar.hpp`): lock · save · undo · redo | cut · copy ·
+  paste | bold · italic · link · more formatting | structure | lists |
+  insert. A group wraps to the next row whole; the app and the ImGui strip
+  compute the rows the same way (`edit_bar_rows`).
+- **Lock** (the padlock, F2, View → Lock Document) makes an editable
+  document read-only without taking its strip away: the tools grey out, the
+  page does not move. The lock belongs to the buffer and its current path
+  (`DocBuffer::lock_set` / `lock_path` / `lock_choice`); following a link
+  to another page falls back to the default. Installed data (`data_dir()`:
+  welcome, help, examples) starts locked, everything else unlocked.
+- Centre tiles' strips are the `UiPanelLayer::EditBar` layer (under every
+  floating window). A document window shows its strip's tools only while it
+  is focused (they draw in its `FindBar` layer as `##find_bar/edit_strip`);
+  unfocused it paints a plain band of the same height. A tool on another
+  view's strip focuses that view first (`UiFrameResult::edit_bar_view`).
+- **New document** (Ctrl+N, File → New Document, the page button beside
+  "+" on the tab strip) opens a blank document in a **new tab**, already
+  stored in the local database (`db:`, listed under Local documents) with
+  its title selected to type over; it never replaces the page in view.
+  Right-clicking "+" offers New Tab, New Document, Open File… and Local
+  Documents.
+
 ## Toolbar states
 
 - Ordinary toolbar actions have no button frame until hover; they rise on
-  hover and sink only while pressed. Browsing is now the default: the
-  **Edit Mode** pencil button (F2) stays recessed when editing is enabled,
-  as do toggles that retain the same graphic (native view, outline,
-  history, downloads and the contextual reader/outline/navigation/site-map
+  hover and sink only while pressed. Toggles that retain the same graphic
+  stay recessed while on (native view, outline, history, downloads, the
+  edit strip's lock and the contextual reader/outline/navigation/site-map
   buttons).
 - Location-field buttons: **Heading outline** (`outline` icon) whenever the
   page has headings, **Page Navigation** (`navigation` icon) for `<nav>` /

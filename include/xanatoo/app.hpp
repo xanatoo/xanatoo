@@ -161,6 +161,11 @@ struct DocBuffer {
   std::string stored_published; // independent last published head
   std::string stored_title;     // friendly local tab label
   Uint32 draft_due = 0;
+  // The lock (F2, the edit strip's lock button) the user set on the page at
+  // `lock_path`; any other page this buffer shows takes default_locked.
+  bool lock_set = false;
+  std::string lock_path;
+  bool lock_choice = false;
 };
 
 // Cached raster of a pane's document layer (background, selection, text) so
@@ -427,6 +432,9 @@ struct Pane {
   int w = 0;
   int y = 0;
   int h = 0;
+  // The edit strip above the text (edit_bar_h; 0 = none): the view's tile
+  // starts at y - head_h.
+  int head_h = 0;
   // Prior block heights for viewport virtualization (node → height).
   std::unordered_map<xanatoo::NodeId, float> height_cache;
   int last_layout_pane_w = 0;  // drop cache when this pane's width changes
@@ -1463,7 +1471,6 @@ struct App {
   std::vector<xanatoo::DiffWordMark> diff_words[2];
   std::vector<float> diff_overview[2];
   bool structure_mode = false;
-  bool edit_mode = false;  // opt in to editing; browsing is the default
   // Content only (F11, gamepad X): no menu bar, toolbars, tab strip; the
   // status line only while a prompt or notice needs it.
   bool chrome_hidden = false;
@@ -1693,11 +1700,25 @@ bool may_be_image(std::string_view url);
 // Foreign content — fetched pages, imported HTML / EPUB, anything under
 // cache_dir() — is read-only: browsed, never edited or saved in place.
 bool is_foreign_path(std::string_view path);
-// Browsing is the default; edit mode is opt-in and foreign content stays read-only.
+// Editable documents are edited in place (no edit mode); foreign content
+// stays read-only, and an editable document can be locked (docs/UI.md
+// "Editable documents"). browsing = the focused view takes no edits now.
 bool browsing(App& app);
 bool focused_read_only(App& app);
+bool pane_read_only(App& app, const Pane& p);
+// Editable and locked: installed data (data_dir(): examples, help) starts
+// locked, the user's own documents unlocked.
+bool pane_locked(App& app, const Pane& p);
+bool default_locked(std::string_view path);
+void set_pane_locked(App& app, const Pane& p, bool locked);
+// Height of the edit strip above an editable view (0 when it has none).
+int edit_bar_h(App& app, const Pane& p);
 inline constexpr const char* kReadOnlyNotice =
     "Read-only page (foreign content) — Ctrl+S saves an editable Markdown copy";
+inline constexpr const char* kLockedNotice =
+    "Locked — F2 or the lock on the edit strip allows editing";
+// Why the focused view takes no edits: kReadOnlyNotice or kLockedNotice.
+const char* no_edit_notice(App& app);
 xanatoo::Document load_doc_or_placeholder(App& app, const std::string& path);
 std::string buffer_tab_label(App& app, BufferId bi);
 // Last component of a local path for tabs / titles; "dir/" for a directory

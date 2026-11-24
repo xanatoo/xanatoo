@@ -389,12 +389,13 @@ void place_windows(App& app) {
     if (!view_live(app, w.view)) continue;
     Pane& p = app.panes[w.view];
     auto [cx, cy, cw, ch] = soft_client_rect(app, w);
-    const int ph = std::max(1, ch - pane_foot_h(app, p));  // bars below
-    if (p.w != cw || p.h != ph) app.needs_layout = true;
+    const int old_w = p.w, old_h = p.h;
     p.x = cx;
-    p.y = cy;
     p.w = cw;
-    p.h = ph;
+    p.head_h = std::min(edit_bar_h(app, p), ch / 2);  // edit strip on top
+    p.y = cy + p.head_h;
+    p.h = std::max(1, ch - p.head_h - pane_foot_h(app, p));  // bars below
+    if (old_w != p.w || old_h != p.h) app.needs_layout = true;
   }
 }
 

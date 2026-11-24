@@ -90,7 +90,7 @@ void find_step(App& app, bool backward) {
 void find_replace_one(App& app) {
   if (!prompt_is_search(app) || app.prompt.text.empty()) return;
   if (browsing(app)) {
-    flash_status(app, "Browse mode — F2 to edit");
+    flash_status(app, no_edit_notice(app));
     return;
   }
   Pane& p = focused_pane(app);
@@ -115,7 +115,7 @@ void find_replace_all(App& app) {
     return;
   }
   if (browsing(app)) {
-    flash_status(app, "Browse mode — F2 to edit");
+    flash_status(app, no_edit_notice(app));
     return;
   }
   Pane& p = focused_pane(app);

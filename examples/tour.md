@@ -1,7 +1,7 @@
 # A tour of xanatoo documents
 
 This page shows everything a xanatoo document can hold, one feature after
-the other. Edit it freely (**F2** leaves browse mode). Your changes are
+the other. Edit it freely (**F2** or the padlock above the page unlocks it). Your changes are
 kept as a draft and never overwrite the installed file. The outline
 (**View → Outline**) lists the sections below.
 

@@ -10,8 +10,10 @@ namespace xanatoo {
 // The embedded ImGui bodies whose title, geometry and stacking belong to native
 // FloatWindows. Children use ImGui's "parent/child_ID" window naming scheme.
 // Menus, tooltips and popups have their own windows and must remain foreground.
-// FindBar belongs to the view it searches: a centre tile or document window.
-enum class UiPanelLayer { Chrome, FindBar, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
+// FindBar belongs to the view it searches: a centre tile or document window;
+// in a document window it also holds that view's edit strip. EditBar: the
+// edit strips of the centre tiles (under every floating window).
+enum class UiPanelLayer { Chrome, FindBar, EditBar, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
                           Annotations, Context,
                           NostrExplorer, LemmyExplorer, Certificates,
                           Identities, RelatedSites, MatrixExplorer };
@@ -24,6 +26,7 @@ inline unsigned ui_panel_bit(UiPanelLayer layer) {
 inline const char* ui_panel_root(UiPanelLayer layer) {
   switch (layer) {
     case UiPanelLayer::FindBar: return "##find_bar";
+    case UiPanelLayer::EditBar: return "##edit_bar";
     case UiPanelLayer::Reply: return "##reply_editor";
     case UiPanelLayer::Bookmarks: return "##bookmarks_panel_body";
     case UiPanelLayer::Subscriptions: return "##subscriptions_panel_body";
@@ -53,7 +56,7 @@ inline bool ui_panel_obscured(UiPanelLayer hovered,
 
 inline UiPanelLayer ui_panel_layer(std::string_view owner) {
   constexpr UiPanelLayer panels[] = {
-    UiPanelLayer::FindBar,
+    UiPanelLayer::FindBar, UiPanelLayer::EditBar,
     UiPanelLayer::Reply, UiPanelLayer::Bookmarks, UiPanelLayer::Subscriptions, UiPanelLayer::Styles,
     UiPanelLayer::StyleManager, UiPanelLayer::Annotations, UiPanelLayer::Context,
     UiPanelLayer::NostrExplorer,

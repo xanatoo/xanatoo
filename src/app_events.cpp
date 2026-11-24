@@ -334,7 +334,8 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
       if (const FloatWindow* w = float_at(app, mxw, myw);
           w && layer && float_ui_layer(app, *w) == layer)
         focus_float(app, *w);
-      if (layer == xanatoo::UiPanelLayer::FindBar) {
+      if (layer == xanatoo::UiPanelLayer::FindBar ||
+          layer == xanatoo::UiPanelLayer::EditBar) {
         app.key_focus = KeyFocus::Document;
         app.prompt.pending = false;  // ImGui gives the keys to what was hit
       }
@@ -1580,12 +1581,12 @@ static void on_controllerbuttondown(App& app, SDL_Event& ev, bool imgui_mouse,
       collapse_or_expand_all(app, true);
       break;
     case xanatoo::sdl::button::Back:
-      // Prefer capsule history when available; else toggle edit mode.
+      // Prefer capsule history when available; else lock / unlock.
       if (nav_step(app, -1)) {
       } else if (focused_read_only(app)) {
         flash_status(app, kReadOnlyNotice);
       } else {
-        execute_command(app, UiCommand::ToggleEdit);
+        execute_command(app, UiCommand::ToggleLock);
       }
       break;
     case xanatoo::sdl::button::Start:
@@ -2251,10 +2252,11 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         k == SDLK_TAB || k == SDLK_RETURN || k == SDLK_KP_ENTER ||
         k == SDLK_SPACE || k == SDLK_LEFTBRACKET || k == SDLK_RIGHTBRACKET ||
         // Ctrl+C / A / S: copy, select, save an editable Markdown copy.
-        // Ctrl+T / W: new / close tab (not document edits). Ctrl+R reload.
+        // Ctrl+T / W: new / close tab (not document edits); Ctrl+N a new
+        // document in a new tab. Ctrl+R reload.
         (ctrl && (k == SDLK_q || k == SDLK_o || k == SDLK_f || k == SDLK_g ||
                   k == SDLK_c || k == SDLK_a || k == SDLK_s || k == SDLK_r ||
-                  k == SDLK_t || k == SDLK_w ||
+                  k == SDLK_t || k == SDLK_w || k == SDLK_n ||
                   k == SDLK_BACKSLASH || k == SDLK_l ||
                   k == SDLK_EQUALS || k == SDLK_MINUS || k == SDLK_PLUS ||
                   k == SDLK_KP_PLUS || k == SDLK_KP_MINUS)) ||
@@ -2402,7 +2404,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       break;
 
     case SDLK_F2:
-      execute_command(app, UiCommand::ToggleEdit);
+      execute_command(app, UiCommand::ToggleLock);
       break;
 
     case SDLK_EQUALS:
