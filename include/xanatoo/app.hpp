@@ -1420,6 +1420,10 @@ struct App {
   xanatoo::NodeId context_scroll_to = xanatoo::INVALID_NODE;
   // Footnote whose mark is hovered: washed in the Context panel.
   xanatoo::NodeId context_footnote = xanatoo::INVALID_NODE;
+  // Thread message an in-page link under the pointer points at (HN's
+  // "reply to …"): its card is washed in the Context panel and tied to the
+  // link by a connector curve. Set by refresh_context_panel while hovered.
+  xanatoo::NodeId context_message = xanatoo::INVALID_NODE;
   // Address context_doc was read from (its page, without fragment); the
   // panel's links resolve against it. Empty when unknown.
   std::string context_address;

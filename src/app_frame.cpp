@@ -5034,6 +5034,45 @@ void draw_help_window(App& app) {
   }
 }
 
+// Soft orange curve tying a link or quote in a view to its target in the
+// Context panel, with a dot at each end. Horizontal tangents at both ends.
+static void draw_connector(App& app, float x0, float y0, float x1, float y1) {
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 160);
+  // Cubic Bezier through (x0,y0), (c0x,y0), (c1x,y1), (x1,y1): control
+  // points pull toward a mid gutter.
+  const float mx = (x0 + x1) * 0.5f;
+  const float c0x = x0 + (mx - x0) * 0.55f;
+  const float c1x = x1 - (x1 - mx) * 0.55f;
+  const int steps = 24;
+  float px = x0, py = y0;
+  for (int i = 1; i <= steps; ++i) {
+    const float t = static_cast<float>(i) / static_cast<float>(steps);
+    const float u = 1.f - t;
+    const float bx = u * u * u * x0 + 3.f * u * u * t * c0x +
+                     3.f * u * t * t * c1x + t * t * t * x1;
+    const float by = u * u * u * y0 + 3.f * u * u * t * y0 +
+                     3.f * u * t * t * y1 + t * t * t * y1;
+    xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
+                            static_cast<int>(py), static_cast<int>(bx),
+                            static_cast<int>(by));
+    // Slight thickness: a parallel stroke.
+    xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
+                            static_cast<int>(py) + 1, static_cast<int>(bx),
+                            static_cast<int>(by) + 1);
+    px = bx;
+    py = by;
+  }
+  auto dot = [&](float x, float y) {
+    SDL_Rect r{static_cast<int>(x) - 2, static_cast<int>(y) - 2, 5, 5};
+    xanatoo::sdl::fill_rect(app.sdl, &r);
+  };
+  SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 200);
+  dot(x0, y0);
+  dot(x1, y1);
+  SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
+}
+
 void draw_context_window(App& app) {
   if (!app.context_panel_open) return;
   if (app.context_win.dock == Dock::None) {
@@ -5157,6 +5196,50 @@ void draw_context_window(App& app) {
       }
     }
   }
+
+  // The message a hovered in-page link points at ("reply to …"): its card,
+  // up to the first reply nested in it, washed and outlined in the
+  // connector's colour; the curve ends at its header line, on the card's
+  // left (`msg_x`) or right (`msg_x1`) edge, whichever faces the link.
+  bool msg_shown = false;
+  float msg_x = 0.f, msg_x1 = 0.f, msg_y = 0.f;
+  if (app.context_message != xanatoo::INVALID_NODE) {
+    const xanatoo::LayoutBox* card = nullptr;
+    for (const auto& mc : app.context_layout.message_cards)
+      if (mc.box.node == app.context_message) card = &mc.box;
+    if (card) {
+      float bottom = card->y + card->height;
+      for (const auto& mc : app.context_layout.message_cards)
+        if (mc.box.node != card->node && mc.box.y > card->y &&
+            mc.box.y < bottom)
+          bottom = mc.box.y;
+      const SDL_Rect r{static_cast<int>(card->x) + cx,
+                       static_cast<int>(card->y - draw_scroll),
+                       static_cast<int>(card->width),
+                       static_cast<int>(bottom - card->y)};
+      SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
+      SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 40);
+      xanatoo::sdl::fill_rect(app.sdl, &r);
+      SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 200);
+      xanatoo::sdl::draw_rect(app.sdl, &r);
+      msg_x = static_cast<float>(r.x);
+      msg_x1 = static_cast<float>(r.x + r.w);
+      msg_y = static_cast<float>(r.y) +
+              std::min(static_cast<float>(r.h),
+                       static_cast<float>(app.fonts.regular.line_height())) *
+                  0.5f;
+      for (const auto& pg : app.context_layout.glyphs) {
+        if (pg.node != app.context_message) continue;
+        xanatoo::Font& font = app.fonts.pick(pg.font);
+        msg_y = pg.y - draw_scroll -
+                static_cast<float>(font.ascender()) +
+                static_cast<float>(font.line_height()) * 0.5f;
+        break;
+      }
+      msg_shown = msg_y >= static_cast<float>(cy) &&
+                  msg_y <= static_cast<float>(cy + ch);
+    }
+  }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 
   {
@@ -5198,50 +5281,41 @@ void draw_context_window(App& app) {
                            y1 <= static_cast<float>(cy + ch) &&
                            x1 >= static_cast<float>(cx) &&
                            x1 <= static_cast<float>(cx + cw);
-          if (ok0 && ok1) {
-            SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 160);
-            // Cubic-ish polyline: control points pull toward a mid gutter.
-            const float mx = (x0 + x1) * 0.5f;
-            const float c0x = x0 + (mx - x0) * 0.55f;
-            const float c1x = x1 - (x1 - mx) * 0.55f;
-            const int steps = 24;
-            float px = x0, pyy = y0;
-            for (int i = 1; i <= steps; ++i) {
-              const float t = static_cast<float>(i) / static_cast<float>(steps);
-              const float u = 1.f - t;
-              // Bezier through (x0,y0), (c0x,y0), (c1x,y1), (x1,y1)
-              const float bx =
-                  u * u * u * x0 + 3.f * u * u * t * c0x +
-                  3.f * u * t * t * c1x + t * t * t * x1;
-              const float by =
-                  u * u * u * y0 + 3.f * u * u * t * y0 +
-                  3.f * u * t * t * y1 + t * t * t * y1;
-              xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
-                                      static_cast<int>(pyy),
-                                      static_cast<int>(bx),
-                                      static_cast<int>(by));
-              // Slight thickness: a parallel stroke.
-              xanatoo::sdl::draw_line(app.sdl, static_cast<int>(px),
-                                      static_cast<int>(pyy) + 1,
-                                      static_cast<int>(bx),
-                                      static_cast<int>(by) + 1);
-              px = bx;
-              pyy = by;
-            }
-            // End caps: small dots at each anchor.
-            auto dot = [&](float x, float y) {
-              SDL_Rect r{static_cast<int>(x) - 2, static_cast<int>(y) - 2, 5, 5};
-              xanatoo::sdl::fill_rect(app.sdl, &r);
-            };
-            SDL_SetRenderDrawColor(app.sdl, 220, 140, 40, 200);
-            dot(x0, y0);
-            dot(x1, y1);
-            SDL_SetRenderDrawBlendMode(app.sdl, SDL_BLENDMODE_NONE);
-          }
+          if (ok0 && ok1) draw_connector(app, x0, y0, x1, y1);
         }
       }
     }
+  }
+
+  // Connector from the hovered link to the message it points at, from the
+  // link's end that faces the panel.
+  if (msg_shown && app.hover.link_pane >= 0 &&
+      app.hover.link_pane < kMaxViews && !app.hover.link_in_footnotes &&
+      app.hover.link_node != xanatoo::INVALID_NODE) {
+    const Pane& lp = app.panes[app.hover.link_pane];
+    const float py = static_cast<float>(lp.y);
+    const float ox = static_cast<float>(lp.x);
+    bool found = false;
+    float lx0 = 0.f, lx1 = 0.f, ly = 0.f;
+    for_each_link_run(
+        app, lp,
+        [&](const xanatoo::PositionedGlyph& pg) {
+          return pg.node == app.hover.link_node &&
+                 pg.span_index == app.hover.link_span &&
+                 pg.auto_link == app.hover.link_auto &&
+                 pg.kind == xanatoo::InlineKind::Link;
+        },
+        [&](float x0, float x1, float top, float, float bot) {
+          if (found) return;
+          found = true;
+          lx0 = x0 + ox;
+          lx1 = x1 + ox;
+          ly = (top + bot) * 0.5f - (lp.scroll_y - py);
+        });
+    const bool panel_right = msg_x >= (lx0 + lx1) * 0.5f;
+    if (found && ly >= py && ly <= py + static_cast<float>(lp.h))
+      draw_connector(app, panel_right ? lx1 : lx0, ly,
+                     panel_right ? msg_x : msg_x1, msg_y);
   }
 }
 

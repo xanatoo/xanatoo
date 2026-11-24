@@ -411,6 +411,7 @@ void refresh_context_panel(App& app) {
   // transclusion, keep whatever page is already loaded so Context can be
   // used as a stable preview surface.
   app.context_footnote = xanatoo::INVALID_NODE;  // set below while hovered
+  app.context_message = xanatoo::INVALID_NODE;   // likewise
 
   auto set_doc = [&](const xanatoo::Document& src, const std::string& key,
                      const std::string& address,
@@ -581,6 +582,19 @@ void refresh_context_panel(App& app) {
       set_doc(d, key, view_page(pi), dest_node);
       app.context_body = xanatoo::plain_text(d, dest_node);
       app.context_footnote = hovered_footnote(app, pi);
+      // A link to a thread message ("reply to …"): mark which card it is.
+      xanatoo::NodeId id = dest_node;
+      for (int guard = 0; id != xanatoo::INVALID_NODE && guard < 256;
+           ++guard) {
+        const xanatoo::Node& m = d.get(id);
+        if (m.id != id) break;
+        if (m.kind == xanatoo::NodeKind::Message) {
+          app.context_message = id;
+          if (!m.src.empty()) app.context_title = "Post by " + m.src;
+          break;
+        }
+        id = m.parent;
+      }
       return;
     }
 
