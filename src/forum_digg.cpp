@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 //
-// Digg's public read-only MCP: Feed, Search and Post. The transport is kept
-// separate (forum_fetch.cpp); these are pure JSON -> document mappers.
-// An MCP tool result may have structuredContent or JSON text content.
+// Digg: feeds, search, stories with their sources and comments, from the
+// replies of the public read-only MCP server (https://digg.com/mcp). The
+// MCP records carry no pictures and no article text; digg_web_story /
+// digg_web_images read those from the story's / feed's web page. Pure
+// mappers; the requests are made in forum_fetch.cpp.
 
 #include "forum_common.hpp"
+#include "xanatoo/html_min.hpp"
 #include "xanatoo/text_escape.hpp"
 #include "xanatoo/util.hpp"
 
-#include <algorithm>
+#include <cctype>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -20,1105 +24,844 @@ using namespace forum;
 
 namespace {
 
-const Json* object(const Json& obj, std::string_view key) {
-  return json_get(obj, key);
-}
+struct Choice {
+  std::string_view slug, name;
+};
 
-const Json* first(const Json& obj,
-                  std::initializer_list<std::string_view> names) {
-  for (std::string_view name : names)
-    if (const Json* value = object(obj, name)) return value;
+constexpr Choice kTopics[] = {
+    {"all", "All"},
+    {"ai", "AI"},
+    {"tech", "Technology"},
+    {"gaming", "Gaming"},
+    {"entertainment", "Entertainment"},
+    {"world-business", "World & Business"},
+    {"science", "Science"},
+    {"sports", "Sports"},
+};
+
+// The first view is what a feed shows when none is named.
+constexpr Choice kViews[] = {
+    {"trending", "Trending"}, {"top", "Top"}, {"best", "Best"},
+    {"hot", "Hot"},           {"newest", "Newest"},
+};
+
+// Time windows of the Top view, the default first.
+constexpr Choice kRanges[] = {
+    {"today", "Today"}, {"24h", "24 hours"}, {"7d", "7 days"},
+    {"30d", "30 days"}, {"1y", "Year"},      {"all", "All time"},
+};
+
+constexpr Choice kSorts[] = {
+    {"relevance", "Relevance"},
+    {"score", "Score"},
+    {"newest", "Newest"},
+};
+
+template <size_t N>
+const Choice* find_choice(const Choice (&list)[N], std::string_view slug) {
+  for (const Choice& c : list)
+    if (c.slug == slug) return &c;
   return nullptr;
 }
-
-std::string text_field(const Json& obj,
-                       std::initializer_list<std::string_view> names) {
-  return json_string(first(obj, names));
-}
-
-long long count_field(const Json& obj,
-                      std::initializer_list<std::string_view> names) {
-  return json_number(first(obj, names));
-}
-
-// Digg post copy can be plain text or a small text record. Only traverse
-// known copy fields: never mistake a Source excerpt for Digg's own summary.
-std::string copy_text(const Json* value) {
-  if (!value) return {};
-  if (value->type == Json::Type::String) return value->s;
-  if (value->type == Json::Type::Object) {
-    for (std::string_view name : {"text", "plainText", "markdown", "body", "content"}) {
-      if (const Json* child = object(*value, name);
-          child && child->type == Json::Type::String && !child->s.empty())
-        return child->s;
-    }
-    // Some copy records contain a sequence of authored paragraphs. Keep
-    // their order, without interpreting arbitrary structured metadata as text.
-    for (std::string_view name : {"paragraphs", "blocks"}) {
-      if (const Json* parts = object(*value, name)) {
-        if (parts->type != Json::Type::Array) continue;
-        std::string joined;
-        for (const Json& part : parts->items) {
-          std::string paragraph;
-          if (part.type == Json::Type::String) paragraph = part.s;
-          else if (part.type == Json::Type::Object)
-            paragraph = text_field(part, {"text", "plainText"});
-          if (paragraph.empty()) continue;
-          if (!joined.empty()) joined += "\n\n";
-          joined += paragraph;
-        }
-        if (!joined.empty()) return joined;
-      }
-    }
-  }
-  return {};
-}
-
-// `copy` is the editorial copy on Digg's post pages. Other supported shapes
-// are the flat post fields and a bounded story/article record. This is a
-// data-driven mapping rather than recursive field-name guessing.
-std::string post_copy(const Json& post,
-                      std::initializer_list<std::string_view> names) {
-  for (const Json* obj : {&post, object(post, "copy"), object(post, "story"),
-                          object(post, "article"), object(post, "storyCopy")}) {
-    if (!obj || obj->type != Json::Type::Object) continue;
-    for (std::string_view name : names) {
-      std::string text = copy_text(object(*obj, name));
-      if (!text.empty()) return text;
-    }
-  }
-  return {};
-}
-
-std::string post_intro(const Json& post) {
-  return post_copy(post, {"dek", "subtitle", "subheading", "lead", "lede",
-                          "leadText", "teaser", "oneLiner", "oneLineSummary",
-                          "description"});
-}
-
-std::string post_summary(const Json& post) {
-  return post_copy(post, {"tldr", "tlDr", "tldrText", "tlDrText",
-                          "tldrSummary", "summary", "summaryText", "shortSummary"});
-}
-
-std::string post_body(const Json& post) {
-  std::string body = post_copy(post, {"body", "bodyText", "articleBody",
-                                      "articleText", "content", "contentText",
-                                      "storyText", "narrative"});
-  if (body.empty()) body = copy_text(object(post, "copy"));
-  return body;
-}
-
-// A Digg post has a headline, a short editorial take and citations. Extra
-// copy is presented as body text, never as another headline-sized section.
-// The one short label identifies a summary without dominating the page.
-void add_editorial_copy(Document& doc, NodeId parent,
-                        const std::string& intro, const std::string& summary,
-                        const std::string& body, bool has_blocks = false) {
-  if (!intro.empty()) append_plain(doc, parent, intro);
-  if (!summary.empty() && summary != intro) {
-    NodeId line = doc.create(NodeKind::Paragraph, parent);
-    add_text(doc, line, "In brief: ", InlineKind::Strong);
-    add_text(doc, line, summary);
-  }
-  if (!body.empty() && body != intro && body != summary)
-    append_plain(doc, parent, body);
-  if (intro.empty() && summary.empty() && body.empty() && !has_blocks)
-    add_note(doc, parent, "Digg has no editorial summary for this story. "
-                          "The original reports are linked below.");
-}
-
-// Feed snippets are previews, not full articles. Normalize whitespace and
-// clip on a word/UTF-8 boundary so long editorial copy does not bury the
-// next headline; the post view retains the complete text.
-std::string feed_preview(std::string_view text) {
-  constexpr size_t kMaxBytes = 230;
-  std::string out;
-  out.reserve(std::min(text.size(), kMaxBytes + 32));
-  bool space = false;
-  for (unsigned char c : text) {
-    if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
-      space = !out.empty();
-      continue;
-    }
-    if (space) { out += ' '; space = false; }
-    out += static_cast<char>(c);
-    if (out.size() > kMaxBytes + 32) break;
-  }
-  if (out.size() <= kMaxBytes) return out;
-  size_t stop = kMaxBytes;
-  while (stop && (static_cast<unsigned char>(out[stop]) & 0xc0) == 0x80)
-    --stop;
-  const size_t last_space = out.rfind(' ', stop);
-  if (last_space != std::string::npos && last_space >= kMaxBytes / 2)
-    stop = last_space;
-  while (stop && out[stop - 1] == ' ') --stop;
-  out.resize(stop);
-  out += "…";
-  return out;
-}
-
-// Linked headlines should stay semantically clickable but use body-sized
-// bold type rather than the large section-heading role.
-void add_story_link(Document& doc, NodeId para, const std::string& text,
-                    const std::string& href) {
-  if (href.empty()) {
-    add_text(doc, para, text, InlineKind::Strong);
-  } else {
-    add_link(doc, para, text, href);
-    add_mark(doc.get(para).spans.back(), InlineKind::Strong);
-  }
-}
-
-const Json* list_field(const Json& obj,
-                       std::initializer_list<std::string_view> names) {
-  // An earlier candidate may be a metadata object (e.g. `media`) while
-  // another key (`attachments`) contains the actual array. Check each type.
-  for (std::string_view name : names)
-    if (const Json* value = object(obj, name);
-        value && value->type == Json::Type::Array) return value;
-  return nullptr;
-}
-
-// Some MCP tools put their data under `data`; static Digg exports use
-// `clusters`. Never search recursively for a field (sources also have titles).
-const Json& content(const Json& reply) {
-  if (const Json* data = object(reply, "data"); data && data->type == Json::Type::Object)
-    return *data;
-  return reply;
-}
-
-bool web_url(std::string_view url) {
-  return starts_with_ci(url, "https://") || starts_with_ci(url, "http://");
-}
-
-// The MCP schema does not promise an image, but public Digg feeds can
-// carry media metadata. Only explicit, bounded image fields qualify: never
-// reinterpret a source URL or a video URL as an image. Images use Xanatoo's
-// existing async remote-image pipeline and remain optional.
-struct StoryImage {
-  std::string thumbnail, full, alt, credit;
-};
-
-std::string media_string(const Json& object,
-                         std::initializer_list<std::string_view> names) {
-  for (std::string_view name : names) {
-    const Json* value = json_get(object, name);
-    if (value && value->type == Json::Type::String && web_url(value->s))
-      return value->s;
-  }
-  return {};
-}
-
-StoryImage image_record(const Json& value, bool video = false, bool nested = false) {
-  StoryImage out;
-  if (value.type == Json::Type::String && web_url(value.s)) {
-    if (!video) out.thumbnail = value.s;
-    return out;
-  }
-  if (value.type != Json::Type::Object) return out;
-  const std::string media_type = text_field(value, {"type", "mediaType", "kind"});
-  const std::string mime = text_field(value, {"mimeType", "mime_type", "contentType"});
-  video = video || media_type == "video" || media_type == "audio" ||
-      media_type == "file" || starts_with_ci(media_type, "video/") ||
-      starts_with_ci(media_type, "audio/") || starts_with_ci(mime, "video/") ||
-      starts_with_ci(mime, "audio/");
-  // A video poster is an image; the video's own `src` or `url` isn't.
-  out.thumbnail = media_string(value, {"thumbnailUrl", "thumbnail_url",
-      "posterUrl", "poster_url", "previewImageUrl", "preview_image_url",
-      "imageUrl", "image_url"});
-  if (out.thumbnail.empty() && !video)
-    out.thumbnail = media_string(value, {"previewUrl", "preview_url", "src",
-                                   "url", "secureUrl"});
-  out.full = media_string(value, {"fullsize", "fullsizeUrl", "originalUrl",
-                                  "original_url", "fullUrl"});
-  out.alt = text_field(value, {"alt", "altText", "description", "caption"});
-  out.credit = text_field(value, {"credit", "attribution", "sourceName"});
-  // A nested image/thumbnail record is common for featured video cards.
-  if (out.thumbnail.empty() && !nested) {
-    for (std::string_view key : {"thumbnail", "poster", "preview", "image"}) {
-      if (const Json* nested = object(value, key)) {
-        StoryImage child = image_record(*nested, false, true);
-        if (!child.thumbnail.empty()) {
-          out.thumbnail = std::move(child.thumbnail);
-          if (out.full.empty()) out.full = std::move(child.full);
-          if (out.alt.empty()) out.alt = std::move(child.alt);
-          if (out.credit.empty()) out.credit = std::move(child.credit);
-          break;
-        }
-      }
-    }
-  }
-  return out;
-}
-
-StoryImage story_image(const Json& post) {
-  for (const Json* scope : {&post, object(post, "media"), object(post, "article"),
-                            object(post, "story")}) {
-    if (!scope || scope->type != Json::Type::Object) continue;
-    // Explicit image-media objects may carry a direct URL; generic media
-    // objects might be video or audio, so never make this fallback for them.
-    if (scope != &post && text_field(*scope, {"type", "mediaType"}) == "image") {
-      StoryImage image = image_record(*scope);
-      if (!image.thumbnail.empty()) return image;
-    }
-    for (std::string_view key : {"thumbnailUrl", "thumbnail_url", "imageUrl",
-                                 "image_url", "heroImageUrl", "coverImageUrl",
-                                 "featuredImageUrl", "previewImageUrl",
-                                 "thumbnail", "heroImage", "featuredImage",
-                                 "coverImage", "previewImage", "image",
-                                 "poster", "posterUrl", "poster_url",
-                                 "ogImage", "openGraphImage"}) {
-      if (const Json* value = object(*scope, key)) {
-        StoryImage img = image_record(*value);
-        if (!img.thumbnail.empty()) {
-          if (img.alt.empty()) img.alt = text_field(post, {"imageAlt", "imageAltText"});
-          if (img.credit.empty()) img.credit = text_field(post, {"imageCredit", "imageAttribution"});
-          return img;
-        }
-      }
-    }
-    // An explicit media array may hold video items. For videos, use only a
-    // supplied poster/thumbnail, never the media item's playback URL.
-    if (const Json* items = list_field(*scope, {"media", "mediaItems", "attachments", "images"})) {
-      for (const Json& item : items->items) {
-        if (item.type != Json::Type::Object) continue;
-        const std::string type = text_field(item, {"type", "mediaType", "kind"});
-        if (type == "audio" || type == "file") continue;
-        StoryImage img = image_record(item, type == "video");
-        if (!img.thumbnail.empty()) return img;
-      }
-    }
-  }
-  return {};
-}
-
-// The MCP detail format does not guarantee a dedicated post image. A Source
-// can still carry its own explicit thumbnail/poster metadata. Reuse only that
-// declared media: do not fetch thumbnails from arbitrary publisher URLs or
-// infer an image from the article's URL. Retain the publisher as attribution.
-// Keep the scan bounded; a post may have hundreds of Sources.
-StoryImage source_preview_image(const Json& data, const Json& post) {
-  const Json* sources = list_field(post, {"sources"});
-  if ((!sources || sources->items.empty()) && &post != &data)
-    sources = list_field(data, {"sources"});
-  if (!sources) return {};
-  const size_t limit = std::min(sources->items.size(), size_t{24});
-  for (size_t i = 0; i < limit; ++i) {
-    const Json& source = sources->items[i];
-    if (source.type != Json::Type::Object) continue;
-    StoryImage image = story_image(source);
-    if (image.thumbnail.empty()) continue;
-    if (image.credit.empty()) {
-      image.credit = text_field(source, {"publisher", "siteName", "domain", "authorName"});
-      if (image.credit.empty()) {
-        const Json* author = object(source, "author");
-        if (author && author->type == Json::Type::Object)
-          image.credit = text_field(*author, {"displayName", "name"});
-      }
-    }
-    return image;
-  }
-  return {};
-}
-
-void add_story_image(Document& doc, NodeId parent, StoryImage image,
-                     std::string_view fallback_alt, bool feed) {
-  if (!web_url(image.thumbnail)) return;
-  NodeId id = doc.create(NodeKind::Image, parent);
-  Node& node = doc.get(id);
-  node.src = std::move(image.thumbnail);
-  node.alt = image.alt.empty() ? std::string(fallback_alt) : std::move(image.alt);
-  if (feed) node.float_side = "right";
-  if (web_url(image.full) && image.full != node.src) {
-    InlineSpan link;
-    link.kind = InlineKind::Link;
-    link.href = std::move(image.full);
-    node.spans.push_back(std::move(link));
-  }
-  if (!feed && !image.credit.empty()) {
-    NodeId caption = doc.create(NodeKind::Caption, parent);
-    add_meta(doc, caption, "Image: " + image.credit);
-  }
-}
-
-std::string native_post(const Json& post) {
-  const std::string uuid = text_field(post, {"id", "postId", "uuid"});
-  if (uuid.size() != 36) return {};
-  for (size_t i = 0; i < uuid.size(); ++i) {
-    const char c = uuid[i];
-    if (i == 8 || i == 13 || i == 18 || i == 23) {
-      if (c != '-') return {};
-    } else if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
-                 (c >= 'A' && c <= 'F'))) return {};
-  }
-  return "digg:post/" + uuid;
-}
-
-std::string post_topic(const Json& post);
-
-std::string post_web(const Json& post) {
-  const std::string url = text_field(post, {"url", "postUrl", "permalink"});
-  // A link labelled "on Digg" must really resolve to Digg, never a
-  // publisher URL accidentally supplied in a feed's `url` field.
-  if (starts_with_ci(url, "https://digg.com/") ||
-      starts_with_ci(url, "https://www.digg.com/")) return url;
-  // Published static JSON cluster feeds may carry the short URL id but
-  // no absolute page URL. Only use documented topic slugs and safe ids.
-  const std::string id = text_field(post, {"clusterUrlId", "shortId", "urlId"});
-  const std::string topic = post_topic(post);
-  const bool topic_ok = topic == "ai" || topic == "tech" || topic == "gaming" ||
-      topic == "entertainment" || topic == "world-business" ||
-      topic == "science" || topic == "sports";
-  if (!topic_ok || id.size() < 4 || id.size() > 32) return {};
-  for (char c : id)
-    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9'))) return {};
-  return "https://digg.com/" + topic + "/" + id;
-}
-
-std::string post_topic(const Json& post) {
-  const Json* t = object(post, "topic");
-  if (t && t->type == Json::Type::Object)
-    return text_field(*t, {"slug", "name"});
-  return json_string(t);
-}
-
-// Digg's public Topics and feed sorts are a small table, not UI-specific
-// branches or a second state model. Keep navigation and labels in one place.
-struct LabelRef { std::string_view name, slug; };
-constexpr LabelRef kTopics[] = {
-    {"All", "all"}, {"AI", "ai"}, {"Technology", "tech"},
-    {"Gaming", "gaming"}, {"Entertainment", "entertainment"},
-    {"World & Business", "world-business"}, {"Science", "science"},
-    {"Sports", "sports"},
-};
-constexpr LabelRef kViews[] = {
-    {"Trending", "trending"}, {"Top", "top"}, {"Best", "best"},
-    {"Hot", "hot"}, {"Newest", "newest"},
-};
 
 std::string topic_name(std::string_view slug) {
-  for (const LabelRef& topic : kTopics)
-    if (topic.slug == slug) return std::string(topic.name);
-  return "All topics";
+  if (const Choice* c = find_choice(kTopics, slug)) return std::string(c->name);
+  return std::string(slug);
 }
 
-std::string digg_ref(std::string path) { return "digg:" + path; }
-
-std::vector<NavItem> nav_for(const ForumRef& ref) {
-  if (starts_with(ref.path, "post/"))
-    return {{"All stories", "digg:", false}};
-  const std::string topic = ref.path.substr(0, ref.path.find('/'));
-  std::vector<NavItem> nav;
-  for (const LabelRef& item : kTopics) {
-    const std::string target = item.slug == "all" ? "digg:" :
-                               digg_ref(std::string(item.slug));
-    nav.push_back({std::string(item.name), target,
-                   item.slug == "all" ? (ref.path.empty() || topic == "all") :
-                                        topic == item.slug});
+bool is_uuid(std::string_view id) {
+  if (id.size() != 36) return false;
+  for (size_t i = 0; i < id.size(); ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (id[i] != '-') return false;
+    } else if (!std::isxdigit(static_cast<unsigned char>(id[i]))) {
+      return false;
+    }
   }
-  return nav;
+  return true;
 }
 
-// Put both navigation rows in the page's Chrome region. Keeping sorting
-// controls outside the story Thread prevents them from visually reading as
-// part of the first story (and makes the Page panel treat them as navigation).
-void add_view_nav(Document& doc, const ForumRef& ref) {
-  if (ref.path == "search" || starts_with(ref.path, "post/")) return;
-  const size_t slash = ref.path.find('/');
-  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
-  const std::string view = slash == std::string::npos ?
-      (topic == "all" ? "trending" : "top") : ref.path.substr(slash + 1);
-  NodeId nav = INVALID_NODE;
-  for (NodeId id : doc.get(doc.root).children) {
-    if (doc.get(id).kind == NodeKind::Chrome &&
-        doc.get(id).summary == "navigation") { nav = id; break; }
-  }
-  if (nav == INVALID_NODE) return;
-  NodeId line = doc.create(NodeKind::Paragraph, nav);
-  add_text(doc, line, "Sort: ", InlineKind::Strong);
-  bool first_item = true;
-  for (const LabelRef& item : kViews) {
-    if (!first_item) add_meta(doc, line, " · ");
-    first_item = false;
-    if (item.slug == view) add_text(doc, line, std::string(item.name), InlineKind::Strong);
-    else add_link(doc, line, std::string(item.name),
-                  digg_ref(topic + "/" + std::string(item.slug)));
-  }
+// The id in a story's web address ("7xbz1s0w").
+bool is_short_id(std::string_view id) {
+  if (id.size() < 6 || id.size() > 16) return false;
+  for (char c : id)
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return false;
+  return true;
 }
 
-void add_timestamp(Document& doc, NodeId caption, const std::string& instant,
-                   std::string_view prefix = {}) {
-  if (instant.empty()) return;
-  add_sep(doc, caption);
-  InlineSpan span;
-  span.role = InlineRole::Metadata;
-  span.text = std::string(prefix) + short_time(instant);
-  span.datetime = instant;
-  doc.get(caption).spans.push_back(std::move(span));
+std::vector<std::string_view> split_path(std::string_view path) {
+  std::vector<std::string_view> seg;
+  while (!path.empty()) {
+    const size_t sl = path.find('/');
+    seg.push_back(path.substr(0, sl));
+    path = sl == std::string_view::npos ? std::string_view{} : path.substr(sl + 1);
+  }
+  return seg;
 }
 
-void add_date(Document& doc, NodeId caption, const Json& obj) {
-  add_timestamp(doc, caption, text_field(obj,
-      {"publishedAt", "createdAt", "firstSourceAt", "firstSourceTime",
-       "earliestSourceAt", "earliestSourceTime"}));
+std::string digg_ref(std::string path, std::string frag = {}) {
+  ForumRef r;
+  r.site = ForumSite::Digg;
+  r.path = std::move(path);
+  r.fragment = std::move(frag);
+  return forum_ref_string(r);
 }
 
-void add_stats(Document& doc, NodeId caption, const Json& post,
-               bool detail = false, std::string_view current_topic = {}) {
-  if (const Json* score = first(post, {"diggScore", "score"}))
-    add_meta(doc, caption, "Score " + std::to_string(json_number(score)));
-  // The post detail has a Sources heading with the count already. Do not
-  // repeat the same count in both the dateline and that heading.
-  if (!detail) {
-    if (const Json* sources = first(post, {"sourceCount", "sourcesCount"})) {
-      add_sep(doc, caption);
-      add_meta(doc, caption, count(json_number(sources), "source", "sources"));
-    }
-  }
-  if (const Json* authors = first(post, {"distinctSourceAuthorCount", "uniqueSourceAuthorCount"});
-      authors && authors->type == Json::Type::Number && authors->n > 0) {
-    add_sep(doc, caption);
-    add_meta(doc, caption, count(json_number(authors), "source author", "source authors"));
-  }
-  // These are aggregated engagement signals on outside sources, not votes
-  // or comments on Digg itself; label them explicitly when supplied.
-  if (detail) {
-    for (const auto& metric : {
-        std::pair{"combinedViews", "source views"},
-        std::pair{"combinedLikes", "source likes"},
-        std::pair{"combinedReposts", "source reposts"},
-        std::pair{"combinedSaves", "source saves"},
-        std::pair{"combinedComments", "source replies"},
-        std::pair{"combinedReplies", "source replies"}}) {
-      if (std::string_view(metric.first) == "combinedReplies" &&
-          object(post, "combinedComments")) continue;
-      const Json* value = object(post, metric.first);
-      if (value && value->type == Json::Type::Number && value->n >= 0) {
-        add_sep(doc, caption);
-        add_meta(doc, caption, std::to_string(json_number(value)) + " " + metric.second);
-      }
-    }
-    if (!object(post, "combinedViews")) {
-      if (const Json* views = object(post, "totalViews");
-          views && views->type == Json::Type::Number && views->n >= 0) {
-        add_sep(doc, caption);
-        add_meta(doc, caption, std::to_string(json_number(views)) + " source views");
-      }
-    }
-  }
-  const std::string topic = post_topic(post);
-  if (!topic.empty() && topic != current_topic) {
-    add_sep(doc, caption);
-    add_link(doc, caption, topic_name(topic), digg_ref(topic), InlineRole::Metadata);
-  }
-  add_date(doc, caption, post);
-  if (detail) {
-    if (const Json* rank = first(post, {"todayRank", "rank"});
-        rank && rank->type == Json::Type::Number && rank->n > 0) {
-      add_sep(doc, caption);
-      add_meta(doc, caption, "Rank #" + std::to_string(json_number(rank)));
-    }
-    const std::string updated = text_field(post, {"updatedAt", "lastUpdatedAt"});
-    const std::string published = text_field(post, {"publishedAt", "createdAt"});
-    if (!updated.empty() && updated != published)
-      add_timestamp(doc, caption, updated, "Updated ");
-  }
+std::string feed_ref(std::string_view topic, std::string_view view = {},
+                     std::string_view range = {}) {
+  if (topic == "all" && view.empty()) return digg_ref("");
+  std::string path(topic);
+  if (!view.empty()) path += "/" + std::string(view);
+  if (!range.empty()) path += "/" + std::string(range);
+  return digg_ref(path);
 }
 
-// The feed is a compact reading list. Titles remain bold links, not large
-// section headings; one brief excerpt and one quiet dateline per story.
-void add_story(Document& doc, NodeId thread, const Json& story,
-               std::string_view current_topic) {
-  const std::string title = text_field(story, {"title", "headline", "label"});
-  if (title.empty()) return;
-  NodeId art = doc.create(NodeKind::Article, thread);
-  doc.get(art).label = text_field(story, {"id", "shortId", "clusterUrlId"});
-  StoryImage preview = story_image(story);
-  if (preview.thumbnail.empty()) preview = source_preview_image(story, story);
-  add_story_image(doc, art, std::move(preview), title, true);
-  const std::string ref = native_post(story);
-  const std::string web = post_web(story);
-  NodeId heading = doc.create(NodeKind::Paragraph, art);
-  add_story_link(doc, heading, title, !ref.empty() ? ref : web);
-  const std::string summary = post_summary(story);
-  const std::string intro = post_intro(story);
-  if (!summary.empty() || !intro.empty()) {
-    const std::string preview = feed_preview(!summary.empty() ? summary : intro);
-    // Editorial snippets which simply repeat the headline add no information.
-    if (preview != title) append_plain(doc, art, preview);
+}  // namespace
+
+// ---- refs -------------------------------------------------------------------
+
+namespace forum {
+
+DiggPath digg_path(std::string_view path) {
+  using Kind = DiggPath::Kind;
+  DiggPath p;
+  const std::vector<std::string_view> seg = split_path(path);
+  auto at = [&](size_t i) { return i < seg.size() ? seg[i] : std::string_view{}; };
+  if (at(0) == "search") {
+    if (seg.size() > 2 || (seg.size() == 2 && !find_choice(kSorts, at(1)))) return p;
+    p.kind = Kind::Search;
+    p.sort = seg.size() == 2 ? at(1) : kSorts[0].slug;
+    return p;
   }
-  // Do not emit an empty Caption: even without text its layout reserves
-  // vertical space, producing odd gaps in sparse API feed entries.
-  const std::string topic = post_topic(story);
-  const bool has_meta = first(story, {"diggScore", "score", "sourceCount",
-      "sourcesCount", "distinctSourceAuthorCount", "uniqueSourceAuthorCount",
-      "publishedAt", "createdAt", "firstSourceAt",
-      "firstSourceTime", "earliestSourceAt", "earliestSourceTime"}) ||
-      (!topic.empty() && topic != current_topic) || (!ref.empty() && !web.empty());
-  if (has_meta) {
-    NodeId cap = doc.create(NodeKind::Caption, art);
-    add_stats(doc, cap, story, false, current_topic);
-    if (!ref.empty() && !web.empty()) {
-      add_sep(doc, cap);
-      add_link(doc, cap, "Digg", web, InlineRole::Metadata);
+  if (at(0) == "post") {
+    if (!is_uuid(at(1))) return p;
+    p.id = at(1);
+    if (seg.size() == 2) {
+      p.kind = Kind::Post;
+    } else if (seg.size() == 3 && at(2) == "comments") {
+      p.kind = Kind::Comments;
+    } else if (seg.size() == 4 && at(2) == "comments" && is_uuid(at(3))) {
+      p.kind = Kind::Replies;
+      p.comment = at(3);
     }
+    return p;
   }
+  p.topic = seg.empty() ? kTopics[0].slug : at(0);
+  if (seg.size() > 3 || !find_choice(kTopics, p.topic)) return p;
+  if (seg.size() == 2 && !find_choice(kViews, at(1))) {
+    // digg.com/TOPIC/ID; view names win over ids ("trending" looks like one).
+    if (p.topic == "all" || !is_short_id(at(1))) return p;
+    p.kind = Kind::Story;
+    p.id = at(1);
+    return p;
+  }
+  p.view = seg.size() > 1 ? at(1) : kViews[0].slug;
+  if (!find_choice(kViews, p.view)) return p;
+  if (p.view == "top") p.range = seg.size() > 2 ? at(2) : kRanges[0].slug;
+  else if (seg.size() > 2) return p;
+  if (!p.range.empty() && !find_choice(kRanges, p.range)) return p;
+  p.kind = Kind::Feed;
+  return p;
 }
 
-// An attributed Source may include media that the reader cannot play inline.
-// Preserve explicit playback/image links beside its citation, instead of
-// silently dropping the attachment or creating a large media gallery.
-struct SourceMediaLink { std::string label, url; };
-
-std::vector<SourceMediaLink> source_media_links(const Json& source) {
-  std::vector<SourceMediaLink> out;
-  constexpr size_t kMaxLinks = 4;
-  auto add = [&](const Json& item) {
-    if (out.size() >= kMaxLinks || item.type != Json::Type::Object) return;
-    const std::string type = ascii_lower(text_field(item, {"type", "mediaType", "kind"}));
-    const std::string mime = ascii_lower(text_field(item, {"mimeType", "mime_type", "contentType"}));
-    const bool video = type == "video" || starts_with(type, "video/") || starts_with(mime, "video/");
-    const bool audio = type == "audio" || starts_with(type, "audio/") || starts_with(mime, "audio/");
-    const bool image = type == "image" || type == "photo" || starts_with(type, "image/") || starts_with(mime, "image/");
-    std::string url, label;
-    if (video || audio) {
-      url = media_string(item, {"playbackUrl", "playback_url", "mediaUrl", "media_url", "src", "url"});
-      label = video ? "Video" : "Audio";
-    } else if (image) {
-      StoryImage im = image_record(item);
-      url = !im.full.empty() ? std::move(im.full) : std::move(im.thumbnail);
-      label = "Image";
-    }
-    if (!web_url(url)) return;
-    for (const SourceMediaLink& previous : out)
-      if (previous.url == url) return;
-    out.push_back({std::move(label), std::move(url)});
-  };
-  if (const Json* media = object(source, "media")) {
-    if (media->type == Json::Type::Object) add(*media);
-    else if (media->type == Json::Type::Array)
-      for (const Json& item : media->items) add(item);
-  }
-  for (std::string_view key : {"attachments", "mediaItems", "images"}) {
-    if (const Json* array = list_field(source, {key}))
-      for (const Json& item : array->items) add(item);
-  }
-  return out;
+bool digg_ref_ok(const ForumRef& r) {
+  using Kind = DiggPath::Kind;
+  const DiggPath p = digg_path(r.path);
+  if (p.kind == Kind::Invalid) return false;
+  if ((p.kind == Kind::Search) == r.query.empty()) return false;
+  // Sources page by number, everything else by cursor.
+  if (p.kind == Kind::Post || p.kind == Kind::Story)
+    return r.cursor.empty() && r.page <= kDiggMaxSourcePage;
+  return r.page == 1;
 }
 
-// Source entries are citations, not a second news feed with giant headlines.
-// Keep the attribution under the link and the publisher's excerpt separate
-// from Digg's own editorial summary above.
-void add_source(Document& doc, NodeId section, const Json& source, size_t index) {
-  const std::string href = text_field(source, {"url", "sourceUrl", "xUrl"});
-  const std::string title = text_field(source, {"title", "headline"});
-  std::string author = text_field(source,
-      {"authorName", "author", "displayName", "username", "handle"});
-  if (author.empty()) {
-    for (std::string_view key : {"author", "account"}) {
-      const Json* person = object(source, key);
-      if (person && person->type == Json::Type::Object) {
-        author = text_field(*person, {"displayName", "name", "username", "handle"});
-        if (!author.empty()) break;
-      }
-    }
-  }
-  const std::string outlet = text_field(source, {"domain", "publisher", "siteName"});
-  const std::string excerpt = text_field(source, {"excerpt", "text", "description"});
-  const std::vector<SourceMediaLink> media = source_media_links(source);
-  if (title.empty() && author.empty() && outlet.empty() && excerpt.empty() &&
-      !web_url(href) && media.empty()) return;
-
-  NodeId art = doc.create(NodeKind::Article, section);
-  doc.get(art).label = "source-" + std::to_string(index + 1);
-  const std::string name = !title.empty() ? title : !author.empty() ? author :
-                           !outlet.empty() ? outlet : web_url(href) ? href : "Source";
-  NodeId line = doc.create(NodeKind::Paragraph, art);
-  add_story_link(doc, line, name, web_url(href) ? href : "");
-
-  const std::string type = text_field(source, {"type", "sourceType"});
-  const bool x_post = type == "x" || type == "tweet";
-  const bool has_outlet = !outlet.empty() && outlet != name && outlet != author;
-  const bool has_author = !author.empty() && author != name;
-  if (x_post || has_outlet || has_author || !media.empty() ||
-      first(source, {"publishedAt", "createdAt", "firstSourceAt",
-                     "firstSourceTime", "earliestSourceAt", "earliestSourceTime"})) {
-    NodeId cap = doc.create(NodeKind::Caption, art);
-    if (x_post) add_meta(doc, cap, "X");
-    if (has_outlet) {
-      add_sep(doc, cap);
-      add_meta(doc, cap, outlet);
-    }
-    if (has_author) {
-      add_sep(doc, cap);
-      add_meta(doc, cap, "by " + author);
-    }
-    add_date(doc, cap, source);
-    for (const SourceMediaLink& item : media) {
-      if (item.url == href) continue;
-      add_sep(doc, cap);
-      add_link(doc, cap, item.label, item.url, InlineRole::Metadata);
-    }
-  }
-  if (!excerpt.empty() && excerpt != title && excerpt != name)
-    append_plain(doc, art, excerpt);
+std::string digg_web_url(const ForumRef& r) {
+  const DiggPath p = digg_path(r.path);
+  if (p.kind == DiggPath::Kind::Story)
+    return "https://digg.com/" + std::string(p.topic) + "/" + std::string(p.id);
+  if (p.kind != DiggPath::Kind::Feed) return {};
+  std::string url = "https://digg.com/";
+  if (p.topic != "all") url += p.topic;
+  if (p.view != kViews[0].slug) url += "?filter=" + std::string(p.view);
+  return url;
 }
 
-// The public website has Useful links, related stories and entity tags.
-// These may be absent in MCP results: emit sections only for explicit data.
-void add_useful_links(Document& doc, NodeId article, const Json& data,
-                      const Json& post) {
-  const Json* links = list_field(post, {"usefulLinks", "keyLinks", "featuredLinks"});
-  if (!links) links = list_field(data, {"usefulLinks", "keyLinks", "featuredLinks"});
-  if (!links) return;
-  NodeId section = INVALID_NODE;
-  size_t count = 0;
-  for (const Json& item : links->items) {
-    if (count >= 24) break;
-    const std::string href = item.type == Json::Type::String ? item.s :
-        text_field(item, {"url", "href", "sourceUrl"});
-    if (!web_url(href)) continue;
-    const std::string title = item.type == Json::Type::Object ?
-        text_field(item, {"title", "label", "headline", "name"}) : std::string();
-    if (section == INVALID_NODE) {
-      section = doc.create(NodeKind::Section, article);
-      doc.get(section).label = "useful-links";
-      add_text(doc, doc.create(NodeKind::Paragraph, section), "Useful links", InlineKind::Strong);
-    }
-    add_link(doc, doc.create(NodeKind::Paragraph, section),
-             title.empty() ? href : title, href);
-    ++count;
-  }
+std::string digg_ref_from_web(std::string_view path, std::string_view filter) {
+  const DiggPath p = digg_path(path);
+  if (p.kind == DiggPath::Kind::Story) return digg_ref(std::string(path));
+  if (p.kind != DiggPath::Kind::Feed || path.find('/') != std::string_view::npos)
+    return {};
+  return feed_ref(p.topic, find_choice(kViews, filter) ? filter : std::string_view{});
 }
 
-void add_related_stories(Document& doc, NodeId article, const Json& data,
-                         const Json& post) {
-  const Json* related = list_field(post, {"relatedPosts", "relatedStories", "related"});
-  if (!related) related = list_field(data, {"relatedPosts", "relatedStories", "related"});
-  if (!related) return;
-  NodeId section = INVALID_NODE;
-  size_t count = 0;
-  for (const Json& item : related->items) {
-    if (count >= 12) break;
-    if (item.type != Json::Type::Object) continue;
-    const std::string title = text_field(item, {"title", "headline", "label"});
-    std::string href = native_post(item);
-    if (href.empty()) href = post_web(item);
-    if (href.empty() || title.empty()) continue;
-    if (section == INVALID_NODE) {
-      section = doc.create(NodeKind::Section, article);
-      doc.get(section).label = "related";
-      add_text(doc, doc.create(NodeKind::Paragraph, section), "Related stories", InlineKind::Strong);
-    }
-    NodeId line = doc.create(NodeKind::Paragraph, section);
-    add_story_link(doc, line, title, href);
-    ++count;
-  }
-}
-
-void add_tags(Document& doc, NodeId article, const Json& data, const Json& post) {
-  const Json* tags = list_field(post, {"entities", "tags"});
-  if (!tags) tags = list_field(data, {"entities", "tags"});
-  if (!tags) return;
-  NodeId line = INVALID_NODE;
-  size_t count = 0;
-  for (const Json& item : tags->items) {
-    if (count >= 16) break;
-    const std::string name = item.type == Json::Type::String ? item.s :
-        text_field(item, {"name", "label", "title"});
-    if (name.empty()) continue;
-    const std::string url = item.type == Json::Type::Object ?
-        text_field(item, {"url", "entityUrl", "permalink"}) : std::string();
-    if (line == INVALID_NODE) {
-      line = doc.create(NodeKind::Caption, article);
-      add_meta(doc, line, "Tags: ");
-    } else add_meta(doc, line, " · ");
-    if (starts_with_ci(url, "https://digg.com/entities/"))
-      add_link(doc, line, name, url, InlineRole::Metadata);
-    else add_meta(doc, line, name);
-    ++count;
-  }
-}
-
-// Some editorial payloads contain ordered sections rather than a flat body.
-// Preserve these as native semantic blocks, not as another flattened summary.
-// This is intentionally bounded and does not recursively walk arbitrary JSON.
-const Json* editorial_blocks(const Json& post) {
-  for (const Json* scope : {object(post, "article"), object(post, "story"),
-                            object(post, "copy"), &post}) {
-    if (!scope || scope->type != Json::Type::Object) continue;
-    if (const Json* blocks = list_field(*scope, {"sections", "contentBlocks", "bodyBlocks"}))
-      return blocks;
-  }
-  return nullptr;
-}
-
-void add_editorial_blocks(Document& doc, NodeId article, const Json& blocks) {
-  size_t added = 0;
-  for (const Json& block : blocks.items) {
-    if (added >= 100) break;
-    if (block.type == Json::Type::String) {
-      if (!block.s.empty()) { append_plain(doc, article, block.s); ++added; }
-      continue;
-    }
-    if (block.type != Json::Type::Object) continue;
-    const std::string heading = text_field(block, {"heading", "title"});
-    if (!heading.empty()) {
-      NodeId line = doc.create(NodeKind::Paragraph, article);
-      add_text(doc, line, heading, InlineKind::Strong);
-      ++added;
-    }
-    const std::string body = text_field(block, {"text", "body", "paragraph", "content"});
-    if (!body.empty() && body != heading) {
-      append_plain(doc, article, body);
-      ++added;
-    }
-    if (const Json* paragraphs = list_field(block, {"paragraphs"})) {
-      for (const Json& part : paragraphs->items) {
-        if (added >= 100) break;
-        const std::string text = part.type == Json::Type::String ? part.s :
-            text_field(part, {"text", "plainText"});
-        if (!text.empty()) { append_plain(doc, article, text); ++added; }
-      }
-    }
-    const std::string kind = text_field(block, {"type", "kind"});
-    if (kind == "image" || kind == "photo") {
-      StoryImage im = image_record(block);
-      if (!im.thumbnail.empty()) {
-        add_story_image(doc, article, std::move(im), heading, false);
-        ++added;
-      }
-    }
-  }
-}
-
-// Digg's documented public MCP tools do not expose a separate comment
-// endpoint. Some post payloads may include discussion records. Render only
-// explicit comment arrays; never interpret aggregated X reply counts or
-// attributed Sources as native Digg comments.
-const Json* digg_comments(const Json& data, const Json& post) {
-  const Json* discussion = object(data, "discussion");
-  const Json* post_discussion = object(post, "discussion");
-  for (const Json* scope : {&data, &post, discussion, post_discussion}) {
-    if (!scope || scope->type != Json::Type::Object) continue;
-    const Json* list = object(*scope, "comments");
-    if (!list) continue;
-    if (list->type == Json::Type::Array) return list;
-    if (list->type == Json::Type::Object)
-      if (const Json* items = list_field(*list, {"items", "nodes", "results"}))
-        return items;
-  }
-  return nullptr;
-}
-
-std::string comment_author(const Json& comment) {
-  if (std::string name = text_field(comment, {"authorName", "username", "displayName"});
-      !name.empty()) return name;
-  for (std::string_view name : {"author", "user", "account"}) {
-    const Json* person = object(comment, name);
-    if (!person) continue;
-    if (person->type == Json::Type::String) return person->s;
-    if (person->type == Json::Type::Object)
-      if (std::string label = text_field(*person, {"displayName", "name", "username", "handle"});
-          !label.empty()) return label;
-  }
+std::string digg_up_path(std::string_view path) {
+  using Kind = DiggPath::Kind;
+  const DiggPath p = digg_path(path);
+  if (p.kind == Kind::Comments || p.kind == Kind::Replies)
+    return "post/" + std::string(p.id);
+  if (p.kind == Kind::Story || p.kind == Kind::Feed)
+    if (const size_t sl = path.rfind('/'); sl != std::string_view::npos)
+      return std::string(path.substr(0, sl));
   return {};
 }
 
-// Bounded DFS keeps replies in source order, lets the existing Message
-// layout indent children and avoids recursion on a malformed response.
-void add_comments(Document& doc, NodeId article, const Json& data,
-                  const Json& post, const std::string& post_url) {
-  NodeId section = doc.create(NodeKind::Section, article);
-  doc.get(section).label = "comments";
-  NodeId heading = doc.create(NodeKind::Header, section);
-  add_text(doc, heading, "Comments", InlineKind::Strong);
+}  // namespace forum
 
-  const Json* comments = digg_comments(data, post);
-  if (comments) {
-    struct Entry { const Json* json; std::string parent; unsigned depth; };
-    std::vector<Entry> stack;
-    for (auto it = comments->items.rbegin(); it != comments->items.rend(); ++it)
-      stack.push_back({&*it, {}, 0});
-    size_t emitted = 0;
-    constexpr size_t kMaxComments = 500;
-    constexpr unsigned kMaxDepth = 32;
-    while (!stack.empty() && emitted < kMaxComments) {
-      Entry current = std::move(stack.back());
-      stack.pop_back();
-      const Json& c = *current.json;
-      if (c.type != Json::Type::Object) continue;
-      const std::string body = text_field(c, {"body", "text", "bodyText", "markdown"});
-      std::string content = body.empty() ? copy_text(object(c, "content")) : body;
-      const Json* deleted = first(c, {"deleted", "isDeleted"});
-      const bool gone = deleted && deleted->type == Json::Type::Bool && deleted->b;
-      if (content.empty() && !gone) continue;
-      ++emitted;
-      MsgHead head;
-      head.label = text_field(c, {"id", "commentId", "_id"});
-      if (head.label.empty()) head.label = "digg-comment-" + std::to_string(emitted);
-      head.author = gone ? "[deleted]" : comment_author(c);
-      if (head.author.empty()) head.author = "[unknown author]";
-      head.iso = text_field(c, {"createdAt", "publishedAt", "postedAt"});
-      head.reply_to = text_field(c, {"parentId", "parentCommentId"});
-      if (head.reply_to.empty()) head.reply_to = current.parent;
-      head.indent = !head.reply_to.empty();
-      if (const Json* likes = first(c, {"score", "likeCount", "likes"}); likes &&
-          likes->type == Json::Type::Number)
-        head.score = count(json_number(likes), "point", "points");
-      NodeId message = add_message(doc, section, head);
-      if (gone) add_note(doc, message, "[deleted]");
-      else append_plain(doc, message, content);
-      if (current.depth >= kMaxDepth) continue;
-      if (const Json* replies = list_field(c, {"replies", "children"})) {
-        for (auto it = replies->items.rbegin(); it != replies->items.rend(); ++it)
-          stack.push_back({&*it, head.label, current.depth + 1});
-      }
-    }
-    if (emitted == 0)
-      add_note(doc, section, "No Digg comments were included in this response.");
-    if (!stack.empty())
-      add_note(doc, section, "More comments were omitted from this view.");
-  } else {
-    add_note(doc, section, "Digg's public post API did not include a comment thread.");
-  }
-  if (!post_url.empty()) {
-    NodeId line = doc.create(NodeKind::Paragraph, section);
-    add_link(doc, line, "Read or join the discussion on Digg", post_url);
-  }
-}
+// ---- MCP envelope and arguments ---------------------------------------------
 
-// May be an unwrapped JSON-RPC result, a complete MCP reply, or a content
-// text block containing a serialized JSON object.
-std::optional<Json> parse_object_json(std::string_view text) {
-  while (!text.empty() && (text.front() == ' ' || text.front() == '\r' ||
-                           text.front() == '\n' || text.front() == '\t'))
-    text.remove_prefix(1);
+namespace {
+
+std::optional<Json> parse_json_value(std::string_view text) {
+  trim_ascii(text);
   if (text.empty() || (text.front() != '{' && text.front() != '['))
     return std::nullopt;
   return json_parse(text);
 }
 
-std::optional<Json> unwrap(Json reply, std::string* err) {
-  if (const Json* error = object(reply, "error")) {
-    if (err) *err = text_field(*error, {"message", "detail"});
+std::optional<Json> unwrap(const Json& reply, std::string* err) {
+  if (const Json* error = json_get(reply, "error")) {
+    if (err) *err = "Digg: " + str(*error, "message");
     return std::nullopt;
   }
-  // Do not assign a nested `result` back onto its owning JSON tree. The
-  // source can be invalidated while vector/object members are being copied.
-  // Keep both the envelope and selected result alive until extraction.
-  const Json* result = object(reply, "result");
-  if (!result) result = &reply;
-  if (const Json* failed = object(*result, "isError");
-      failed && failed->type == Json::Type::Bool && failed->b) {
-    if (err) {
-      const Json* c = list_field(*result, {"content"});
-      *err = c && !c->items.empty() ? text_field(c->items.front(), {"text"})
-                                     : "Digg MCP returned a tool error";
-    }
+  const Json* result = json_get(reply, "result");
+  if (!result) {
+    if (err) *err = "Digg sent no result";
     return std::nullopt;
   }
-  if (const Json* data = object(*result, "structuredContent")) return *data;
-  if (const Json* parts = list_field(*result, {"content"})) {
-    for (const Json& part : parts->items) {
-      const std::string payload = text_field(part, {"text"});
-      if (auto parsed = parse_object_json(payload)) return parsed;
-    }
-    if (err) *err = "Digg MCP returned text instead of structured JSON";
+  const std::vector<Json>& parts = arr(*result, "content");
+  if (const Json* failed = json_get(*result, "isError"); failed && failed->b) {
+    if (err)
+      *err = "Digg: " + (parts.empty() ? std::string("the request failed")
+                                       : str(parts.front(), "text"));
     return std::nullopt;
   }
-  return *result;
+  if (const Json* data = json_get(*result, "structuredContent");
+      data && data->type == Json::Type::Object)
+    return *data;
+  // The same record as JSON text.
+  for (const Json& part : parts)
+    if (auto parsed = parse_json_value(str(part, "text"))) return parsed;
+  if (err) *err = "Digg sent no structured result";
+  return std::nullopt;
+}
+
+// Cursors are kept escaped in refs; the tools want them as they were sent.
+void add_cursor(std::string& args, const ForumRef& ref) {
+  if (!ref.cursor.empty())
+    args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
 }
 
 }  // namespace
 
 std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err) {
-  if (auto j = parse_object_json(body)) return unwrap(std::move(*j), err);
-  // Streamable HTTP also permits text/event-stream. Each blank line ends an
-  // event; accept the last complete JSON-RPC message, not arbitrary SSE text.
+  if (auto j = parse_json_value(body)) return unwrap(*j, err);
+  // text/event-stream: the last complete event is the reply.
   std::string payload;
   std::optional<Json> last;
-  size_t at = 0;
-  while (at < body.size()) {
-    const size_t end = body.find('\n', at);
-    std::string_view line = body.substr(at, end == std::string_view::npos
-                                            ? std::string_view::npos : end - at);
+  auto flush = [&] {
+    if (auto j = parse_json_value(payload)) last = std::move(j);
+    payload.clear();
+  };
+  while (!body.empty()) {
+    const size_t end = body.find('\n');
+    std::string_view line = body.substr(0, end);
+    body.remove_prefix(end == std::string_view::npos ? body.size() : end + 1);
     if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
     if (starts_with(line, "data:")) {
-      if (!payload.empty()) payload += '\n';
       line.remove_prefix(5);
       if (!line.empty() && line.front() == ' ') line.remove_prefix(1);
+      if (!payload.empty()) payload += '\n';
       payload += line;
-    } else if (line.empty() && !payload.empty()) {
-      if (auto j = parse_object_json(payload)) last = std::move(*j);
-      payload.clear();
+    } else if (line.empty()) {
+      flush();
     }
-    if (end == std::string_view::npos) break;
-    at = end + 1;
   }
-  if (!payload.empty())
-    if (auto j = parse_object_json(payload)) last = std::move(*j);
-  if (last) return unwrap(std::move(*last), err);
-  if (err) *err = "Digg MCP returned neither JSON nor a JSON SSE event";
+  flush();
+  if (last) return unwrap(*last, err);
+  if (err) *err = "Digg sent neither JSON nor an event stream";
   return std::nullopt;
 }
 
 std::string digg_feed_arguments(const ForumRef& ref) {
-  // Digg's digg_get_feed tool rejects values above 20 (MCP schema).
-  constexpr int kFeedLimit = 20;
-  const size_t slash = ref.path.find('/');
-  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
-  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
-  std::string args = "{\"topic\":" + json_quote(topic) +
-                     ",\"limit\":" + std::to_string(kFeedLimit);
-  if (!view.empty()) args += ",\"view\":" + json_quote(view);
-  // Refs contain URL-escaped cursors; the MCP tool needs their raw values.
-  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
+  const DiggPath p = digg_path(ref.path);
+  std::string args = "{\"topic\":" + json_quote(p.topic) +
+                     ",\"view\":" + json_quote(p.view);
+  if (!p.range.empty()) args += ",\"range\":" + json_quote(p.range);
+  args += ",\"limit\":20";  // the tool's maximum
+  add_cursor(args, ref);
   return args + "}";
 }
 
-// Search uses its own result window; forward opaque cursors only for
-// another page of the same query. The MCP search tool caps limit at 50.
 std::string digg_search_arguments(const ForumRef& ref) {
-  std::string args = "{\"query\":" + json_quote(ref.query) + ",\"limit\":30";
-  if (!ref.cursor.empty()) args += ",\"cursor\":" + json_quote(percent_decode(ref.cursor));
+  std::string args = "{\"query\":" + json_quote(ref.query) +
+                     ",\"sort\":" + json_quote(digg_path(ref.path).sort) +
+                     ",\"limit\":30";
+  add_cursor(args, ref);
   return args + "}";
 }
 
-Document digg_list_document(const Json& reply, const ForumRef& ref) {
-  const Json& data = content(reply);
-  const Json* posts = data.type == Json::Type::Array ? &data :
-      list_field(data, {"posts", "results", "items", "clusters"});
-  const bool search = ref.path == "search";
-  const std::string topic = ref.path.substr(0, ref.path.find('/'));
-  const size_t slash = ref.path.find('/');
-  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
-  std::string title = search ? "Search Digg: " + ref.query :
-      "Digg — " + topic_name(topic);
-  if (!search && !view.empty()) {
-    for (const LabelRef& item : kViews)
-      if (view == item.slug) { title += " · " + std::string(item.name); break; }
+std::string digg_post_arguments(std::string_view id, int page) {
+  return "{\"id\":" + json_quote(id) + ",\"sourceOffset\":" +
+         std::to_string((page - 1) * kDiggSourcePageSize) +
+         ",\"sourceLimit\":" + std::to_string(kDiggSourcePageSize) + "}";
+}
+
+// Only the comment pages carry a cursor of theirs.
+std::string digg_comments_arguments(std::string_view post, const ForumRef& ref) {
+  std::string args =
+      "{\"postId\":" + json_quote(post) + ",\"sort\":\"top\",\"limit\":50";
+  if (digg_path(ref.path).kind == DiggPath::Kind::Comments) add_cursor(args, ref);
+  return args + "}";
+}
+
+std::string digg_replies_arguments(std::string_view comment, const ForumRef& ref) {
+  std::string args = "{\"commentId\":" + json_quote(comment) + ",\"limit\":50";
+  if (digg_path(ref.path).kind == DiggPath::Kind::Replies) add_cursor(args, ref);
+  return args + "}";
+}
+
+// ---- web pages --------------------------------------------------------------
+
+namespace {
+
+constexpr std::string_view kImageDir = "editorial-story-images/";
+
+// The CDN scales (and crops) an editorial picture as asked.
+std::string cdn_image(std::string_view path, std::string_view size) {
+  return "https://cdn.digg.com/cdn-cgi/image/" + std::string(size) +
+         ",quality=85,format=jpeg/" + std::string(kImageDir) + std::string(path);
+}
+
+// Value of ` name="…"` in a start tag ("" when absent).
+std::string_view attribute(std::string_view tag, std::string_view name) {
+  const std::string key = " " + std::string(name) + "=\"";
+  size_t at = tag.find(key);
+  if (at == std::string_view::npos) return {};
+  at += key.size();
+  const size_t end = tag.find('"', at);
+  return end == std::string_view::npos ? std::string_view{}
+                                       : tag.substr(at, end - at);
+}
+
+// "Image: CREDIT" under the picture of a story page.
+std::string image_credit(std::string_view html) {
+  constexpr std::string_view kMark = ">Image: ";
+  const size_t at = html.find(kMark);
+  if (at == std::string_view::npos) return {};
+  const std::string_view rest = html.substr(at + kMark.size(), 200);
+  const size_t end = rest.find('<');
+  return end == std::string_view::npos ? std::string()
+                                       : html_decode_entities(rest.substr(0, end));
+}
+
+// The contents of the article <section>, without the sections inside it
+// (embedded "Featured Source" players).
+std::string article_body(std::string_view html) {
+  size_t at = html.find("data-cluster-article-body=");
+  if (at != std::string_view::npos) at = html.find('>', at);
+  if (at == std::string_view::npos) return {};
+  std::string out;
+  int depth = 1;
+  for (size_t i = at + 1; i < html.size();) {
+    const size_t lt = html.find('<', i);
+    if (lt == std::string_view::npos) break;
+    if (depth == 1) out += html.substr(i, lt - i);
+    const size_t gt = html.find('>', lt);
+    if (gt == std::string_view::npos) break;
+    const std::string_view tag = html.substr(lt, gt + 1 - lt);
+    if (starts_with(tag, "</section")) {
+      if (--depth == 0) return out;
+    } else if (starts_with(tag, "<section")) {
+      ++depth;
+    } else if (depth == 1) {
+      out += tag;
+    }
+    i = gt + 1;
   }
+  return {};  // cut off: no half article
+}
+
+}  // namespace
+
+DiggImages digg_web_images(std::string_view html) {
+  DiggImages out;
+  for (size_t at = html.find(kImageDir); at != std::string_view::npos;
+       at = html.find(kImageDir, at)) {
+    at += kImageDir.size();
+    const std::string_view rest = html.substr(at, 160);
+    size_t n = 0;
+    while (n < rest.size() &&
+           (std::isalnum(static_cast<unsigned char>(rest[n])) || rest[n] == '-' ||
+            rest[n] == '.' || rest[n] == '_' || rest[n] == '/'))
+      ++n;
+    const std::string_view path = rest.substr(0, n);
+    const std::vector<std::string_view> seg = split_path(path);
+    if (seg.size() == 2 && is_uuid(seg[0]) && !seg[1].empty() && seg[1] != "..")
+      out.emplace(seg[0], path);
+  }
+  return out;
+}
+
+DiggWebStory digg_web_story(std::string_view html) {
+  DiggWebStory s;
+  // Related stories have a data-cluster-id too; only the page's own element
+  // names the id of the address.
+  const size_t at = html.find("data-cluster-detail-url-cluster-id=");
+  if (at == std::string_view::npos) return s;
+  const size_t lt = html.rfind('<', at);
+  const size_t gt = html.find('>', at);
+  if (lt == std::string_view::npos || gt == std::string_view::npos) return s;
+  const std::string_view id = attribute(html.substr(lt, gt - lt), "data-cluster-id");
+  if (!is_uuid(id)) return s;
+  s.id = id;
+  const DiggImages images = digg_web_images(html);
+  if (auto it = images.find(s.id); it != images.end()) {
+    s.image = it->second;
+    s.image_credit = image_credit(html);
+  }
+  s.article_html = article_body(html);
+  return s;
+}
+
+// ---- documents --------------------------------------------------------------
+
+namespace {
+
+// One story, from an MCP post record or an entry of the JSON cluster feeds.
+struct Story {
+  std::string id, ref, web, topic, title, description, tldr, published, updated;
+  long long score = 0, sources = 0, authors = 0;
+};
+
+Story read_story(const Json& j) {
+  Story s;
+  s.id = str(j, "id");
+  if (is_uuid(s.id)) s.ref = digg_ref("post/" + s.id);
+  else s.id.clear();
+  s.title = str(j, "title");
+  s.description = str(j, "description");
+  s.tldr = str(j, "tldr");
+  s.topic = str(j, "topic");
+  s.web = str(j, "url");
+  if (starts_with(s.web, "/")) {  // cluster feeds: "/ai/7xbz1s0w", no topic
+    if (s.topic.empty()) s.topic = s.web.substr(1, s.web.find('/', 1) - 1);
+    s.web.insert(0, "https://digg.com");
+  }
+  if (!starts_with(s.web, "https://digg.com/")) s.web.clear();
+  if (!find_choice(kTopics, s.topic)) s.topic.clear();
+  s.published = str(j, "publishedAt");
+  if (s.published.empty()) s.published = str(j, "first_post_at");
+  s.updated = str(j, "updatedAt");
+  s.score = num(j, "diggScore");
+  s.sources = num(j, json_get(j, "story_count") ? "story_count" : "sourceCount");
+  s.authors = num(j, "uniqueAuthors");
+  return s;
+}
+
+// Plain one-line excerpt, cut at a word.
+std::string preview(std::string_view text) {
+  constexpr size_t kMax = 230;
+  std::string out;
+  for (unsigned char c : text) {
+    if (std::isspace(c)) {
+      if (!out.empty() && out.back() != ' ') out += ' ';
+    } else {
+      out += static_cast<char>(c);
+    }
+  }
+  if (!out.empty() && out.back() == ' ') out.pop_back();
+  if (out.size() <= kMax) return out;
+  size_t stop = out.rfind(' ', kMax);
+  if (stop == std::string::npos || stop < kMax / 2) {
+    stop = kMax;
+    while (stop && (static_cast<unsigned char>(out[stop]) & 0xc0) == 0x80) --stop;
+  }
+  out.resize(stop);
+  return out + "…";
+}
+
+// Bold body-sized link: a feed is a reading list, not a stack of headings.
+void add_title(Document& doc, NodeId para, const std::string& text,
+               const std::string& href) {
+  if (href.empty()) {
+    add_text(doc, para, text, InlineKind::Strong);
+    return;
+  }
+  add_link(doc, para, text, href);
+  add_mark(doc.get(para).spans.back(), InlineKind::Strong);
+}
+
+void add_date(Document& doc, NodeId cap, const std::string& iso,
+              std::string_view prefix = {}) {
+  if (iso.empty()) return;
+  add_sep(doc, cap);
+  InlineSpan span;
+  span.role = InlineRole::Metadata;
+  span.text = std::string(prefix) + short_time(iso);
+  span.datetime = iso;
+  doc.get(cap).spans.push_back(std::move(span));
+}
+
+NodeId add_image(Document& doc, NodeId parent, std::string src,
+                 const std::string& alt) {
+  const NodeId id = doc.create(NodeKind::Image, parent);
+  doc.get(id).src = std::move(src);
+  doc.get(id).alt = alt;
+  return id;
+}
+
+void add_caption(Document& doc, NodeId art, const Story& s,
+                 std::string_view current_topic, bool detail) {
+  const NodeId cap = doc.create(NodeKind::Caption, art);
+  if (!s.topic.empty() && s.topic != current_topic)
+    add_link(doc, cap, topic_name(s.topic), feed_ref(s.topic), InlineRole::Metadata);
+  auto field = [&](const std::string& text) {
+    add_sep(doc, cap);
+    add_meta(doc, cap, text);
+  };
+  if (s.score > 0) field("score " + std::to_string(s.score));
+  if (s.sources > 0) field(count(s.sources, "source", "sources"));
+  if (s.authors > 0) field(count(s.authors, "author", "authors"));
+  add_date(doc, cap, s.published);
+  if (detail && short_time(s.updated) != short_time(s.published))
+    add_date(doc, cap, s.updated, "updated ");
+  if (!s.web.empty()) {
+    add_sep(doc, cap);
+    InlineSpan web;
+    web.kind = InlineKind::Link;
+    web.role = InlineRole::Metadata;
+    web.rel = "external";
+    web.text = "View on Digg";
+    web.href = s.web;
+    doc.get(cap).spans.push_back(std::move(web));
+  }
+  if (doc.get(cap).spans.empty()) add_meta(doc, cap, "Digg");
+}
+
+void add_feed_entry(Document& doc, NodeId thread, const Story& s,
+                    std::string_view current_topic, const DiggImages& images) {
+  if (s.title.empty()) return;
+  const NodeId art = doc.create(NodeKind::Article, thread);
+  doc.get(art).label = s.id;
+  if (auto it = images.find(s.id); it != images.end()) {
+    const NodeId img = add_image(doc, art, cdn_image(it->second, "width=240,height=160,fit=cover"), s.title);
+    doc.get(img).float_side = "right";
+  }
+  add_title(doc, doc.create(NodeKind::Paragraph, art), s.title,
+            s.ref.empty() ? s.web : s.ref);
+  const std::string text = preview(s.description.empty() ? s.tldr : s.description);
+  if (!text.empty()) doc.append_text(doc.create(NodeKind::Paragraph, art), text);
+  add_caption(doc, art, s, current_topic, false);
+}
+
+// Another "Label: a · b" line in the document's navigation.
+void add_nav_row(Document& doc, const std::string& label,
+                 const std::vector<NavItem>& items) {
+  for (NodeId id : doc.get(doc.root).children) {
+    if (doc.get(id).kind != NodeKind::Chrome) continue;
+    const NodeId line = doc.create(NodeKind::Paragraph, id);
+    doc.append_text(line, label + ": ", InlineKind::Strong);
+    bool first = true;
+    for (const NavItem& item : items) {
+      if (!first) doc.append_text(line, " · ");
+      first = false;
+      if (item.current) doc.append_text(line, item.text, InlineKind::Strong);
+      else add_link(doc, line, item.text, item.ref);
+    }
+    return;
+  }
+}
+
+void add_feed_nav(Document& doc, const ForumRef& ref, const DiggPath& p) {
+  std::vector<NavItem> items;
+  if (p.kind == DiggPath::Kind::Search) {
+    for (const Choice& c : kSorts) {
+      ForumRef r = ref;
+      r.cursor.clear();
+      r.fragment.clear();
+      r.path = "search/" + std::string(c.slug);
+      items.push_back({std::string(c.name), forum_ref_string(r), c.slug == p.sort});
+    }
+    add_nav_row(doc, "Sort", items);
+    return;
+  }
+  for (const Choice& c : kViews)
+    items.push_back({std::string(c.name), feed_ref(p.topic, c.slug), c.slug == p.view});
+  add_nav_row(doc, "Sort", items);
+  if (p.range.empty()) return;
+  items.clear();
+  for (const Choice& c : kRanges)
+    items.push_back({std::string(c.name), feed_ref(p.topic, p.view, c.slug),
+                     c.slug == p.range});
+  add_nav_row(doc, "From", items);
+}
+
+// "More … →" by the reply's opaque cursor.
+void add_more(Document& doc, NodeId parent, const Json& reply, ForumRef ref,
+              const std::string& text) {
+  const std::string cursor = str(reply, "nextCursor");
+  if (cursor.empty()) return;
+  ref.cursor = url_encode(cursor);
+  ref.page = 1;
+  ref.fragment.clear();
+  add_link(doc, doc.create(NodeKind::Paragraph, parent), text + " →",
+           forum_ref_string(ref));
+}
+
+bool is_web(std::string_view url) {
+  return starts_with_ci(url, "https://") || starts_with_ci(url, "http://");
+}
+
+std::string x_handle(std::string_view url) {
+  for (std::string_view base : {"https://x.com/", "https://twitter.com/"}) {
+    if (!starts_with(url, base)) continue;
+    const std::string_view name = url.substr(base.size());
+    return "@" + std::string(name.substr(0, name.find_first_of("/?#")));
+  }
+  return {};
+}
+
+std::string web_host(std::string_view url) {
+  const size_t s = url.find("://");
+  if (s == std::string_view::npos) return {};
+  std::string_view h = url.substr(s + 3);
+  h = h.substr(0, h.find_first_of("/?#:"));
+  if (starts_with(h, "www.")) h.remove_prefix(4);
+  return std::string(h);
+}
+
+// A post on X (author and text) or a web page (title, author, excerpt).
+void add_source(Document& doc, NodeId section, const Json& s) {
+  const bool x = str(s, "kind") == "x";
+  std::string url = str(s, "url");
+  if (!is_web(url)) url.clear();
+  const std::string author = str(s, "author");
+  const std::string host = web_host(url);
+  const std::string handle = x ? x_handle(url) : std::string();
+  std::string title = x ? author : str(s, "title");
+  for (const std::string& other : {handle, author, host})
+    if (title.empty()) title = other;
+  if (title.empty()) title = "Source";
+  const NodeId art = doc.create(NodeKind::Article, section);
+  doc.get(art).label = str(s, "id");
+  add_title(doc, doc.create(NodeKind::Paragraph, art), title, url);
+  const NodeId cap = doc.create(NodeKind::Caption, art);
+  auto field = [&](const std::string& text) {
+    if (text.empty() || text == title) return;
+    add_sep(doc, cap);
+    add_meta(doc, cap, text);
+  };
+  if (x) {
+    field(handle);
+    field("X");
+  } else {
+    field(author);
+    field(host);
+  }
+  add_date(doc, cap, str(s, "publishedAt"));
+  if (doc.get(cap).spans.empty()) add_meta(doc, cap, "Web page");
+  append_plain(doc, art, str(s, "text"));
+}
+
+struct CommentList {
+  std::string post;  // UUID, for the permalinks
+  std::unordered_set<std::string> shown;
+};
+
+void add_comment(Document& doc, NodeId parent, const Json& c, CommentList& list) {
+  const std::string id = str(c, "id");
+  if (!list.shown.insert(id).second) return;
+  MsgHead h;
+  h.label = id;
+  if (const Json* a = json_get(c, "author")) {
+    h.author = str(*a, "name");
+    if (h.author.empty()) h.author = str(*a, "username");
+    h.author_href = str(*a, "url");
+    if (!is_web(h.author_href)) h.author_href.clear();
+  }
+  h.iso = str(c, "createdAt");
+  h.permalink = digg_ref("post/" + list.post, "id:" + id);
+  for (const char* key : {"repliedToCommentId", "parentId"})
+    if (h.reply_to.empty() && list.shown.count(str(c, key))) h.reply_to = str(c, key);
+  h.indent = !h.reply_to.empty();
+  if (const long long n = num(c, "diggCount"); n > 0) h.score = count(n, "digg", "diggs");
+  const NodeId msg = add_message(doc, parent, h);
+  append_plain(doc, msg, str(c, "body"));
+  const Json* gif = json_get(c, "gif");
+  if (str(c, "state") == "unavailable") add_note(doc, msg, "Comment not available.");
+  else if (gif && gif->type != Json::Type::Null) add_note(doc, msg, "GIF on Digg's page.");
+  if (const std::string edited = str(c, "editedAt"); !edited.empty())
+    add_date(doc, doc.create(NodeKind::Caption, msg), edited, "edited ");
+}
+
+// The comments of `reply`, each with the replies that came along, or a link
+// to the rest of them.
+void add_comments(Document& doc, NodeId parent, const Json& reply,
+                  const DiggReplies& replies, CommentList& list) {
+  for (const Json& c : arr(reply, "comments")) {
+    const std::string id = str(c, "id");
+    add_comment(doc, parent, c, list);
+    const long long total = num(c, "replyCount");
+    long long shown = 0;
+    if (auto it = replies.find(id); it != replies.end()) {
+      for (const Json& r : arr(it->second, "replies")) {
+        add_comment(doc, parent, r, list);
+        ++shown;
+      }
+    }
+    if (shown >= total) continue;
+    add_link(doc, doc.create(NodeKind::Paragraph, parent),
+             (shown ? "All " : "") + count(total, "reply", "replies") + " →",
+             digg_ref("post/" + list.post + "/comments/" + id));
+  }
+}
+
+void add_related(Document& doc, NodeId parent, const Json& reply,
+                 std::string_view key, const std::string& label) {
+  const Json* j = json_get(reply, key);
+  if (!j || j->type != Json::Type::Object) return;
+  const Story s = read_story(*j);
+  if (s.title.empty()) return;
+  const NodeId para = doc.create(NodeKind::Paragraph, parent);
+  add_text(doc, para, label + ": ", InlineKind::Strong);
+  add_link(doc, para, s.title, s.ref.empty() ? s.web : s.ref);
+}
+
+NodeId add_section(Document& doc, NodeId parent, const std::string& label,
+                   const std::string& title) {
+  const NodeId section = doc.create(NodeKind::Section, parent);
+  doc.get(section).label = label;
+  add_text(doc, doc.create(NodeKind::Header, section), title);
+  return section;
+}
+
+// Picture, summary and article of a story.
+void add_story_body(Document& doc, NodeId art, const Story& s,
+                    const DiggWebStory& web) {
+  if (!web.image.empty()) {
+    const NodeId img = add_image(doc, art, cdn_image(web.image, "width=1080"), s.title);
+    InlineSpan full;
+    full.kind = InlineKind::Link;
+    full.href = "https://cdn.digg.com/" + std::string(kImageDir) + web.image;
+    doc.get(img).spans.push_back(std::move(full));
+    if (!web.image_credit.empty())
+      add_meta(doc, doc.create(NodeKind::Caption, art), "Image: " + web.image_credit);
+  }
+  append_plain(doc, art, s.description);
+  if (!s.tldr.empty() && s.tldr != s.description) {
+    const NodeId para = doc.create(NodeKind::Paragraph, art);
+    add_text(doc, para, "In brief: ", InlineKind::Strong);
+    add_text(doc, para, s.tldr);
+  }
+  if (!web.article_html.empty()) {
+    // Subheadings open sections, so they stay where they are in the text.
+    HtmlOptions opt;
+    opt.base_url = "https://digg.com/";
+    opt.sections = true;
+    html_append_blocks(doc, art, web.article_html, opt);
+  }
+}
+
+void add_comment_section(Document& doc, NodeId thread, const Story& s,
+                         const DiggPost& extra) {
+  const Json& c = *extra.comments;
+  const long long n = num(c, "commentCount");
+  const NodeId section = add_section(
+      doc, thread, "comments",
+      n > 0 ? "Comments (" + std::to_string(n) + ")" : "Comments");
+  CommentList list{s.id, {}};
+  add_comments(doc, section, c, extra.replies, list);
+  if (list.shown.empty()) add_note(doc, section, "No comments.");
+  if (const Json* locked = json_get(c, "locked"); locked && locked->b)
+    add_note(doc, section, "The discussion is closed.");
+  ForumRef more;
+  more.site = ForumSite::Digg;
+  more.path = "post/" + s.id + "/comments";
+  add_more(doc, section, c, more, "More comments");
+}
+
+}  // namespace
+
+Document digg_list_document(const Json& reply, const ForumRef& ref,
+                            const DiggImages& images) {
+  const DiggPath p = digg_path(ref.path);
+  const bool search = p.kind == DiggPath::Kind::Search;
+  const std::string_view topic = search ? std::string_view{} : p.topic;
+  std::string title = "Digg — " + topic_name(p.topic);
+  if (search) title = "Search Digg: " + ref.query;
+  else if (p.view != kViews[0].slug)
+    title += " · " + std::string(find_choice(kViews, p.view)->name);
+  if (p.range.size() && p.range != kRanges[0].slug)
+    title += " · " + std::string(find_choice(kRanges, p.range)->name);
+  std::vector<NavItem> nav;
+  for (const Choice& t : kTopics)
+    nav.push_back({std::string(t.name), feed_ref(t.slug), t.slug == topic});
   Document doc;
-  NodeId thread = start_document(doc, title, "Digg", nav_for(ref), "");
-  doc.get(thread).label.clear();
-  if (!search) add_view_nav(doc, ref);
-  if (posts) {
-    for (const Json& post : posts->items)
-      add_story(doc, thread, post, search ? std::string_view{} : topic);
-  }
-  if (!posts || posts->items.empty())
-    add_note(doc, thread, search ? "No recent Digg posts matched this search." :
-                                      "No published posts were returned.");
-  // Both the Feed and Search tools return opaque nextCursor values. Never
-  // pretend a cursor is an integer page, nor construct an old-page link.
-  const std::string cursor = text_field(data, {"nextCursor"});
-  if (!cursor.empty() && cursor.size() < 512) {
-    ForumRef next = ref;
-    next.cursor = url_encode(cursor);
-    NodeId nav = doc.create(NodeKind::Paragraph, doc.root);
-    add_link(doc, nav, search ? "More search results →" : "More stories →",
-             forum_ref_string(next));
-  }
+  const NodeId thread = start_document(doc, title, "Digg", nav, "digg");
+  add_feed_nav(doc, ref, p);
+  if (search && json_get(reply, "totalMatches"))
+    add_meta(doc, doc.create(NodeKind::Caption, thread),
+             count(num(reply, "totalMatches"), "story", "stories") + " found");
+  // The JSON feeds name their stories "clusters".
+  const std::vector<Json>& posts =
+      arr(reply, json_get(reply, "clusters") ? "clusters" : "posts");
+  for (const Json& post : posts)
+    add_feed_entry(doc, thread, read_story(post), topic, images);
+  if (posts.empty()) add_note(doc, thread, search ? "No stories found." : "No stories.");
+  add_more(doc, doc.root, reply, ref, "More stories");
   add_web_link(doc, doc.root, ref);
   return doc;
 }
 
-Document digg_post_document(const Json& reply, const ForumRef& ref) {
-  const Json& data = content(reply);
-  const Json* post = object(data, "post");
-  if (!post || post->type != Json::Type::Object) post = &data;
-  const std::string title = text_field(*post, {"title", "headline", "label"});
-  std::string url = post_web(*post);
-  if (url.empty() && post != &data) url = post_web(data);
+Document digg_post_document(const Json& reply, const ForumRef& ref,
+                            const DiggPost& extra) {
+  const Json* record = json_get(reply, "story");
+  const Story s = record ? read_story(*record) : Story{};
+  std::vector<NavItem> nav = {{"All stories", "digg:", false}};
+  if (!s.topic.empty()) nav.push_back({topic_name(s.topic), feed_ref(s.topic), false});
   Document doc;
-  NodeId thread = start_document(doc, title.empty() ? "Digg post" : title,
-                                 "Digg", nav_for(ref), "");
-  doc.get(thread).label.clear();
-  doc.meta.author = "Digg";
-  // The thread supplies the only visible headline; do not repeat it as a
-  // second Header in the article. Link it to Digg when a permalink exists.
-  if (!url.empty()) {
-    NodeId heading = thread_title(doc, thread);
-    if (heading != INVALID_NODE) {
-      doc.get(heading).spans.clear();
-      add_link(doc, heading, title.empty() ? "Digg post" : title, url);
-    }
+  const NodeId thread = start_document(
+      doc, s.title.empty() ? "Digg story" : s.title, "Digg", nav, "digg");
+  const NodeId art = doc.create(NodeKind::Article, thread);
+  doc.get(art).label = s.id;
+  add_caption(doc, art, s, {}, true);
+  add_related(doc, art, reply, "newer", "Newer story");
+  if (ref.page == 1) {
+    add_story_body(doc, art, s, extra.web);
+    add_related(doc, art, reply, "follows", "Earlier story");
+    if (extra.comments) add_comment_section(doc, thread, s, extra);
   }
-  NodeId art = doc.create(NodeKind::Article, thread);
-  doc.get(art).label = "digg-post";
-  const bool has_dateline = !url.empty() ||
-      !post_topic(*post).empty() || first(*post, {"diggScore", "score",
-      "distinctSourceAuthorCount", "uniqueSourceAuthorCount", "combinedViews",
-      "combinedLikes", "combinedReposts", "combinedSaves", "combinedComments",
-      "combinedReplies", "todayRank", "rank", "totalViews",
-      "publishedAt", "createdAt", "firstSourceAt", "firstSourceTime",
-      "earliestSourceAt", "earliestSourceTime", "updatedAt", "lastUpdatedAt"});
-  if (has_dateline) {
-    NodeId cap = doc.create(NodeKind::Caption, art);
-    add_stats(doc, cap, *post, true);
-    if (!url.empty()) {
-      add_sep(doc, cap);
-      add_link(doc, cap, "View on Digg", url, InlineRole::Metadata);
-    }
-  }
+  const NodeId section = add_section(
+      doc, thread, "sources",
+      ref.page == 1 ? "Sources" : "Sources, page " + std::to_string(ref.page));
+  const std::vector<Json>& sources = arr(reply, "sources");
+  for (const Json& src : sources) add_source(doc, section, src);
+  if (sources.empty()) add_note(doc, section, "No sources.");
+  ForumRef pager = ref;
+  pager.fragment.clear();
+  if (!s.id.empty()) pager.path = "post/" + s.id;  // no web page to look up
+  add_pager(doc, pager,
+            num(reply, "nextSourceOffset") > 0 && ref.page < kDiggMaxSourcePage,
+            "More sources");
+  return doc;
+}
 
-  // Digg publishes editorial copy and attributable outside sources, not
-  // the full articles. Keep these distinct in the semantic document tree.
-  std::string intro = post_intro(*post);
-  std::string summary = post_summary(*post);
-  std::string body = post_body(*post);
-  if (post != &data) {
-    if (intro.empty()) intro = post_intro(data);
-    if (summary.empty()) summary = post_summary(data);
-    if (body.empty()) body = post_body(data);
-  }
-  // Featured images belong to the article, not its individual citations.
-  // Prefer the post image, falling back to outer MCP metadata when needed.
-  StoryImage featured = story_image(*post);
-  if (featured.thumbnail.empty() && post != &data) featured = story_image(data);
-  if (featured.thumbnail.empty()) featured = source_preview_image(data, *post);
-  add_story_image(doc, art, std::move(featured), title, false);
-  const Json* blocks = editorial_blocks(*post);
-  if (!blocks && post != &data) blocks = editorial_blocks(data);
-  // A structured article is more faithful than a flattened copy of the
-  // same material. Never show both representations when both are present.
-  if (blocks && !blocks->items.empty()) body.clear();
-  add_editorial_copy(doc, art, intro, summary, body,
-                     blocks && !blocks->items.empty());
-  if (blocks) add_editorial_blocks(doc, art, *blocks);
-  add_tags(doc, art, data, *post);
-  add_useful_links(doc, art, data, *post);
-
-  add_comments(doc, art, data, *post, url);
-
-  const Json* sources = list_field(data, {"sources"});
-  if (!sources) sources = list_field(*post, {"sources"});
-  const Json* source_total = first(data, {"sourceCount", "totalSources"});
-  if (!source_total) source_total = first(*post, {"sourceCount", "totalSources"});
-  const long long total = source_total ? json_number(source_total) :
-      (sources ? static_cast<long long>(sources->items.size()) : 0);
-  NodeId section = doc.create(NodeKind::Section, art);
-  doc.get(section).label = "sources";
-  const std::string heading = total > 0 ? "Sources (" + std::to_string(total) + ")" :
-                                "Sources";
-  add_text(doc, doc.create(NodeKind::Header, section), heading, InlineKind::Strong);
-  if (sources && !sources->items.empty()) {
-    for (size_t i = 0; i < sources->items.size(); ++i)
-      add_source(doc, section, sources->items[i], i);
-  } else {
-    add_note(doc, section, "No source excerpts were returned.");
-  }
-  const long long next = count_field(data, {"nextSourceOffset"});
-  if (next > 0 && (total == 0 || next < total)) {
-    NodeId para = doc.create(NodeKind::Paragraph, section);
-    add_meta(doc, para, "Digg returned only the first source page. ");
-    if (!url.empty()) add_link(doc, para, "See all sources on Digg", url);
-    else add_meta(doc, para, "Additional sources are available on the Digg website.");
-  }
-  add_related_stories(doc, art, data, *post);
+Document digg_comments_document(const Json& reply, const ForumRef& ref,
+                                const DiggReplies& replies) {
+  const DiggPath p = digg_path(ref.path);
+  const bool one = p.kind == DiggPath::Kind::Replies;
+  CommentList list{std::string(p.id), {}};
+  Document doc;
+  const NodeId thread = start_document(
+      doc, one ? "Digg — Replies" : "Digg — Comments", "Digg",
+      {{"All stories", "digg:", false}, {"Story", digg_ref("post/" + list.post), false}},
+      "digg");
+  if (one)
+    for (const Json& r : arr(reply, "replies")) add_comment(doc, thread, r, list);
+  else
+    add_comments(doc, thread, reply, replies, list);
+  if (list.shown.empty()) add_note(doc, thread, one ? "No replies." : "No comments.");
+  add_more(doc, doc.root, reply, ref, one ? "More replies" : "More comments");
   return doc;
 }
 

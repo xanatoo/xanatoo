@@ -2,6 +2,28 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Digg reader checked against the live server
+
+- The Digg commits were written without access; most field names were
+  guessed. Checked against live replies of digg.com/mcp and rewritten
+  `src/forum_digg.cpp` to the real schema: comments come from
+  `digg_get_post_comments` / `digg_get_comment_replies` (replies indented,
+  "N replies →"), sources from `digg_get_post` (X posts with handle, web
+  pages with host), newer / earlier stories of the same event.
+- Pictures and the article are not in the tools: read from Digg's web pages
+  (feed thumbnails cropped by the CDN, story picture with credit, article
+  with its subheadings in order).
+- New refs: `digg:TOPIC/ID` (web short id, resolved through the page),
+  `digg:TOPIC/top/RANGE`, `digg:search/SORT`, `digg:post/UUID?page=N`
+  (source pages), `…/comments[/UUID]`. Story web addresses now open
+  natively. Search keyword `digg` (was `dg`).
+- Removed: guessed fields that the strict schema never returns (media,
+  tags, engagement, sections, …), the separate `xanatoo_digg_tests`
+  (now `test_digg` in `forum_tests.cpp`). Fixed the 2 failing Digg tests.
+- Checked under Xvfb: feeds, More stories (long cursor), search, story by
+  UUID and by web id, source page 2. Docs: `docs/FORUMS.md`,
+  `docs/dev/SERVICES.md`.
+
 ## Status (2026-11-22) — Digg comment section (bundle 297)
 
 - Native `digg:post/UUID` pages now always distinguish Comments from Sources.
@@ -5439,7 +5461,7 @@ fuller Digg-authored articles, Useful links, tags, engagement signals and
 native comments. The **published MCP documentation does not promise all of
 these fields**, so website/API parity cannot be claimed without a real MCP
 capture. Implemented shallow, explicit mapping for thumbnails and featured
-images (normal Xanаtoo image system; alt, credit, originals; video URL not
+images (normal xanatoo image system; alt, credit, originals; video URL not
 misused as image), structured Digg editorial sections, useful links, related
 stories, entity tags, source-author counts, rank and *clearly labelled*
 aggregated source engagement metrics. No new pagination or favicon changes.

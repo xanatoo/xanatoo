@@ -503,90 +503,29 @@ Edit → Credentials…); they are read on the main thread when a load starts.
 
 ## Digg
 
-- `digg:` (Home), `digg:tech`, `digg:ai`, `digg:gaming`,
-  `digg:entertainment`, `digg:world-business`, `digg:science`,
-  `digg:sports`; `digg:TOPIC/top`, `/newest`, `/best`, `/hot`,
-  `/trending` select view. Search: `digg:search?query=WORDS`; post:
-  `digg:post/UUID` (a Digg MCP UUID, not the web short slug).
-  The unified search engine `digg` (`dg` keyword) opens `digg:search`.
-- `src/forum_digg.cpp` handles pure JSON/SSE-MCP decoding and Document
-  conversion. The API call is in `src/forum_fetch.cpp`, using verified
-  HTTPS POST to the official `digg_get_feed`, `digg_search_posts` and
-  `digg_get_post` tools. Feed requests use `limit: 20` (the MCP
-  `digg_get_feed` maximum); search requests can request up to 50. Only
-  anonymous, read-only tools; no login.
-- If the MCP endpoint is unavailable, `tech/clusters.json` and
-  `ai-clusters-ranked.json` are the published limited feed fallback.
-- Digg's *topic* web URL can toggle to native view, but a story URL only
-  exposes its short ID, not the UUID needed by `digg_get_post`.
-  Story detail Documents include explicit web and source links.
-- A Digg post aggregates several outside articles or X posts: the MCP tool
-  supplies Digg's own headline/teaser/TLDR/editorial copy and source excerpts,
-  **not** the full text of external publishers' articles. `digg_post_document`
-  renders known flat and nested editorial copy fields before Sources, avoids
-  duplicate intro/TLDR/body text, and falls back to a clear note when no copy
-  is supplied. Following a Source URL uses Xanаtoo's normal web reading path.
-  Do not treat a source excerpt as Digg's editorial text or pick one source as
-  the canonical original article.
-- The documented read-only Digg MCP tools currently offer **no separate
-  comments request**. Native post pages now include a Comments section: if
-  explicit comment arrays are present in a post response they render as
-  Message nodes with nested replies, otherwise the page says the API did not
-  include a thread and links to the Digg story to read/join its discussion.
-  Digg aggregated social-media reaction/comment counts must **not** be used
-  as native Digg comment totals. The comment record shapes are covered by
-  offline tests only; no live MCP response containing native comments has
-  been verified.
-- Optional image records in MCP/static responses are mapped to the normal
-  document `Image` node: right-floated thumbnails on feed entries and a
-  centered hero image on post pages, retaining supplied alt text, credits and
-  links to an original image. A media item's video URL is never used as an
-  image URL; only explicit poster/thumbnail fields qualify. Image records
-  may be missing from MCP even when Digg's HTML page contains an image.
-  If a post has no image but one of its first 24 attributed Sources contains
-  an explicit image or video poster, the reader uses that as its feed
-  thumbnail / post image, retaining source attribution. The lookup stops at
-  supplied metadata: it does not scrape third-party pages for OpenGraph tags.
-  Video and audio playback URLs are never mistaken for image URLs; Source
-  citations expose up to four explicitly supplied image, video, or audio
-  attachment links in their quiet metadata row rather than opening a large
-  media gallery. Missing/unusable URL fields remain absent, not fabricated.
-  The public `llms.txt` does **not** guarantee images in the Feed/Post tools.
-- Fields that the old renderer silently dropped are now mapped **when
-  present**: `distinctSourceAuthorCount`, aggregated source engagement
-  (labelled *source* views/likes/saves/reposts/replies, NOT Digg comments),
-  daily rank, tags/entities, Useful links and Related stories. When present,
-  ordered editorial `sections`/`contentBlocks` render as separate semantic
-  paragraphs; no external publisher text is fabricated. Absent fields do not
-  generate blank UI sections. Named-field extraction is intentionally shallow
-  and bounded, not a recursive JSON walker.
-- The live Digg **website** additionally displays full editorial stories,
-  featured media, related stories and native comment threads. Those surfaces
-  are **not** proof that the public read-only MCP tool exposes the same
-  records. All optional fields above are exercised with synthetic offline
-  response fixtures, not a live MCP capture. The app still cannot retrieve
-  native Digg comments without an actual public response containing them;
-  the page links to Digg instead. Contributor avatars and dynamic web-only
-  widgets have not been implemented. A verified live MCP response/schema is
-  needed before claiming parity with Digg.com.
-- Native page hierarchy is deliberately compact: the page has one title;
-  topic and sort links share a navigation-Chrome region (also available in
-  the Page panel); each feed entry is a bold, body-sized linked title, a
-  short editorial preview (clipped on a UTF-8/word boundary) and a quiet
-  metadata line. Long excerpts do not push other headlines off-screen.
-  Post pages show one headline, a dateline, Digg's introduction, an inline
-  **In brief** summary where different, and any additional editorial body.
-  The Sources section uses body-sized linked citations with attribution and
-  excerpts grouped per source, not a second stack of large headings.
-  Editorial copy and source excerpts are always distinct, and the reader's
-  chosen style sheet still controls appearance. `styles/digg.xss` offers an
-  optional compact Digg look, assignable to `service:digg` through the
-  Style Sheets panel. Its source-page continuation is still only a normal
-  external Digg link if `nextSourceOffset` is returned; this is not a
-  native pagination implementation. Search still uses `nextCursor` with
-  the original query and covers the most recent 90 days.
-- `tests/digg_tests.cpp` exercises refs, feed views, JSON/SSE tool replies,
-  feed and search cursor pagination, 20-item feeds, post copy variants and
-  semantic source grouping without network or SDL dependencies. The MCP envelope must be read through pointers to its nested
-  `result`: assigning that child JSON back onto its owning `Json` object
-  corrupts memory (ASan heap-use-after-free regression, fixed in bundle 293).
+- Refs and user view: `docs/FORUMS.md`. `digg_path` (`src/forum_digg.cpp`)
+  parses the ref path into a `DiggPath` (Feed / Search / Post / Story /
+  Comments / Replies); validation, web addresses and Up use it too.
+- `src/forum_digg.cpp` is pure: `digg_mcp_decode` (JSON or SSE envelope,
+  `structuredContent`, else the JSON text content; `isError` → message),
+  the `digg_*_arguments` builders, the web extraction (`digg_web_images`:
+  story UUID → CDN picture from a feed page; `digg_web_story`: UUID,
+  picture, credit and `data-cluster-article-body` of a story page) and the
+  three documents. `src/forum_fetch.cpp` makes the calls
+  (`digg_mcp_call`, POST with `user_agent("read-only forum client")`).
+- The tool schema is strict (unknown arguments are rejected). Shapes seen
+  live (2026-11-24): feed and search entries have `id`, `title`, `tldr`,
+  `description`, `url` (relative for cluster feeds), `topic`, `score`,
+  `sourceCount`, `uniqueAuthors`, `createdAt` and `nextCursor`;
+  `digg_get_post` returns `story`, `follows` / `newer` (same event),
+  `sources` (`kind` `x` or `webpage`) and `nextSourceOffset`; comments have
+  `author{name,username,url}`, `state`, `diggCount`, `replyCount`,
+  `editedAt` and `parentId`. Neither tool returns pictures or the article.
+- Calls per story: `digg_get_post`, the story web page, comments and up to
+  8 `digg_get_comment_replies`. A `TOPIC/ID` ref reads the web page first
+  for the UUID; a web page of another (merged) story is not used.
+- Pictures: `cdn_image` asks the CDN for the shown size
+  (`cdn-cgi/image/width=240,height=160,fit=cover,…` for thumbnails,
+  `width=1080` for the story picture, linked to the original).
+- The article goes through `html_append_blocks` with `sections = true`, so
+  its subheadings open sections instead of being lifted above the body.

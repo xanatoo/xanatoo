@@ -24,9 +24,11 @@
 //   lesswrong:users/SLUG               profile + posts
 //   lesswrong:w/SLUG                   tag / wiki page + posts
 //   lesswrong:search?query=Q           posts, tags and users found
-//   digg: / digg:TOPIC[/VIEW]          Digg feed (all topics or a topic)
-//   digg:search?query=Q               recent published posts
-//   digg:post/UUID                    post, summary and original sources
+//   digg:[TOPIC[/VIEW]]                Digg feed       (also TOPIC/top/RANGE)
+//   digg:search[/SORT]?query=Q         recent stories found
+//   digg:post/UUID[?page=N]            story, comments, sources (20 a page)
+//   digg:TOPIC/ID                      the same, by the id in its web address
+//   digg:post/UUID/comments[/UUID]     more comments / replies to one
 //
 // Parsers are pure (JSON in, Document out) and tested with cut-down recorded
 // replies; only forum_fetch touches the network.
@@ -37,6 +39,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 namespace xanatoo {
 
@@ -52,8 +55,8 @@ struct ForumRef {
   // Bluesky: "HANDLE" or "HANDLE/post/RKEY".
   std::string path;
   int page = 1;          // ?page=N
-  std::string cursor;    // ?cursor=C (Bluesky feeds page by cursor)
-  std::string query;     // ?query=Q, decoded (LessWrong search)
+  std::string cursor;    // ?cursor=C (Bluesky and Digg lists)
+  std::string query;     // ?query=Q, decoded (LessWrong, Digg search)
   std::string fragment;  // after '#', kept for the address
 };
 
@@ -93,14 +96,41 @@ Document bsky_thread_document(const Json& reply, const ForumRef& ref);
 Document flarum_list_document(const Json& reply, const ForumRef& ref);
 Document flarum_discussion_document(const Json& discussion, const Json& posts,
                                     const ForumRef& ref);
-// Digg public MCP tools: structured results, no account or write operations.
-// The MCP transport envelope (JSON or SSE) is decoded by digg_mcp_decode.
-// Construct feed tool arguments separately so offline tests cover API limits.
+// Digg: the tools of its public read-only MCP server. digg_mcp_decode takes
+// the reply out of its envelope (JSON or event stream); digg_*_arguments are
+// the JSON arguments of the tool calls.
+constexpr int kDiggSourcePageSize = 20;  // the tool's maximum
+constexpr int kDiggMaxSourcePage = 25;   // sourceOffset ends at 499
+std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err = nullptr);
 std::string digg_feed_arguments(const ForumRef& ref);
 std::string digg_search_arguments(const ForumRef& ref);
-std::optional<Json> digg_mcp_decode(std::string_view body, std::string* err = nullptr);
-Document digg_list_document(const Json& reply, const ForumRef& ref);
-Document digg_post_document(const Json& reply, const ForumRef& ref);
+std::string digg_post_arguments(std::string_view id, int page);
+std::string digg_comments_arguments(std::string_view post, const ForumRef& ref);
+std::string digg_replies_arguments(std::string_view comment, const ForumRef& ref);
+// What the tools leave out, read from digg.com pages: story UUID → path of
+// its picture on the CDN; the article of a story page.
+using DiggImages = std::unordered_map<std::string, std::string>;
+struct DiggWebStory {
+  std::string id;  // UUID ("": not a story page)
+  std::string image, image_credit;
+  std::string article_html;
+};
+DiggImages digg_web_images(std::string_view html);
+DiggWebStory digg_web_story(std::string_view html);
+// Comment UUID → its digg_get_comment_replies reply.
+using DiggReplies = std::unordered_map<std::string, Json>;
+// The optional parts of a story page.
+struct DiggPost {
+  std::optional<Json> comments;
+  DiggReplies replies;
+  DiggWebStory web;
+};
+Document digg_list_document(const Json& reply, const ForumRef& ref,
+                            const DiggImages& images = {});
+Document digg_post_document(const Json& reply, const ForumRef& ref,
+                            const DiggPost& extra = {});
+Document digg_comments_document(const Json& reply, const ForumRef& ref,
+                                const DiggReplies& replies = {});
 // LessWrong: whole GraphQL replies ({"data": …}); /api/search multi-query
 // reply (array: posts, tags, users). Listings ask for this many entries.
 constexpr size_t kLessWrongPageSize = 30;

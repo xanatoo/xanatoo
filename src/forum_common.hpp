@@ -85,6 +85,23 @@ void add_web_link(Document& doc, NodeId parent, const ForumRef& ref);
 // An empty-listing note.
 void add_note(Document& doc, NodeId parent, const std::string& text);
 
+// forum_digg.cpp: what the path of a digg: ref names.
+struct DiggPath {
+  enum class Kind { Invalid, Feed, Search, Post, Story, Comments, Replies };
+  Kind kind = Kind::Invalid;
+  // Views into the path given (or into static tables).
+  std::string_view topic, view, range;  // Feed (topic: Story as well)
+  std::string_view sort;                // Search
+  std::string_view id;                  // UUID; Story: id of the web address
+  std::string_view comment;             // Replies: UUID
+};
+DiggPath digg_path(std::string_view path);
+bool digg_ref_ok(const ForumRef& r);
+std::string digg_web_url(const ForumRef& r);
+// Path and ?filter= of a digg.com page → ref ("" when there is none).
+std::string digg_ref_from_web(std::string_view path, std::string_view filter);
+std::string digg_up_path(std::string_view path);
+
 #if defined(XANATOO_FORUMS) && XANATOO_FORUMS
 // forum_fetch.cpp: HTTPS GET + JSON parse; the site fetchers.
 std::optional<Json> get_json(const std::string& url, std::string* err);

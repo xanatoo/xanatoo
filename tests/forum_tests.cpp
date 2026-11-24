@@ -533,6 +533,204 @@ void test_lesswrong() {
                                        ref("lesswrong:users/nobody"));
   EXPECT(all_text(u).find("No such user.") != std::string::npos);
 }
+
+// Digg: records as the public MCP tools send them (2026-11), cut down.
+void test_digg() {
+  constexpr const char* kPost = "13cbc94a-13c4-4177-ad08-bdf3146cf788";
+  // Refs, their web forms, and the levels up.
+  EXPECT(is_forum_ref("digg:"));
+  EXPECT(is_forum_ref("digg:ai/newest"));
+  EXPECT(is_forum_ref("digg:ai/top/7d"));
+  EXPECT(is_forum_ref("digg:ai/7xbz1s0w"));
+  EXPECT(is_forum_ref("digg:search/newest?query=gemini"));
+  EXPECT(is_forum_ref("digg:post/13cbc94a-13c4-4177-ad08-bdf3146cf788?page=3#id:x"));
+  EXPECT(is_forum_ref("digg:post/13cbc94a-13c4-4177-ad08-bdf3146cf788/comments?cursor=abc"));
+  EXPECT(!is_forum_ref("digg:nope"));
+  EXPECT(!is_forum_ref("digg:ai/newest/7d"));     // ranges are for Top only
+  EXPECT(!is_forum_ref("digg:all/7xbz1s0w"));     // stories live under a topic
+  EXPECT(!is_forum_ref("digg:search"));           // needs a query
+  EXPECT(!is_forum_ref("digg:ai?query=x"));
+  EXPECT(!is_forum_ref("digg:ai?page=2"));        // feeds go by cursor
+  EXPECT(!is_forum_ref("digg:post/13cbc94a?page=2"));
+  EXPECT(!is_forum_ref("digg:post/13cbc94a-13c4-4177-ad08-bdf3146cf788?page=26"));
+  EXPECT_EQ(forum_web_url(ref("digg:")), "https://digg.com/");
+  EXPECT_EQ(forum_web_url(ref("digg:ai/top/7d")), "https://digg.com/ai?filter=top");
+  EXPECT_EQ(forum_web_url(ref("digg:all/newest")), "https://digg.com/?filter=newest");
+  EXPECT_EQ(forum_web_url(ref("digg:ai/7xbz1s0w")), "https://digg.com/ai/7xbz1s0w");
+  EXPECT_EQ(forum_web_url(ref("digg:search?query=abc")), "");
+  EXPECT_EQ(forum_ref_from_web_url("https://digg.com/"), "digg:");
+  EXPECT_EQ(forum_ref_from_web_url("https://digg.com/?filter=hot"), "digg:all/hot");
+  EXPECT_EQ(forum_ref_from_web_url("https://digg.com/tech?filter=top"), "digg:tech/top");
+  EXPECT_EQ(forum_ref_from_web_url("https://digg.com/ai/7xbz1s0w"), "digg:ai/7xbz1s0w");
+  EXPECT_EQ(forum_ref_from_web_url("https://digg.com/u/someone"), "");
+  EXPECT_EQ(forum_up_ref(ref("digg:ai/top/7d")), "digg:ai/top");
+  EXPECT_EQ(forum_up_ref(ref("digg:ai/7xbz1s0w")), "digg:ai");
+  EXPECT_EQ(forum_up_ref(ref("digg:ai")), "digg:");
+  EXPECT_EQ(forum_up_ref(ref("digg:post/13cbc94a-13c4-4177-ad08-bdf3146cf788/comments")),
+            std::string("digg:post/") + kPost);
+
+  // Tool arguments: Top has a range; long cursors survive the ref.
+  const std::string cursor(2900, 'Q');
+  ForumRef top = ref("digg:ai/top?cursor=a%2Bb");
+  EXPECT_EQ(digg_feed_arguments(top),
+            R"({"topic":"ai","view":"top","range":"today","limit":20,"cursor":"a+b"})");
+  EXPECT_EQ(::ref("digg:ai?cursor=" + cursor).cursor, cursor);
+  EXPECT_EQ(digg_feed_arguments(ref("digg:")),
+            R"({"topic":"all","view":"trending","limit":20})");
+  EXPECT_EQ(digg_search_arguments(ref("digg:search/score?query=a%20b")),
+            R"({"query":"a b","sort":"score","limit":30})");
+  EXPECT_EQ(digg_post_arguments(kPost, 3),
+            std::string(R"({"id":")") + kPost + R"(","sourceOffset":40,"sourceLimit":20})");
+
+  // The MCP envelope: event stream, structured content or JSON text, errors.
+  auto j = digg_mcp_decode(
+      "event: message\r\ndata: {\"result\":{\"content\":[{\"type\":\"text\","
+      "\"text\":\"{\\\"posts\\\":[]}\"}]},\"jsonrpc\":\"2.0\",\"id\":1}\r\n\r\n");
+  EXPECT(j && json_get(*j, "posts"));
+  j = digg_mcp_decode(R"({"result":{"content":[],"structuredContent":{"nextCursor":null}}})");
+  EXPECT(j && json_get(*j, "nextCursor"));
+  std::string err;
+  EXPECT(!digg_mcp_decode(R"({"result":{"isError":true,"content":[{"type":"text","text":"bad id"}]}})", &err));
+  EXPECT_EQ(err, "Digg: bad id");
+
+  // A feed: native story links, previews, pictures from the web page, More.
+  const std::string feed_html =
+      "<img src=\"https://cdn.digg.com/cdn-cgi/image/width=640,quality=80,format=auto/"
+      "editorial-story-images/13cbc94a-13c4-4177-ad08-bdf3146cf788/0638fdc8.jpg\">"
+      "{\\\"x\\\":\\\"editorial-story-images/not-a-uuid/a.jpg\\\"}";
+  const DiggImages images = digg_web_images(feed_html);
+  EXPECT_EQ(images.size(), 1u);
+  Json feed = parse(R"({"posts":[{"id":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+      "url":"https://digg.com/tech/7xbz1s0w","topic":"tech","title":"Delta lifts ground stop",
+      "description":"Delta says its Atlanta ground stop has been lifted.","tldr":null,
+      "feedEntryAt":"2026-11-22T18:00:00Z","publishedAt":"2026-11-22T17:51:00.123Z",
+      "updatedAt":"2026-11-22T18:10:00Z"}],
+      "nextCursor":"c1+/=","asOf":"2026-11-22T18:20:00Z","view":"trending","range":null,
+      "unavailableCount":0})");
+  Document f = digg_list_document(feed, ref("digg:"), images);
+  EXPECT(has_href(f, std::string("digg:post/") + kPost));
+  EXPECT(has_href(f, "digg:tech"));
+  EXPECT(has_href(f, "https://digg.com/tech/7xbz1s0w"));
+  EXPECT(has_href(f, "digg:?cursor=c1%2B%2F%3D"));
+  EXPECT(has_href(f, "digg:all/top"));
+  EXPECT_EQ(count_kind(f, NodeKind::Header), 1u);  // the page title; entries are bold links
+  EXPECT_EQ(count_kind(f, NodeKind::Image), 1u);
+  EXPECT(all_text(f).find("cdn.digg.com/cdn-cgi/image/width=240,height=160,fit=cover,quality=85,format=jpeg/"
+                          "editorial-story-images/13cbc94a") != std::string::npos);
+  EXPECT(all_text(f).find("Atlanta ground stop has been lifted") != std::string::npos);
+  // The Top feed offers its time windows.
+  Document t = digg_list_document(Json{}, ref("digg:ai/top/7d"));
+  EXPECT(has_href(t, "digg:ai/top/30d"));
+  EXPECT(all_text(t).find("No stories.") != std::string::npos);
+  // The static JSON feed: relative addresses, no topic.
+  Json clusters = parse(R"({"clusters":[{"id":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+      "short_id":"7xbz1s0w","url":"/ai/7xbz1s0w","title":"T","tldr":"Brief.",
+      "story_count":83,"first_post_at":"2026-11-20T10:00:00Z"}]})");
+  Document c = digg_list_document(clusters, ref("digg:ai"));
+  EXPECT(has_href(c, "https://digg.com/ai/7xbz1s0w"));
+  EXPECT(all_text(c).find("83 sources") != std::string::npos);
+  // Search results count their matches.
+  Json found = parse(R"({"posts":[{"id":"13cbc94a-13c4-4177-ad08-bdf3146cf788","title":"T",
+      "topic":"ai","diggScore":71,"sourceCount":12,"uniqueAuthors":9,"firstSourceAt":null}],
+      "nextCursor":null,"totalMatches":41})");
+  Document s = digg_list_document(found, ref("digg:search?query=gemini"));
+  EXPECT(all_text(s).find("41 stories found") != std::string::npos);
+  EXPECT(all_text(s).find("9 authors") != std::string::npos);
+  EXPECT(has_href(s, "digg:search/newest?query=gemini"));
+  EXPECT(!has_href(s, "digg:search?query=gemini&cursor="));
+
+  // A story page: the web page's id, picture and article.
+  const std::string page =
+      R"(<article data-cluster-id="aaaaaaaa-0000-0000-0000-000000000000"></article>)"
+      R"(<div data-cluster-detail="" data-cluster-detail-url-cluster-id="7xbz1s0w" )"
+      R"(data-cluster-id="13cbc94a-13c4-4177-ad08-bdf3146cf788" class="min-h-screen">)"
+      R"(<img src="https://cdn.digg.com/cdn-cgi/image/width=1080/editorial-story-images/)"
+      R"(13cbc94a-13c4-4177-ad08-bdf3146cf788/0638fdc8.jpg"><div>Image: @cnnbrk on X</div>)"
+      R"(<section aria-label="Body" data-cluster-article-body="true" class="typeset">)"
+      R"(<p>Delta says it is fine. <a href="https://example.org/a" class="text-link-always">Source</a></p>)"
+      R"(<div data-article-featured-source="true"><section><iframe src="x"></iframe><p>Embed</p></section></div>)"
+      R"(<h2>Why it matters</h2><p>Flights resumed.</p></section>)";
+  const DiggWebStory web = digg_web_story(page);
+  EXPECT_EQ(web.id, kPost);
+  EXPECT_EQ(web.image, std::string(kPost) + "/0638fdc8.jpg");
+  EXPECT_EQ(web.image_credit, "@cnnbrk on X");
+  EXPECT(web.article_html.find("Flights resumed") != std::string::npos);
+  EXPECT(web.article_html.find("Embed") == std::string::npos);
+  EXPECT(digg_web_story("<p>404</p>").id.empty());
+
+  Json post = parse(R"({"story":{"id":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+      "url":"https://digg.com/tech/7xbz1s0w","topic":"tech","title":"Delta lifts ground stop",
+      "description":"Delta says its ground stop was lifted.","tldr":"Flights resume.",
+      "feedEntryAt":"2026-11-22T18:00:00Z","publishedAt":"2026-11-22T17:51:00Z",
+      "updatedAt":"2026-11-22T19:30:00Z"},
+    "follows":{"id":"6d35f561-a7db-40fb-b2d9-8256c53b0abb","url":"https://digg.com/tech/aaaaaaaa",
+      "title":"Delta outage halts flights","publishedAt":"2026-11-22T12:00:00Z"},"newer":null,
+    "sources":[
+      {"id":"s1","kind":"x","url":"https://x.com/cnnbrk/status/1","author":"CNN Breaking News",
+       "title":null,"text":"Delta lifts ground stop https://cnn.com/x","publishedAt":"2026-11-22T17:40:00Z"},
+      {"id":"s2","kind":"webpage","url":"https://www.bloomberg.com/news/a","author":"Mary Schlangenstein",
+       "title":"Delta Tech Outage","text":"Delta Air Lines said…","publishedAt":null}],
+    "nextSourceOffset":20,"sourceLimitReached":false})");
+  DiggPost extra;
+  extra.web = web;
+  extra.comments = parse(R"({"comments":[
+      {"id":"6bf1d543-05d6-4ae1-9a23-ff391fb84322","postId":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+       "parentId":null,"repliedToCommentId":null,"state":"published","body":"Finally.","gif":null,
+       "author":{"username":"ann","name":"Ann","avatarUrl":null,"url":"https://digg.com/u/ann"},
+       "diggCount":3,"replyCount":1,"createdAt":"2026-11-16T20:18:36.996177+00:00","editedAt":null},
+      {"id":"3fbd1527-9875-4308-b73b-ac1dfd67fae5","postId":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+       "parentId":null,"repliedToCommentId":null,"state":"unavailable","body":null,"gif":null,
+       "author":null,"diggCount":0,"replyCount":2,"createdAt":"2026-11-16T21:00:00+00:00","editedAt":null}],
+      "commentCount":4,"locked":false,"nextCursor":"n1"})");
+  extra.replies.emplace("6bf1d543-05d6-4ae1-9a23-ff391fb84322", parse(R"({"replies":[
+      {"id":"77777777-0000-0000-0000-000000000001","postId":"13cbc94a-13c4-4177-ad08-bdf3146cf788",
+       "parentId":"6bf1d543-05d6-4ae1-9a23-ff391fb84322","repliedToCommentId":"6bf1d543-05d6-4ae1-9a23-ff391fb84322",
+       "state":"published","body":"@ann Indeed.","gif":null,
+       "author":{"username":"bob","name":"","avatarUrl":null,"url":"https://digg.com/u/bob"},
+       "diggCount":0,"replyCount":0,"createdAt":"2026-11-16T22:00:00+00:00","editedAt":"2026-11-16T22:05:00+00:00"}],
+      "replyCount":1,"nextCursor":null})"));
+  Document d = digg_post_document(post, ref("digg:tech/7xbz1s0w"), extra);
+  EXPECT_EQ(d.meta.title, "Delta lifts ground stop");
+  const std::string text = all_text(d);
+  EXPECT(has_href(d, "https://digg.com/tech/7xbz1s0w"));
+  EXPECT(has_href(d, "digg:post/6d35f561-a7db-40fb-b2d9-8256c53b0abb"));  // earlier story
+  EXPECT(text.find("updated 2026-11-22 19:30 UTC") != std::string::npos);
+  EXPECT(text.find("Image: @cnnbrk on X") != std::string::npos);
+  EXPECT(text.find("Flights resume.") != std::string::npos);
+  EXPECT(text.find("Why it matters") != std::string::npos);
+  EXPECT(has_href(d, "https://example.org/a"));
+  // Comments with replies under their parent.
+  EXPECT(text.find("Comments (4)") != std::string::npos);
+  const Node* reply = message(d, "77777777-0000-0000-0000-000000000001");
+  EXPECT(reply && reply->alt == "6bf1d543-05d6-4ae1-9a23-ff391fb84322");
+  EXPECT(reply && reply->src == "bob");
+  EXPECT(has_href(d, "https://digg.com/u/ann"));
+  EXPECT(has_href(d, std::string("digg:post/") + kPost + "#id:6bf1d543-05d6-4ae1-9a23-ff391fb84322"));
+  EXPECT(text.find("Comment not available.") != std::string::npos);
+  EXPECT(text.find("edited 2026-11-16 22:05 UTC") != std::string::npos);
+  EXPECT(has_href(d, std::string("digg:post/") + kPost +
+                         "/comments/3fbd1527-9875-4308-b73b-ac1dfd67fae5"));
+  EXPECT(has_href(d, std::string("digg:post/") + kPost + "/comments?cursor=n1"));
+  // Sources: X author and handle; web page title, author and host.
+  EXPECT(has_href(d, "https://x.com/cnnbrk/status/1"));
+  EXPECT(text.find("CNN Breaking News|") != std::string::npos);
+  EXPECT(text.find("@cnnbrk") != std::string::npos);
+  EXPECT(text.find("Mary Schlangenstein") != std::string::npos);
+  EXPECT(text.find("bloomberg.com") != std::string::npos);
+  EXPECT(has_href(d, std::string("digg:post/") + kPost + "?page=2"));
+  // Later pages: only sources.
+  Document p2 = digg_post_document(post, ::ref(std::string("digg:post/") + kPost + "?page=2"));
+  EXPECT(all_text(p2).find("Sources, page 2") != std::string::npos);
+  EXPECT(all_text(p2).find("Delta says its ground stop") == std::string::npos);
+  EXPECT(has_href(p2, std::string("digg:post/") + kPost + "?page=3"));
+
+  // The replies to one comment.
+  Document r = digg_comments_document(
+      parse(R"({"replies":[],"replyCount":0,"nextCursor":null})"),
+      ::ref(std::string("digg:post/") + kPost + "/comments/6bf1d543-05d6-4ae1-9a23-ff391fb84322"));
+  EXPECT(all_text(r).find("No replies.") != std::string::npos);
+  EXPECT(has_href(r, std::string("digg:post/") + kPost));
+}
 }  // namespace
 
 void test_forums(int& passed, int& failed) {
@@ -544,6 +742,7 @@ void test_forums(int& passed, int& failed) {
   test_bluesky();
   test_flarum();
   test_lesswrong();
+  test_digg();
   passed += g_passed;
   failed += g_failed;
 }

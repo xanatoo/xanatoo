@@ -282,7 +282,7 @@ std::vector<SearchEngine> builtin_table() {
       {"lesswrong", "LessWrong", "lw", "LW", "lesswrong:search?query=%s",
        "page", "+",
        {"lesswrong:", "lesswrong.com"}},
-      {"digg", "Digg", "dg", "Dg", "digg:search?query=%s",
+      {"digg", "Digg", "digg", "Dg", "digg:search?query=%s",
        "page", "+",
        {"digg:", "digg.com"}},
       {"dailymotion", "Dailymotion", "dm", "DM",

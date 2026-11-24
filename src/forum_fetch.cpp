@@ -403,15 +403,14 @@ std::optional<Document> lesswrong_fetch(const ForumRef& ref, std::string* err) {
   return bad(ref, err);
 }
 
-// Digg's published endpoint speaks Streamable HTTP MCP. Public tools are
-// anonymous and read-only. Accept both JSON-RPC JSON and SSE responses;
-// never send cookies, user credentials or a request to a write tool.
+// Digg's public MCP server (Streamable HTTP): anonymous, read-only tools.
 std::optional<Json> digg_mcp_call(std::string_view tool, std::string_view arguments,
-                                 std::string* err) {
+                                  std::string* err) {
   const std::string body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
                            "\"params\":{\"name\":" + json_quote(tool) +
                            ",\"arguments\":" + std::string(arguments) + "}}";
-  static const std::string agent = user_agent("read-only Digg MCP client");
+  static const std::string agent = user_agent("read-only forum client");
+  std::cerr << "Forums: POST https://digg.com/mcp " << tool << "\n";
   HttpRequestSecurity security;
   security.require_https = true;
   security.public_only = true;
@@ -423,7 +422,7 @@ std::optional<Json> digg_mcp_call(std::string_view tool, std::string_view argume
                               "MCP-Protocol-Version: 2025-06-18\r\n",
                               body, &e, security);
   if (!result) {
-    if (err) *err = "Digg MCP: " + e;
+    if (err) *err = "Digg: " + e;
     return std::nullopt;
   }
   if (result->status != 200) {
@@ -433,37 +432,106 @@ std::optional<Json> digg_mcp_call(std::string_view tool, std::string_view argume
   return digg_mcp_decode(result->body, err);
 }
 
-std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err) {
-  if (starts_with(ref.path, "post/")) {
-    auto reply = digg_mcp_call("digg_get_post",
-                                "{\"id\":" + json_quote(ref.path.substr(5)) + "}", err);
-    if (!reply) return std::nullopt;
-    return digg_post_document(*reply, ref);
+// A digg.com page, for what the tools leave out ("" when it cannot be had).
+std::string digg_page(const std::string& url) {
+  static const std::string agent = user_agent("read-only forum client");
+  std::cerr << "Forums: GET " << url << "\n";
+  std::string e;
+  auto resp = https_get_follow(url, agent, &e);
+  return resp && resp->status == 200 ? std::move(resp->body) : std::string();
+}
+
+// The replies to the first answered comments, one call each.
+DiggReplies digg_fetch_replies(const Json& comments, const ForumRef& ref) {
+  constexpr size_t kMaxCalls = 8;
+  DiggReplies out;
+  for (const Json& c : arr(comments, "comments")) {
+    if (num(c, "replyCount") <= 0) continue;
+    if (out.size() >= kMaxCalls) break;
+    const std::string id = str(c, "id");
+    auto r = digg_mcp_call("digg_get_comment_replies",
+                           digg_replies_arguments(id, ref), nullptr);
+    if (!r) break;
+    out.emplace(id, std::move(*r));
   }
-  if (ref.path == "search") {
-    auto reply = digg_mcp_call("digg_search_posts",
-                                digg_search_arguments(ref), err);
-    if (!reply) return std::nullopt;
-    return digg_list_document(*reply, ref);
+  return out;
+}
+
+std::optional<Document> digg_fetch_story(const ForumRef& ref, const DiggPath& p,
+                                         std::string* err) {
+  DiggPost extra;
+  std::string id(p.id);
+  if (p.kind == DiggPath::Kind::Story) {
+    extra.web = digg_web_story(digg_page(digg_web_url(ref)));
+    id = extra.web.id;
+    if (id.empty()) {
+      if (err) *err = "no such Digg story: " + std::string(p.id);
+      return std::nullopt;
+    }
   }
-  const size_t slash = ref.path.find('/');
-  const std::string topic = ref.path.empty() ? "all" : ref.path.substr(0, slash);
-  const std::string view = slash == std::string::npos ? "" : ref.path.substr(slash + 1);
+  auto reply = digg_mcp_call("digg_get_post", digg_post_arguments(id, ref.page), err);
+  if (!reply) return std::nullopt;
+  if (ref.page > 1) return digg_post_document(*reply, ref);
+  if (const Json* story = json_get(*reply, "story")) {
+    id = str(*story, "id");
+    const std::string url = str(*story, "url");
+    if (extra.web.id.empty() && starts_with(url, "https://digg.com/"))
+      extra.web = digg_web_story(digg_page(url));
+  }
+  if (extra.web.id != id) extra.web = {};
+  extra.comments = digg_mcp_call("digg_get_post_comments",
+                                 digg_comments_arguments(id, ref), nullptr);
+  if (extra.comments) extra.replies = digg_fetch_replies(*extra.comments, ref);
+  return digg_post_document(*reply, ref, extra);
+}
+
+std::optional<Document> digg_fetch_feed(const ForumRef& ref, const DiggPath& p,
+                                        std::string* err) {
   auto reply = digg_mcp_call("digg_get_feed", digg_feed_arguments(ref), err);
-  if (!reply && ref.cursor.empty() && (topic == "ai" || topic == "tech") &&
-      (view.empty() || view == "trending" || view == "top")) {
-    // Published, keyless feeds as a fallback when MCP is unavailable. Tech
-    // clusters are short-id-ordered, not score-ranked; AI ranked is ranked.
-    const std::string url = topic == "ai" ?
-        "https://digg.com/ai-clusters-ranked.json" : "https://digg.com/tech/clusters.json";
-    std::string ignored;
-    reply = get_json(url, &ignored);
+  // Two topics are also published as plain JSON.
+  if (!reply && ref.cursor.empty() && (p.topic == "ai" || p.topic == "tech") &&
+      (p.view == "trending" || p.view == "top")) {
+    reply = get_json(p.topic == "ai" ? "https://digg.com/ai-clusters-ranked.json"
+                                     : "https://digg.com/tech/clusters.json",
+                     nullptr);
     if (reply && err) err->clear();
   }
   if (!reply) return std::nullopt;
-  return digg_list_document(*reply, ref);
+  DiggImages images;
+  if (ref.cursor.empty()) images = digg_web_images(digg_page(digg_web_url(ref)));
+  return digg_list_document(*reply, ref, images);
 }
 
+std::optional<Document> digg_fetch(const ForumRef& ref, std::string* err) {
+  using Kind = DiggPath::Kind;
+  const DiggPath p = digg_path(ref.path);
+  std::optional<Json> reply;
+  switch (p.kind) {
+    case Kind::Invalid: return bad(ref, err);
+    case Kind::Feed: return digg_fetch_feed(ref, p, err);
+    case Kind::Post:
+    case Kind::Story: return digg_fetch_story(ref, p, err);
+    case Kind::Search:
+      if (ref.query.size() < 3 || ref.query.size() > 120) {
+        if (err) *err = "Digg searches for 3 to 120 characters";
+        return std::nullopt;
+      }
+      reply = digg_mcp_call("digg_search_posts", digg_search_arguments(ref), err);
+      if (!reply) return std::nullopt;
+      return digg_list_document(*reply, ref);
+    case Kind::Comments:
+      reply = digg_mcp_call("digg_get_post_comments",
+                            digg_comments_arguments(p.id, ref), err);
+      if (!reply) return std::nullopt;
+      return digg_comments_document(*reply, ref, digg_fetch_replies(*reply, ref));
+    case Kind::Replies:
+      reply = digg_mcp_call("digg_get_comment_replies",
+                            digg_replies_arguments(p.comment, ref), err);
+      if (!reply) return std::nullopt;
+      return digg_comments_document(*reply, ref);
+  }
+  return bad(ref, err);
+}
 
 }  // namespace forum
 

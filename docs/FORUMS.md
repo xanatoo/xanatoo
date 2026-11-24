@@ -36,12 +36,12 @@ recorded replies.
 | `lesswrong:users/SLUG` | profile (karma, counts, bio) + posts, newest first |
 | `lesswrong:w/SLUG` | tag / wiki page: description + posts by relevance |
 | `lesswrong:search?query=Q[&page=N]` | posts found, plus matching tags and users |
-| `digg:` | trending stories across topics |
-| `digg:TOPIC` | AI, technology, gaming, entertainment, world-business, science or sports |
-| `digg:TOPIC/top` / `digg:TOPIC/newest` | select a feed view; `trending`, `best`, `hot` are also supported |
-| `digg:all/top` | a feed view across all topics |
-| `digg:search?query=WORDS[&cursor=C]` | recent Digg stories found by keyword/semantic search; nextCursor pages |
-| `digg:post/UUID` | Digg post summary and its attributed X/web sources (UUID from a feed/search) |
+| `digg:[TOPIC[/VIEW]]` | Digg feed: `all` (default), `ai`, `tech`, `gaming`, `entertainment`, `world-business`, `science`, `sports`; views `trending` (default), `top`, `best`, `hot`, `newest` (`?cursor=C`) |
+| `digg:TOPIC/top/RANGE` | Top over `today` (default), `24h`, `7d`, `30d`, `1y`, `all` |
+| `digg:search[/SORT]?query=Q` | stories of the last 90 days; sort `relevance` (default), `score`, `newest` |
+| `digg:post/UUID[?page=N]` | story: picture, article, comments, then its sources (20 a page) |
+| `digg:TOPIC/ID` | the same story by the short id of its web address (`digg.com/ai/7xbz1s0w`) |
+| `digg:post/UUID/comments[/UUID]` | more comments of a story / the replies to one comment |
 
 The 4chan prefix is `fourchan:` because a URI scheme must start with a
 letter: `4chan:g/` would be read as a local path.
@@ -106,51 +106,34 @@ Exchange hosts, bsky.app, lesswrong.com: `/posts/ID/slug?commentId=C` →
 - The `lesswrong` search engine (keyword `lw`) opens
   `lesswrong:search?query=…`.
 
-### Digg MCP
+### Digg
 
-The official `https://digg.com/mcp` Streamable HTTP endpoint offers
-anonymous, read-only tools. xanatoo currently uses `digg_get_feed`,
-`digg_search_posts`, and `digg_get_post`, sending JSON-RPC `tools/call` requests directly
-(accepting JSON or SSE), without an API key or browser, and renders the
-structured response as native articles. Feed and search results carry an
-opaque `nextCursor` to fetch more stories, which may expire; search covers
-published posts from the last 90 days, not the whole historic archive.
-The Home feed defaults to Trending, topic feeds to Top for today; the
-native view row also offers Best, Hot and Newest. `digg_get_post`
-uses a UUID (not the short ID in a Digg web page URL), and its sources
-link to the original articles or X posts. The current implementation shows
-the first source page only; remaining sources can be read on Digg’s site.
+Digg's public MCP server (`https://digg.com/mcp`, Streamable HTTP, JSON-RPC
+`tools/call`, answers as JSON or an event stream) is anonymous and
+read-only. Used tools: `digg_get_feed`, `digg_search_posts`,
+`digg_get_post`, `digg_get_post_comments` and `digg_get_comment_replies`.
+What the tools leave out is read from Digg's own web pages: the feed
+thumbnails and, for a story, its picture (with credit) and the editorial
+article; the story page also maps the short web id to the UUID the tools
+take. Pictures come from Digg's image CDN in the size shown (thumbnails
+cropped 240×160).
 
-If MCP is unavailable, the documented `ai-clusters-ranked.json` and
-`tech/clusters.json` JSON feeds provide a limited fallback for AI and
-Technology listings (the latter is **not** rank-ordered). There is no
-published public write/authentication interface for making Diggs or
-posting comments. Native Digg comments cannot be fetched through a documented
-comment API; a post response containing an explicit comment array is rendered
-as a native discussion, otherwise the Comments section links back to Digg.
-Aggregated X reply counts are not Digg comment counts. Digg web **topic** URLs are convertible to native
-refs; post web URLs cannot be converted to an MCP UUID, so they remain
-ordinary web pages. The native feed is a compact reading list: one bold, body-sized link and a
-short preview for each story, followed by subdued score/source/date metadata.
-Topic and sorting controls live together in the navigation region, separate
-from the feed. The post view has one prominent headline, an inline Digg
-summary and any further editorial copy, followed by a bibliography-like
-Sources list. Source titles are smaller clickable citations, with their
-attributions and excerpts immediately beneath; excerpts are never promoted
-into Digg editorial copy. An optional `styles/digg.xss` theme can be pinned to
-`service:digg` in the Style Sheets panel. When more source pages exist, the
-post retains a link to Digg for them; native pagination is not a design goal
-at present. See
-https://digg.com/llms.txt and https://digg.com/mcp/connect for the
-published interfaces.
+- Feeds and searches page by `nextCursor` ("More stories"); a cursor can
+  expire. Without the MCP server, AI and Technology fall back to the
+  published `ai-clusters-ranked.json` / `tech/clusters.json`.
+- A story page shows the headline, dateline, picture, Digg's summary and
+  "In brief", the article, newer / earlier stories of the same event, the
+  Digg comments (replies indented; at most 8 reply calls, then "N replies →"
+  links) and the sources (X posts with author and handle, web pages with
+  title and host). Further source pages are `?page=N` (the tool stops at
+  offset 499).
+- Digg web addresses of topics and stories open natively; Up goes from
+  a story to its topic.
+- No votes, posting or login.
 
-The parser / MCP envelope tests are offline (`xanatoo_digg_tests`), including
-full 20-story feeds and a regression for use-after-free when unwrapping an
-MCP `result` nested inside its owning JSON object. The regression triggers
-AddressSanitizer on the old implementation and passes on the corrected one.
-The transport has not been live-tested against Digg in this development
-environment. The offline fixtures cover known field variants and semantic
-Document structure, but are not live MCP response captures.
+Tests: `test_digg` in `tests/forum_tests.cpp` (refs, web addresses,
+tool arguments, envelopes, feed / search / story / comment documents,
+web page extraction), offline, shaped after live replies (2026-11-24).
 
 ## Not done
 
