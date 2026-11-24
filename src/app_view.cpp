@@ -27,6 +27,14 @@ namespace fs = std::filesystem;
 
 namespace xanatoo::app {
 
+// Panels laid out with app.fonts / the layout engine outside the panes
+// (Help, hover help, Context) go stale when sizes or options change.
+static void invalidate_side_layouts(App& app) {
+  app.help_needs_layout = true;
+  app.hover_help.needs_layout = true;
+  app.context_needs_layout = true;
+}
+
 void apply_view_settings(App& app, bool persist) {
   keep_views(app);
   app.view_settings.clamp();
@@ -34,6 +42,7 @@ void apply_view_settings(App& app, bool persist) {
       xanatoo::LayoutOptions::from_view(app.view_settings, app.ui_scale));
   for (Pane& p : app.panes) p.height_cache.clear();
   app.needs_layout = true;
+  invalidate_side_layouts(app);
   if (persist && !xanatoo::save_view_settings(app.view_settings))
     std::cerr << "Could not persist view settings to "
               << xanatoo::view_settings_path() << "\n";
@@ -839,6 +848,7 @@ void apply_font_sizes(App& app) {
           ? static_cast<int>(std::lround(body * app.style.heading_scale))
           : static_cast<int>(std::lround(app.heading_px * app.style.body_scale));
   app.fonts.set_sizes(body, heading);
+  invalidate_side_layouts(app);
 }
 
 std::string body_font_path(const App& app) {
