@@ -96,6 +96,7 @@
               expat # fontconfig.pc Requires: expat
               openssl
               mbedtls # optional TLS backend: -DXANATOO_TLS=mbedtls
+              secp256k1 # Nostr signing with -DXANATOO_TLS=mbedtls (as on Android)
               sqlite
               # Video / other audio formats in the Media panel (optional,
               # -DXANATOO_FFMPEG); headless: no X11 / SDL of its own.

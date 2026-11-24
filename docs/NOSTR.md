@@ -26,7 +26,8 @@ tags and NIP-19 mentions. Cache lookups/search operate without a relay.
 Privacy/security: local cache may contain personal data and could grow
 indefinitely; future releases need size/export/clear controls. NIP-01 event
 IDs are now recalculated from their canonical serialized content. When using
-OpenSSL, the Nostr reader also checks BIP-340 Schnorr signatures. On mbedTLS
+OpenSSL, or Mbed TLS with libsecp256k1 (Android), the Nostr reader also
+checks BIP-340 Schnorr signatures. On Mbed TLS builds without libsecp256k1
 or network-disabled test builds, an ID match is **hash-only** and cannot
 authenticate the author. Signed, hash-only, and legacy unverified events are
 counted separately. Historical cache records from before verification remain
@@ -111,7 +112,8 @@ its local label).
 An account is either **watch-only** (just the public key) or has its
 **signing key** here:
 
-- **New key** makes a key pair (OpenSSL `RAND_priv_bytes`); **Import key**
+- **New key** makes a key pair (OpenSSL `RAND_priv_bytes`, or
+  `/dev/urandom` with libsecp256k1); **Import key**
   takes an `nsec1…` (encrypted with the password given) or an
   `ncryptsec1…` (opened with its own password and kept unchanged).
 - Keys are kept **only** as NIP-49 `ncryptsec` (scrypt log N 16, r 8, p 1;
@@ -128,8 +130,9 @@ An account is either **watch-only** (just the public key) or has its
 - Passwords are not NFKC-normalized (NIP-49 asks for it): ASCII and
   precomposed text give the same bytes, odd decompositions may not open in
   other clients.
-- `--no-save` and builds without OpenSSL (mbedTLS) cannot create or import
-  keys; the panel says so.
+- `--no-save` and builds without a secp256k1 backend (Mbed TLS without
+  libsecp256k1) cannot create or import keys; the panel says so. Android
+  builds libsecp256k1 in and can.
 
 **Posting:** with the active account unlocked, the tab shows a note box.
 Post signs a kind-1 event (BIP-340, `nostr_sign.cpp`; `p` tags for the

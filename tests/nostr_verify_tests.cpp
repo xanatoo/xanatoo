@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
-// Official BIP-340 vectors and NIP-01 serialization smoke tests.
+// Official BIP-340 vectors and NIP-01 serialization smoke tests; built once
+// per available secp256k1 backend (OpenSSL, libsecp256k1 + Mbed TLS).
 #include "xanatoo/nostr_verify.hpp"
 #include "xanatoo/nostr_nip11.hpp"
 #include "xanatoo/nostr_sign.hpp"
@@ -27,7 +28,7 @@ int main() {
          "57be22489918c23cc660b9aaf61d9c871cf28950821da6bcd2e75efdf360548f");
   const std::string relay_self =
       "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
   assert(nostr_verify_event(signed_event) == NostrVerification::SignatureValid);
   assert(nostr_verify_event(signed_group) == NostrVerification::SignatureValid);
   assert(nostr_relay_master_matches(relay_self, relay_self,
@@ -49,7 +50,7 @@ int main() {
   const std::string valid =
       "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA8215"
       "25F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0";
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
   assert(nostr_verify_bip340(pubkey, zero, valid));  // vector 0
   assert(!nostr_verify_bip340(pubkey, zero, zero + zero));
   assert(!nostr_verify_bip340(std::string(64, 'f'), zero, valid));
@@ -77,7 +78,7 @@ int main() {
          "f67935eddb3744c8798809e3758dcbb80dd0d04400842506030ada9680bfdf5a");
   std::string populated = raw;
   populated.replace(populated.find(zero), 64, *id);
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
   assert(nostr_verify_event(populated) == NostrVerification::Invalid);
 #else
   assert(nostr_verify_event(populated) == NostrVerification::HashOnly);
@@ -105,7 +106,7 @@ int main() {
   const std::string nip49 =
       "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p";
   assert(is_ncryptsec(nip49) && !is_ncryptsec(nip19_sk));
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
   assert(nostr_signing_available());
   // Official BIP-340 signing vectors 0..3 (secret key, aux, message, sig).
   struct Vec { const char *sk, *pk, *aux, *msg, *sig; };

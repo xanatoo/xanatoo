@@ -6,6 +6,23 @@
 #include <string>
 #include <string_view>
 
+// secp256k1 crypto backend, chosen at build time (one of):
+//   XANATOO_NOSTR_SECP256K1=1      libsecp256k1 + Mbed TLS (Android, mbedtls builds)
+//   XANATOO_NOSTR_VERIFY_OPENSSL=1 OpenSSL's libcrypto (desktop default)
+// XANATOO_NOSTR_CRYPTO is 1 when either is present; without one, events are
+// only hash-checked and nothing can be signed.
+#ifndef XANATOO_NOSTR_SECP256K1
+#define XANATOO_NOSTR_SECP256K1 0
+#endif
+#ifndef XANATOO_NOSTR_VERIFY_OPENSSL
+#define XANATOO_NOSTR_VERIFY_OPENSSL 0
+#endif
+#if XANATOO_NOSTR_SECP256K1 || XANATOO_NOSTR_VERIFY_OPENSSL
+#define XANATOO_NOSTR_CRYPTO 1
+#else
+#define XANATOO_NOSTR_CRYPTO 0
+#endif
+
 namespace xanatoo {
 
 // NIP-01 event integrity. HashOnly is intentionally NOT an authenticated

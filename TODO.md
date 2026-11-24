@@ -2,6 +2,22 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Nostr signing on Android (libsecp256k1)
+
+- Second secp256k1 backend `XANATOO_NOSTR_SECP256K1`: libsecp256k1
+  (schnorrsig / extrakeys) for BIP-340 sign + verify, Mbed TLS for
+  ChaCha20-Poly1305 and PBKDF2-HMAC-SHA256, scrypt ROMix / Salsa20/8 in
+  `nostr_sign.cpp`, `/dev/urandom` for keys. NIP-49 framing, HChaCha20 and
+  key handling are shared with the OpenSSL backend; `XANATOO_NOSTR_CRYPTO`
+  (nostr_verify.hpp) says whether either is present.
+- Android: `mk/android/secp256k1/Android.mk` from nixpkgs' `secp256k1.src`;
+  the APK now verifies signatures and can create / import accounts and post.
+- Desktop `-DXANATOO_TLS=mbedtls` uses it when pkg-config finds
+  `libsecp256k1` (in the dev shell now). `xanatoo_nostr_secp256k1_tests`
+  runs the BIP-340 / NIP-49 vectors against it.
+- Open: not tried on a device yet; scrypt log N 16 needs 64 MiB and takes
+  a moment on slow phones.
+
 ## Status (2026-11-24) — Reply panel head, Nostr reply links
 
 - Reply panel: "Replying to <author>", an excerpt of the message under an

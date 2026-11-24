@@ -14,10 +14,11 @@
 #include <utility>
 #include <vector>
 
-#ifndef XANATOO_NOSTR_VERIFY_OPENSSL
-#define XANATOO_NOSTR_VERIFY_OPENSSL 0
-#endif
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_SECP256K1
+#include <secp256k1.h>
+#include <secp256k1_extrakeys.h>
+#include <secp256k1_schnorrsig.h>
+#elif XANATOO_NOSTR_VERIFY_OPENSSL
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
@@ -33,7 +34,7 @@ bool hex_string(std::string_view s, size_t length) {
       });
 }
 
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
 unsigned char hex_digit(char c) {
   if (c >= '0' && c <= '9') return static_cast<unsigned char>(c - '0');
   if (c >= 'a' && c <= 'f') return static_cast<unsigned char>(c - 'a' + 10);
@@ -231,7 +232,18 @@ std::optional<std::string> nostr_event_id(std::string_view event_json) {
 bool nostr_verify_bip340(std::string_view pubkey_hex,
                          std::string_view message_hex,
                          std::string_view sig_hex) {
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_SECP256K1
+  if (!hex_string(pubkey_hex, 64) || !hex_string(message_hex, 64) ||
+      !hex_string(sig_hex, 128)) return false;
+  const auto pk = from_hex(pubkey_hex);
+  const auto msg = from_hex(message_hex);
+  const auto sig = from_hex(sig_hex);
+  // Verification needs no precomputed signing tables: the static context.
+  secp256k1_xonly_pubkey xonly;
+  return secp256k1_xonly_pubkey_parse(secp256k1_context_static, &xonly, pk.data()) == 1 &&
+         secp256k1_schnorrsig_verify(secp256k1_context_static, sig.data(), msg.data(),
+                                     msg.size(), &xonly) == 1;
+#elif XANATOO_NOSTR_VERIFY_OPENSSL
   if (!hex_string(pubkey_hex, 64) || !hex_string(message_hex, 64) ||
       !hex_string(sig_hex, 128)) return false;
   const auto pk = from_hex(pubkey_hex);
@@ -297,7 +309,7 @@ NostrVerification nostr_verify_event(std::string_view json) {
   const std::string signature = json_str_field(top, "sig");
   if (!hex_string(declared, 64) || ascii_lower(declared) != *id ||
       !hex_string(signature, 128)) return NostrVerification::Invalid;
-#if XANATOO_NOSTR_VERIFY_OPENSSL
+#if XANATOO_NOSTR_CRYPTO
   if (!nostr_verify_bip340(pubkey, *id, signature)) return NostrVerification::Invalid;
   return NostrVerification::SignatureValid;
 #else

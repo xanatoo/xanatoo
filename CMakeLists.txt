@@ -528,10 +528,22 @@ endif()
 
 if(XANATOO_NOSTR)
   target_compile_definitions(xanatoo PRIVATE XANATOO_NOSTR=1)
+  # secp256k1 (signature checks, signing accounts): OpenSSL's libcrypto, or
+  # with Mbed TLS libsecp256k1 (Mbed TLS has no Schnorr signatures).
+  set(_nostr_crypto "none: hash checks only, no signing")
   if(XANATOO_TLS STREQUAL "openssl")
     target_compile_definitions(xanatoo PRIVATE XANATOO_NOSTR_VERIFY_OPENSSL=1)
+    set(_nostr_crypto "OpenSSL")
+  elseif(XANATOO_TLS STREQUAL "mbedtls")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SECP256K1 QUIET IMPORTED_TARGET libsecp256k1)
+    if(SECP256K1_FOUND)
+      target_compile_definitions(xanatoo PRIVATE XANATOO_NOSTR_SECP256K1=1)
+      target_link_libraries(xanatoo PRIVATE PkgConfig::SECP256K1)
+      set(_nostr_crypto "libsecp256k1 ${SECP256K1_VERSION} + Mbed TLS")
+    endif()
   endif()
-  message(STATUS "Nostr client: ON (WSS, ${XANATOO_TLS})")
+  message(STATUS "Nostr client: ON (WSS, ${XANATOO_TLS}; secp256k1: ${_nostr_crypto})")
 else()
   target_compile_definitions(xanatoo PRIVATE XANATOO_NOSTR=0)
   message(STATUS "Nostr client: OFF")
@@ -942,6 +954,26 @@ if(OpenSSL_FOUND)
   target_link_libraries(xanatoo_nostr_verify_tests PRIVATE OpenSSL::Crypto)
 endif()
 add_test(NAME nostr_verify_tests COMMAND xanatoo_nostr_verify_tests)
+
+# The same vectors against the libsecp256k1 + Mbed TLS backend (the Android
+# one), whenever both are installed, whatever TLS backend the app uses.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(NOSTR_SECP_TEST QUIET IMPORTED_TARGET libsecp256k1 mbedcrypto)
+endif()
+if(NOSTR_SECP_TEST_FOUND)
+  add_executable(xanatoo_nostr_secp256k1_tests
+    tests/nostr_verify_tests.cpp src/nostr_verify.cpp src/nostr_sign.cpp
+    src/bech32.cpp src/util.cpp)
+  target_include_directories(xanatoo_nostr_secp256k1_tests PRIVATE include)
+  target_compile_definitions(xanatoo_nostr_secp256k1_tests PRIVATE XANATOO_NOSTR_SECP256K1=1)
+  target_link_libraries(xanatoo_nostr_secp256k1_tests PRIVATE PkgConfig::NOSTR_SECP_TEST)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+    target_compile_options(xanatoo_nostr_secp256k1_tests PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(xanatoo_nostr_secp256k1_tests PRIVATE -Wl,--gc-sections)
+  endif()
+  add_test(NAME nostr_secp256k1_tests COMMAND xanatoo_nostr_secp256k1_tests)
+endif()
 
 # Exercise the real OpenSSL transport against a local, ephemeral TLS server:
 # matching trusted identity succeeds, hostname/CA mismatches fail, and the

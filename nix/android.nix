@@ -6,7 +6,8 @@
 # nixpkgs source; xanatoo (plus a static FreeType built from nixpkgs'
 # source) into libmain.so against it; both packaged into a signed APK.
 #
-# Network clients (Gemini / Nostr / Reddit / Lemmy) use Mbed TLS; SQLite is
+# Network clients (Gemini / Nostr / Reddit / Lemmy) use Mbed TLS, Nostr
+# signatures libsecp256k1 (both from nixpkgs' sources); SQLite is
 # built from its amalgamation; images go through thumtoo over prebuilt
 # libvips / glib / libarchive (nix/android-imagelibs.nix); no FontConfig (fonts come from the bundled
 # DejaVu and /system/fonts). Data files ship as APK assets (see
@@ -137,6 +138,8 @@ let
       SQLITE_MK = "${../mk/android/sqlite/Android.mk}";
       MBEDTLS_SRC = "${pkgs.mbedtls.src}";
       MBEDTLS_MK = "${../mk/android/mbedtls/Android.mk}";
+      SECP256K1_SRC = "${pkgs.secp256k1.src}";
+      SECP256K1_MK = "${../mk/android/secp256k1/Android.mk}";
       THUMTOO_MK = "${../mk/android/thumtoo/Android.mk}";
       IMAGELIBS = imageLibs;
       APPLICATION_MK = applicationMk;

@@ -6538,7 +6538,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                            "key here (kept encrypted by a password) you post "
                            "as it; without, it is watch-only.");
         if (!state.nostr_can_sign)
-          ImGui::TextDisabled("This build cannot sign (it needs OpenSSL): "
+          ImGui::TextDisabled("This build cannot sign (no secp256k1 library): "
                               "accounts are watch-only.");
         if (state.identity_no_save)
           ImGui::TextDisabled("--no-save: no accounts can be saved.");

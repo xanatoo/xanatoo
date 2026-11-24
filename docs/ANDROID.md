@@ -84,6 +84,12 @@ Gemini, Nostr (WSS), Reddit and Lemmy are on, over `TlsStream`
 `mk/android/mbedtls/Android.mk`); the APK requests `INTERNET`. Desktop keeps
 OpenSSL by default and can use the same backend with `-DXANATOO_TLS=mbedtls`.
 
+Nostr signatures (checking events, signing accounts, posting) use
+libsecp256k1 (nixpkgs' `secp256k1.src`, `mk/android/secp256k1/Android.mk`,
+schnorrsig + extrakeys modules) with Mbed TLS for NIP-49's
+ChaCha20-Poly1305 and PBKDF2 (`XANATOO_NOSTR_SECP256K1`, see
+`docs/dev/SERVICES.md`); key generation reads `/dev/urandom`.
+
 Entropy: mbedTLS's platform source calls `getrandom()` blocking, which on
 Fire OS 5's kernel stalled ~60 s (servers closed the connection before the
 ClientHello). The Android module builds with `MBEDTLS_NO_PLATFORM_ENTROPY` +

@@ -91,7 +91,7 @@ std::string today();
 // Refused when signing accounts cannot be made or kept: why, else empty.
 std::string nostr_key_blocker() {
   if (!xanatoo::nostr_signing_available())
-    return "This build cannot sign Nostr events (it needs OpenSSL)";
+    return "This build cannot sign Nostr events (no secp256k1: OpenSSL or libsecp256k1)";
   if (xanatoo::no_save()) return "--no-save: a signing key could not be kept";
   if (xanatoo::state_dir().empty()) return "No state directory to keep the key in";
   return {};

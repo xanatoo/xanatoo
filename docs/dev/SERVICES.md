@@ -268,13 +268,22 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
 ## Nostr
 
 - WSS over `TlsStream` (`tls.hpp`).
-- Read-only note/thread fetch gated by `XANATOO_NOSTR` (default ON; needs OpenSSL).
+- Note/thread fetch gated by `XANATOO_NOSTR` (default ON; needs TLS).
+- secp256k1 backend (`nostr_verify.hpp`, `XANATOO_NOSTR_CRYPTO`):
+  `XANATOO_NOSTR_VERIFY_OPENSSL` (OpenSSL libcrypto; with
+  `XANATOO_TLS=openssl`) or `XANATOO_NOSTR_SECP256K1` (libsecp256k1 for
+  BIP-340, Mbed TLS for ChaCha20-Poly1305 / PBKDF2, scrypt's ROMix in
+  `nostr_sign.cpp`, `/dev/urandom`; with `XANATOO_TLS=mbedtls` when
+  pkg-config finds `libsecp256k1`, and on Android via
+  `mk/android/secp256k1/Android.mk`). Neither: hash-only, no signing.
+  `xanatoo_nostr_secp256k1_tests` runs the signing / NIP-49 vectors against
+  the libsecp256k1 backend whenever it is installed (the dev shell has it).
 - Relay events and encountered public keys now persist in `nostr.sqlite` via
   `nostr_store.cpp` when SQLite is enabled (no writes under `--no-save`). Events
   are deduplicated by id; distinct source relays, `p` tag/NIP-19 mentioned
   keys, and newest observed kind-0 metadata are indexed. `nostr_verify.cpp`
-  reconstructs NIP-01 event IDs; OpenSSL builds additionally verify BIP-340
-  Schnorr signatures. Other TLS backends cache **hash-checked, unsigned-status**
+  reconstructs NIP-01 event IDs; builds with a secp256k1 backend additionally
+  verify BIP-340 Schnorr signatures. Builds without one cache **hash-checked, unsigned-status**
   observations only; historic pre-verifier records are preserved as excluded
   `verification=0` rows and require refetch. The UI distinguishes these cases.
   Claimed NIP-05 names are NOT verified. Do not portray the cache as a complete
@@ -287,7 +296,7 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   (also "Save this author" on an npub page), make active, view profile, copy
   npub, remove (`nostr_remove_local_identity`, only the local label).
   Signing keys: `nostr_keys.cpp` (`state_dir()/nostr-keys`, 0600, only
-  NIP-49 ncryptsec), crypto in `nostr_sign.cpp` (OpenSSL: BIP-340 sign,
+  NIP-49 ncryptsec), crypto in `nostr_sign.cpp` (either backend: BIP-340 sign,
   nsec / ncryptsec, scrypt + XChaCha20-Poly1305, `nostr_sign_event`),
   Bech32 shared in `bech32.cpp`. `App::nostr_unlocked` holds secrets for
   the session only (wiped on lock). `nostr_publish` (nostr.cpp) sends
