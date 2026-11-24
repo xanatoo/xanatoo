@@ -1,0 +1,56 @@
+<doc title="Semantic hypertext sketch" lang="en" author="xanatoo">
+  <h level="1" label="top">Semantic form, not page geometry</h>
+  <p>This document is an <strong>XML tree</strong> of roles and identity. Layout is a view over it.</p>
+  <h level="2" label="identity">Stable identity</h>
+  <p>Headings and blocks can carry <code>label</code> so links stay valid when wording changes. See <a href="#identity">this section</a>.</p>
+  <h level="2" label="disclosure">Progressive disclosure</h>
+  <stretch expanded="false" summary="Why stretchtext is semantic">
+    <p>Expansion is a <em>reading state</em>, not a different file. The same node is always in the tree.</p>
+  </stretch>
+  <h level="2" label="code">Code as content</h>
+  <codeblock src="cpp"><code>NodeId find_anchor_node(const Document&amp; doc, std::string_view href);</code></codeblock>
+  <h level="2" label="notes">Notes vs quotations</h>
+  <quote>A document is not just something you render and read.</quote>
+  <note>A note is authorial commentary — semantic aside, not a margin region.</note>
+  <h level="2" label="transclude">Transclusion</h>
+  <include src="#identity"/>
+  <p>Full include of a labelled block; the view embeds the passage live.</p>
+  <include src="#identity" summary="Stable identity"/>
+  <p>Excerpt include keeps only the range matching a phrase inside the target.</p>
+  <h level="2" label="defs">Definitions</h>
+  <deflist>
+    <term label="stretchtext-term">Stretchtext</term>
+    <def>A passage that expands in place; reading state, not a separate file.</def>
+    <term>Transclusion</term>
+    <def>Live embedding of a labelled passage via <code>include</code>.</def>
+  </deflist>
+  <h level="2" label="fig">Figures</h>
+  <figure label="network-fig">
+    <image alt="Network diagram" src="network.png"/>
+    <caption>A network is a graph of passages and links — structure, not decoration.</caption>
+  </figure>
+  <h level="2" label="refs">References and typed links</h>
+  <p>Stretchtext is related to <a href="#stretchtext-term" rel="glossary">the glossary entry</a>. Classic work includes <cite href="nelson65">Nelson 1965</cite>.</p>
+  <biblio>
+    <ref label="nelson65">Nelson, T. (1965). Complex information processing: a file structure for the complex, the changing and the indeterminate.</ref>
+  </biblio>
+  <h level="2" label="roles-table">Role cheat-sheet</h>
+  <table>
+    <tr>
+      <th>Form</th>
+      <th>Role</th>
+    </tr>
+    <tr>
+      <td>label</td>
+      <td>Stable anchor for links and includes</td>
+    </tr>
+    <tr>
+      <td>cite</td>
+      <td>Pointer into a bibliography entry</td>
+    </tr>
+    <tr>
+      <td>excerpt</td>
+      <td>Range within a transcluded passage</td>
+    </tr>
+  </table>
+</doc>

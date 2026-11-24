@@ -39,7 +39,7 @@ revision. Neither says anything about trust or truth.
   `published` advances **only** on explicit local Publish. These are separate
   immutable parent chains (`kind=working` and `kind=published`) and neither
   overwrites the other. The document's bytes live in `objects`, encoded with
-  the internal S-expression representation, not a filesystem path.
+  the canonical XML representation (older revisions: S-expressions), not a filesystem path.
 - `document_origins(key, source, original, raw)` — immutable provenance for an
   imported file or fetched page: a stable source alias, the original parsed
   document revision, and a content-addressed copy of the exact source bytes.

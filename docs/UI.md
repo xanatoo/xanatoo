@@ -10,7 +10,7 @@ keyboard/mouse behaviour. The dock/tile model is intentionally more flexible.
 ## Navigation and layout menus
 
 - **View → View Source** switches the current pane between the rendered
-  document, raw source, S-expression and XML. It reuses the loaded document
+  document, raw source and XML. It reuses the loaded document
   (including database-native and unsaved documents) instead of opening a
   second page or fetching the remote URL again. Source representations are
   read-only pane-local projections, not edits to the underlying buffer.

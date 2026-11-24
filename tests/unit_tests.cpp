@@ -3,6 +3,7 @@
 //
 // Lightweight unit tests (no Catch/GTest). Run: ./xanatoo_tests
 
+#include "xanatoo/doc_codec.hpp"
 #include "xanatoo/about.hpp"
 #include "xanatoo/ebooks.hpp"
 #include "xanatoo/feed.hpp"
@@ -1784,7 +1785,6 @@ void test_markdown_nested_inlines() {
     const Document d = parse_document(src, "t.md");
     const std::string want = spans(d);
     EXPECT_EQ(spans(parse_document(serialize_document(d, "t.md"), "t.md")), want);
-    EXPECT_EQ(spans(parse_sexpr(serialize_sexpr(d))), want);
     EXPECT_EQ(spans(parse_xml(serialize_xml(d))), want);
   }
   {
@@ -1794,8 +1794,8 @@ void test_markdown_nested_inlines() {
       std::fprintf(stderr, "markdown out: %s\n", out.c_str());
     EXPECT(out.find("**a *[b](http://b)***") != std::string::npos);
   }
-  EXPECT(serialize_sexpr(parse_document("**a *b***\n", "t.md"))
-             .find("(strong \"a \" (em \"b\"))") != std::string::npos);
+  EXPECT(serialize_xml(parse_document("**a *b***\n", "t.md"))
+             .find("<strong>a </strong><em marks=\"strong\">b</em>") != std::string::npos);
 
   // HTML: <strong><a> keeps the face on the link.
   Document h;
@@ -1840,9 +1840,8 @@ void test_parse_sexpr() {
   EXPECT(hrs >= 1);
   EXPECT(found_em);
 
-  std::string out = serialize_sexpr(doc);
-  EXPECT(out.find("(doc") != std::string::npos ||
-         out.find("doc") != std::string::npos);
+  std::string out = serialize_xml(doc);
+  EXPECT(out.find("<doc") != std::string::npos);
 }
 
 void test_heading_tag_spellings() {
@@ -1857,20 +1856,21 @@ void test_heading_tag_spellings() {
     EXPECT(title.kind == NodeKind::Header);
     EXPECT_EQ(title.level, 0);
   }
-  const std::string canonical = serialize_sexpr(sexpr);
-  EXPECT(canonical.find("(heading") != std::string::npos);
-  EXPECT(canonical.find("(header") == std::string::npos);
-  EXPECT_EQ(serialize_sexpr(parse_sexpr(canonical)), canonical);
+  const std::string canonical = serialize_xml(sexpr);
+  EXPECT(canonical.find("<h nid") != std::string::npos);
+  EXPECT(canonical.find("<header") == std::string::npos);
+  EXPECT_EQ(serialize_xml(parse_xml(canonical)), canonical);
 
   const Document ranked = parse_sexpr(
       "(doc (heading 3 \"Ranked\") (heading 12 \"Deep\"))");
   const auto& titles = ranked.get(ranked.root).children;
   EXPECT_EQ(ranked.get(titles.at(0)).level, 3);
   EXPECT_EQ(ranked.get(titles.at(1)).level, 12);
-  const std::string ranked_text = serialize_sexpr(ranked);
-  EXPECT(ranked_text.find("(heading 3") != std::string::npos);
-  EXPECT(ranked_text.find("(heading 12") != std::string::npos);
-  EXPECT_EQ(serialize_sexpr(parse_sexpr(ranked_text)), ranked_text);
+  // (heading N …) is the unranked title with a depth hint, not <hN>.
+  const std::string ranked_text = serialize_xml(ranked);
+  EXPECT(ranked_text.find("<h nid=\"2\" level=\"3\"") != std::string::npos);
+  EXPECT(ranked_text.find("level=\"12\"") != std::string::npos);
+  EXPECT_EQ(serialize_xml(parse_xml(ranked_text)), ranked_text);
 
   const Document fences = parse_markup(
       ":::heading\nNew\n:::\n\n:::header\nOld\n:::\n");
@@ -1941,28 +1941,23 @@ void test_source_view_text() {
     EXPECT_EQ(code.spans.size(), 1u);
     if (!code.spans.empty()) EXPECT_EQ(code.spans[0].text, raw);
   }
-  const auto sx = source_view_text(doc, SelectorKind::SourceSexpr, std::nullopt);
-  EXPECT_EQ(sx.language, "lisp");
-  EXPECT_EQ(sx.text, serialize_sexpr(doc));
-  EXPECT(parse_sexpr(sx.text).root != INVALID_NODE);
   const auto xml = source_view_text(doc, SelectorKind::SourceXml, std::nullopt);
   EXPECT_EQ(xml.language, "xml");
   EXPECT_EQ(xml.text, serialize_xml(doc));
   EXPECT(parse_xml(xml.text).root != INVALID_NODE);
   const auto missing = source_view_text(doc, SelectorKind::SourceRaw, std::nullopt);
   EXPECT(missing.text.find("unavailable") != std::string::npos);
-  EXPECT(sx.warning.empty());
   EXPECT(xml.warning.empty());
   EXPECT_EQ(source_view_document(xml).get(source_view_document(xml).root)
                 .children.size(), 1u);
 
-  // Text on a container is not representable: both pipes warn about it,
+  // Text on a container is not representable: the pipe warns about it,
   // naming the node, and the rendered view puts the warning first.
   Document bad;
   const NodeId bad_root = bad.create(NodeKind::Document);
   const NodeId sec = bad.create(NodeKind::Section, bad_root);
   bad.append_text(sec, "stray words");
-  for (SelectorKind k : {SelectorKind::SourceSexpr, SelectorKind::SourceXml}) {
+  for (SelectorKind k : {SelectorKind::SourceXml}) {
     const auto v = source_view_text(bad, k, std::nullopt);
     EXPECT(v.text.find("stray") == std::string::npos);
     EXPECT(v.warning.find("Invalid document structure") != std::string::npos);
@@ -1978,7 +1973,7 @@ void test_source_view_text() {
   }
 }
 
-void test_sexpr_image_link() {
+void test_xml_image_link() {
   using namespace xanatoo;
   Document a;
   const NodeId root = a.create(NodeKind::Document);
@@ -1989,17 +1984,17 @@ void test_sexpr_image_link() {
   link.href = "https://example.org/full.html";
   a.get(im).spans.push_back(link);
   std::vector<NodeId> unwritten;
-  const std::string sx = serialize_sexpr(a, &unwritten);
+  const std::string sx = serialize_xml(a, &unwritten);
   EXPECT(unwritten.empty());
-  EXPECT(sx.find(":href \"https://example.org/full.html\"") != std::string::npos);
-  const Document b = parse_sexpr(sx);
+  EXPECT(sx.find("href=\"https://example.org/full.html\"") != std::string::npos);
+  const Document b = parse_xml(sx);
   const auto& kids = b.get(b.root).children;
   EXPECT_EQ(kids.size(), 1u);
   if (!kids.empty()) {
     const std::string* href = image_link_href(b.get(kids[0]));
     EXPECT(href && *href == "https://example.org/full.html");
   }
-  EXPECT_EQ(serialize_sexpr(b), sx);
+  EXPECT_EQ(serialize_xml(b), sx);
 }
 
 void test_markup_stretch_and_link() {
@@ -4410,7 +4405,7 @@ void test_locator() {
   EXPECT_EQ(l.pipes[1].value, "the%20best,of%20times");
   EXPECT(!l.point);
 
-  for (const std::string_view name : {"source-raw", "source-sexpr", "source-xml"}) {
+  for (const std::string_view name : {"source-raw", "source-xml"}) {
     l = parse_locator("book.md//" + std::string(name));
     EXPECT_EQ(l.base, "book.md");
     EXPECT_EQ(l.pipes.size(), 1u);
@@ -4426,8 +4421,10 @@ void test_locator() {
   EXPECT_EQ(format_locator(l), "https://example.org/p//source-raw");
   l = parse_locator("book.md//source-xml");
   EXPECT_EQ(l.pipes[0].kind, SelectorKind::SourceXml);
+  // The S-expression view is gone; its old addresses show the XML.
   l = parse_locator("book.md//source-sexpr");
-  EXPECT_EQ(l.pipes[0].kind, SelectorKind::SourceSexpr);
+  EXPECT_EQ(l.pipes[0].kind, SelectorKind::SourceXml);
+  EXPECT_EQ(format_locator(l), "book.md//source-xml");
 
   // file: URLs stay whole; '#' in the path is %23.
   l = parse_locator("file:///a/b%23c.md//id:ch3#id:x");
@@ -4754,9 +4751,9 @@ void test_footnotes() {
   EXPECT_EQ(nodes_of(again, NodeKind::Footnote).size(), 2u);
   EXPECT_EQ(serialize_document(again, "fn.md"), out);
 
-  // S-expression round trip
+  // XML round trip (a .sexp path writes XML now: S-expressions are read only)
   const std::string sx = serialize_document(doc, "fn.sexp");
-  EXPECT(sx.find("(fnref \"b\")") != std::string::npos);
+  EXPECT(sx.find("<fnref href=\"b\"") != std::string::npos);
   Document sdoc = parse_document(sx, "fn.sexp");
   EXPECT_EQ(nodes_of(sdoc, NodeKind::Footnote).size(), 2u);
   EXPECT_EQ(serialize_document(sdoc, "fn.md"), out);
@@ -5153,8 +5150,8 @@ void test_inline_images_and_asides() {
     const std::string md = serialize_markup(d);
     Document again = parse_markup(md);
     EXPECT_EQ(again.get(kids_of(again, again.root)[0]).float_side, "right");
-    const std::string sx = serialize_sexpr(d);
-    Document sex = parse_sexpr(sx);
+    const std::string sx = serialize_xml(d);
+    Document sex = parse_xml(sx);
     EXPECT_EQ(sex.get(kids_of(sex, sex.root)[0]).float_side, "right");
     Document invalid = parse_markup("![x](a.png){float=center}\n");
     EXPECT(invalid.get(kids_of(invalid, invalid.root)[0]).float_side.empty());
@@ -5243,8 +5240,8 @@ void test_inline_images_and_asides() {
     EXPECT_EQ(sx.get(sk[1]).src, "right");
     EXPECT(sx.get(sk[2]).kind == NodeKind::Note);
   }
-  const std::string so = serialize_sexpr(sx);
-  EXPECT_EQ(serialize_sexpr(parse_sexpr(so)), so);
+  const std::string so = serialize_xml(sx);
+  EXPECT_EQ(serialize_xml(parse_xml(so)), so);
 
   // HTML: an aside in <main> is a box, one with chrome classes stays chrome.
   Document hp = parse_html_page(
@@ -5331,7 +5328,7 @@ void test_inline_images_and_asides() {
     text = find_box(narrow, ib[1]);
     EXPECT(table && text);
     if (table && text) EXPECT(text->y >= table->y + table->height);
-    Document roundtrip = parse_sexpr(serialize_sexpr(infobox));
+    Document roundtrip = parse_xml(serialize_xml(infobox));
     bool retained = false;
     for (const Node& n : roundtrip.nodes)
       retained |= n.kind == NodeKind::Table && n.float_side == "right";
@@ -5458,8 +5455,8 @@ void test_inline_images_and_asides() {
               EXPECT(line.x > tall->x + tall->width - 1.f);
           }
         }
-        for (const std::string& serialized : {serialize_markup(spans), serialize_sexpr(spans)}) {
-          Document restored = serialized[0] == '(' ? parse_sexpr(serialized) : parse_markup(serialized);
+        for (const std::string& serialized : {serialize_markup(spans), serialize_xml(spans)}) {
+          Document restored = serialized[0] == '<' ? parse_xml(serialized) : parse_markup(serialized);
           bool col = false, row = false;
           for (const Node& n : restored.nodes) {
             col |= n.kind == NodeKind::TableCell && n.col_span == 2;
@@ -6289,7 +6286,7 @@ void test_examples_in_menu() {
     if (!de.is_regular_file()) continue;
     const std::string ext = de.path().extension().string();
     if (ext != ".md" && ext != ".gmi" && ext != ".gemini" && ext != ".org" &&
-        ext != ".sexp")
+        ext != ".sexp" && ext != ".xml")
       continue;  // pictures and the like
     const std::string name = de.path().filename().string();
     if (!listed.count(name))
@@ -7079,9 +7076,9 @@ void test_related_chrome() {
       EXPECT_EQ(sx.get(k[1]).summary, "related");
       EXPECT_EQ(kids_of(sx, k[1]).size(), 2u);
     }
-    const std::string so = serialize_sexpr(sx);
-    EXPECT(so.find("(chrome") != std::string::npos);
-    EXPECT_EQ(serialize_sexpr(parse_sexpr(so)), so);
+    const std::string so = serialize_xml(sx);
+    EXPECT(so.find("<chrome") != std::string::npos);
+    EXPECT_EQ(serialize_xml(parse_xml(so)), so);
   }
   // A whole web page dumps to Markdown and reads back with its chrome.
   {
@@ -7747,11 +7744,11 @@ void test_collection() {
   Document again = parse_document(out, "x.md");
   EXPECT_EQ(serialize_markup(again), out);
 
-  const std::string sx = serialize_sexpr(doc);
-  EXPECT(sx.find("(collection") != std::string::npos);
-  EXPECT(sx.find(":view \"list\"") != std::string::npos);
-  Document sdoc = parse_sexpr(sx);
-  EXPECT_EQ(serialize_sexpr(sdoc), sx);
+  const std::string sx = serialize_xml(doc);
+  EXPECT(sx.find("<collection") != std::string::npos);
+  EXPECT(sx.find("summary=\"list\"") != std::string::npos);
+  Document sdoc = parse_xml(sx);
+  EXPECT_EQ(serialize_xml(sdoc), sx);
 }
 
 void test_front_matter_and_preamble() {
@@ -7912,7 +7909,7 @@ void test_fixed_layout() {
       EXPECT(n.width == 100 && n.height == 150 && !n.label.empty());
     }
   EXPECT(pages == 4);
-  const Document sx = parse_sexpr(serialize_sexpr(doc));
+  const Document sx = parse_xml(serialize_xml(doc));
   pages = 0;
   for (const Node& n : sx.nodes)
     if (n.kind == NodeKind::Page && n.width == 100 && n.height == 150 &&
@@ -8630,8 +8627,8 @@ static void test_list_folding() {
                                "(ul (li \"y\")))))", "t.sexp");
   EXPECT(!d3.get(find(d3, "x")).expanded);
   EXPECT(d3.get(find(d3, "x")).label == "task");
-  const std::string sx = serialize_document(d3, "t.sexp");
-  EXPECT(sx.find(":expanded #f") != std::string::npos);
+  const std::string sx = serialize_xml(d3);
+  EXPECT(sx.find("expanded=\"false\"") != std::string::npos);
   Document d4 = parse_document(serialize_markup(d3), "t.md");
   EXPECT(!d4.get(find(d4, "x")).expanded);
   EXPECT(d4.get(find(d4, "x")).label == "task");
@@ -9076,7 +9073,7 @@ void test_table_alignment() {
   {
     Document again = parse_markup(serialize_markup(fenced));
     check_fenced(again, kids_of(again, again.root)[0]);
-    Document sx = parse_sexpr(serialize_sexpr(fenced));
+    Document sx = parse_xml(serialize_xml(fenced));
     check_fenced(sx, kids_of(sx, sx.root)[0]);
   }
   // "align=" is a whole key, not the tail of "valign=".
@@ -9274,7 +9271,73 @@ void test_touch_span_axis() {
   EXPECT(r.lo == 850 && r.len == 50);
 }
 
+
+// XML is the canonical document format: every example keeps its whole tree
+// (the lossless binary codec sees no difference) through serialize_xml →
+// parse_xml.
+// XML is the canonical document format: every example keeps its whole tree
+// (the lossless binary codec sees no difference) through serialize_xml →
+// parse_xml.
+bool encode_span_eq(const xanatoo::InlineSpan& a, const xanatoo::InlineSpan& b) {
+  xanatoo::Document x, y;
+  x.nodes.emplace_back().spans = {a};
+  y.nodes.emplace_back().spans = {b};
+  return xanatoo::encode_document(x) == xanatoo::encode_document(y);
+}
+
+// The lossless encoding of `d` with neighbouring plain text runs joined:
+// readers differ in where they split a text run (the XML reader joins them),
+// which is no difference in content.
+std::string canonical_spans(xanatoo::Document d) {
+  for (xanatoo::Node& n : d.nodes) {
+    std::vector<xanatoo::InlineSpan> joined;
+    for (xanatoo::InlineSpan& sp : n.spans) {
+      if (!joined.empty() && sp.kind == xanatoo::InlineKind::Text) {
+        xanatoo::InlineSpan& prev = joined.back();
+        xanatoo::InlineSpan probe = prev;
+        probe.text = sp.text;
+        if (prev.kind == xanatoo::InlineKind::Text && encode_span_eq(probe, sp)) {
+          prev.text += sp.text;
+          continue;
+        }
+      }
+      joined.push_back(std::move(sp));
+    }
+    n.spans = std::move(joined);
+  }
+  return xanatoo::encode_document(d);
+}
+
+void test_examples_xml_round_trip() {
+  using namespace xanatoo;
+  namespace fs = std::filesystem;
+  const std::string tour = data_file("examples/tour.md");
+  if (tour.empty()) {
+    std::fprintf(stderr, "SKIP test_examples_xml_round_trip (no data dir)\n");
+    return;
+  }
+  for (const auto& de :
+       fs::recursive_directory_iterator(fs::path(tour).parent_path())) {
+    if (!de.is_regular_file()) continue;
+    const std::string path = de.path().string();
+    const std::string ext = de.path().extension().string();
+    if (ext != ".md" && ext != ".gmi" && ext != ".org" && ext != ".sexp" &&
+        ext != ".xml")
+      continue;
+    std::ifstream in(de.path(), std::ios::binary);
+    const std::string src((std::istreambuf_iterator<char>(in)), {});
+    const Document d = parse_document(src, path);
+    const std::string xml = serialize_xml(d);
+    const Document back = parse_xml(xml);
+    if (canonical_spans(back) != canonical_spans(d))
+      std::fprintf(stderr, "XML round trip changes %s\n", path.c_str());
+    EXPECT(canonical_spans(back) == canonical_spans(d));
+    EXPECT_EQ(serialize_xml(back), xml);
+  }
+}
+
 int main() {
+  test_examples_xml_round_trip();
   test_touch_gutter_between();
   test_touch_span_axis();
   test_plain_text_files();
@@ -9357,7 +9420,7 @@ int main() {
   test_parse_document_xml_path();
   test_source_view_text();
   test_org_gemtext_images();
-  test_sexpr_image_link();
+  test_xml_image_link();
   test_markup_stretch_and_link();
   test_markup_blockquote_code_table();
   test_markup_list_continuation();

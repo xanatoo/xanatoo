@@ -125,8 +125,8 @@ CMake commands, packaged assets, and the currently unsupported features.
 | Input | How xanatoo handles it |
 | --- | --- |
 | Markdown (`.md`), Org (`.org`) | Direct, editable semantic documents |
-| S-expression (`.sexp`, `.glyph`, `.ss`) | Structured document form; editable and exportable |
-| Experimental minimal XML (`.xml`) | Same semantic tree with fixed tags, quoted attributes, and builtin escapes; editable and exportable ([subset definition](docs/XML.md)) |
+| XML (`.xml`) | Canonical structured document form: fixed tags, quoted attributes, builtin escapes; lossless, editable and exportable ([subset definition](docs/XML.md)) |
+| S-expression (`.sexp`, `.glyph`, `.ss`) | Older structured form; read only |
 | Local `.html`, HTTP(S) pages | Simplified semantic HTML, read-only; no CSS/JavaScript engine |
 | Gemtext (`.gmi`, `.gemini`), `gemini://` | Native document parser and optional network client |
 | Plain text (`.txt`) | Kept line by line in monospace (blank lines split blocks); saved back as plain text |
@@ -150,8 +150,7 @@ notes.md#id:introduction       whole document, passage marked
 notes.md//id:introduction      that section as the current view
 notes.md#text:hypertext        selected text, marked in context
 notes.md//source-raw            original Markdown/HTML text
-notes.md//source-sexpr          live semantic tree as S-expressions
-notes.md//source-xml            live semantic tree as minimal XML
+notes.md//source-xml            live semantic tree as XML
 ```
 
 The `#text:` form accepts a richer quote/context selector as documented in

@@ -33,9 +33,11 @@ Document parse_markup(std::string_view source);
 // flattened conservatively.
 std::string serialize_markup(const Document& doc);
 
-// --- Experimental S-expression format ---------------------------------
+// --- S-expression format (read only) ------------------------------------
 //
-// Unambiguous nested form of the same document model, e.g.:
+// The older nested form of the document model. Xanatoo still reads it
+// (.sexp files, revisions stored before XML became the canonical format)
+// but no longer writes it: XML is the one complete serialization. E.g.:
 //
 //   (doc
 //     (h 1 "Title")
@@ -70,17 +72,17 @@ bool path_uses_sexpr(std::string_view path);
 bool looks_like_sexpr(std::string_view source);
 
 Document parse_sexpr(std::string_view source);
-// `unwritten`, when given, receives the nodes whose inline spans the format
-// cannot hold (text on a container, as left by an importer) and so are not
-// in the output. Callers should warn about them rather than lose them
-// silently.
-std::string serialize_sexpr(const Document& doc,
-                            std::vector<NodeId>* unwritten = nullptr);
 
-// --- Experimental minimal XML document format ----------------------------
+// The document store's bytes (revisions, drafts, imported originals): XML,
+// or S-expressions in revisions written before XML became canonical.
+Document parse_stored_document(std::string_view data);
+std::string serialize_stored_document(const Document& doc);
+
+// --- Native XML document format (canonical) ------------------------------
 //
-// .xml is a native semantic-tree format, not an HTML/XML general-purpose
-// importer. Only elements, quoted attributes, and the five predefined XML
+// .xml is xanatoo's canonical serialization of the semantic tree (every
+// field the model has; the document store writes it too). It is not a
+// general-purpose HTML/XML importer. Only elements, quoted attributes, and the five predefined XML
 // entities plus numeric character references are supported. In particular,
 // declarations, DTDs, namespaces, comments, CDATA and processing instructions
 // are rejected. Invalid input throws std::invalid_argument (with byte offset).
@@ -89,9 +91,16 @@ bool path_uses_xml(std::string_view path);
 Document parse_xml(std::string_view source);
 // The element name a node is written as ("section", "image", …).
 const char* xml_element_name(const Node& node);
-// `unwritten` as for serialize_sexpr.
+// `unwritten`, when given, receives the nodes whose inline spans the format
+// cannot hold (text on a container, as left by an importer) and so are not
+// in the output. Callers should warn about them rather than lose them
+// silently. Text XML cannot hold (malformed UTF-8, control characters)
+// throws std::invalid_argument, or with XmlInvalid::Replace is written as
+// U+FFFD (the document store, which must not fail on a page's odd bytes).
+enum class XmlInvalid : uint8_t { Throw, Replace };
 std::string serialize_xml(const Document& doc,
-                          std::vector<NodeId>* unwritten = nullptr);
+                          std::vector<NodeId>* unwritten = nullptr,
+                          XmlInvalid invalid = XmlInvalid::Throw);
 
 // --- Gemini gemtext -------------------------------------------------------
 //
@@ -120,8 +129,10 @@ std::string serialize_plain_text(const Document& doc);
 // Best-effort export (lossy vs full Markdown model).
 std::string serialize_gemtext(const Document& doc);
 
-// Dispatch: native XML by .xml path; sexpr (path/content), gemtext, org,
-// HTML by path; otherwise Markdown-ish markup.
+// Dispatch: native XML by .xml path; sexpr by content ('(' first), gemtext,
+// org, HTML by path; otherwise Markdown-ish markup. A .sexp path that does
+// not hold an S-expression is XML (the drafts of a .sexp document), and
+// serialize_document writes XML for it: S-expressions are read only.
 Document parse_document(std::string_view source, std::string_view path = {});
 std::string serialize_document(const Document& doc, std::string_view path = {});
 

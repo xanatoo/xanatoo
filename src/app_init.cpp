@@ -40,7 +40,7 @@ static void add_startup_document(App& app, xanatoo::Document doc,
       if (const auto data = xanatoo::load_stored_document_revision(
               stored->key, stored->working)) {
         const BufferId id = add_buffer(
-            app, xanatoo::parse_sexpr(*data), "db:" + stored->key);
+            app, xanatoo::parse_stored_document(*data), "db:" + stored->key);
         DocBuffer& b = buf(app, id);
         b.doc_key = stored->key;
         b.stored_working = stored->working;

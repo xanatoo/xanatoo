@@ -33,8 +33,10 @@ inline constexpr ExampleEntry kExamples[] = {
     {nullptr, nullptr},
     {"Gemini gemtext", "gemini-sample.gmi"},
     {"Org-mode", "sample.org"},
-    {"Semantic format (S-expression)", "semantic.sexp"},
-    {"Sample (S-expression)", "sample.sexp"},
+    {"Semantic format (XML)", "semantic.xml"},
+    {"Sample (S-expression, read-only)", "sample.sexp"},
+    {"Reply panel demo (XML)", "reply-demo.xml"},
+    {"Quote links demo (XML)", "quotes-demo.xml"},
 };
 
 // Opened by the "Diff demo" item instead of a menu entry of their own.

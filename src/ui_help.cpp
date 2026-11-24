@@ -131,10 +131,9 @@ const std::vector<UiHelpTopic> kTopics = {
     {"export a copy", "Export a copy",
      "Saves the document under a new name, in the format of the file "
      "extension. **Ctrl+Shift+S**."},
-    {"export as s-expression", "Export as S-expression",
-     "Writes the document tree in xanatoo's S-expression format (`.sexp`)."},
-    {"export as xml (experimental)", "Export as XML",
-     "Writes the document as XHTML 2-style XML. Experimental."},
+    {"export as xml", "Export as XML",
+     "Writes the document as XHTML 2-style XML, xanatoo's canonical "
+     "format: it keeps everything the document holds."},
     {"export as markdown", "Export as Markdown",
      "Writes the document as Markdown with xanatoo's `:::` block "
      "extensions."},
@@ -302,10 +301,9 @@ const std::vector<UiHelpTopic> kTopics = {
      "bars. **F9**."},
     {"view source", "View source",
      "Shows the page as the rendered document, its raw source, or the "
-     "document tree as S-expression or XML."},
+     "document tree as XML."},
     {"rendered document", "Rendered document", "The page as a document (normal view)."},
     {"raw source", "Raw source", "The bytes the page was loaded from."},
-    {"s-expression", "S-expression source", "The document tree in `.sexp` form."},
     {"xml", "XML source", "The document tree as XML."},
     {"image gallery", "Image gallery",
      "All images of the page as a grid; click one to view it alone. "

@@ -95,9 +95,40 @@ void append_utf8(uint32_t cp, std::string& out) {
   }
 }
 
+// U+FFFD for every byte sequence XML cannot hold (malformed UTF-8, control
+// characters, U+FFFE / U+FFFF); everything else unchanged.
+std::string replace_invalid_xml(std::string_view s) {
+  std::string out;
+  out.reserve(s.size());
+  for (size_t i = 0; i < s.size();) {
+    size_t len = 1;
+    const unsigned char a = static_cast<unsigned char>(s[i]);
+    if (a >= 0xc2 && a <= 0xdf) len = 2;
+    else if (a >= 0xe0 && a <= 0xef) len = 3;
+    else if (a >= 0xf0 && a <= 0xf4) len = 4;
+    if (i + len <= s.size() && valid_xml_utf8(s.substr(i, len))) {
+      out.append(s.substr(i, len));
+      i += len;
+    } else {
+      out += "\xEF\xBF\xBD";
+      ++i;
+    }
+  }
+  return out;
+}
+
+// serialize_xml's handling of text it cannot write, for the one call that
+// is running (escape_xml is reached from many places).
+thread_local XmlInvalid g_invalid = XmlInvalid::Throw;
+
 void escape_xml(std::string_view value, std::string& out, bool attribute) {
-  if (!valid_xml_utf8(value))
-    throw std::invalid_argument("XML export: invalid UTF-8 or XML character");
+  std::string replaced;
+  if (!valid_xml_utf8(value)) {
+    if (g_invalid == XmlInvalid::Throw)
+      throw std::invalid_argument("XML export: invalid UTF-8 or XML character");
+    replaced = replace_invalid_xml(value);
+    value = replaced;
+  }
   for (char c : value) {
     switch (c) {
       case '&': out += "&amp;"; break;
@@ -716,9 +747,19 @@ private:
     for (const auto& [key, value] : tag.attrs)
       node_attribute(doc_.get(id), key, value, id);
     if (tag.empty) return;
+    // Whitespace-only text beside a block child is the writer's indentation
+    // (a cell or list item holding paragraphs), not content: hold it until
+    // the next item shows which it is.
+    std::string pending_space;
+    bool after_block = false;
+    auto flush_space = [&] {
+      if (!pending_space.empty()) doc_.append_text(id, pending_space);
+      pending_space.clear();
+    };
     while (true) {
       if (pos_ >= source_.size()) fail("unclosed element");
       if (starts("</")) {
+        if (!after_block) flush_space();
         read_close(tag.name);
         return;
       }
@@ -736,14 +777,25 @@ private:
         pos_ = saved;
         InlineKind inline_type{};
         if (accepts_inline(kind) && inline_kind(name, inline_type)) {
+          flush_space();
           read_inline(id, read_start(), inline_type);
+          after_block = false;
         } else {
+          pending_space.clear();
           read_node(id, depth + 1);
+          after_block = true;
         }
       } else {
         std::string value = read_text();
         if (accepts_inline(kind)) {
-          if (!value.empty()) doc_.append_text(id, value);
+          if (value.empty()) continue;
+          if (whitespace_only(value)) {
+            if (!after_block) pending_space += value;
+            continue;
+          }
+          flush_space();
+          doc_.append_text(id, value);
+          after_block = false;
         } else if (!whitespace_only(value)) {
           fail("text is not allowed in this container");
         }
@@ -777,10 +829,16 @@ Document parse_xml(std::string_view source) {
   return XmlReader(source).read();
 }
 
-std::string serialize_xml(const Document& doc, std::vector<NodeId>* unwritten) {
+std::string serialize_xml(const Document& doc, std::vector<NodeId>* unwritten,
+                          XmlInvalid invalid) {
   if (doc.root == INVALID_NODE || doc.get(doc.root).kind != NodeKind::Document)
     throw std::invalid_argument("XML export: missing document root");
   std::string result;
+  struct Mode {
+    XmlInvalid saved = g_invalid;
+    ~Mode() { g_invalid = saved; }
+  } mode;
+  g_invalid = invalid;
   write_node(doc, doc.root, result, 0, true);
   if (unwritten) collect_unwritten_spans(doc, xml_writes_spans, *unwritten);
   return result;

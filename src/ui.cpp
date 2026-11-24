@@ -3517,8 +3517,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("View original", UiCommand::ViewOriginal, cmd,
                     state.can_publish);
       menu_item_cmd("Export a copy…", UiCommand::SaveAs, cmd, true, "Ctrl+Shift+S");
-      menu_item_cmd("Export as S-expression…", UiCommand::ExportSexpr, cmd, true);
-      menu_item_cmd("Export as XML (experimental)…", UiCommand::ExportXml, cmd, true);
+      menu_item_cmd("Export as XML…", UiCommand::ExportXml, cmd, true);
       menu_item_cmd("Export as Markdown…", UiCommand::ExportMarkdown, cmd, true);
       ImGui::Separator();
       menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path, "Ctrl+R / F5");
@@ -3615,9 +3614,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         if (ImGui::MenuItem("Raw Source", nullptr,
                             state.source_mode == "source-raw"))
           cmd = UiCommand::ViewSourceRaw;
-        if (ImGui::MenuItem("S-expression", nullptr,
-                            state.source_mode == "source-sexpr"))
-          cmd = UiCommand::ViewSourceSexpr;
         if (ImGui::MenuItem("XML", nullptr,
                             state.source_mode == "source-xml"))
           cmd = UiCommand::ViewSourceXml;

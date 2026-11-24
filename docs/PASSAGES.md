@@ -49,7 +49,6 @@ book.md#intro                    same; a bare fragment is a label (as today)
 book.md//id:ch3//text:the%20best,of%20times    range inside a section, cut
 book.md//id:ch3#text:the%20best,of%20times     section cut, range marked
 book.md//source-raw             source file bytes, shown as literal text
-book.md//source-sexpr           current semantic tree as S-expressions
 book.md//source-xml             current semantic tree as restricted XML
 map.png//rect:0.2,0.1,0.3,0.3    crop, usable as an image anywhere
 map.png#rect:0.2,0.1,0.3,0.3     whole image, region framed
@@ -62,11 +61,11 @@ Rules:
 - Pipes apply left to right, each to the result of the one before. Selectors
   are typed by what they apply to (document or image), so an image node
   selected from a document takes `rect:`.
-- `source-raw`, `source-sexpr`, `source-xml` are **view transformations**
+- `source-raw`, `source-xml` are **view transformations**
   without payloads. They currently stand alone (not combined with cuts or
   fragments). Up/back from one returns to the rendered document. They keep
   the underlying semantic document and its edit history unchanged, and the
-  source view itself is read-only. `source-sexpr`/`source-xml` serialize the
+  source view itself is read-only. `source-xml` serializes the
   current in-memory tree, including edits. `source-raw` reads the local file's
   bytes from disk (which may predate unsaved edits) or the cached decoded text
   of a fetched HTTP/Gemini response. Service adapters that construct a tree
@@ -359,7 +358,7 @@ The page is parsed **once**, with the chrome kept and marked:
   `text:` stay the same. A jump (`expand_ancestors_for_node`) or a find hit
   inside hidden chrome leaves reader mode first (`reveal_chrome`), as a jump
   into a folded section unfolds it.
-- Saving a web page as Markdown, `.sexp` or XML keeps the regions as native
+- Saving a web page as Markdown or XML keeps the regions as native
   blocks (`:::chrome role="navigation"` … `:::`, `(chrome :role "…" …)`,
   `<chrome summary="…">`), so a dump of what is in memory reads back the
   same and reader mode works on the saved file. Org and gemtext have no

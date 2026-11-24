@@ -137,7 +137,7 @@ Facing columns
 :::
 
 The first heading covers two columns; the second covers both rows. In an
-S-expression table, write the same attributes as `:colspan 2` and `:rowspan 2`.
+XML table, write the same attributes as `colspan="2"` and `rowspan="2"`.
 
 ## Side boxes
 

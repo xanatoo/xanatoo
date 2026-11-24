@@ -1,8 +1,12 @@
-# Experimental minimal XML format
+# Native XML format (canonical)
 
-Xanatoo can read, edit and save `.xml` documents as an alternative serialization
-of its semantic tree. **This is an experiment, not a decision to adopt XML as
-the canonical format.** `.sexp` and Markdown remain available.
+`.xml` is xanatoo's canonical serialization of its semantic tree: the only
+writer that keeps everything a document holds, and the format of the local
+document store (revstore). Markdown and Org stay as convenient, not
+feature-complete, formats. `.sexp` is **read only** since 2026-11: old files
+and old store revisions still open (`parse_stored_document` tells them apart
+by their first character), but nothing writes S-expressions any more —
+saving an opened `.sexp` file asks for another name, and its drafts are XML.
 
 Example:
 
@@ -84,7 +88,7 @@ anchors; `label` / `href` remain the human-facing references.
 Text is only allowed in text-bearing blocks. An importer that leaves inline
 text on a container node (a section, figure, …) produces a tree this format
 cannot hold: the exporter leaves that text out and reports the nodes
-(`serialize_xml`'s `unwritten`), and `//source-xml` / `//source-sexpr` show a
+(`serialize_xml`'s `unwritten`), and `//source-xml` shows a
 warning naming them above the source, rather than failing or dropping it
 silently.
 
@@ -99,12 +103,19 @@ doesn't attempt to read arbitrary SVG, XHTML or generic XML vocabularies.
 
 ## Editing and round trips
 
-Open a `.xml` file, or use **File → Export as XML (experimental)…**. Saving an
+Open a `.xml` file, or use **File → Export as XML…**. Saving an
 open `.xml` document writes this format. The direct `parse_xml` and
 `serialize_xml` functions are also exposed in `parse.hpp`; both preserve
 the semantic tree and metadata (not cosmetic whitespace). Invalid input
 throws `std::invalid_argument` with a byte offset. Output is UTF-8 without an
 XML declaration, to match the restricted grammar.
 
-No claim of full compatibility with generic XML tools is made. The format
-could still be replaced by S-expressions or kept alongside them.
+The writer indents block children; the reader drops whitespace-only text that
+sits beside block children (that indentation), so a round trip is exact.
+Text XML cannot hold (invalid UTF-8, control characters) makes
+`serialize_xml` throw; the store writes with `XmlInvalid::Replace`, which
+puts U+FFFD there instead, so an autosave never fails. A unit test round-trips
+every file in `examples/` through XML and compares the lossless binary
+encoding (`doc_codec`).
+
+No claim of full compatibility with generic XML tools is made.

@@ -1,6 +1,6 @@
-; xanatoo experimental S-expression document
-; Open with: xanatoo examples/sample.sexp
-; Save as .sexp / .glyph / .ss to keep this form.
+; xanatoo S-expression document (the older, read-only form of the tree;
+; XML is the canonical one, see semantic.xml). Open with:
+;   xanatoo examples/sample.sexp
 
 (doc
   (h 1 "S-expression documents")

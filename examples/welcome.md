@@ -66,8 +66,8 @@ Open any of these from this page (links load in the same pane and join session h
 - [Books and long reads](books.md) — Standard Ebooks / Project Gutenberg EPUBs
 - [Feeds](feeds.md) — RSS / Atom: blogs, news, Mastodon, Reddit, arXiv
 - [Org-mode sample](sample.org) — headings, TODO, tags, source blocks
-- [Semantic format (S-expression)](semantic.sexp) — experimental sexpr form
-- [Sample (S-expression)](sample.sexp) — compact sexpr demo
+- [Semantic format (XML)](semantic.xml) — xanatoo's canonical tree format
+- [Sample (S-expression)](sample.sexp) — the older form, read only
 
 ### Diff pair (open both for side-by-side marks)
 

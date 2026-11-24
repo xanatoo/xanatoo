@@ -163,7 +163,6 @@ enum class UiCommand {
   ViewOriginal,  // show immutable imported source snapshot
 
   SaveAs,
-  ExportSexpr,
   ExportXml,
   ExportMarkdown,
   Reload,
@@ -280,7 +279,6 @@ enum class UiCommand {
   OpenPageFeed,   // location bar feed button (arg = feed URL of the page)
   ViewSourceRendered, // leave a source projection and show the document
   ViewSourceRaw,      // focused document's raw source (if available)
-  ViewSourceSexpr,    // focused document's S-expression representation
   ViewSourceXml,      // focused document's XML representation
   ToggleGallery,      // focused view: `//gallery` of the page, or back out
   ToggleReader,  // focused view: hide / show the page chrome (nav, aside, …)

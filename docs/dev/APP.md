@@ -98,7 +98,7 @@ scrolls both panes to a normalized position, not an exact aligned hunk.
 after replacing a buffer's document call `refresh_views_of_buf`.
 The tab right-click menu allows targeted tear-off; the native document-window
 title context menu moves a specific window back (only `WindowRole::Document`).
-View source projections (`//source-raw`, `//source-sexpr`, `//source-xml`) are
+View source projections (`//source-raw`, `//source-xml`; the old `//source-sexpr` is an alias of `//source-xml`) are
 pane-local and switch in View → View Source; see `docs/UI.md`.
 SDL `DropText` and URL-shaped `DropFile` events navigate the specific view at
 the drop location via `drop_view_at` / `navigate_pane` (`app_events.cpp`), not

@@ -332,8 +332,12 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
           flash_status(app, "Cannot overwrite an XML file that failed to import");
           return true;
         }
+        if (xanatoo::path_uses_sexpr(target)) {
+          flash_status(app, "S-expressions are read-only — use .xml, .md or .org");
+          return true;
+        }
         if (xanatoo::path_uses_html(target)) {
-          flash_status(app, "Cannot write HTML — use .md, .org, .sexp or .xml");
+          flash_status(app, "Cannot write HTML — use .xml, .md or .org");
           return true;
         }
         std::string text;

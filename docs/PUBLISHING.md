@@ -11,7 +11,7 @@ anything. Network publication must remain a separate, observable operation.
 
 | Problem | Candidate | Notes |
 |---|---|---|
-| Canonical editable document | Xanatoo S-expression / XML | Keep stable document identity distinct from a revision hash. |
+| Canonical editable document | Xanatoo XML | Keep stable document identity distinct from a revision hash. |
 | Human-readable representation | Static HTML, Markdown | Readers should not need Xanatoo. |
 | Writable ordinary web hosting | HTTPS/WebDAV | Upload immutable revision files, then update a `latest` pointer conditionally using ETags. |
 | Immutable distribution / archiving | IPFS | CID identifies bytes; an IPNS name may point to the latest CID. Availability still needs pinning. |
@@ -49,7 +49,7 @@ article-123/
   revisions/
     <revision-id>/
       manifest.json
-      document.sexp
+      document.xml
       document.html
       assets/<digest>...
 ```

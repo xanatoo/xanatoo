@@ -93,8 +93,9 @@ std::string commit_object_revision(std::string_view key,
 // Database-native documents are independent from legacy file/draft heads.
 // `working` changes through autosaves; `published` is an explicit, immutable
 // snapshot of one working revision. Both have independent parent chains.
-// The bytes are the internal canonical document representation (S-expression
-// today), never a file path or an export format.
+// The bytes are the canonical document representation (XML; revisions from
+// before 2026-11 are S-expressions), never a file path or an export format.
+// Read and write them with parse_stored_document / serialize_stored_document.
 struct StoredDocument {
   std::string key;
   std::string title;
@@ -109,7 +110,7 @@ struct StoredDocument {
 struct DocumentOrigin {
   std::string key;
   std::string source;    // canonical file:<path> or source URL
-  std::string revision;  // immutable original document tree (S-expression)
+  std::string revision;  // immutable original document tree (XML, older: S-expression)
   std::string raw;       // content id of exact source bytes
 };
 

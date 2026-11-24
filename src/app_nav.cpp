@@ -959,7 +959,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
         }
         bi = find_buffer(app, path);
         if (bi == kNoBuffer)
-          bi = add_buffer(app, xanatoo::parse_sexpr(*body), path);
+          bi = add_buffer(app, xanatoo::parse_stored_document(*body), path);
         break;
       }
       std::error_code source_ec;
@@ -979,7 +979,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
         }
         bi = find_buffer(app, path);
         if (bi == kNoBuffer) {
-          bi = add_buffer(app, xanatoo::parse_sexpr(*body), path);
+          bi = add_buffer(app, xanatoo::parse_stored_document(*body), path);
           DocBuffer& b = buf(app, bi);
           b.doc_key = head->key;
           b.stored_working = head->working;
@@ -1019,7 +1019,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
             flash_status(app, "Local document not found");
             return;
           }
-          bi = add_buffer(app, xanatoo::parse_sexpr(*body), ref);
+          bi = add_buffer(app, xanatoo::parse_stored_document(*body), ref);
           DocBuffer& b = buf(app, bi);
           b.doc_key = stored->key;
           b.stored_working = stored->working;

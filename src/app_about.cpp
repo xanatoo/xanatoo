@@ -155,8 +155,10 @@ AboutSection formats() {
   AboutSection s{"Document formats", {}, {}};
   s.items.push_back({"Markdown", true, "`.md`, editable", {}, {}});
   s.items.push_back({"Org", true, "`.org`, editable", {}, {}});
-  s.items.push_back({"S-expressions", true, "`.sexp`, xanatoo's own tree",
-                     "examples/semantic.sexp", {}});
+  s.items.push_back({"XML", true, "`.xml`, xanatoo's own tree (canonical)",
+                     "examples/semantic.xml", {}});
+  s.items.push_back({"S-expressions", true, "`.sexp`, read-only (older form)",
+                     "examples/sample.sexp", {}});
   s.items.push_back({"Gemtext", true, "`.gmi`, `.gemini`",
                      "examples/gemini-sample.gmi", {}});
   s.items.push_back({"HTML", true, "`.html`, read-only", {}, {}});

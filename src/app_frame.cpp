@@ -185,9 +185,6 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
         case xanatoo::SelectorKind::SourceRaw:
           ui_state.source_mode = "source-raw";
           break;
-        case xanatoo::SelectorKind::SourceSexpr:
-          ui_state.source_mode = "source-sexpr";
-          break;
         case xanatoo::SelectorKind::SourceXml:
           ui_state.source_mode = "source-xml";
           break;
@@ -1768,7 +1765,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       mark.kind = is_note ? "note" : "highlight";
       if (is_note) mark.body = arg;
       mark.targets.push_back({
-          key, xanatoo::content_id(xanatoo::serialize_sexpr(d)), address});
+          key, xanatoo::content_id(xanatoo::serialize_stored_document(d)), address});
       const std::string id = mark.id;
       if (!xanatoo::add_annotation(*layer, std::move(mark))) {
         flash_status(app, "Could not save annotation; no document changes made");
@@ -1929,7 +1926,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     }
     case C::ViewSourceRendered:
     case C::ViewSourceRaw:
-    case C::ViewSourceSexpr:
     case C::ViewSourceXml: {
       // These are pane-local representations of the already loaded buffer.
       // Do not re-open draft:/db:/remote pages just to change projection.
@@ -1937,8 +1933,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       xanatoo::Locator loc;
       if (cmd == C::ViewSourceRaw)
         loc.pipes.push_back({xanatoo::SelectorKind::SourceRaw, {}});
-      else if (cmd == C::ViewSourceSexpr)
-        loc.pipes.push_back({xanatoo::SelectorKind::SourceSexpr, {}});
       else if (cmd == C::ViewSourceXml)
         loc.pipes.push_back({xanatoo::SelectorKind::SourceXml, {}});
       if (!previous.empty())
@@ -1996,12 +1990,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       open_prompt(app, PromptKind::SaveAs, std::move(suggested));
       break;
     }
-    case C::ExportSexpr:
     case C::ExportXml:
     case C::ExportMarkdown: {
-      const bool as_sexp = (cmd == C::ExportSexpr);
-      const bool as_xml = (cmd == C::ExportXml);
-      const char* ext = as_sexp ? ".sexp" : as_xml ? ".xml" : ".md";
+      const char* ext = cmd == C::ExportXml ? ".xml" : ".md";
       std::string cur = path_of(app, p);
       std::string target;
       if (cur.empty() || is_stored_document_ref(cur) ||
@@ -2866,18 +2857,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::OpenSemanticDoc: {
-      std::string path = find_data_file(app, "semantic.sexp");
-      if (path.empty()) path = find_data_file(app, "examples/semantic.sexp");
-      // find_data_file already tries examples/
-      if (path.empty()) {
-        for (const char* c :
-             {"examples/semantic.sexp", "../examples/semantic.sexp"})
-          if (fs::exists(c)) {
-            path = fs::absolute(c).string();
-            break;
-          }
-      }
-      open_browse(app, path, "semantic.sexp — demo");
+      open_browse(app, find_data_file(app, "examples/semantic.xml"),
+                  "semantic.xml — demo");
       break;
     }
     case C::OpenInWindow:

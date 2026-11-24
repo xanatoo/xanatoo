@@ -25,9 +25,9 @@ Jump to: [Files](#Files) · [Edit](#Edit) · [Navigate](#Navigate) · [View](#Vi
   back into a tab
 - **Alt+F / E / O / I / V / G / B / H** — File / Edit / Format / Insert / View / Go / Bookmarks / Help menu
 - **Middle-click** — On a link: open it in a new tab; elsewhere: paste at caret
-- **Drag .md / .sexp** — Open in a software window
+- **Drag .md / .xml** — Open in a software window
 
-Export via *File → Export as S-expression…* or *Export as Markdown…*.
+Export via *File → Export as XML…* or *Export as Markdown…*.
 
 ## Edit
 
@@ -138,7 +138,8 @@ images are nodes in a tree, not only visual decorations.
 
 - **Transclusion** — `:::include #Target` or a path embeds another passage live
 - **Dual pane** — a two-page trail: left links open on the right, right links shift left
-- **S-expression format** — experimental `.sexp` serialization of the tree
+- **XML format** — `.xml` is the canonical, lossless form of the tree
+  (`.sexp` files still open, read only)
 
 Press **F1** or **Esc** to close this window.
 

@@ -19,14 +19,13 @@ namespace xanatoo {
 
 enum class SelectorKind : uint8_t {
   Id, Path, Text, Rect, At,
-  SourceRaw, SourceSexpr, SourceXml,  // payload-free document-view pipes
+  SourceRaw, SourceXml,  // payload-free document-view pipes
   Gallery,  // payload-free: the images of what the pipes before it show
   Item,     // item:N (1-based) of a gallery, after `//gallery`
 };
 
 inline bool is_source_pipe(SelectorKind kind) {
   return kind == SelectorKind::SourceRaw ||
-         kind == SelectorKind::SourceSexpr ||
          kind == SelectorKind::SourceXml;
 }
 
@@ -50,7 +49,7 @@ struct Locator {
 };
 
 // Never fails: without selectors the whole input is the base. Only known
-// selector names or source-raw/source-sexpr/source-xml/gallery at the end
+// selector names or source-raw/source-xml/gallery at the end
 // are taken;
 // thumtoo pipes
 // (`//page:12`) and any other `//` stay in the base.

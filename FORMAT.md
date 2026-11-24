@@ -1,13 +1,13 @@
-# xanatoo semantic document model (experimental S-expression format)
+# xanatoo semantic document model
 
 The **semantic tree** is the common document model: a tree of *meaning*, not a
 page description. Layout (columns, fonts, margins) is a view over this tree and
-must not be required to understand or exchange a document. Its preferred disk
-encoding is still an experiment: both S-expressions and a restricted XML
-representation are available; see [docs/XML.md](docs/XML.md).
+must not be required to understand or exchange a document. Its canonical disk
+encoding is a restricted XML; see [docs/XML.md](docs/XML.md).
 
-Markdown remains a convenience import/export. `.sexp` and `.xml` are both
-structured, editable import/export formats for now.
+Markdown remains a convenience import/export. The S-expression forms shown
+below are the older encoding: xanatoo still reads `.sexp` files but no longer
+writes them; each form has an XML element of the same meaning.
 
 ## Design principles
 
@@ -135,7 +135,8 @@ Not part of the semantic document:
 
 ## Example
 
-See `examples/semantic.sexp`.
+See `examples/semantic.xml` (XML) and `examples/sample.sexp` (the older
+S-expression form).
 
 ## Threads and messages
 

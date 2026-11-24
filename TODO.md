@@ -2,6 +2,28 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — XML is the canonical format; `.sexp` read only
+
+- The S-expression writer is gone (`serialize_sexpr`, Export as
+  S-expression, View Source → S-expression). `parse_sexpr` stays: `.sexp`
+  files and old store revisions still open. `//source-sexpr` is an alias of
+  `//source-xml`. Saving an opened `.sexp` asks for .xml / .md / .org; its
+  drafts are XML (parse_document sniffs `(`).
+- The revstore / drafts / annotation ids use `serialize_stored_document`
+  (XML, `XmlInvalid::Replace` → U+FFFD, never throws) and
+  `parse_stored_document` (sniffs sexp vs XML). A stored document gets one
+  new revision on its first save after the switch (the bytes differ).
+- XML reader: whitespace-only text beside block children is indentation
+  and is dropped (table cells holding `<p>` gained spaces before).
+- sexp reader: `(doc :title … :lang …)` meta is read at the top level too.
+- `examples/semantic.sexp` → `examples/semantic.xml`; `sample.sexp` stays
+  as the read-only legacy sample. Test `test_examples_xml_round_trip`
+  round-trips every example through XML via the lossless doc_codec.
+- Next: social markup — `rel="mention"` / `rel="tag"` links, `rel="score"`
+  metadata spans, `mention` / `hashtag` style roles, context menu entries,
+  used by Bluesky, Nostr, Mastodon, Reddit. XML first, Markdown where
+  natural; no voting actions, no guessing `@word` in plain text.
+
 ## Status (2026-11-24) — Service strips for native services
 
 - The "Hacker News: Top · New · Best · Ask HN · Show HN" rows (and the

@@ -62,7 +62,7 @@ bool write_stored_working(App& app, DocBuffer& b) {
   if ((!b.path.empty() && !is_stored_document_ref(b.path)) || b.placeholder)
     return false;
   if (b.doc_key.empty()) b.doc_key = new_doc_key();
-  const std::string text = serialize_sexpr(b.doc);
+  const std::string text = serialize_stored_document(b.doc);
   const std::string title = draft_title(b, serialize_document(b.doc, {}));
   const auto head = save_stored_document(b.doc_key, text, b.stored_working, title);
   if (!head) {
@@ -254,8 +254,8 @@ bool make_stored_copy(App& app, BufferId id) {
   const std::string raw = remote ? *b->raw_source : read_file(b->path);
   std::string initial, working;
   try {
-    initial = serialize_sexpr(remote ? b->doc : parse_document(raw, b->path));
-    working = serialize_sexpr(b->doc);
+    initial = serialize_stored_document(remote ? b->doc : parse_document(raw, b->path));
+    working = serialize_stored_document(b->doc);
   } catch (const std::invalid_argument&) {
     flash_status(app, "Cannot import an invalid source document");
     return false;
@@ -378,7 +378,7 @@ bool open_stored_document(App& app, int pi, const std::string& ref) {
     flash_status(app, "Local document not found");
     return false;
   }
-  show_doc_in_pane(app, pi, parse_sexpr(*body), ref);
+  show_doc_in_pane(app, pi, parse_stored_document(*body), ref);
   DocBuffer& b = buf(app, app.panes[pi].buf);
   b.doc_key = key;
   b.stored_working = head->working;
@@ -400,7 +400,7 @@ bool open_stored_original(App& app, int pi, const std::string& ref) {
     return false;
   }
   if (!stash_or_confirm(app, app.panes[pi].buf)) return false;
-  show_doc_in_pane(app, pi, parse_sexpr(*body), ref);
+  show_doc_in_pane(app, pi, parse_stored_document(*body), ref);
   return true;
 }
 

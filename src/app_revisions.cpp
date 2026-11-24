@@ -42,7 +42,7 @@ std::vector<std::string> lines_of(const std::string& text, size_t limit) {
 
 std::string readable(const std::string& source) {
   try {
-    return xanatoo::serialize_document(xanatoo::parse_sexpr(source), {});
+    return xanatoo::serialize_document(xanatoo::parse_stored_document(source), {});
   } catch (...) {
     return "(snapshot cannot be rendered as a document)";
   }

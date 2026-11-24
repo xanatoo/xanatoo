@@ -71,7 +71,8 @@ std::string percent_encode(std::string_view s) {
 std::optional<Selector> parse_selector(std::string_view s) {
   for (const auto& [name, kind] : {
            SelectorName{"source-raw", SelectorKind::SourceRaw},
-           {"source-sexpr", SelectorKind::SourceSexpr},
+           // The S-expression view is gone; old addresses show the XML.
+           {"source-sexpr", SelectorKind::SourceXml},
            {"source-xml", SelectorKind::SourceXml},
            {"gallery", SelectorKind::Gallery}})
     if (s == name) return Selector{kind, {}};
@@ -90,7 +91,6 @@ std::optional<Selector> parse_selector(std::string_view s) {
 
 std::string_view selector_name(SelectorKind kind) {
   if (kind == SelectorKind::SourceRaw) return "source-raw";
-  if (kind == SelectorKind::SourceSexpr) return "source-sexpr";
   if (kind == SelectorKind::SourceXml) return "source-xml";
   if (kind == SelectorKind::Gallery) return "gallery";
   for (const SelectorName& n : kNames)
