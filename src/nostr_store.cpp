@@ -625,6 +625,19 @@ std::vector<std::string> nostr_cached_thread_json(std::string_view id) {
   return {};
 }
 
+std::string nostr_cached_event_json(std::string_view id) {
+#if XANATOO_SQLITE
+  if (hex_pubkey(id)) {
+    auto rows = cached_raw(
+        "SELECT raw_json FROM events WHERE id=? AND verification>0 LIMIT 1;", id);
+    if (!rows.empty()) return rows.front();
+  }
+#else
+  (void)id;
+#endif
+  return {};
+}
+
 std::vector<std::string> nostr_cached_author_json(std::string_view pk) {
 #if XANATOO_SQLITE
   if (hex_pubkey(pk)) return cached_raw(

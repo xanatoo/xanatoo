@@ -4368,7 +4368,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   service_bars(state, result, cmd);
 
   // ---- Reply composer: custom floating/dockable frame underneath, ImGui
-  // text widget and Markdown tools above it. Nothing here sends a request.
+  // text widget and Markdown tools above it. Only Nostr targets post (as the
+  // unlocked active account); for other services Send is a mockup.
   if (state.reply_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Reply))) {
     if (reply_generation_seen_ != state.reply_generation) {
@@ -4378,6 +4379,11 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       reply_selection_ = {};
       reply_focus_ = true;
       reply_restore_selection_ = false;
+    }
+    if (reply_sent_seen_ != state.reply_sent) {
+      reply_sent_seen_ = state.reply_sent;  // went out: empty the composer
+      reply_input_[0] = '\0';
+      reply_selection_ = {};
     }
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(state.reply_x + 4),
                                    static_cast<float>(state.reply_y + 4)));
@@ -4403,7 +4409,15 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (!state.reply_label.empty() &&
           ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("Comment: %s", state.reply_label.c_str());
-      muted_wrapped("Markdown · preview only, no account connected");
+      if (!state.reply_nostr) {
+        muted_wrapped("Markdown · preview only, no account connected");
+      } else if (state.reply_blocker.empty()) {
+        muted_wrapped(("Nostr · plain text · as " + state.reply_account).c_str());
+      } else {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.16f, 0.10f, 1.f));
+        ImGui::TextWrapped("Cannot send: %s", state.reply_blocker.c_str());
+        ImGui::PopStyleColor();
+      }
       const char* format_before = nullptr;
       const char* format_after = nullptr;
       auto format = [&](const char* label, const char* before,
@@ -4422,14 +4436,17 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                 next_width < right)
           ImGui::SameLine();
       };
-      format("Bold", "**", "**");
-      next_format_on_same_line("Italic");
-      format("Italic", "*", "*");
-      next_format_on_same_line("Code");
-      format("Code", "`", "`");
-      next_format_on_same_line("Link");
-      format("Link", "[", "](https://)");
-      next_format_on_same_line("Quote");
+      // Nostr notes are plain text: only the quote prefix means anything.
+      if (!state.reply_nostr) {
+        format("Bold", "**", "**");
+        next_format_on_same_line("Italic");
+        format("Italic", "*", "*");
+        next_format_on_same_line("Code");
+        format("Code", "`", "`");
+        next_format_on_same_line("Link");
+        format("Link", "[", "](https://)");
+        next_format_on_same_line("Quote");
+      }
       format("Quote", "> ", "");
 
       if (reply_focus_) {
@@ -4479,14 +4496,20 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           result.arg = reply_input_;
         }
       }
-      const bool can_send = reply_input_[0] != '\0';
+      const bool can_send = reply_input_[0] != '\0' && !state.reply_sending &&
+          (!state.reply_nostr || state.reply_blocker.empty());
       ImGui::BeginDisabled(!can_send);
-      if (classic_button("Send reply")) {
+      if (classic_button(state.reply_sending ? "Sending…" : "Send reply")) {
         cmd = UiCommand::SendReply;
         result.arg = reply_input_;
       }
       ImGui::EndDisabled();
-      muted_wrapped("Mockup: Send does not post anything");
+      if (!state.reply_nostr)
+        muted_wrapped("Mockup: Send does not post anything");
+      else if (!state.reply_status.empty())
+        muted_wrapped(state.reply_status.c_str());
+      else
+        muted_wrapped("Signed and sent to public relays; it cannot be taken back.");
     }
     ImGui::End();
     ImGui::PopStyleVar();

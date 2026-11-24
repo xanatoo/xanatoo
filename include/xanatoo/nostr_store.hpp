@@ -95,6 +95,8 @@ std::vector<std::string> nostr_cached_group_lists_json(int limit = 100);
 // Exact relay JSON for offline fallback. These are local, unverified copies.
 std::vector<std::string> nostr_cached_thread_json(std::string_view event_id);
 std::vector<std::string> nostr_cached_author_json(std::string_view pubkey);
+// One signature-checked cached event by hex id, empty when not cached.
+std::string nostr_cached_event_json(std::string_view event_id);
 std::vector<std::string> nostr_cached_recent_json();
 
 // Labelled local accounts (public keys). Their signing keys, if any, are

@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-24) — Nostr replies
+
+- Reply panel posts for real on Nostr notes: unlocked active account,
+  parent from cache or relays (by id, kind 1 only), NIP-10 marked e tags +
+  p tags (`nostr_reply_tags`, unit-tested), signed, published on a worker
+  (`App::nostr_reply`); success empties the composer and refetches the page.
+  The panel names the account or says why it cannot send; Nostr shows only
+  Quote. Other services keep the mockup. Xvfb: blocker shown, Send disabled.
+  Not sent to live relays (public).
+- Open: NIP-22 comments on non-kind-1 events, an optimistic local insert
+  instead of the refetch.
+
 ## Status (2026-11-24) — Nostr signing accounts and posting
 
 - Identities → Nostr tab: New key / Import key (nsec or ncryptsec) / Watch
@@ -21,7 +33,7 @@
   password + tamper, sign→verify (`nostr_verify_tests`); key store
   (`nostr_keys_tests`). Under Xvfb: create, lock, wrong / right password.
   Not tried against live relays (posting is public).
-- Open: replies via the Reply panel, NIP-46 remote signer, NIP-65 relay
+- Open: NIP-46 remote signer, NIP-65 relay
   list, kind 0 profile editing, kind 5 deletion, NFKC passwords.
 
 ## Status (2026-11-24) — Social markup: mentions and hashtags

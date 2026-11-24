@@ -13,6 +13,7 @@
 // notes (nostr_sign + nostr_publish on a worker). The tab follows the
 // focused page's protocol.
 
+#include <algorithm>
 #include <ctime>
 #include <iostream>
 #include <thread>
@@ -417,22 +418,118 @@ void use_identity(App& app, const std::string& sha, const std::string& scope) {
 
 }  // namespace
 
-void update_nostr_post(App& app) {
-  NostrPost& post = app.nostr_post;
+namespace {
+
+// Picks up a finished post; true when some relay took it.
+bool collect_post(App& app, NostrPost& post, const char* what) {
   if (!post.pending || !post.pending->done.load(std::memory_order_acquire))
-    return;
-  post.results = std::move(post.pending->results);
-  post.pending.reset();
+    return false;
+  auto job = std::move(post.pending);
+  post.results = std::move(job->results);
+  if (!job->event_id.empty()) post.event_id = job->event_id;
   size_t ok = 0;
   for (const auto& r : post.results) ok += r.accepted;
-  if (ok) {
-    post.status = "Posted to " + std::to_string(ok) + " of " +
-                  std::to_string(post.results.size()) + " relays";
-    ++post.sent;
-  } else {
-    post.status = "Not posted: no relay took the note";
-  }
+  if (!job->error.empty())
+    post.status = std::string("Not posted: ") + job->error;
+  else if (ok)
+    post.status = std::string(what) + " posted to " + std::to_string(ok) +
+                  " of " + std::to_string(post.results.size()) + " relays";
+  else
+    post.status = "Not posted: no relay took it";
+  if (ok) ++post.sent;
   flash_status(app, post.status);
+  return ok > 0;
+}
+
+}  // namespace
+
+void update_nostr_post(App& app) {
+  collect_post(app, app.nostr_post, "Note");
+  if (collect_post(app, app.nostr_reply, "Reply")) {
+    app.reply.text.clear();
+    // Show it under the note: the thread asks the relays again.
+    for (int pi : live_views(app))
+      if (path_of(app, app.panes[pi]) == app.reply.page) refetch_page(app, pi);
+  }
+}
+
+bool reply_is_nostr(const App& app) {
+  if (!xanatoo::is_nostr_ref(app.reply.page)) return false;
+  const std::string& id = app.reply.label;
+  return id.size() == 64 &&
+         std::all_of(id.begin(), id.end(), [](char c) {
+           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+         });
+}
+
+namespace {
+
+// Why the Reply panel cannot post to Nostr now, else empty.
+std::string reply_blocker(const App& app) {
+#if !(defined(XANATOO_NOSTR) && XANATOO_NOSTR)
+  return "this build has no Nostr";
+#else
+  if (!xanatoo::nostr_signing_available()) return "this build cannot sign";
+  if (app.nostr_active_identity.empty())
+    return "no Nostr account (Identities → Nostr)";
+  if (!app.nostr_unlocked.count(app.nostr_active_identity))
+    return nostr_key(app, app.nostr_active_identity) ?
+        "unlock the active account (Identities → Nostr)" :
+        "the active account is watch-only";
+  return {};
+#endif
+}
+
+}  // namespace
+
+void send_reply(App& app) {
+  if (app.reply.text.find_first_not_of(" \t\r\n") == std::string::npos) {
+    flash_status(app, "Enter a reply before sending");
+    return;
+  }
+  if (!reply_is_nostr(app)) {
+    flash_status(app, "Reply mockup: not sent (no account connected)");
+    return;
+  }
+  if (app.nostr_reply.pending) return;
+  const std::string why = reply_blocker(app);
+  if (!why.empty()) {
+    app.nostr_reply.status = "Not sent: " + why;
+    flash_status(app, app.nostr_reply.status);
+    return;
+  }
+#if defined(XANATOO_NOSTR) && XANATOO_NOSTR
+  auto job = std::make_shared<NostrPostJob>();
+  app.nostr_reply.pending = job;
+  app.nostr_reply.results.clear();
+  app.nostr_reply.status = "Sending the reply…";
+  std::thread([job, parent = app.reply.label, text = app.reply.text,
+               secret = app.nostr_unlocked.at(app.nostr_active_identity)]() mutable {
+    try {
+      job->results = xanatoo::nostr_reply(parent, text, secret, &job->event_id,
+                                          &job->error);
+    } catch (...) {
+      job->error = "failed";
+    }
+    xanatoo::nostr_wipe(secret);
+    job->done.store(true, std::memory_order_release);
+  }).detach();
+#endif
+}
+
+void reply_ui_state(App& app, xanatoo::UiState& st) {
+  st.reply_nostr = app.reply.open && reply_is_nostr(app);
+  st.reply_account.clear();
+  st.reply_blocker.clear();
+  if (st.reply_nostr) {
+    st.reply_blocker = reply_blocker(app);
+    if (st.reply_blocker.empty())
+      if (const NostrLocalIdentity* a = nostr_account(app, app.nostr_active_identity))
+        st.reply_account = a->label;
+  }
+  st.reply_sending = app.nostr_reply.pending != nullptr;
+  st.reply_status = app.nostr_reply.status;
+  st.reply_sent = app.nostr_reply.sent;
 }
 
 void refresh_identities(App& app) {

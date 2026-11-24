@@ -154,7 +154,7 @@ enum class UiCommand {
   JumpQuote,       // context menu quote link; arg = index into the items
   ContextJump,     // Context panel: jump to hovered quote source
   EditReply,       // arg = Markdown currently in the reply editor
-  SendReply,       // mock only: never sends to an external service
+  SendReply,       // posts to Nostr (unlocked account); a mockup elsewhere
   // Tabs / MDI
   NewTab,          // new empty buffer + tab
   CloseTab,        // close focused buffer (Ctrl+W)
@@ -643,6 +643,12 @@ struct UiState {
   unsigned shaded_panels = 0;
   uint64_t reply_generation = 0;
   std::string reply_author, reply_page, reply_label, reply_text;
+  bool reply_nostr = false;      // the target is a Nostr note: Send posts
+  std::string reply_account;     // unlocked active Nostr account, or empty
+  std::string reply_blocker;     // why Send cannot post now
+  bool reply_sending = false;
+  std::string reply_status;      // the last send's outcome
+  uint64_t reply_sent = 0;       // bumped per posted reply
   int reply_x = 0, reply_y = 0, reply_w = 0, reply_h = 0;
   // True when caret is on a ListItem (enables indent/outdent menu items).
   bool on_list_item = false;
@@ -1071,6 +1077,7 @@ private:
   bool find_caret_select_ = false;
   char reply_input_[16384] = {}; // Markdown draft, not sent to any server
   uint64_t reply_generation_seen_ = 0;
+  uint64_t reply_sent_seen_ = 0;
   char annotation_new_note_[16384] = {};
   char annotation_edit_note_[16384] = {};
   std::string annotation_edit_synced_id_;

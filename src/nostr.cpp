@@ -6,6 +6,7 @@
 
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/bech32.hpp"
+#include "xanatoo/nostr_sign.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/nostr_relays.hpp"
 #include "xanatoo/nostr_nip11.hpp"
@@ -470,6 +471,44 @@ std::vector<std::string> nostr_mentioned_pubkeys(std::string_view content) {
       out.push_back(*pk);
     p = end;
   }
+  return out;
+}
+
+std::vector<std::vector<std::string>> nostr_reply_tags(
+    std::string_view parent_id, std::string_view parent_pubkey,
+    const std::vector<std::vector<std::string>>& parent_tags,
+    std::string_view relay_hint, std::string_view self) {
+  std::vector<std::vector<std::string>> out;
+  const std::string parent = ascii_lower(parent_id);
+  const std::string author = ascii_lower(parent_pubkey);
+  if (!is_hex64(parent)) return out;
+  // The thread root: the parent's marked root, else its first e tag
+  // (deprecated positional NIP-10), else the parent starts the thread.
+  std::string root, first_e;
+  for (const auto& t : parent_tags) {
+    if (t.size() < 2 || t[0] != "e" || !is_hex64(ascii_lower(t[1]))) continue;
+    if (first_e.empty()) first_e = ascii_lower(t[1]);
+    if (t.size() >= 4 && t[3] == "root") root = ascii_lower(t[1]);
+  }
+  if (root.empty()) root = first_e;
+  const std::string hint(relay_hint);
+  if (root.empty() || root == parent) {
+    out.push_back({"e", parent, hint, "root", author});
+  } else {
+    out.push_back({"e", root, "", "root"});
+    out.push_back({"e", parent, hint, "reply", author});
+  }
+  std::vector<std::string> people;
+  auto add = [&](std::string pk) {
+    pk = ascii_lower(pk);
+    if (is_hex64(pk) && pk != self &&
+        std::find(people.begin(), people.end(), pk) == people.end())
+      people.push_back(std::move(pk));
+  };
+  add(author);
+  for (const auto& t : parent_tags)
+    if (t.size() >= 2 && t[0] == "p") add(t[1]);
+  for (auto& pk : people) out.push_back({"p", std::move(pk)});
   return out;
 }
 
@@ -1656,6 +1695,59 @@ std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
       break;
     }
   return out;
+}
+
+std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
+                                            std::string_view text,
+                                            const std::string& secret_hex,
+                                            std::string* event_id,
+                                            std::string* err) {
+  auto fail = [&](std::string msg) {
+    if (err) *err = std::move(msg);
+    return std::vector<NostrPublishResult>{};
+  };
+  const std::string id = ascii_lower(parent_id);
+  if (!is_hex64(id)) return fail("not a Nostr note");
+  NostrEvent parent;
+  std::string relay;
+  bool found = false;
+  const std::string cached = nostr_cached_event_json(id);
+  if (!cached.empty() && parse_event_json(cached, parent) && parent.id == id) {
+    found = true;
+  } else {
+    for (const auto& r : default_relays()) {
+      WsConn c;
+      if (!ws_connect(c, r, nullptr)) continue;
+      std::map<std::string, NostrEvent> by_id;
+      if (ws_send_text(c, "[\"REQ\",\"xanatoo-parent\",{\"ids\":[\"" + id +
+                              "\"]}]"))
+        collect_ws_events(c, by_id, 5, r);
+      c.close();
+      auto it = by_id.find(id);
+      if (it != by_id.end()) {
+        parent = it->second;
+        relay = r;
+        found = true;
+        break;
+      }
+    }
+  }
+  if (!found) return fail("the note replied to was not found on the relays");
+  if (parent.kind != 1)
+    return fail("replies to this kind of event (" + std::to_string(parent.kind) +
+                ") are not supported yet");
+  const std::string self = nostr_pubkey_of(secret_hex);
+  auto tags = nostr_reply_tags(parent.id, parent.pubkey, parent.tags, relay, self);
+  for (const auto& pk : nostr_mentioned_pubkeys(text))
+    if (std::none_of(tags.begin(), tags.end(), [&](const auto& t) {
+          return t.size() >= 2 && t[0] == "p" && t[1] == pk;
+        }))
+      tags.push_back({"p", pk});
+  const std::string ev = nostr_sign_event(
+      secret_hex, 1, text, tags, static_cast<int64_t>(std::time(nullptr)));
+  if (ev.empty()) return fail("the reply could not be signed");
+  if (event_id) *event_id = ascii_lower(json_str_field(json_top_level(ev), "id"));
+  return nostr_publish(ev);
 }
 
 #endif  // XANATOO_NOSTR

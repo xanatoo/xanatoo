@@ -1255,6 +1255,38 @@ void test_nostr_content() {
   EXPECT_EQ(mentioned.size(), size_t(1));
 }
 
+void test_nostr_reply_tags() {
+  using namespace xanatoo;
+  const std::string a(64, 'a'), b(64, 'b'), c(64, 'c'), me(64, 'd');
+  const std::string root(64, '1'), mid(64, '2'), parent(64, '3');
+  using Tags = std::vector<std::vector<std::string>>;
+  // Reply to a thread's first note: one e tag marked root.
+  Tags t = nostr_reply_tags(root, a, {}, "wss://r", me);
+  EXPECT_EQ(t.size(), size_t(2));
+  if (t.size() == 2) {
+    EXPECT(t[0] == (std::vector<std::string>{"e", root, "wss://r", "root", a}));
+    EXPECT(t[1] == (std::vector<std::string>{"p", a}));
+  }
+  // Reply to a reply (marked tags): root from its root tag, it as "reply",
+  // its author and its p tags, never ourselves, no duplicates.
+  t = nostr_reply_tags(parent, b,
+                       {{"e", root, "", "root"}, {"e", mid, "", "reply"},
+                        {"p", a}, {"p", me}, {"p", b}, {"t", "x"}},
+                       "", me);
+  EXPECT_EQ(t.size(), size_t(4));
+  if (t.size() == 4) {
+    EXPECT(t[0] == (std::vector<std::string>{"e", root, "", "root"}));
+    EXPECT(t[1] == (std::vector<std::string>{"e", parent, "", "reply", b}));
+    EXPECT(t[2] == (std::vector<std::string>{"p", b}));
+    EXPECT(t[3] == (std::vector<std::string>{"p", a}));
+  }
+  // Deprecated positional tags: the first e tag is the root.
+  t = nostr_reply_tags(parent, c, {{"e", root}, {"e", mid}}, "", me);
+  EXPECT(!t.empty() && t[0][1] == root && t[0][3] == "root");
+  EXPECT(t.size() > 1 && t[1][1] == parent && t[1][3] == "reply");
+  EXPECT(nostr_reply_tags("xyz", a, {}).empty());
+}
+
 void test_nostr_local_cache() {
   using namespace xanatoo;
   namespace fs = std::filesystem;
@@ -9492,6 +9524,7 @@ int main() {
   test_gemini_urls();
   test_nostr_refs();
   test_nostr_content();
+  test_nostr_reply_tags();
   test_nostr_local_cache();
   test_parse_markup();
   test_parse_unclaimed_block_lines();

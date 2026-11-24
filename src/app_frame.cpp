@@ -388,6 +388,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.reply_page = app.reply.page;
   ui_state.reply_label = app.reply.label;
   ui_state.reply_text = app.reply.text;
+  reply_ui_state(app, ui_state);
   if (app.reply.open) {
     auto [x, y, w, h] = float_client_rect(app, app.reply_win);
     ui_state.reply_x = x;
@@ -1097,6 +1098,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.reply.label = message.label;
       app.reply.author = message.src;
       app.reply.text.clear();
+      if (!app.nostr_reply.pending) app.nostr_reply.status.clear();
       app.reply.anchor_y = app.context_reply_y;
       ++app.reply.generation;
       app.reply_win.scroll = 0.f;
@@ -1109,10 +1111,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       if (app.reply.open) app.reply.text = arg;
       break;
     case C::SendReply:
-      if (app.reply.open)
-        flash_status(app, app.reply.text.empty()
-                              ? "Enter a reply before sending"
-                              : "Reply mockup: not sent (no account connected)");
+      if (app.reply.open) {
+        if (!arg.empty()) app.reply.text = arg;
+        send_reply(app);
+      }
       break;
     case C::Quit:
       if (stash_all_or_confirm(app)) app.running = false;

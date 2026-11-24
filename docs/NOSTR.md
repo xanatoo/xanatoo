@@ -138,7 +138,13 @@ five default relays in parallel (`nostr_publish`), each answer (NIP-01
 `OK`) listed per relay. An accepted note goes into the local cache and can
 be opened with View note.
 
-Not yet: replies (the Reply panel is still a mock), NIP-46 remote signers,
+**Replies:** right-click a note → Reply… posts a kind-1 reply as the
+unlocked active account, with NIP-10 marked `e` tags (`root`, `reply`) and
+`p` tags for the thread's people (`nostr_reply_tags`, `nostr_reply`); see
+`docs/REPLIES.md`. Replies to other event kinds (NIP-22 comments) are
+refused for now.
+
+Not yet: NIP-46 remote signers,
 relay preferences (NIP-65), profile editing (kind 0), follow lists
 (kind 3), deletion requests (kind 5), private messages.
 

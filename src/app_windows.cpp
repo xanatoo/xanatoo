@@ -1180,7 +1180,7 @@ void draw_floats(App& app) {
         draw_media_panel(app);
         break;
       case WindowRole::Reply:
-        if (draw_floating_frame(app, *w, "Reply (mockup)", float_active(app, *w)))
+        if (draw_floating_frame(app, *w, reply_is_nostr(app) ? "Reply" : "Reply (mockup)", float_active(app, *w)))
           app.ui.render_embedded_panel(app.sdl, xanatoo::UiPanelLayer::Reply);
         break;
       case WindowRole::Annotations:

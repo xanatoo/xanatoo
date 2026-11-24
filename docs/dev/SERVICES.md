@@ -293,12 +293,15 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   the session only (wiped on lock). `nostr_publish` (nostr.cpp) sends
   `["EVENT",…]` to `nostr_publish_relays()` in parallel and collects `OK`;
   the panel posts on a detached worker (`NostrPostJob`, polled by
-  `update_nostr_post`). Explorer also has a NIP-29
+  `update_nostr_post`). Reply panel: `send_reply` (app_identity.cpp) runs
+  `nostr_reply` (parent from `nostr_cached_event_json` or relays by id,
+  `nostr_reply_tags` NIP-10, sign, publish) on `App::nostr_reply`; success
+  refetches the page. Explorer also has a NIP-29
   Groups tab, with `(relay,group ID)` identity, `kind:39000` metadata and
   `h`-tagged event counts. `nostr:groups@wss://relay` discovers public group
   metadata; clicking a group opens its relay-specific timeline. NIP-11 relay
   master-key binding, membership and private groups remain unimplemented.
-  Posting is kind-1 notes only; replies, NIP-46 and NIP-65 are open.
+  Posting is kind-1 notes and replies to kind-1; NIP-22, NIP-46, NIP-65 open.
 - Opens `note1` / `nevent1` / `nostr:…` / 64-hex via Ctrl+L → Thread+Message layout.
 - `npub1` / `nprofile1` open the author's profile + recent notes. Message
   headers link the author (`nostr:npub1…`) and date (`nostr:note1…`) via

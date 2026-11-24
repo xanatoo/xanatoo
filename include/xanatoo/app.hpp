@@ -1169,6 +1169,8 @@ struct IdentityPanel {
 struct NostrPostJob {
   std::atomic<bool> done{false};
   std::vector<xanatoo::NostrPublishResult> results;
+  std::string event_id;  // set by a reply worker (it signs there)
+  std::string error;     // why it never reached the relays
 };
 
 // The last note posted from the Nostr tab and what the relays said.
@@ -1399,6 +1401,7 @@ struct App {
   std::vector<xanatoo::NostrKey> nostr_keys;
   std::unordered_map<std::string, std::string> nostr_unlocked;
   NostrPost nostr_post;
+  NostrPost nostr_reply;  // a Reply panel answer to a Nostr note
   std::string revision_document_key;
   std::string revision_working, revision_published, revision_selected;
   std::vector<xanatoo::ObjectRevision> revision_history;
@@ -1666,8 +1669,14 @@ struct App {
 void refresh_nostr_catalogue(App& app);
 // Just the saved accounts and the active one (Identities panel).
 void refresh_nostr_identities(App& app);
-// Collect relay answers to a note being posted (each frame).
+// Collect relay answers to a note or reply being posted (each frame).
 void update_nostr_post(App& app);
+// The Reply panel's target is a Nostr note (an event id on a nostr: page).
+bool reply_is_nostr(const App& app);
+// Reply panel Send: posts to Nostr as the unlocked active account, else
+// says why it cannot (other services: the panel is still a mockup).
+void send_reply(App& app);
+void reply_ui_state(App& app, xanatoo::UiState& st);
 
 // Write state_dir()/session.conf (at shutdown); restore it at startup when
 // no document was named on the command line; put the saved scroll back once

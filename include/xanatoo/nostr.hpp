@@ -54,6 +54,16 @@ void nostr_append_content(Document& doc, NodeId parent, std::string_view content
 // Hex pubkeys of the nostr:npub1… / nostr:nprofile1… mentions in a note.
 std::vector<std::string> nostr_mentioned_pubkeys(std::string_view content);
 
+// NIP-10 tags for a kind-1 reply to the event (`parent_id`, by
+// `parent_pubkey`, with `parent_tags`): marked "root" / "reply" e tags (the
+// root from the parent's own root tag, else its first e tag, else the parent
+// itself) and p tags for the parent's author and everyone it tagged, without
+// `self`. `relay_hint` is where the parent was seen (may be empty).
+std::vector<std::vector<std::string>> nostr_reply_tags(
+    std::string_view parent_id, std::string_view parent_pubkey,
+    const std::vector<std::vector<std::string>>& parent_tags,
+    std::string_view relay_hint = {}, std::string_view self = {});
+
 // What one relay said to a published event (nostr_publish).
 struct NostrPublishResult {
   std::string relay;
@@ -76,6 +86,16 @@ std::optional<Document> nostr_fetch_thread(std::string_view ref,
 std::vector<std::string> nostr_publish_relays();
 std::vector<NostrPublishResult> nostr_publish(std::string_view event_json,
                                               std::vector<std::string> relays = {});
+
+// A kind-1 reply to event `parent_id` as `secret_hex` (blocking): finds the
+// parent in the cache or on relays, tags it (nostr_reply_tags plus the
+// text's mentions), signs and publishes. Empty results with *err set when
+// it never got as far as the relays; *event_id gets the reply's id.
+std::vector<NostrPublishResult> nostr_reply(std::string_view parent_id,
+                                            std::string_view text,
+                                            const std::string& secret_hex,
+                                            std::string* event_id,
+                                            std::string* err);
 #endif
 
 }  // namespace xanatoo
