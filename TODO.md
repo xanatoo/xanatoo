@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Android development commands
+
+- Added Linux development shell commands to build and install the Android
+  APK through the existing flake pipeline. Renamed the installer app to
+  `install-xanatoo-android`.
+- Verified the APK dry run and installer command routing. No device install
+  was performed.
+
 ## Status (2026-11-25) — Press feedback
 
 - Held panel titles darken and take a sunken bevel. Pending touchscreen

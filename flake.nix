@@ -304,7 +304,7 @@
           default = run;
           xanatoo = run;
         } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
-          install-android-xanatoo = (androidFor system).installApp;
+          install-xanatoo-android = (androidFor system).installApp;
         } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           xanatoo-wasm = (import ./nix/wasm.nix {
             pkgs = import nixpkgs { inherit system; };
@@ -319,6 +319,15 @@
           pkgs = import nixpkgs { inherit system; };
           # Main package for inputsFrom (pulls buildInputs into the shell).
           pkg = self.packages.${system}.xanatoo-unwrapped;
+
+          isLinux = pkgs.stdenv.hostPlatform.isLinux;
+          androidHelper = name: action: pkgs.writeShellScriptBin name ''
+            if [ -z "''${XANATOO_SOURCE:-}" ]; then
+              echo "$0: XANATOO_SOURCE is not set (enter the shell with: nix develop)" >&2
+              exit 1
+            fi
+            exec nix ${action} "$XANATOO_SOURCE#${name}" "$@"
+          '';
 
           dejavuFont =
             "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
@@ -473,6 +482,9 @@ except Exception:
               xanatooRunGdb
               xanatooTest
               pandoc  # EPUB → Markdown import (optional at runtime)
+            ] ++ pkgs.lib.optionals isLinux [
+              (androidHelper "xanatoo-android" "build")
+              (androidHelper "install-xanatoo-android" "run")
             ];
             CMAKE_BUILD_TYPE = "Debug";
             shellHook = ''
@@ -501,7 +513,10 @@ xanatoo — nix develop (out-of-tree CMake)
     xanatoo-build       reconfigure if cache missing / source path changed, then ninja
     xanatoo-run         build, then run the unwrapped binary (args forwarded)
     xanatoo-run-gdb     build, then gdb auto-run (quit on exit 0; stay on crash)
-    xanatoo-test        build, then xanatoo_tests / ctest
+    xanatoo-test        build, then xanatoo_tests / ctest${pkgs.lib.optionalString isLinux ''
+
+    ${"    "}xanatoo-android           build the Android APK
+    ${"    "}install-xanatoo-android   build and install the APK on a connected device''}
 
   One-shot from outside:
     nix develop -c xanatoo-run examples/welcome.md

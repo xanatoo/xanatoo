@@ -38,8 +38,11 @@ ports, the SDL3 transition and Android.
 
 ## Android
 
-- `nix build .#xanatoo-android` (ndk-build pipeline from Kurvenrausch;
-  `nix/android.nix`, `mk/android/`). See `docs/ANDROID.md`.
+- On Linux, `nix develop -c xanatoo-android` builds the APK through the
+  `xanatoo-android` flake package, and
+  `nix develop -c install-xanatoo-android` runs the flake installer. The
+  ndk-build pipeline lives in `nix/android.nix` and `mk/android/`. See
+  `docs/ANDROID.md`.
 - Built with `XANATOO_FONTCONFIG=0`, SQLite (amalgamation) and the network
   clients on Mbed TLS; keep code compiling with `-DXANATOO_FONTCONFIG=OFF`
   and `-DXANATOO_TLS=mbedtls` (desktop CMake accepts both). New `src/*.cpp`

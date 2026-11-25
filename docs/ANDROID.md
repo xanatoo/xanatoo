@@ -1,8 +1,17 @@
 # Android port
 
+On Linux, the development shell provides both commands:
+
 ```sh
-nix build .#xanatoo-android          # result/xanatoo-0.1.0.apk
-nix run .#install-android-xanatoo    # adb install -r
+nix develop -c xanatoo-android          # Build the APK
+nix develop -c install-xanatoo-android  # Build and install with adb install -r
+```
+
+You can also call the flake outputs directly:
+
+```sh
+nix build .#xanatoo-android
+nix run .#install-xanatoo-android
 ```
 
 Same pipeline as Kurvenrausch / Pingus (`nix/android.nix`, `mk/android/`):
