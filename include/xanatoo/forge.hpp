@@ -27,6 +27,7 @@ struct ForgeRef {
 struct GitFile {
   std::string url;
   std::string filename;
+  std::string_view request_headers{};
 };
 
 bool is_git_ref(std::string_view url);

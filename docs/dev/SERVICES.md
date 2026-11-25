@@ -497,6 +497,9 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
 - `parse_git_ref` in `forge.cpp` maps `git:github.com/OWNER/REPO?path=PATH&ref=REVISION`
   and `git:gitlab.com/GROUP/PROJECT?path=PATH&ref=REVISION` to the same raw
   endpoints as the forge browsers. An omitted revision uses `HEAD`.
+- GitHub and GitLab addresses also accept `?blob=SHA` with a full SHA-1.
+  The SHA is the download filename. GitHub uses the Git blobs endpoint
+  with the raw Accept media type. GitLab uses its raw blob endpoint.
 - `git:radicle/SEED/rad:RID?path=PATH&ref=COMMIT` uses the HTTPS seed's
   `/raw/` endpoint and requires a full commit SHA.
 - Fetch routing offers the standard download prompt and streams the raw

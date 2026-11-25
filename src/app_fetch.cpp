@@ -592,7 +592,8 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
         out->error = "Open the raw file as a download.";
       } else if (out->force_download) {
         xanatoo::web_fetch(file->url, &out->error, nullptr, nullptr, nullptr,
-                          out->download.get(), nullptr, true, nullptr, file->filename);
+                          out->download.get(), nullptr, true, nullptr, file->filename,
+                          file->request_headers);
       } else {
         out->download->name = file->filename;
         out->download->offered.store(true, std::memory_order_release);

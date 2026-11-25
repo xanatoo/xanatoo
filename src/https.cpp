@@ -518,9 +518,12 @@ bool stream_raw(const std::string& url, std::string_view agent,
   }
   HttpConnection conn;
   if (!conn.open(*parsed, err)) return false;
+  const bool custom_accept = ascii_lower(extra_headers).find("accept:") !=
+      std::string::npos;
   const std::string req = "GET " + parsed->target + " HTTP/1.1\r\nHost: " + parsed->authority +
       "\r\nUser-Agent: " + std::string(agent) +
-      "\r\nAccept: */*\r\nAccept-Language: " + accept_language() +
+      (custom_accept ? "\r\n" : "\r\nAccept: */*\r\n") +
+      "Accept-Language: " + accept_language() +
       "\r\nAccept-Encoding: identity\r\n" + std::string(extra_headers) +
       "Connection: close\r\n\r\n";
   if (!conn.write_all(req.data(), req.size())) {

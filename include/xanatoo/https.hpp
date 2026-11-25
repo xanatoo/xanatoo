@@ -63,7 +63,7 @@ using HttpHeaderCallback = std::function<bool(const HttpStreamHeaders&)>;
 using HttpBodyCallback = std::function<bool(std::string_view)>;
 
 // `extra_headers`: full header lines ending with "\r\n" ("Range: bytes=10-\r\n");
-// the browser build (https_wasm.cpp) ignores them.
+// the browser build forwards only its allowed request headers.
 bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,

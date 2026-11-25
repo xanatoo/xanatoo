@@ -42,6 +42,17 @@ tag, or commit SHA. Radicle requires an HTTPS seed serving the repository
 and a full 40-digit commit SHA. Percent-encode special characters in query
 values, for example `%20` for a space and `%23` for a hash.
 
+GitHub and GitLab also accept a full, 40-digit Git blob SHA in place of
+the path and revision. The download is named after the SHA. The same bytes
+can appear under different filenames and revisions.
+
+- [GitHub blob](git:github.com/git/git?blob=665ce5f5a83647619fba9157fa9b0141ae8b228b)
+- [GitLab blob](git:gitlab.com/gitlab-org/gitlab?blob=b0400317536e10b7c8895572f5b850693a113f16)
+
+For content-addressed storage, keep the blob reachable from a branch or tag
+so the host can continue serving it. Use `git hash-object FILE` in a SHA-1
+repository to calculate the Git blob ID.
+
 ## News and forums
 
 - [Hacker News](hn:) · [new](hn:newest) · [Ask HN](hn:ask) · [Show HN](hn:show)

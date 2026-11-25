@@ -424,7 +424,8 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   WebPagesFile* pages,
                                   bool force_download,
                                   HttpStreamHeaders* response,
-                                  std::string_view download_name) {
+                                  std::string_view download_name,
+                                  std::string_view request_headers) {
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
       "; +https://github.com/xanatoo/xanatoo)";
@@ -512,7 +513,7 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
           body_bytes.append(bytes);
         }
         return true;
-      }, err, &fin);
+      }, err, &fin, request_headers);
   if (!ok) {
     if (download && downloading) {
       download->error = err ? *err : "download failed";

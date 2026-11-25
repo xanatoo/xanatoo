@@ -973,6 +973,30 @@ static void test_git_refs() {
   EXPECT(!parse_git_ref("git:unknown.example/owner/repo?path=README.md"));
 }
 
+static void test_git_blob_refs() {
+  const auto github = parse_git_ref(
+      "git:github.com/git/git.git?blob=665CE5F5A83647619FBA9157FA9B0141AE8B228B");
+  EXPECT(github.has_value());
+  if (github) {
+    EXPECT_EQ(github->filename, "665ce5f5a83647619fba9157fa9b0141ae8b228b");
+    EXPECT_EQ(github->url, "https://api.github.com/repos/git/git/git/blobs/"
+                           "665ce5f5a83647619fba9157fa9b0141ae8b228b");
+    EXPECT_EQ(github->request_headers, "Accept: application/vnd.github.raw+json\r\n");
+  }
+  EXPECT(web_url_for("git:github.com/git/git?blob=665ce5f5a83647619fba9157fa9b0141ae8b228b")
+             .empty());
+  EXPECT_EQ(web_url_for("git:gitlab.com/group/sub/project?blob=b0400317536e10b7c8895572f5b850693a113f16"),
+            "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproject/repository/blobs/"
+            "b0400317536e10b7c8895572f5b850693a113f16/raw");
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?blob="));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?blob=665ce5f"));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?blob=665ce5f5a83647619fba9157fa9b0141ae8b228z"));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?blob=665ce5f5a83647619fba9157fa9b0141ae8b228b&ref=HEAD"));
+  EXPECT(!parse_git_ref("git:gitlab.com/group/repo?path=README.md&blob=b0400317536e10b7c8895572f5b850693a113f16"));
+  EXPECT(!parse_git_ref("git:gitlab.com/group/repo?blob=b0400317536e10b7c8895572f5b850693a113f16&blob=HEAD"));
+  EXPECT(!parse_git_ref("git:radicle/seed.example/rad:zabc?blob=b0400317536e10b7c8895572f5b850693a113f16"));
+}
+
 static void test_forge_refs() {
   const auto& engines = builtin_engines();
   EXPECT_EQ(engine_for_address("github:owner/repo", engines), "github");
@@ -1061,6 +1085,7 @@ void test_forums(int& passed, int& failed) {
   test_service_bars();
   test_forge_refs();
   test_git_refs();
+  test_git_blob_refs();
   passed += g_passed;
   failed += g_failed;
 }

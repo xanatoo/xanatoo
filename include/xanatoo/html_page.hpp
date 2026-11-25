@@ -78,7 +78,8 @@ std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   WebPagesFile* pages = nullptr,
                                   bool force_download = false,
                                   HttpStreamHeaders* response = nullptr,
-                                  std::string_view download_name = {});
+                                  std::string_view download_name = {},
+                                  std::string_view request_headers = {});
 #endif
 
 }  // namespace xanatoo

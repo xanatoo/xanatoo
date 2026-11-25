@@ -114,7 +114,8 @@ std::string web_url_for(std::string_view ref) {
     return "https://" + std::string(after_prefix(ref, kLemmyPrefix));
   if (auto r = parse_youtube_ref(ref)) return youtube_web_url(*r);
   if (auto r = parse_video_site_ref(ref)) return video_site_web_url(*r);
-  if (auto file = parse_git_ref(ref)) return file->url;
+  if (auto file = parse_git_ref(ref); file && file->request_headers.empty())
+    return file->url;
   if (auto r = parse_forge_ref(ref)) return forge_web_url(*r);
   if (auto r = parse_ia_ref(ref)) return ia_web_url(*r);
   if (auto r = parse_forum_ref(ref)) return forum_web_url(*r);

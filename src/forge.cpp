@@ -44,6 +44,11 @@ bool safe_path(std::string_view path, bool project = false) {
   return true;
 }
 
+bool is_sha1(std::string_view value) {
+  return value.size() == 40 &&
+      value.find_first_not_of("0123456789abcdefABCDEF") == value.npos;
+}
+
 std::string prefix(const ForgeRef& ref) { return ref.github ? "github:" : "gitlab:"; }
 
 std::string origin(const ForgeRef& ref) {
@@ -361,7 +366,7 @@ std::optional<GitFile> parse_git_ref(std::string_view url) {
   const auto repository = take(address, '?');
   std::string_view project = repository;
   const auto provider = take(project);
-  std::string path, revision;
+  std::string path, revision, blob;
   while (!address.empty()) {
     const auto field = take(address, '&');
     std::string_view value = field;
@@ -370,9 +375,9 @@ std::optional<GitFile> parse_git_ref(std::string_view url) {
     if (!safe_path(decoded)) return std::nullopt;
     if (key == "path" && path.empty()) path = std::move(decoded);
     else if (key == "ref" && revision.empty()) revision = std::move(decoded);
+    else if (key == "blob" && blob.empty()) blob = std::move(decoded);
     else return std::nullopt;
   }
-  if (path.empty()) return std::nullopt;
 
   if (provider == "github.com" || provider == "gitlab.com") {
     const bool github = provider == "github.com";
@@ -383,6 +388,15 @@ std::optional<GitFile> parse_git_ref(std::string_view url) {
     ref.github = github;
     ref.view = View::Raw;
     ref.project = project;
+    if (!blob.empty()) {
+      if (!path.empty() || !revision.empty() || !is_sha1(blob)) return std::nullopt;
+      blob = ascii_lower(std::move(blob));
+      if (github)
+        return GitFile{api_base(ref) + "/git/blobs/" + blob, blob,
+                       "Accept: application/vnd.github.raw+json\r\n"};
+      return GitFile{api_base(ref) + "/repository/blobs/" + blob + "/raw", blob};
+    }
+    if (path.empty()) return std::nullopt;
     ref.path = std::move(path);
     ref.revision = std::move(revision);
     return GitFile{forge_raw_url(ref), forge_filename(ref)};
@@ -394,8 +408,7 @@ std::optional<GitFile> parse_git_ref(std::string_view url) {
     if (!host || !starts_with(project, "rad:z") || project.size() <= 5 ||
         project.substr(5).find_first_not_of(
             "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz") != project.npos ||
-        revision.size() != 40 ||
-        revision.find_first_not_of("0123456789abcdefABCDEF") != revision.npos)
+        !is_sha1(revision) || path.empty() || !blob.empty())
       return std::nullopt;
     return GitFile{"https://" + host->authority + "/raw/" + std::string(project) +
                        "/" + revision + "/" + encoded_path(path),

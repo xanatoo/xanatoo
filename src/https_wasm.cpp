@@ -182,8 +182,8 @@ bool https_get_follow_stream(std::string_view url, std::string_view agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
                              std::string* err, std::string* final_url,
-                             std::string_view) {
-  auto r = https_get(url, agent, err);
+                             std::string_view extra_headers) {
+  auto r = https_request("GET", url, agent, extra_headers, {}, err);
   if (!r) return false;
   if (final_url) *final_url = std::string(url);
   HttpStreamHeaders h;
