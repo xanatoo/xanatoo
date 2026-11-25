@@ -3256,24 +3256,41 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                              ImGuiTabBarFlags_FittingPolicyScroll |
                                  ImGuiTabBarFlags_Reorderable |
                                  ImGuiTabBarFlags_DrawSelectedOverline)) {
-        // ImGui retains drag order; apply application-side sorting before layout.
-        if (tab_submitted_ids_ != state.tab_ids) {
-          if (ImGuiTabBar* bar = ImGui::GetCurrentTabBar()) {
-            std::vector<ImGuiID> ids;
-            for (uint32_t bid : state.tab_ids)
-              ids.push_back(ImGui::GetID(("###tab" + std::to_string(bid)).c_str()));
-            if (bar->Tabs.Size > 1)
-              std::stable_sort(bar->Tabs.Data, bar->Tabs.Data + bar->Tabs.Size,
-                               [&](const ImGuiTabItem& a, const ImGuiTabItem& b) {
-                return std::find(ids.begin(), ids.end(), a.ID) <
-                       std::find(ids.begin(), ids.end(), b.ID);
-              });
+        ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
+        bar->GroupSpacing = 8.f * scale_;
+        std::unordered_map<ImGuiID, size_t> tab_indices;
+        for (size_t i = 0; i < state.tab_ids.size(); ++i) {
+          const ImGuiID id =
+              ImGui::GetID(("###tab" + std::to_string(state.tab_ids[i])).c_str());
+          tab_indices.emplace(id, i);
+        }
+        size_t known_tabs = 0;
+        for (ImGuiTabItem& tab : bar->Tabs) {
+          if (const auto it = tab_indices.find(tab.ID); it != tab_indices.end()) {
+            ++known_tabs;
+            tab.GroupId = it->second < state.tab_roots.size()
+                              ? state.tab_roots[it->second] : 0;
           }
-          tab_submitted_ids_ = state.tab_ids;
+        }
+        // Newly submitted items enter ImGui's list after layout. Wait until
+        // they are all registered before accepting a drag order from ImGui.
+        const bool tabs_registered = known_tabs == state.tab_ids.size();
+        if (tab_submitted_ids_ != state.tab_ids) {
+          if (bar->Tabs.Size > 1) {
+            const auto index = [&](ImGuiID id) {
+              const auto it = tab_indices.find(id);
+              return it == tab_indices.end() ? state.tab_ids.size() : it->second;
+            };
+            std::stable_sort(bar->Tabs.begin(), bar->Tabs.end(),
+                             [&](const ImGuiTabItem& a, const ImGuiTabItem& b) {
+              return index(a.ID) < index(b.ID);
+            });
+          }
+          bar->ReorderRequestTabId = 0;
+          if (tabs_registered) tab_submitted_ids_ = state.tab_ids;
         }
         const bool force_sel = tab_force_select_;
         tab_force_select_ = false;
-        ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
         for (int i = 0; i < static_cast<int>(state.tab_labels.size()); ++i) {
           // One-shot SetSelected when main changed active_tab (Next/Prev tab).
           // Continuous SetSelected fights ImGui clicks → flicker / stacked docs.
@@ -3449,7 +3466,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           ImGui::PopID();
         }
         if (ImGuiTabBar* tb = ImGui::GetCurrentTabBar();
-            tb && cmd == UiCommand::None && !result.tab_drag_out &&
+            tb && tabs_registered && cmd == UiCommand::None && !result.tab_drag_out &&
             tab_tear_id_ == 0 &&
             static_cast<int>(tab_item_ids.size()) == tb->Tabs.Size) {
           std::string order;
@@ -3475,8 +3492,10 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         }
         ImGui::EndTabBar();
         // After main applies SelectTab/NextTab, active_tab changes → sync ImGui.
-        if (state.active_tab != tab_synced_active_) {
-          tab_synced_active_ = state.active_tab;
+        const uint32_t active_id =
+            state.tab_ids[static_cast<size_t>(state.active_tab)];
+        if (active_id != tab_synced_active_) {
+          tab_synced_active_ = active_id;
           tab_force_select_ = true;
         }
       }

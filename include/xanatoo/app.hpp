@@ -128,6 +128,7 @@ struct SummaryScan {
 
 struct DocBuffer {
   BufferId id = kNoBuffer;
+  BufferId tab_parent = kNoBuffer;  // Opener, independent of the current page
   xanatoo::Document doc;
   // Lists and stretches the reader folded / unfolded (fold.hpp); gone with `doc`.
   xanatoo::Folds folds;
@@ -1844,6 +1845,8 @@ void remove_buffer(App& app, BufferId id);
 // Close a tab: like remove_buffer, but keeps the buffer while a floating
 // window still shows it.
 void close_tab(App& app, BufferId id);
+void insert_tab(App& app, BufferId id, BufferId opener = kNoBuffer);
+BufferId tab_root(App& app, BufferId id);
 void pop_out_focused(App& app);
 // A tab dragged off the strip: its buffer moves into a window at (mx, my),
 // docked when that is a dock zone.

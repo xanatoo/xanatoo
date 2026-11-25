@@ -130,6 +130,7 @@ std::string session_text(App& app) {
       }
     }
   }
+  std::unordered_map<BufferId, size_t> saved_tabs;
   for (BufferId id : app.tab_order) {
     const DocBuffer* b = find_buf(app, id);
     if (!b || b->path.empty() || b->path.find('\n') != std::string::npos)
@@ -139,7 +140,17 @@ std::string session_text(App& app) {
     if (!is_in_app_remote_url(path) && fs::exists(path, ec) &&
         !fs::path(path).is_absolute())
       path = fs::absolute(path, ec).string();
+    saved_tabs.emplace(id, saved_tabs.size());
     out << "tab=" << path << "\n";
+  }
+  for (BufferId id : app.tab_order) {
+    const auto child = saved_tabs.find(id);
+    if (child == saved_tabs.end()) continue;
+    BufferId parent = buf(app, id).tab_parent;
+    while (parent != kNoBuffer && !saved_tabs.contains(parent))
+      parent = buf(app, parent).tab_parent;
+    if (parent != kNoBuffer)
+      out << "tabparent" << child->second << "=" << saved_tabs.at(parent) << "\n";
   }
   for (const std::string& v : app.visited)
     if (v.find('\n') == std::string::npos) out << "visit=" << v << "\n";
@@ -314,11 +325,28 @@ void restore_session(App& app) {
       for (const std::string& t : tabs)
         if (find_buffer(app, t) == kNoBuffer) open_link_in_tab(app, 0, t);
       std::vector<BufferId> order;
-      for (const std::string& t : tabs)
-        if (BufferId id = find_buffer(app, t);
-            id != kNoBuffer &&
-            std::find(order.begin(), order.end(), id) == order.end())
+      std::vector<BufferId> restored;
+      for (const std::string& t : tabs) {
+        const BufferId id = find_buffer(app, t);
+        restored.push_back(id);
+        if (id != kNoBuffer &&
+            std::find(order.begin(), order.end(), id) == order.end()) {
+          buf(app, id).tab_parent = kNoBuffer;
           order.push_back(id);
+        }
+      }
+      for (size_t i = 0; i < restored.size(); ++i) {
+        const auto* value = get("tabparent" + std::to_string(i));
+        if (!value || restored[i] == kNoBuffer) continue;
+        std::istringstream in(*value);
+        size_t index;
+        if (!(in >> index) || index >= restored.size()) continue;
+        const BufferId parent = restored[index];
+        BufferId ancestor = parent;
+        while (ancestor != kNoBuffer && ancestor != restored[i])
+          ancestor = buf(app, ancestor).tab_parent;
+        if (ancestor != restored[i]) buf(app, restored[i]).tab_parent = parent;
+      }
       for (BufferId id : app.tab_order)
         if (std::find(order.begin(), order.end(), id) == order.end())
           order.push_back(id);

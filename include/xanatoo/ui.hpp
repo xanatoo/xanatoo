@@ -803,6 +803,7 @@ struct UiState {
   std::vector<SDL_Texture*> bookmark_icons;
   // Tab strip (labels left→right); active_tab is index into tab_labels.
   std::vector<std::string> tab_labels;
+  std::vector<uint32_t> tab_roots;  // root opener of each tab tree
   std::vector<uint32_t> tab_ids;  // buffer id of each tab (stable ImGui ids)
   std::vector<SDL_Texture*> tab_icons;
   std::vector<uint8_t> tab_editable;  // 1: editable, unlocked (green tab)
@@ -1134,7 +1135,7 @@ private:
   // fighting click selection every frame (which caused flicker).
   bool tab_force_select_ = false;
   std::vector<uint32_t> tab_submitted_ids_;
-  int tab_synced_active_ = -1;
+  uint32_t tab_synced_active_ = 0;
   // Tab being dragged off the strip (buffer id, 0 = none) until release.
   uint32_t tab_tear_id_ = 0;
 };

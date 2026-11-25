@@ -9288,6 +9288,7 @@ bool    ImGui::BeginTabBarEx(ImGuiTabBar* tab_bar, const ImRect& tab_bar_bb, ImG
     tab_bar->PrevTabsContentsHeight = tab_bar->CurrTabsContentsHeight;
     tab_bar->CurrTabsContentsHeight = 0.0f;
     tab_bar->ItemSpacingY = g.Style.ItemSpacing.y;
+    tab_bar->GroupSpacing = 0.0f;
     tab_bar->FramePadding = g.Style.FramePadding;
     tab_bar->TabsActiveCount = 0;
     tab_bar->LastTabItemIdx = -1;
@@ -9355,6 +9356,11 @@ static float TabBarCalcScrollableWidth(ImGuiTabBar* tab_bar, ImGuiTabBarSection*
 
 // This is called only once a frame before by the first call to ItemTab()
 // The reason we're not calling it in BeginTabBar() is to leave a chance to the user to call the SetTabItemClosed() functions.
+static float TabBarItemSpacing(const ImGuiTabBar* bar, const ImGuiTabItem& left, const ImGuiTabItem& right)
+{
+    return GImGui->Style.ItemInnerSpacing.x + (left.GroupId != right.GroupId ? bar->GroupSpacing : 0.0f);
+}
+
 static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
 {
     ImGuiContext& g = *GImGui;
@@ -9461,7 +9467,9 @@ static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
 
         int section_n = TabItemGetSectionIdx(tab);
         ImGuiTabBarSection* section = &sections[section_n];
-        section->Width += tab->ContentWidth + (section_n == curr_section_n ? g.Style.ItemInnerSpacing.x : 0.0f);
+        section->Width += tab->ContentWidth;
+        if (section_n == curr_section_n)
+            section->Width += TabBarItemSpacing(tab_bar, tab[-1], *tab);
         curr_section_n = section_n;
 
         // Store data so we can build an array sorted by width if we need to shrink tabs down
@@ -9535,7 +9543,9 @@ static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
             ImGuiTabItem* tab = &tab_bar->Tabs[section_tab_index + tab_n];
             tab->Offset = tab_offset;
             tab->NameOffset = -1;
-            tab_offset += tab->Width + (tab_n < section->TabCount - 1 ? g.Style.ItemInnerSpacing.x : 0.0f);
+            tab_offset += tab->Width;
+            if (tab_n < section->TabCount - 1)
+                tab_offset += TabBarItemSpacing(tab_bar, *tab, tab[1]);
         }
         tab_bar->WidthAllTabs += ImMax(section->Width + section->Spacing, 0.0f);
         tab_offset += section->Spacing;
@@ -9773,8 +9783,10 @@ void ImGui::TabBarQueueReorderFromMousePos(ImGuiTabBar* tab_bar, ImGuiTabItem* s
         dst_idx = i;
 
         // Include spacing after tab, so when mouse cursor is between tabs we would not continue checking further tabs that are not hovered.
-        const float x1 = bar_offset + dst_tab->Offset - g.Style.ItemInnerSpacing.x;
-        const float x2 = bar_offset + dst_tab->Offset + dst_tab->Width + g.Style.ItemInnerSpacing.x;
+        const float before = i > 0 ? TabBarItemSpacing(tab_bar, dst_tab[-1], *dst_tab) : g.Style.ItemInnerSpacing.x;
+        const float after = i + 1 < tab_bar->Tabs.Size ? TabBarItemSpacing(tab_bar, *dst_tab, dst_tab[1]) : g.Style.ItemInnerSpacing.x;
+        const float x1 = bar_offset + dst_tab->Offset - before;
+        const float x2 = bar_offset + dst_tab->Offset + dst_tab->Width + after;
         //GetForegroundDrawList()->AddRect(ImVec2(x1, tab_bar->BarRect.Min.y), ImVec2(x2, tab_bar->BarRect.Max.y), IM_COL32(255, 0, 0, 255));
         if ((dir < 0 && mouse_pos.x > x1) || (dir > 0 && mouse_pos.x < x2))
             break;

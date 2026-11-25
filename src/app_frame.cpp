@@ -915,6 +915,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   }
   ui_state.tab_labels.clear();
   ui_state.tab_ids.clear();
+  ui_state.tab_roots.clear();
   ui_state.tab_icons.clear();
   ui_state.tab_editable.clear();
   ui_state.tab_service_color.clear();
@@ -923,6 +924,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     const BufferId bi = app.tab_order[static_cast<size_t>(ti)];
     ui_state.tab_labels.push_back(buffer_tab_label(app, bi));
     ui_state.tab_ids.push_back(bi);
+    ui_state.tab_roots.push_back(tab_root(app, bi));
     const DocBuffer* tab_buffer = find_buf(app, bi);
     ui_state.tab_icons.push_back(tab_buffer ? address_icon(app, tab_buffer->path) : nullptr);
     ui_state.tab_editable.push_back(buffer_takes_edits(app, bi) ? 1 : 0);

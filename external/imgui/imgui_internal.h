@@ -2616,7 +2616,7 @@ enum ImGuiTabItemFlagsPrivate_
     //ImGuiTabItemFlags_Unsorted                = 1 << 23,  // [Docking] Trailing tabs with the _Unsorted flag will be sorted based on the DockOrder of their Window.
 };
 
-// Storage for one active tab item (sizeof() 40 bytes)
+// Storage for one active tab item
 struct ImGuiTabItem
 {
     ImGuiID             ID;
@@ -2627,6 +2627,7 @@ struct ImGuiTabItem
     float               Width;                  // Width currently displayed
     float               ContentWidth;           // Width of label, stored during BeginTabItem() call
     float               RequestedWidth;         // Width optionally requested by caller, -1.0f is unused
+    ImGuiID             GroupId;                // Optional group for additional spacing at its boundary
     ImS32               NameOffset;             // When Window==NULL, offset to name within parent ImGuiTabBar::TabsNames
     ImS16               BeginOrder;             // BeginTabItem() order, used to re-order tabs after toggling ImGuiTabBarFlags_Reorderable
     ImS16               IndexDuringLayout;      // Index only used during TabBarLayout(). Tabs gets reordered so 'Tabs[n].IndexDuringLayout == n' but may mismatch during additions.
@@ -2669,6 +2670,7 @@ struct IMGUI_API ImGuiTabBar
     ImS16               TabsActiveCount;        // Number of tabs submitted this frame.
     ImS16               LastTabItemIdx;         // Index of last BeginTabItem() tab for use by EndTabItem()
     float               ItemSpacingY;
+    float               GroupSpacing;           // Extra horizontal spacing between different GroupIds
     ImVec2              FramePadding;           // style.FramePadding locked at the time of BeginTabBar()
     ImVec2              BackupCursorPos;
     ImGuiTextBuffer     TabsNames;              // For non-docking tab bar we re-append names in a contiguous buffer.

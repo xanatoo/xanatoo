@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Tab opener trees
+
+- Link tabs open next to their opener's branch and keep parent links in the
+  session. The horizontal strip adds a gap between unrelated trees.
+- Verified background middle-click, nested and sibling placement, group
+  spacing, session restore, and reparenting on close under Xvfb. The Nix
+  suite passed 14,889 checks.
+
 ## Status (2026-11-25) — Outline and Page Navigation keys
 
 - Up, Down, Home and End navigate the document as the panel selection moves.

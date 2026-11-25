@@ -1062,11 +1062,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
   app.visit_hint.reset();
   app.visit_from = 0;
   app.visit_resume = false;  // a new tab is a new visit
-  auto& order = app.tab_order;
-  if (std::find(order.begin(), order.end(), bi) == order.end()) {
-    auto cur = std::find(order.begin(), order.end(), app.panes[pi].buf);
-    order.insert(cur == order.end() ? cur : cur + 1, bi);
-  }
+  insert_tab(app, bi, app.panes[pi].buf);
   update_title(app);
   flash_status(app, "Opened in new tab: " + buf(app, bi).path);
 }

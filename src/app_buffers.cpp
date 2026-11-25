@@ -356,6 +356,35 @@ DocBuffer& buf(App& app, BufferId id) {
   return *b;
 }
 
+BufferId tab_root(App& app, BufferId id) {
+  while (const DocBuffer* b = find_buf(app, id)) {
+    if (b->tab_parent == kNoBuffer) break;
+    id = b->tab_parent;
+  }
+  return id;
+}
+
+void insert_tab(App& app, BufferId id, BufferId opener) {
+  auto& order = app.tab_order;
+  if (std::find(order.begin(), order.end(), id) != order.end()) return;
+  auto pos = std::find(order.begin(), order.end(), opener);
+  // A returning floating document can already have descendants.
+  BufferId ancestor = opener;
+  while (ancestor != kNoBuffer && ancestor != id)
+    ancestor = buf(app, ancestor).tab_parent;
+  if (opener != kNoBuffer && ancestor != id) buf(app, id).tab_parent = opener;
+  if (pos != order.end()) {
+    ++pos;
+    for (; pos != order.end(); ++pos) {
+      BufferId parent = buf(app, *pos).tab_parent;
+      while (parent != kNoBuffer && parent != opener)
+        parent = buf(app, parent).tab_parent;
+      if (parent != opener) break;
+    }
+  }
+  order.insert(pos, id);
+}
+
 // Drop `id` from the tab strip (keeping at least one tab) and repoint panes
 // that showed it at the neighbouring tab. The buffer itself is untouched.
 static void leave_tab(App& app, BufferId id) {
@@ -396,6 +425,9 @@ void remove_buffer(App& app, BufferId id) {
     app.soft_wins.erase(app.soft_wins.begin() +
                         static_cast<std::ptrdiff_t>(i));
   }
+  const BufferId parent = buf(app, id).tab_parent;
+  for (auto& b : app.buffers)
+    if (b.tab_parent == id) b.tab_parent = parent;
   leave_tab(app, id);
   app.buffers.erase(
       std::remove_if(app.buffers.begin(), app.buffers.end(),

@@ -103,6 +103,14 @@ by the displayed title (ignoring the unsaved marker). Bulk closes use
 `stash_or_confirm` for each buffer and stop if confirmation is needed.
 Application order changes are copied into ImGui before tab layout;
 the selected buffer stays selected. Tab menu items use the shared icon renderer.
+Opening a link in a new tab records the source buffer as its parent and inserts
+the tab after the opener's contiguous descendants. Blank tabs and documents
+opened independently start their own trees. The horizontal strip adds space
+between adjacent tabs with different roots. Dragging and title sorting change
+the strip order while preserving parent links. Removing a buffer reparents its
+children to its parent. Tear-off keeps the buffer and its parent links.
+The session stores parent links by saved tab position so they survive new buffer
+IDs. Older sessions restore their saved tabs as roots.
 The Services menu also uses that renderer, with icon names assigned alongside
 service targets in `app_frame.cpp`.
 The native document-window
