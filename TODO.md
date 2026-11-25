@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Two-finger gutter grabs
+
+- Route the second contact to the visible gutter first, including when the
+  first finger is on an embedded panel control or opened a touch menu.
+  Grab the tile gutter across the badge and diff track. Keep the divider
+  under the same grab offset during the drag. Match dock resize presses
+  to the full dock edge hit area at every UI scale.
+- Resolve equidistant gutters in screen order regardless of finger order.
+- Nix suite passed (14,797 checks). Touchscreen hardware remains untested.
+
 ## Status (2026-11-25) — Services menu icons
 
 - Added icons to service and directory rows and Open URL using the shared

@@ -801,9 +801,6 @@ bool float_press(App& app, int mx, int my) {
   auto st = float_stack(app);
   for (auto it = st.rbegin(); it != st.rend(); ++it) {
     FloatWindow* w = *it;
-    if (mx < w->x - help_edge || mx > w->x + w->w + help_edge ||
-        my < w->y - help_edge || my > w->y + w->h + help_edge)
-      continue;
     const bool inside = contains(*w, mx, my);
     // Free windows resize at any edge; docked ones at the inner edge.
     // This is also used by hover cursor feedback.

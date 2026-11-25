@@ -321,6 +321,13 @@ static bool follow_link_hit(App& app, const xanatoo::LinkHit& hit) {
   return false;
 }
 
+void tile_split_press(App& app, int x, int y) {
+  const SDL_Rect divider = tile_divider_rect(app);
+  app.split_drag_grab = app.tile_axis == TileAxis::Rows ? y - divider.y
+                                                      : x - divider.x;
+  app.dragging_split = true;
+}
+
 void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
     const int mxw = x, myw = y;
 
@@ -380,7 +387,7 @@ void pointer_left_down(App& app, int x, int y, bool imgui_mouse) {
         return;
       }
       if (within(tile_divider_rect(app), 2)) {
-        app.dragging_split = true;
+        tile_split_press(app, x, y);
         return;
       }
     }
@@ -1092,15 +1099,16 @@ void pointer_motion(App& app, int x, int y, bool imgui_mouse) {
         const int area_h = std::max(1, app.win_h - status_bar_h - area_y -
             static_cast<int>(app.ui_bottom) - dock_band_h(app, Dock::Bottom) -
             tile_gutter_size(app));
-        app.split_ratio = (app.mouse_y - static_cast<float>(area_y)) /
+        app.split_ratio = static_cast<float>(y - area_y - app.split_drag_grab) /
                           static_cast<float>(area_h);
         area_len = area_h;
       } else {
         // Ratio within the pane area (docked columns excluded).
         const int area_x = dock_column_w(app, Dock::Left);
         const int area_w = std::max(
-            1, app.win_w - area_x - dock_column_w(app, Dock::Right));
-        app.split_ratio = (app.mouse_x - static_cast<float>(area_x)) /
+            1, std::max(64, app.win_w - area_x - dock_column_w(app, Dock::Right)) -
+                   tile_gutter_size(app));
+        app.split_ratio = static_cast<float>(x - area_x - app.split_drag_grab) /
                           static_cast<float>(area_w);
         area_len = area_w;
       }

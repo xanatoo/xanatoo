@@ -863,8 +863,10 @@ public:
   // True when ImGui chrome (any window from the last frame, or an open popup)
   // owns window point (x, y). Unlike want_capture_mouse() this does not
   // depend on where the mouse was last frame, so touches can be routed.
+  // Touch can test the gutter beneath its own popup before dismissing it.
   bool captures_point(float x, float y,
-                      std::optional<UiPanelLayer> native_top = std::nullopt) const;
+                      std::optional<UiPanelLayer> native_top = std::nullopt,
+                      bool dismiss_popup = false) const;
   // The embedded panel body under (x, y), nullopt for chrome, popups (an open
   // one covers everything) or no ImGui window.
   std::optional<UiPanelLayer> panel_at(float x, float y) const;

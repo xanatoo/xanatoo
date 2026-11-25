@@ -681,7 +681,8 @@ struct Touch {
   Uint32 start_ticks = 0;
   bool on_float = false;
   bool on_image = false;  // `pane` shows a single gallery image
-  bool menu_open = false;  // the long press opened a context menu
+  bool menu_open = false;  // the first finger opened a menu
+  bool ui_moved = false;   // motion on ImGui chrome cancels the long press
   int pane = 0;
   // Pan velocity (scroll px/s) and the fling that continues it.
   float velocity = 0.f;
@@ -1295,6 +1296,7 @@ struct App {
   bool primary_sel_input = false;
   bool click_new_tab = false;  // middle-click in progress: panels open in a new tab
   bool dragging_split = false;
+  int split_drag_grab = 0;
   bool dragging_diff_overview = false;
   bool dragging_scroll = false;
   int page_slider_pane = -1;  // paged view whose bar slider is being dragged
@@ -2126,6 +2128,7 @@ void note_program_selection(App& app);
 
 // Left-button press / drag / release at window point (x, y); the mouse
 // handlers and touch taps share these (app_events.cpp).
+void tile_split_press(App& app, int x, int y);
 void pointer_left_down(App& app, int x, int y, bool imgui_mouse);
 void pointer_motion(App& app, int x, int y, bool imgui_mouse);
 void pointer_left_up(App& app, int x, int y);

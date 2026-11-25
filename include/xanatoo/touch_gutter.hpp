@@ -17,6 +17,11 @@ namespace xanatoo {
 template <class Hit>
 std::optional<std::pair<int, int>> segment_hit_near_middle(
     float x0, float y0, float x1, float y1, Hit&& hit) {
+  // Sample ties in a fixed screen direction regardless of press order.
+  if (x0 > x1 || (x0 == x1 && y0 > y1)) {
+    std::swap(x0, x1);
+    std::swap(y0, y1);
+  }
   const float len = std::hypot(x1 - x0, y1 - y0);
   const int half = static_cast<int>(std::ceil(len * 0.5f));
   const float mx = (x0 + x1) * 0.5f, my = (y0 + y1) * 0.5f;

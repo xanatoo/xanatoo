@@ -1768,14 +1768,15 @@ bool Ui::popup_open() const {
 }
 
 bool Ui::captures_point(float x, float y,
-                         std::optional<UiPanelLayer> native_top) const {
+                        std::optional<UiPanelLayer> native_top,
+                        bool dismiss_popup) const {
   if (!ready_) return false;
-  if (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId |
-                                 ImGuiPopupFlags_AnyPopupLevel))
-    return true;
+  if (!dismiss_popup && popup_open()) return true;
   ImGuiWindow* hovered = nullptr;
   ImGui::FindHoveredWindowEx(ImVec2(x, y), true, &hovered, nullptr);
-  return hovered && !ui_panel_obscured(ui_panel_layer(hovered->Name), native_top);
+  if (!hovered || (dismiss_popup && (hovered->Flags & ImGuiWindowFlags_Popup)))
+    return false;
+  return !ui_panel_obscured(ui_panel_layer(hovered->Name), native_top);
 }
 
 std::optional<UiPanelLayer> Ui::panel_at(float x, float y) const {

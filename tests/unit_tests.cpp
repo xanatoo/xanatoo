@@ -9419,6 +9419,10 @@ void test_touch_gutter_between() {
   g = segment_hit_near_middle(100.f, 0.f, 200.f, 0.f, two);
   EXPECT(g && g->first >= 160 && g->first < 162);
   EXPECT(!segment_hit_near_middle(100.f, 0.f, 200.f, 0.f, col(300, 310)));
+  const auto tied = [](int x, int) { return x == 130 || x == 170; };
+  g = segment_hit_near_middle(100.f, 0.f, 200.f, 0.f, tied);
+  EXPECT(g && g->first == 170);
+  EXPECT(g == segment_hit_near_middle(200.f, 0.f, 100.f, 0.f, tied));
   // A row gutter crossed vertically.
   g = segment_hit_near_middle(40.f, 10.f, 40.f, 90.f,
                               [](int, int y) { return y == 30; });

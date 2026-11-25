@@ -73,17 +73,21 @@ bool scroll_target(App& app, float dy) {
   return moved;
 }
 
-// A gutter a pointer press at (x, y) would drag: the tile divider (not its
-// mode badge), a split between docked panels or a dock's outer edge.
-bool gutter_at(App& app, int x, int y) {
-  const auto within = [&](const SDL_Rect& rc) {
-    return x >= rc.x && x < rc.x + rc.w && y >= rc.y && y < rc.y + rc.h;
-  };
-  if (app.split && within(tile_divider_rect(app)) &&
-      !within(tile_mode_button_rect(app)))
-    return true;
-  return dock_split_at(app, x, y) != DockSplitAxis::None ||
-         dock_edge_at(app, x, y);
+bool tile_gutter_at(const App& app, int x, int y) {
+  const SDL_Rect rc = tile_divider_rect(app);
+  return x >= rc.x && x < rc.x + rc.w && y >= rc.y && y < rc.y + rc.h;
+}
+
+enum class Gutter { None, DockSplit, DockEdge, Tile };
+
+Gutter gutter_at(App& app, int x, int y) {
+  if (dock_split_at(app, x, y) != DockSplitAxis::None)
+    return Gutter::DockSplit;
+  if (dock_edge_at(app, x, y)) return Gutter::DockEdge;
+  if (tile_gutter_at(app, x, y) &&
+      !float_at(app, x, y) && !float_resize_at(app, x, y))
+    return Gutter::Tile;
+  return Gutter::None;
 }
 
 // Drop what the first finger's press started (scrollbar, frame, split or
@@ -92,6 +96,19 @@ bool gutter_at(App& app, int x, int y) {
 void cancel_press(App& app) {
   app.dragging_sel = false;
   app.dragging_scroll = false;
+  app.dragging_diff_overview = false;
+  app.context_selecting = false;
+  app.quote_click = {};
+  app.dragging_image = false;
+  app.resize_image = xanatoo::INVALID_NODE;
+  app.dragging_block = false;
+  app.drag_block_id = xanatoo::INVALID_NODE;
+  app.drop_target_id = xanatoo::INVALID_NODE;
+  app.drop_line_y = -1.f;
+  app.dragging_col_gap = false;
+  app.col_gap_left = app.col_gap_right = xanatoo::INVALID_NODE;
+  page_pointer_up(app);
+  gallery_pointer_up(app);
   app.dragging_split = false;
   dock_split_release(app);
   for (FloatWindow* w : float_stack(app)) {
@@ -104,6 +121,14 @@ void cancel_press(App& app) {
   app.dock_preview = Dock::None;
 }
 
+// Dismiss a menu opened by the first finger when its gesture changes.
+void close_touch_menu(App& app) {
+  Touch& t = app.touch;
+  if (!t.menu_open) return;
+  app.ui.close_popups();
+  t.menu_open = false;
+}
+
 // Two fingers either side of a gutter: grab it at the point between them.
 // Whatever the first finger started gives way: it often lands on a pane
 // scrollbar or a panel frame right next to the gutter.
@@ -111,15 +136,20 @@ bool begin_gutter_drag(App& app) {
   Touch& t = app.touch;
   const TouchPoint& a = t.fingers[0];
   const TouchPoint& b = t.fingers[1];
+  Gutter gutter = Gutter::None;
   const auto g = segment_hit_near_middle(
       a.x, a.y, b.x, b.y, [&](int x, int y) {
-        return y >= app.ui_top && y < app.win_h - status_bar_h &&
+        if (y < app.ui_top || y >= app.win_h - status_bar_h)
+          return false;
+        gutter = gutter_at(app, x, y);
+        return gutter != Gutter::None &&
                !app.ui.captures_point(static_cast<float>(x),
                                       static_cast<float>(y),
-                                      float_layer_at(app, x, y)) &&
-               gutter_at(app, x, y);
+                                      float_layer_at(app, x, y), t.menu_open);
       });
   if (!g) return false;
+  close_touch_menu(app);
+  app.ui.touch_long_press(false);
   if (t.mode == TouchMode::Direct || t.mode == TouchMode::Select)
     cancel_press(app);
   t.flinging = false;
@@ -128,7 +158,13 @@ bool begin_gutter_drag(App& app) {
   t.gutter_dx = static_cast<float>(g->first) + 0.5f - mx;
   t.gutter_dy = static_cast<float>(g->second) + 0.5f - my;
   t.mode = TouchMode::GutterDrag;
-  pointer_left_down(app, g->first, g->second, false);
+  const auto [x, y] = *g;
+  switch (gutter) {
+    case Gutter::DockSplit: dock_split_press(app, x, y); break;
+    case Gutter::DockEdge: float_press(app, x, y); break;
+    case Gutter::Tile: tile_split_press(app, x, y); break;
+    case Gutter::None: break;
+  }
   return true;
 }
 
@@ -152,6 +188,7 @@ void begin_gesture(App& app, float x, float y) {
   t.on_float = false;
   t.on_image = false;
   t.menu_open = false;
+  t.ui_moved = false;
   const int xi = static_cast<int>(x), yi = static_cast<int>(y);
   if (app.ui.captures_point(x, y, float_layer_at(app, xi, yi)) ||
       y < app.ui_top) {
@@ -192,11 +229,13 @@ void begin_gesture(App& app, float x, float y) {
     return xi >= rc.x - pad && xi < rc.x + rc.w + pad &&
            yi >= rc.y - pad && yi < rc.y + rc.h + pad;
   };
-  const bool on_gutter = (app.split && (within(divider, 3) || within(badge))) ||
-                         gutter_at(app, xi, yi);
+  const bool on_badge = app.split && within(badge);
+  const bool on_gutter = (app.split && within(divider, 3)) || on_badge ||
+                         gutter_at(app, xi, yi) != Gutter::None;
   if (on_scrollbar || on_gutter) {
     t.mode = TouchMode::Direct;
     pointer_left_down(app, xi, yi, false);
+    t.menu_open = on_badge && !float_resize_at(app, xi, yi);
     return;
   }
   t.mode = TouchMode::Pending;
@@ -211,14 +250,6 @@ void open_touch_menu(App& app) {
   // a menu item that opened under it.
   app.ui.touch_long_press(false);
   t.menu_open = true;
-}
-
-// The menu a long press opened is in the way of what the finger does next.
-void close_touch_menu(App& app) {
-  Touch& t = app.touch;
-  if (!t.menu_open) return;
-  app.ui.close_popups();
-  t.menu_open = false;
 }
 
 // Long press on pane text: select the word and open the context menu;
@@ -307,19 +338,17 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
   if (t.count == 1) {
     app.pointer_away = false;  // ImGui follows this finger again
     begin_gesture(app, x, y);
-  } else if (t.mode == TouchMode::UiHold) {
+    return;
+  }
+  if (t.mode == TouchMode::Ignored) return;
+  if (begin_gutter_drag(app)) return;
+  if (t.mode == TouchMode::UiHold) {
     t.mode = TouchMode::Ignored;  // two fingers on chrome: no right click
   } else if (t.mode == TouchMode::Direct && float_span_begin(app)) {
-    t.mode = TouchMode::FloatSpan;  // a free window's title held: span it
-  } else if (t.mode == TouchMode::Pending || t.mode == TouchMode::Hold ||
-             t.mode == TouchMode::Pan || t.mode == TouchMode::Image ||
-             t.mode == TouchMode::Select || t.mode == TouchMode::Direct) {
+    t.mode = TouchMode::FloatSpan;
+  } else if (t.mode != TouchMode::Select && t.mode != TouchMode::Direct) {
     close_touch_menu(app);
-    // The gutter comes first, whichever side touched down first and
-    // whatever that finger began; only then a pinch (not for a press).
-    if (!begin_gutter_drag(app) && t.mode != TouchMode::Select &&
-        t.mode != TouchMode::Direct)
-      begin_pinch(app);
+    begin_pinch(app);
   }
 }
 
@@ -338,7 +367,7 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
   switch (t.mode) {
     case TouchMode::UiHold:  // ImGui drags it (a slider, a tab, a scroll)
       if (std::hypot(x - t.start_x, y - t.start_y) >= kSlopPx)
-        t.mode = TouchMode::Ignored;
+        t.ui_moved = true;
       break;
     case TouchMode::Hold:  // the menu is open: wait for the lift
       break;
@@ -516,7 +545,8 @@ void update_touch(App& app) {
   const Uint32 now = xanatoo::sdl::ticks();
   if (t.mode == TouchMode::Pending && now - t.start_ticks >= kLongPressMs)
     begin_select(app);
-  if (t.mode == TouchMode::UiHold && now - t.start_ticks >= kLongPressMs) {
+  if (t.mode == TouchMode::UiHold && !t.ui_moved &&
+      now - t.start_ticks >= kLongPressMs) {
     app.ui.touch_long_press(true);
     t.mode = TouchMode::Ignored;
   }
