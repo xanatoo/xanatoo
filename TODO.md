@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Repository About, Releases and Tags
+
+- Added rendered READMEs and license links, paged releases with asset and
+  source links, and paged tags linked to tagged file trees on both services.
+- Opened all three views on both hosts under Xvfb. The Nix suite passed
+  14,863 checks.
+
 ## Status (2026-11-25) — Repository project search
 
 - Added public project search to both repository service strips. Results

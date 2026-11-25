@@ -7,7 +7,10 @@
 
 namespace xanatoo {
 
-enum class ForgeView { Home, Search, Tree, Blob, Raw, Issues, Changes, Issue, Change, Reviews, ReviewComments };
+enum class ForgeView {
+  Home, Search, About, Tree, Blob, Raw, Releases, Tags,
+  Issues, Changes, Issue, Change, Reviews, ReviewComments
+};
 
 struct ForgeRef {
   bool github = false;

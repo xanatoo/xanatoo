@@ -480,6 +480,13 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   in each service strip. Their `search?q=` refs page through GitHub's
   repository search and GitLab's public project list. Result links open
   the native file tree for the selected project.
+- About renders the default-branch README and shows license metadata and a
+  link to the license file when the host exposes it. GitHub supplies README
+  HTML. GitLab supplies the README URL and license via project metadata,
+  then the client renders the raw README.
+- Releases show formatted notes, source archives and asset links. GitHub
+  uses REST and GitLab uses anonymous GraphQL with cursors. Tags use the
+  REST tag lists. Release and tag headings open the corresponding file tree.
 - File previews show up to 256 KiB of UTF-8 content. Raw refs offer the
   standard download confirmation and stream the file after confirmation.
   GitHub's Contents API caps a directory listing at 1,000 entries. Public

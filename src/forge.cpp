@@ -59,6 +59,9 @@ std::string route(const ForgeRef& ref) {
   switch (ref.view) {
     case View::Home: return {};
     case View::Search: return "search";
+    case View::About: return "about";
+    case View::Releases: return "releases";
+    case View::Tags: return "tags";
     case View::Tree: return "tree";
     case View::Blob: return "blob";
     case View::Raw: return "raw";
@@ -182,12 +185,19 @@ std::optional<ForgeRef> parse_forge_ref(std::string_view url) {
     ref.path = percent_decode(path);
     if ((!ref.path.empty() || ref.view != View::Tree) && !safe_path(ref.path))
       return std::nullopt;
+  } else if (path.empty() && kind == "about") {
+    ref.view = View::About;
+  } else if (path.empty() && kind == "releases") {
+    ref.view = View::Releases;
+  } else if (path.empty() && kind == "tags") {
+    ref.view = View::Tags;
   } else if (!kind.empty() || !path.empty()) {
     return std::nullopt;
   }
-  const bool gitlab_thread = !ref.github && (ref.view == View::Issue || ref.view == View::Change);
-  if (gitlab_thread && ref.page != 1) return std::nullopt;
-  if (cursor && (!gitlab_thread || (!ref.after.empty() && !ref.before.empty())))
+  const bool cursor_view = !ref.github &&
+      (ref.view == View::Issue || ref.view == View::Change || ref.view == View::Releases);
+  if ((cursor_view || ref.view == View::About) && ref.page != 1) return std::nullopt;
+  if (cursor && (!cursor_view || (!ref.after.empty() && !ref.before.empty())))
     return std::nullopt;
   return ref;
 }
@@ -220,7 +230,7 @@ std::string forge_web_url(const ForgeRef& ref) {
   }
   std::string url = origin(ref) + ref.project;
   const auto section = route(ref);
-  if (section.empty()) return url;
+  if (section.empty() || ref.view == View::About) return url;
   url += route_separator(ref) + section;
   if (file_view(ref.view)) {
     url += "/" + (ref.revision.empty() ? "HEAD" : forum::url_encode(ref.revision));
@@ -306,6 +316,9 @@ std::optional<ServiceBar> forge_service_bar(std::string_view url) {
     if (!ref->revision.empty()) files += sep + "tree?ref=" + forum::url_encode(ref->revision);
     bar.rows.push_back({{}, {
       {"Files", files, ref->view == View::Home || file_view(ref->view)},
+      {"About", project + sep + "about", ref->view == View::About},
+      {"Releases", project + sep + "releases", ref->view == View::Releases},
+      {"Tags", project + sep + "tags", ref->view == View::Tags},
       {"Issues", project + sep + "issues", ref->view == View::Issues || ref->view == View::Issue},
       {ref->github ? "Pull requests" : "Merge requests", project + sep + changes(*ref),
        ref->view == View::Changes || ref->view == View::Change ||
@@ -573,24 +586,51 @@ void copy_markdown_block(Document& doc, NodeId parent, const Document& source,
     case NodeKind::Paragraph: case NodeKind::BlockQuote: case NodeKind::CodeBlock:
     case NodeKind::Heading: case NodeKind::Header: case NodeKind::Section:
     case NodeKind::List: case NodeKind::ListItem: case NodeKind::HorizontalRule:
+    case NodeKind::Table: case NodeKind::TableRow: case NodeKind::TableCell:
+    case NodeKind::Image:
       break;
     default: return;
   }
+  const auto image = block.kind == NodeKind::Image ? resolve_url(base, block.src) : "";
+  if (block.kind == NodeKind::Image && !starts_with_ci(image, "https://")) return;
   const auto next = doc.create(block.kind, parent);
   auto& node = doc.get(next);
   node.level = block.level;
+  node.col_span = block.col_span;
+  node.row_span = block.row_span;
+  node.align = block.align;
   if (block.kind == NodeKind::CodeBlock) node.src = block.src;
+  if (block.kind == NodeKind::Image) {
+    node.src = image;
+    node.alt = block.alt;
+  }
   for (auto span : block.spans) {
-    if (span.kind == InlineKind::Link) {
-      span.href = resolve_url(base, span.href);
-      if (!starts_with_ci(span.href, "https://") && !starts_with_ci(span.href, "http://")) {
+    if (span.kind == InlineKind::Image) {
+      span.src = resolve_url(base, span.src);
+      if (!starts_with_ci(span.src, "https://")) {
         span.kind = InlineKind::Text;
+        span.text = span.alt;
+        span.src.clear();
+      }
+    }
+    if ((span.kind == InlineKind::Link || span.kind == InlineKind::Image) && !span.href.empty()) {
+      if (!starts_with(span.href, "#")) span.href = resolve_url(base, span.href);
+      if (!starts_with_ci(span.href, "https://") && !starts_with_ci(span.href, "http://") &&
+          !starts_with(span.href, "#")) {
+        if (span.kind == InlineKind::Link) span.kind = InlineKind::Text;
         span.href.clear();
       }
     }
     node.spans.push_back(std::move(span));
   }
   for (const auto child : block.children) copy_markdown_block(doc, next, source, child, base);
+}
+
+void append_markdown(Document& doc, NodeId parent, std::string_view body,
+                     const std::string& base) {
+  const auto markdown = parse_markup(body);
+  for (const auto id : markdown.get(markdown.root).children)
+    copy_markdown_block(doc, parent, markdown, id, base);
 }
 
 NodeId add_post(Document& doc, NodeId thread, const ForgeRef& ref, const Json& entry,
@@ -615,9 +655,8 @@ NodeId add_post(Document& doc, NodeId thread, const ForgeRef& ref, const Json& e
     forum::append_html(doc, message, html, forge_web_url(ref));
   } else {
     const auto* description = json_get(entry, "description");
-    const auto markdown = parse_markup(description ? json_string(description) : forum::str(entry, "body"));
-    for (const auto id : markdown.get(markdown.root).children)
-      copy_markdown_block(doc, message, markdown, id, forge_web_url(ref));
+    append_markdown(doc, message, description ? json_string(description) : forum::str(entry, "body"),
+                    forge_web_url(ref));
   }
   return message;
 }
@@ -627,12 +666,41 @@ bool flag(const Json& value, std::string_view path) {
   return member && member->type == Json::Type::Bool && member->b;
 }
 
+std::string cursor_args(const ForgeRef& ref, int count) {
+  const auto size = std::to_string(count);
+  if (!ref.before.empty()) return "last:" + size + ",before:" + forum::json_quote(ref.before);
+  if (!ref.after.empty()) return "first:" + size + ",after:" + forum::json_quote(ref.after);
+  return "first:" + size;
+}
+
+void add_cursor_pager(Document& doc, const ForgeRef& ref, const Json& connection) {
+  const auto start = json_string(json_path(connection, "pageInfo/startCursor"));
+  const auto end = json_string(json_path(connection, "pageInfo/endCursor"));
+  const bool previous = !start.empty() &&
+      (!ref.after.empty() || flag(connection, "pageInfo/hasPreviousPage"));
+  const bool next = !end.empty() &&
+      (!ref.before.empty() || flag(connection, "pageInfo/hasNextPage"));
+  if (previous || next) {
+    const auto pager = doc.create(NodeKind::Paragraph, doc.root);
+    auto target = ref;
+    target.page = 1;
+    if (previous) {
+      target.after.clear();
+      target.before = start;
+      forum::add_link(doc, pager, "← Previous", forge_ref_string(target));
+    }
+    if (next) {
+      target.before.clear();
+      target.after = end;
+      forum::add_sep(doc, pager);
+      forum::add_link(doc, pager, "Next →", forge_ref_string(target));
+    }
+  }
+}
+
 void gitlab_discussion(Document& doc, NodeId thread, const ForgeRef& ref, std::string* err) {
   const auto field = ref.view == View::Issue ? "issue" : "mergeRequest";
-  const auto count = std::to_string(kPageSize);
-  auto page = "first:" + count;
-  if (!ref.after.empty()) page += ",after:" + forum::json_quote(ref.after);
-  if (!ref.before.empty()) page = "last:" + count + ",before:" + forum::json_quote(ref.before);
+  const auto page = cursor_args(ref, kPageSize);
   const auto query = "{project(fullPath:" + forum::json_quote(ref.project) + "){" +
       field + "(iid:" + forum::json_quote(ref.number) + "){discussions(" + page +
       "){pageInfo{startCursor endCursor hasNextPage hasPreviousPage}"
@@ -666,28 +734,7 @@ void gitlab_discussion(Document& doc, NodeId thread, const ForgeRef& ref, std::s
     }
   }
   if (!shown) forum::add_note(doc, thread, "No comments on this page.");
-  const auto start = json_string(json_path(*discussion, "pageInfo/startCursor"));
-  const auto end = json_string(json_path(*discussion, "pageInfo/endCursor"));
-  const bool previous = !start.empty() &&
-      (!ref.after.empty() || flag(*discussion, "pageInfo/hasPreviousPage"));
-  const bool next = !end.empty() &&
-      (!ref.before.empty() || flag(*discussion, "pageInfo/hasNextPage"));
-  if (previous || next) {
-    const auto pager = doc.create(NodeKind::Paragraph, doc.root);
-    auto target = ref;
-    target.page = 1;
-    if (previous) {
-      target.after.clear();
-      target.before = start;
-      forum::add_link(doc, pager, "← Previous", forge_ref_string(target));
-    }
-    if (next) {
-      target.before.clear();
-      target.after = end;
-      forum::add_sep(doc, pager);
-      forum::add_link(doc, pager, "Next →", forge_ref_string(target));
-    }
-  }
+  add_cursor_pager(doc, ref, *discussion);
 }
 
 std::optional<Document> thread_page(const ForgeRef& ref, std::string* err) {
@@ -756,6 +803,272 @@ std::optional<Document> thread_page(const ForgeRef& ref, std::string* err) {
   return doc;
 }
 
+std::optional<ForgeRef> project_file(const ForgeRef& ref, std::string_view url,
+                                     std::string_view revision) {
+  const auto base = origin(ref) + ref.project + route_separator(ref) + "blob/";
+  if (!starts_with(url, base)) return std::nullopt;
+  url.remove_prefix(base.size());
+  if (revision.empty()) {
+    return parse_forge_ref(forge_ref_from_web(base + std::string(url)));
+  }
+  const auto encoded = forum::url_encode(revision) + "/";
+  const auto literal = std::string(revision) + "/";
+  if (starts_with(url, encoded)) url.remove_prefix(encoded.size());
+  else if (starts_with(url, literal)) url.remove_prefix(literal.size());
+  else return std::nullopt;
+  ForgeRef file;
+  file.github = ref.github;
+  file.project = ref.project;
+  file.view = View::Blob;
+  file.path = percent_decode(url.substr(0, url.find_first_of("?#")));
+  file.revision = revision == "HEAD" ? "" : std::string(revision);
+  if (!safe_path(file.path)) return std::nullopt;
+  return file;
+}
+
+void readme_links(Document& doc, const ForgeRef& ref, const ForgeRef& file) {
+  const auto revision = file.revision.empty() ? "HEAD" : file.revision;
+  auto rewrite = [&](std::string& href, bool image) {
+    const auto target = project_file(ref, href, revision);
+    if (!target) return;
+    if (image) {
+      href = forge_raw_url(*target);
+    } else {
+      const auto fragment = href.find('#');
+      href = forge_ref_string(*target) +
+          (fragment == href.npos ? "" : href.substr(fragment));
+    }
+  };
+  for (auto& node : doc.nodes) {
+    if (node.kind == NodeKind::Image) rewrite(node.src, true);
+    for (auto& span : node.spans) {
+      if (span.kind == InlineKind::Image) rewrite(span.src, true);
+      if ((span.kind == InlineKind::Link || span.kind == InlineKind::Image) && !span.href.empty())
+        rewrite(span.href, false);
+    }
+  }
+}
+
+void about_license(Document& doc, NodeId root, const ForgeRef& ref, const Json& data) {
+  const auto path = forum::str(data, "path");
+  auto file = ref.github ? std::optional<ForgeRef>{} :
+      project_file(ref, forum::str(data, "license_url"), forum::str(data, "default_branch"));
+  if (ref.github && safe_path(path)) {
+    ForgeRef target;
+    target.github = true;
+    target.project = ref.project;
+    target.view = View::Blob;
+    target.path = path;
+    file = std::move(target);
+  }
+  auto name = json_string(json_path(data, "license/name"));
+  const auto spdx = json_string(json_path(data, "license/spdx_id"));
+  if (spdx == "NOASSERTION" || name == "Other") name.clear();
+  if (name.empty() && !file) {
+    forum::add_note(doc, root, "License information unavailable.");
+    return;
+  }
+  const auto row = doc.create(NodeKind::Paragraph, root);
+  forum::add_text(doc, row, "License ", InlineKind::Strong);
+  if (file) forum::add_link(doc, row, name.empty() ? forge_filename(*file) : name,
+                           forge_ref_string(*file));
+  else forum::add_text(doc, row, name);
+  if (!spdx.empty() && spdx != "NOASSERTION" && spdx != name)
+    forum::add_meta(doc, row, " (" + spdx + ")");
+}
+
+std::optional<Document> about_page(const ForgeRef& ref, std::string* err) {
+  const auto api = api_base(ref);
+  Document doc;
+  const auto root = start_page(doc, ref.project + " · About");
+  std::optional<ForgeRef> file;
+  std::optional<HttpResult> readme;
+  std::string readme_error;
+  if (ref.github) {
+    std::string license_error;
+    const auto license = get_json(api + "/license", &license_error);
+    if (license) about_license(doc, root, ref, *license);
+    else forum::add_note(doc, root, "License information unavailable.");
+    constexpr auto accept = "Accept: application/vnd.github.html+json\r\n";
+    readme = https_request("GET", api + "/readme", user_agent("repository README"), accept,
+                           {}, &readme_error);
+    if (readme && readme->status == 200 && starts_with(readme->body, "<div ")) {
+      const std::string_view html = readme->body;
+      auto path = html_attr(html.substr(5, html.find('>') - 5), "data-path");
+      if (safe_path(path)) {
+        ForgeRef target;
+        target.github = true;
+        target.project = ref.project;
+        target.view = View::Blob;
+        target.path = std::move(path);
+        file = std::move(target);
+      }
+    }
+  } else {
+    const auto project = get_json(api + "?license=true", err);
+    if (!project) return std::nullopt;
+    about_license(doc, root, ref, *project);
+    file = project_file(ref, forum::str(*project, "readme_url"), forum::str(*project, "default_branch"));
+    if (file) readme = https_get_follow(forge_raw_url(*file), user_agent("repository README"),
+                                      &readme_error);
+  }
+
+  if (!readme || readme->status != 200) {
+    if (readme && readme->status != 404) readme_error = http_status_error(readme->status);
+    forum::add_note(doc, root, readme_error.empty() ? "README unavailable." :
+                                                     "README unavailable. " + readme_error);
+    return doc;
+  }
+  const auto base = file ? forge_web_url(*file) : forge_web_url(ref) + "/";
+  if (file) link_line(doc, root, "README source", forge_ref_string(*file));
+  if (readme->body.empty()) forum::add_note(doc, root, "The README is empty.");
+  else if (ref.github) {
+    HtmlOptions options;
+    options.base_url = base;
+    options.sections = true;
+    options.anchors = true;
+    options.images = true;
+    html_append_blocks(doc, root, readme->body, options);
+  } else if (is_valid_utf8(readme->body) && readme->body.find('\0') == std::string::npos) {
+    append_markdown(doc, root, readme->body, base);
+  } else {
+    forum::add_note(doc, root, "This README cannot be rendered as text.");
+  }
+  if (file) readme_links(doc, ref, *file);
+  return doc;
+}
+
+void https_link(Document& doc, NodeId parent, const std::string& label, const std::string& url) {
+  if (!label.empty() && starts_with_ci(url, "https://")) link_line(doc, parent, label, url);
+}
+
+NodeId version_entry(Document& doc, const ForgeRef& ref, const std::string& title,
+                     const std::string& tag, const std::string& commit, const std::string& date) {
+  const auto article = doc.create(NodeKind::Article, doc.root);
+  const auto heading = doc.create(NodeKind::Header, article);
+  auto tree = ref;
+  tree.view = View::Tree;
+  tree.page = 1;
+  tree.before.clear();
+  tree.after.clear();
+  tree.revision = safe_path(commit) ? commit : ref.github ? "refs/tags/" + tag : tag;
+  if (safe_path(tag) && safe_path(tree.revision))
+    forum::add_link(doc, heading, title, forge_ref_string(tree));
+  else
+    doc.append_text(heading, title);
+  if (tag != title || !date.empty()) {
+    const auto caption = doc.create(NodeKind::Caption, article);
+    if (tag != title) forum::add_meta(doc, caption, tag);
+    if (!date.empty()) {
+      forum::add_sep(doc, caption);
+      forum::add_meta(doc, caption, forum::short_time(date));
+    }
+  }
+  return article;
+}
+
+std::optional<Document> tags_page(const ForgeRef& ref, std::string* err) {
+  const auto url = api_base(ref) + (ref.github ? "/tags?" : "/repository/tags?") + paging(ref);
+  const auto data = get_json(url, err);
+  if (!data) return std::nullopt;
+  if (data->type != Json::Type::Array) {
+    *err = "Expected a tag list from the repository API";
+    return std::nullopt;
+  }
+  Document doc;
+  const auto root = start_page(doc, ref.project + " · Tags");
+  if (data->items.empty()) forum::add_note(doc, root, "No tags on this page.");
+  for (const auto& item : data->items) {
+    const auto name = forum::str(item, "name");
+    const auto commit = json_string(json_path(item, ref.github ? "commit/sha" : "commit/id"));
+    if (name.empty()) continue;
+    const auto article = version_entry(doc, ref, name, name, commit, forum::str(item, "created_at"));
+    const auto message = forum::str(item, "message");
+    if (!message.empty()) forum::append_plain(doc, article, message);
+    if (ref.github) {
+      https_link(doc, article, "Source ZIP", forum::str(item, "zipball_url"));
+      https_link(doc, article, "Source tar.gz", forum::str(item, "tarball_url"));
+    } else if (safe_path(commit)) {
+      const auto archive = api_base(ref) + "/repository/archive";
+      const auto query = "?sha=" + forum::url_encode(commit);
+      https_link(doc, article, "Source ZIP", archive + ".zip" + query);
+      https_link(doc, article, "Source tar.gz", archive + ".tar.gz" + query);
+    }
+  }
+  add_pager(doc, ref, data->items.size() >= kPageSize);
+  return doc;
+}
+
+std::optional<Document> releases_page(const ForgeRef& ref, std::string* err) {
+  constexpr int page_size = 10;
+  std::optional<Json> data;
+  const Json* connection = nullptr;
+  const Json* entries = nullptr;
+  if (ref.github) {
+    const auto url = api_base(ref) + "/releases?per_page=" + std::to_string(page_size) +
+        "&page=" + std::to_string(ref.page);
+    data = get_json(url, err);
+    if (data) entries = &*data;
+  } else {
+    const auto query = "{project(fullPath:" + forum::json_quote(ref.project) +
+        "){releases(" + cursor_args(ref, page_size) +
+        "){pageInfo{startCursor endCursor hasNextPage hasPreviousPage}"
+        " nodes{tagName name descriptionHtml releasedAt commit{sha}"
+        " assets{sources{nodes{format url}} links{nodes{name url directAssetUrl}}}}}}}";
+    data = get_json("https://gitlab.com/api/graphql?query=" + forum::url_encode(query), err);
+    if (data) {
+      connection = json_path(*data, "data/project/releases");
+      if (connection) entries = json_get(*connection, "nodes");
+      if (!entries) *err = json_string(json_path(*data, "errors/0/message"));
+    }
+  }
+  if (!entries || entries->type != Json::Type::Array) {
+    if (err->empty()) *err = "Expected a release list from the repository API";
+    return std::nullopt;
+  }
+
+  Document doc;
+  const auto root = start_page(doc, ref.project + " · Releases");
+  if (entries->items.empty()) forum::add_note(doc, root, "No releases on this page.");
+  for (const auto& item : entries->items) {
+    const auto tag = forum::str(item, ref.github ? "tag_name" : "tagName");
+    auto title = forum::str(item, "name");
+    if (title.empty()) title = tag;
+    if (title.empty()) continue;
+    const auto date = forum::str(item, ref.github ? "published_at" : "releasedAt");
+    const auto article = version_entry(doc, ref, title, tag,
+                                       json_string(json_path(item, "commit/sha")), date);
+    if (ref.github) {
+      if (flag(item, "prerelease")) forum::add_note(doc, article, "Pre-release");
+      const auto base = forge_web_url(ref) + "/tag/" + forum::url_encode(tag);
+      append_markdown(doc, article, forum::str(item, "body"), base);
+      https_link(doc, article, "Source ZIP", forum::str(item, "zipball_url"));
+      https_link(doc, article, "Source tar.gz", forum::str(item, "tarball_url"));
+      for (const auto& asset : forum::arr(item, "assets"))
+        https_link(doc, article, forum::str(asset, "name"), forum::str(asset, "browser_download_url"));
+    } else {
+      HtmlOptions options;
+      options.base_url = forge_web_url(ref) + "/" + forum::url_encode(tag);
+      options.sections = true;
+      options.images = true;
+      html_append_blocks(doc, article, forum::str(item, "descriptionHtml"), options);
+      if (const auto* sources = json_path(item, "assets/sources"))
+        for (const auto& asset : forum::arr(*sources, "nodes"))
+          https_link(doc, article, "Source " + forum::str(asset, "format"), forum::str(asset, "url"));
+      if (const auto* links = json_path(item, "assets/links")) {
+        for (const auto& asset : forum::arr(*links, "nodes")) {
+          const auto direct = forum::str(asset, "directAssetUrl");
+          https_link(doc, article, forum::str(asset, "name"),
+                     direct.empty() ? forum::str(asset, "url") : direct);
+        }
+      }
+    }
+  }
+  if (connection) add_cursor_pager(doc, ref, *connection);
+  else add_pager(doc, ref, entries->items.size() >= page_size);
+  return doc;
+}
+
 }  // namespace
 
 std::optional<Document> forge_fetch(const ForgeRef& ref, std::string* err) {
@@ -774,6 +1087,9 @@ std::optional<Document> forge_fetch(const ForgeRef& ref, std::string* err) {
   }
   switch (ref.view) {
     case View::Search: break;
+    case View::About: return about_page(ref, err);
+    case View::Releases: return releases_page(ref, err);
+    case View::Tags: return tags_page(ref, err);
     case View::Home: case View::Tree: return tree_page(ref, err);
     case View::Blob: return file_page(ref, err);
     case View::Issues: case View::Changes: return item_list(ref, err);

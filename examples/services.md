@@ -22,7 +22,8 @@ directory page, but its links say what is missing.
 - [GitLab](gitlab:) · [GitLab project](gitlab:gitlab-org/gitlab) — enter `gitlab:group/project`, including any subgroups.
 
 Search for projects in the service strip or use it to switch between files,
-issues and pull or merge requests.
+issues and pull or merge requests. **About** shows the README and license.
+**Releases** shows release notes and downloads, and **Tags** links to tagged file trees.
 Open a file to preview it or choose **Download** to save it. To browse a branch,
 tag or commit, append `/tree?ref=REVISION` on GitHub or `/-/tree?ref=REVISION`
 on GitLab. Encode a slash in a revision as `%2F`.
