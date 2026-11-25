@@ -735,7 +735,7 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "site-file", "site-folder", "site-about", "site-store", "site-web",
       "site-feed", "site-nostr", "language",
       "format", "insert", "view", "lists",
-      "tab-select", "tab-window", "tab-close", "tab-close-others",
+      "select-all", "tab-select", "tab-window", "tab-close", "tab-close-others",
       "tab-close-left", "tab-close-right", "tab-sort",
       // Panels menu
       "keyboard", "backlinks", "related", "media", "subscriptions",
@@ -2668,9 +2668,10 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       url_context_was_open_ = ImGui::IsPopupOpen("##url_context");
       if (url_right_clicked) url_context_acted_ = false;
       if (ImGui::BeginPopup("##url_context")) {
-        auto url_item = [&](const char* label, const char* sc = nullptr,
-                            bool sel = false, bool enabled = true) {
-          const bool hit = ImGui::MenuItem(label, sc, sel, enabled);
+        auto url_item = [&](const char* label, const char* icon_name,
+                            bool enabled = true) {
+          const bool hit = menu_item_with_icon(label, icon_name, nullptr,
+                                               false, enabled);
           if (hit) url_context_acted_ = true;
           return hit;
         };
@@ -2693,32 +2694,32 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             st->ReloadUserBufAndMoveToEnd();
           url_bar_editing_ = true;
         };
-        if (url_item("Cut", nullptr, false, selected)) {
+        if (url_item("Cut", "cut", selected)) {
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
           edit_url("");
         }
-        if (url_item("Copy", nullptr, false, selected))
+        if (url_item("Copy", "copy", selected))
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
-        if (url_item("Paste", nullptr, false, !clipboard.empty()))
+        if (url_item("Paste", "paste", !clipboard.empty()))
           edit_url(clipboard);
-        if (url_item("Select All")) select_url_bar_ = true;
+        if (url_item("Select All", "select-all")) select_url_bar_ = true;
         ImGui::Separator();
-        if (url_item("Copy Address", nullptr, false, !value.empty()))
+        if (url_item("Copy Address", "link", !value.empty()))
           ImGui::SetClipboardText(value.c_str());
-        if (url_item("Open Address", nullptr, false, !value.empty())) {
+        if (url_item("Open Address", "open", !value.empty())) {
           cmd = UiCommand::NavigateUrl;
           result.arg = value;
         }
-        if (url_item("Paste and Go", nullptr, false, !clipboard.empty())) {
+        if (url_item("Paste and Go", "forward", !clipboard.empty())) {
           cmd = UiCommand::NavigateUrl;
           result.arg = clipboard;
         }
         if (state.has_path) {
           ImGui::Separator();
           if (state.page_bookmarked) {
-            if (url_item("Remove Page Bookmark"))
+            if (url_item("Remove Page Bookmark", "bookmark"))
               cmd = UiCommand::RemoveBookmark;
-          } else if (url_item("Bookmark This Page")) {
+          } else if (url_item("Bookmark This Page", "bookmark-outline")) {
             cmd = UiCommand::BookmarkPage;
           }
         }
@@ -3006,21 +3007,23 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         auto replaced = [&](const std::string& with) {
           return value.substr(0, from) + with + value.substr(to);
         };
-        if (ImGui::MenuItem("Cut", nullptr, false, selected)) {
+        if (menu_item_with_icon("Cut", "cut", nullptr, false, selected)) {
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
           set_query(replaced(""));
         }
-        if (ImGui::MenuItem("Copy", nullptr, false, selected))
+        if (menu_item_with_icon("Copy", "copy", nullptr, false, selected))
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
-        if (ImGui::MenuItem("Paste", nullptr, false, !clipboard.empty()))
+        if (menu_item_with_icon("Paste", "paste", nullptr, false,
+                                !clipboard.empty()))
           set_query(replaced(clipboard));
-        if (ImGui::MenuItem("Select All", nullptr, false, !value.empty()))
+        if (menu_item_with_icon("Select All", "select-all", nullptr, false,
+                                !value.empty()))
           search_select_all_ = true;
-        if (ImGui::MenuItem("Clear", nullptr, false, !value.empty()))
+        if (menu_item_with_icon("Clear", "stop", nullptr, false, !value.empty()))
           set_query("");
         ImGui::Separator();
-        if (ImGui::MenuItem("Paste and Search", nullptr, false,
-                            !clipboard.empty()) &&
+        if (menu_item_with_icon("Paste and Search", "find", nullptr, false,
+                                !clipboard.empty()) &&
             cmd == UiCommand::None) {
           set_query(clipboard);
           cmd = UiCommand::Search;

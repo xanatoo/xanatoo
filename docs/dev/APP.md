@@ -194,10 +194,11 @@ Downloads) share `KeyFocus::Panel` + `App::panel_focus` (`focus_panel`,
 every role — never pass a constant `active` to `draw_floating_frame`.
 
 Context menus: `ui.cpp` keeps page-content actions separate from View/Panels
-controls. The location `InputText` has clipboard/address/bookmark actions;
-Back/Forward buttons show nearest-first targets derived from the focused
-pane's `NavHistory`, or `SplitHistory` when split browsing. `NavJump` uses a
-signed offset and must preserve the destination's caret/scroll state.
+controls. The location and search fields use the shared icon menu renderer
+for their clipboard and field-specific actions. Back/Forward buttons show
+nearest-first targets derived from the focused pane's `NavHistory`, or
+`SplitHistory` when split browsing. `NavJump` uses a signed offset and must
+preserve the destination's caret/scroll state.
 
 Primary selection (X11 / Wayland, `sdl::kMiddleClickPastesPrimary`: Linux
 desktop, SDL3 or SDL2 >= 2.26):

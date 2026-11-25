@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <!-- SPDX-FileCopyrightText: Ingo Ruhnke <grumbel@gmail.com> -->
+  <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+  <rect x="3" y="3" width="14" height="14" rx="1"
+        fill="#dce7ee" stroke="#505957" stroke-dasharray="2 1.5"/>
+  <path d="M6 7h8M6 10h8M6 13h6" fill="none" stroke="#486b86"
+        stroke-linecap="round"/>
+</svg>

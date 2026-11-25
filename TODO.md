@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — URL and search context-menu icons
+
+- Added icons to each action in the URL and search context menus using the
+  shared menu renderer. Added a Select All icon for both fields.
+- Verified both menus under Xvfb. The Nix suite passed 14,797 checks.
+
 ## Status (2026-11-25) — Incremental Android development
 
 - The Linux Android shell runs the NDK and packaging tools directly. It
