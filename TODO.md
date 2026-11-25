@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Glossary
+
+- Added `GLOSSARY.md`, which defines the project's concepts in 11 sections.
+  It covers the Xanadu and hypertext ideas, the document model, addresses and
+  passages, storage and revisions, and layout. It also covers the GUI
+  (tiles, docks, strips, every panel), networking, services, formats,
+  platforms and code architecture. Linked from `AGENTS.md`.
+
 ## Status (2026-11-25) — URL and search context-menu icons
 
 - Added icons to each action in the URL and search context menus using the

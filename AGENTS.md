@@ -34,6 +34,9 @@ nix develop -c xanatoo-run examples/welcome.md
 
 ## Where to read more
 
+Terms and phrases used throughout the project (Xanadu ideas, addresses,
+panels, docks, services, protocols) are defined in `GLOSSARY.md`.
+
 Read the matching notes before working in an area:
 
 | Area | Notes |
