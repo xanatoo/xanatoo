@@ -11,6 +11,7 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/feed.hpp"
+#include "xanatoo/forums.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/locator.hpp"
@@ -61,6 +62,7 @@ bool subscribable_source(std::string_view address) {
            low == "nostr:recent" || low == "nostr:groups" ||
            starts_with(low, "nostr:group@") || starts_with(low, "nostr:groups@");
   }
+  if (auto forum = parse_forum_ref(url)) return forum_has_post_listing(*forum);
   // Group/list pages on the other built-in read-only services.
   if (xanatoo::is_reddit_ref(url))
     return url.find("/comments/") == std::string::npos &&
@@ -77,7 +79,7 @@ std::string subscription_source_address(std::string_view address) {
 void add_subscription(App& app, std::string address) {
   address = normalize(address);
   if (!subscribable_source(address)) {
-    flash_status(app, "Subscribe to a Lemmy community/user, Nostr author/group, or feed");
+    flash_status(app, "Subscribe to a supported feed, community, or profile");
     return;
   }
   std::string why;

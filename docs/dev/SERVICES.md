@@ -447,7 +447,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   Bluesky / Flarum / LessWrong: `discourse:HOST/t/…`, `lobsters:s/ID`,
   `fourchan:B/thread/N`, `stackexchange:HOST/questions/ID`,
   `bsky:HANDLE/post/RKEY` (also `/feed/RKEY`, `bsky:hashtag/TAG`; bare `bsky:` parses as the Discover feed `bsky.app/feed/whats-hot`), `flarum:HOST/d/ID`, `lesswrong:posts/ID`.
-  See `docs/FORUMS.md`.
+  Subscriptions use `forum_has_post_listing` to recognize feeds and topic
+  listings. See `docs/FORUMS.md`.
 - LessWrong asks GraphQL by POST (`lw_query` in `forum_fetch.cpp`, a
   GraphQL `errors` reply without `data` becomes the error text); search
   is `lesswrong:search?query=Q` (`ForumRef::query`, decoded) over the

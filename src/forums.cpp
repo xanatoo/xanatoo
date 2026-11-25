@@ -184,6 +184,47 @@ std::optional<ForumRef> parse_forum_ref(std::string_view s) {
 
 bool is_forum_ref(std::string_view ref) { return parse_forum_ref(ref).has_value(); }
 
+bool forum_has_post_listing(const ForumRef& ref) {
+  const std::string_view path = ref.path;
+  const size_t slash = path.find('/');
+  const auto first = path.substr(0, slash);
+  const auto rest = slash == std::string_view::npos
+                        ? std::string_view{} : path.substr(slash + 1);
+  switch (ref.site) {
+    case ForumSite::Discourse:
+      return first != "t" && first != "categories";
+    case ForumSite::Lobsters:
+      return path.empty() || path == "hottest" || path == "newest" ||
+             path == "active" || path == "recent" ||
+             (first == "t" && !rest.empty()) || starts_with(first, "~");
+    case ForumSite::FourChan:
+      return !path.empty() && slash == std::string_view::npos;
+    case ForumSite::StackExchange:
+      return path.empty() || path == "questions" ||
+             (starts_with(rest, "tagged/") && first == "questions" &&
+              rest.size() > 7 && rest.find('/', 7) == std::string_view::npos);
+    case ForumSite::Bluesky:
+      if (first == "search") return path == "search" && !ref.query.empty();
+      if (first == "hashtag") return !rest.empty() && rest.find('/') == std::string_view::npos;
+      return slash == std::string_view::npos || rest == "replies" || rest == "media" ||
+             (starts_with(rest, "feed/") && rest.size() > 5 &&
+              rest.find('/', 5) == std::string_view::npos);
+    case ForumSite::Flarum:
+      return path.empty();
+    case ForumSite::LessWrong:
+      return path.empty() || path == "new" || path == "top" || path == "curated" ||
+             path == "quicktakes" ||
+             ((first == "users" || first == "w") && !rest.empty() &&
+              rest.find('/') == std::string_view::npos);
+    case ForumSite::Digg: {
+      const auto kind = forum::digg_path(path).kind;
+      return kind == forum::DiggPath::Kind::Feed ||
+             kind == forum::DiggPath::Kind::Search;
+    }
+  }
+  return false;
+}
+
 const char* forum_site_name(ForumSite s) { return info(s).name; }
 
 std::string forum_ref_string(const ForumRef& r) {

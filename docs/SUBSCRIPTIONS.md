@@ -30,6 +30,9 @@ Supported sources, when the corresponding build feature is available:
 | Nostr group/recent | A `nostr:group@…` link or `nostr:recent` |
 | RSS/Atom | `https://example.org/feed.xml` |
 | Reddit/Hacker News lists | `reddit:r/linux/`, `hn:news` |
+| Bluesky feeds and profiles | `bsky:`, `bsky:alice.example`, `bsky:alice.example/feed/news` |
+| Lobsters listings | `lobsters:`, `lobsters:t/tech` |
+| Other native forum listings | `discourse:forum.example/latest`, `fourchan:g/`, `stackexchange:stackoverflow.com`, `flarum:forum.example`, `lesswrong:new`, `digg:tech` |
 
 Ordinary Lemmy web URLs for communities/users are converted to native Lemmy
 addresses on addition. Single posts or individual Nostr notes are not changing

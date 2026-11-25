@@ -69,6 +69,8 @@ struct ForumRef {
 
 std::optional<ForumRef> parse_forum_ref(std::string_view ref);
 bool is_forum_ref(std::string_view ref);
+// A listing of posts or topics that subscriptions can watch.
+bool forum_has_post_listing(const ForumRef& ref);
 std::string forum_ref_string(const ForumRef& r);
 // The service strip of a forum page (service_bar.hpp).
 ServiceBar forum_service_bar(const ForumRef& r);

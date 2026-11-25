@@ -13,6 +13,7 @@
 #include "xanatoo/layout.hpp"
 #include "xanatoo/service_bar.hpp"
 #include "xanatoo/search.hpp"
+#include "xanatoo/subscriptions.hpp"
 
 #include <cstdio>
 #include <string>
@@ -96,6 +97,28 @@ size_t count_kind(const Document& d, NodeKind k) {
   size_t n = 0;
   for (const Node& node : d.nodes) n += node.kind == k;
   return n;
+}
+
+void test_subscription_listings() {
+  for (const auto* address : {
+           "bsky:", "bsky:alice.example", "bsky:alice.example/replies",
+           "bsky:alice.example/media", "bsky:alice.example/feed/news",
+           "bsky:hashtag/news", "bsky:search?query=news",
+           "lobsters:", "lobsters:newest", "lobsters:t/tech",
+           "lobsters:~alice/stories", "discourse:forum.example/latest",
+           "fourchan:g/", "stackexchange:stackoverflow.com/questions/tagged/c++",
+           "flarum:forum.example", "lesswrong:quicktakes", "lesswrong:users/alice",
+           "digg:tech", "digg:search?query=news"}) {
+    EXPECT(forum_has_post_listing(ref(address)));
+  }
+  for (const auto* address : {
+           "bsky:alice.example/post/abc", "bsky:alice.example/feeds", "bsky:search",
+           "lobsters:s/abc", "discourse:forum.example/t/topic/1",
+           "discourse:forum.example/categories", "fourchan:", "fourchan:g/thread/1",
+           "stackexchange:stackoverflow.com/questions/1", "flarum:forum.example/d/1",
+           "lesswrong:posts/abc", "digg:tech/abc123"}) {
+    EXPECT(!forum_has_post_listing(ref(address)));
+  }
 }
 
 void test_refs() {
@@ -251,6 +274,7 @@ void test_lobsters() {
   Json list = parse(R"([{"short_id":"a1","title":"T","url":"","score":1,"comment_count":0,
     "submitter_user":"u","created_at":"2026-11-18T00:00:00Z","tags":[]}])");
   Document l = lobsters_list_document(list, ref("lobsters:newest"));
+  EXPECT(!subscription_item_keys(l).empty());
   EXPECT(has_href(l, "lobsters:s/a1"));
   EXPECT(has_href(l, "lobsters:~u/stories"));
   EXPECT(!has_href(l, "lobsters:newest?page=2"));  // fewer than 25 stories
@@ -421,6 +445,7 @@ void test_bluesky() {
         "value":{"text":"quoted words"}}}},
       "reason":{"$type":"app.bsky.feed.defs#reasonRepost","by":{"handle":"bob.example"}}}]})");
   Document f = bsky_feed_document(feed, ref("bsky:bob.example"));
+  EXPECT(!subscription_item_keys(f).empty());
   EXPECT(has_href(f, "bsky:bob.example?cursor=2026-11-03T16%3A06%3A41.753Z"));
   EXPECT(has_href(f, "bsky:bob.example"));  // reposted by
   // Replies are behind a classic comments link at the bottom of each post.
@@ -1074,6 +1099,7 @@ static void test_forge_refs() {
 
 void test_forums(int& passed, int& failed) {
   test_refs();
+  test_subscription_listings();
   test_discourse();
   test_lobsters();
   test_fourchan();
