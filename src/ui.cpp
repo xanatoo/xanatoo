@@ -214,6 +214,74 @@ bool classic_button(const char* label, const ImVec2& size = ImVec2(0.f, 0.f)) {
   return clicked;
 }
 
+// Keep ImGui's window movement, resizing and stacking while drawing the
+// dialog title with the same colours and controls as the canvas panels.
+bool begin_panel_dialog(const char* title, bool& open, theme::Tint tint,
+                        float scale, ImGuiWindowFlags flags = 0) {
+  const theme::Palette& pal = theme::palette();
+  const auto color = [](theme::Rgb c) { return IM_COL32(c.r, c.g, c.b, 255); };
+  const float title_h = std::round(28.f * scale);
+  const float padding = std::max(0.f, (title_h - ImGui::GetFontSize()) / 2.f);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                      ImVec2(ImGui::GetStyle().FramePadding.x, padding));
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, color(pal.face));
+  ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 0));
+  const bool visible = ImGui::Begin(title, nullptr, flags | ImGuiWindowFlags_NoCollapse);
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar();
+  if (!visible) return false;
+
+  ImGuiWindow* window = ImGui::GetCurrentWindow();
+  const ImRect bar = window->TitleBarRect();
+  ImDrawList* draw = window->DrawList;
+  ImGui::PushClipRect(window->OuterRectClipped.Min, window->OuterRectClipped.Max,
+                      false);
+  const bool active = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+  const theme::TitleTint& tt = theme::title_tint(tint);
+  const ImU32 top = color(active ? tt.top : tt.idle_top);
+  const ImU32 bottom = color(active ? tt.bottom : tt.idle_bottom);
+  const ImVec2 lo(bar.Min.x + 1.f, bar.Min.y + 1.f);
+  const ImVec2 hi(bar.Max.x - 1.f, bar.Max.y);
+  draw->AddRectFilledMultiColor(lo, hi, top, top, bottom, bottom);
+  draw->AddLine(ImVec2(lo.x, lo.y + 0.5f), ImVec2(hi.x, lo.y + 0.5f),
+                color(pal.highlight));
+  draw->AddLine(ImVec2(lo.x, hi.y - 0.5f), ImVec2(hi.x, hi.y - 0.5f),
+                color(active ? tt.line : pal.shadow));
+
+  const ImGuiID close_id = window->GetID("##panel_close");
+  const ImRect close_zone(bar.Min, ImVec2(bar.Min.x + title_h, bar.Max.y));
+  bool hovered = false;
+  bool held = false;
+  const ImGuiNavLayer nav_layer = window->DC.NavLayerCurrent;
+  window->DC.NavLayerCurrent = ImGuiNavLayer_Menu;
+  ImGui::ItemAdd(close_zone, close_id, nullptr, ImGuiItemFlags_NoNavDefaultFocus);
+  if (ImGui::ButtonBehavior(close_zone, close_id, &hovered, &held))
+    open = false;
+  ImGui::RenderNavCursor(close_zone, close_id, ImGuiNavRenderCursorFlags_Compact);
+  window->DC.NavLayerCurrent = nav_layer;
+  const float side = std::round(20.f * scale);
+  const ImVec2 center = close_zone.GetCenter();
+  const ImVec2 a(std::round(center.x - side / 2.f),
+                 std::round(center.y - side / 2.f));
+  const ImVec2 b(a.x + side, a.y + side);
+  const ImU32 face_top = color(held ? pal.face_dark : pal.highlight);
+  const ImU32 face_bottom = color(hovered && !held ? pal.face_light : pal.face_dark);
+  draw->AddRectFilledMultiColor(a, b, face_top, face_top, face_bottom, face_bottom);
+  draw->AddRect(a, b, color(pal.frame));
+  const float arm = std::round(4.f * scale);
+  draw->AddLine(ImVec2(center.x - arm, center.y - arm),
+                ImVec2(center.x + arm, center.y + arm), color(pal.text));
+  draw->AddLine(ImVec2(center.x - arm, center.y + arm),
+                ImVec2(center.x + arm, center.y - arm), color(pal.text));
+  draw->PushClipRect(ImVec2(close_zone.Max.x, bar.Min.y), hi, true);
+  draw->AddText(ImVec2(close_zone.Max.x + 4.f * scale,
+                       bar.Min.y + (bar.GetHeight() - ImGui::GetFontSize()) / 2.f),
+                color(active ? tt.text : pal.text_dim), title);
+  draw->PopClipRect();
+  ImGui::PopClipRect();
+  return true;
+}
+
 // Favicon-style tile of a search engine: a rounded square in the engine's
 // colour with its badge letters, so engines stay told apart by shorthand.
 void draw_engine_tile(ImDrawList* draw, ImVec2 p, float side,
@@ -4734,9 +4802,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(440.f * scale_, 0.f), ImGuiCond_Appearing);
     ImGui::SetNextWindowFocus();
-    if (ImGui::Begin("Download", &open,
-                     ImGuiWindowFlags_AlwaysAutoResize |
-                         ImGuiWindowFlags_NoCollapse)) {
+    if (begin_panel_dialog("Download", open, theme::Tint::Orange, scale_,
+                           ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::TextUnformatted("Download this file?");
       ImGui::Spacing();
       {
@@ -4761,18 +4828,18 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::Separator();
       ImGui::Spacing();
       const float btn_w = 120.f * scale_;
-      if (ImGui::Button("Cancel", ImVec2(btn_w, 0)))
+      if (classic_button("Cancel", ImVec2(btn_w, 0)))
         cmd = UiCommand::CancelDownload;
       ImGui::SameLine();
 #if !defined(EMSCRIPTEN)
       // Folder picker availability is decided when the command runs.
-      if (ImGui::Button("Download to…", ImVec2(btn_w + 16.f * scale_, 0)))
+      if (classic_button("Download to…", ImVec2(btn_w + 16.f * scale_, 0)))
         cmd = UiCommand::DownloadToFolder;
       ImGui::SameLine();
 #endif
       ImGui::PushStyleColor(ImGuiCol_Button,
                             ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
-      if (ImGui::Button("Download", ImVec2(btn_w, 0)))
+      if (classic_button("Download", ImVec2(btn_w, 0)))
         cmd = UiCommand::ConfirmDownload;
       ImGui::PopStyleColor();
       if (ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
@@ -4796,7 +4863,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                             ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(520.f * scale_, 560.f * scale_),
                             ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Preferences", &open)) {
+    if (begin_panel_dialog("Preferences", open, theme::Tint::Violet, scale_)) {
+      ImGui::PushTextWrapPos(0.f);
       // Checkboxes show the state; a click issues the toggle command.
       auto toggle = [&](const char* label, bool on, UiCommand c,
                         const char* tip) {
@@ -4913,6 +4981,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::Spacing();
       ImGui::TextDisabled("Display preferences are saved to view.conf.");
       if (classic_button("Close")) open = false;
+      ImGui::PopTextWrapPos();
     }
     ImGui::End();
     if (!open) cmd = UiCommand::TogglePreferences;
@@ -4926,7 +4995,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                             ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(610.f * scale_, 620.f * scale_),
                             ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Credentials", &open)) {
+    if (begin_panel_dialog("Credentials", open, theme::Tint::Steel, scale_)) {
+      ImGui::PushTextWrapPos(0.f);
       if (!catalog_credentials_loaded_) {
         const CatalogCredentials stored = load_catalog_credentials();
         for (size_t i = 0; i < catalog_key_count; ++i) {
@@ -5081,6 +5151,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::TextDisabled("Stored in catalog-credentials.conf and reddit.conf "
                            "in the private config directory.");
       if (classic_button("Close##credentials")) open = false;
+      ImGui::PopTextWrapPos();
     }
     ImGui::End();
     if (!open) cmd = UiCommand::ToggleCredentials;
