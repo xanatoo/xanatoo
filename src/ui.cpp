@@ -4163,6 +4163,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
             cmd = UiCommand::SubscriptionOpen;
             result.arg = sub.address;
           }
+          if (middle_open(cmd, result.arg, sub.address))
+            cmd = UiCommand::SubscriptionOpenInTab;
           if (sub.unread) {
             const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
             ImGui::GetWindowDrawList()->AddCircleFilled(

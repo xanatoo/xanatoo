@@ -70,6 +70,9 @@ behaviour is free functions ("systems") taking `App&`:
 
 ## Views, navigation, buffers, prompts, windows
 
+Middle-clicking a source in the Subscriptions menu uses the same tab-opening
+path as History and Bookmarks, and marks the subscription read.
+
 Document views: `App::panes[kMaxViews]` — slots 0 / 1 are the centre
 (split), document windows own a slot from `kCentreViews` up
 (`FloatWindow::view`, `alloc_view` / `release_view` / `close_doc_window`).

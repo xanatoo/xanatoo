@@ -1581,6 +1581,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::SubscriptionOpen:
       open_subscription(app, arg);
       break;
+    case C::SubscriptionOpenInTab:
+      if (!arg.empty()) {
+        mark_subscription_read(app, arg);
+        open_link_in_tab(app, app.focus, arg);
+      }
+      break;
     case C::SubscriptionMarkRead:
       mark_subscription_read(app, arg);
       break;

@@ -2,6 +2,11 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Middle-click in the Subscriptions menu
+
+- Middle-click opens the source in a new tab and clears its unread count.
+  The Nix suite passed 14,901 checks.
+
 ## Status (2026-11-25) — History branches in new tabs
 
 - Link-opened tabs copy the opener’s trail through the displayed page,

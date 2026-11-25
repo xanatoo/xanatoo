@@ -11,6 +11,8 @@ follow API, notification server or posting rights are required.
   user profile; alternatively paste a source address and choose **Add
   subscription**. The Bookmarks menu offers the current-source action too.
 - **Open** navigates to the watched source and clears its unread count.
+- Middle-click a source in the **Subscriptions** menu to open it in a new
+  tab and clear its unread count.
 - In **Lemmy Explorer** and **Nostr Explorer**, right-click a discovered
   community/person or Nostr author/group and choose **Subscribe**.
 - **Refresh** schedules an immediate check of that source; **Refresh all**

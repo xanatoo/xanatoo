@@ -58,6 +58,7 @@ enum class UiCommand {
   Subscribe, // add a source by address (empty = current page)
   Unsubscribe, // remove subscription by address
   SubscriptionOpen, // open and mark read
+  SubscriptionOpenInTab,
   SubscriptionMarkRead, // mark read without opening
   SubscriptionRefresh, // force a fetch now (empty = all)
   SubscriptionInterval, // address + newline + integer minutes
