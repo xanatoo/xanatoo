@@ -4,11 +4,12 @@
 
 ## Status (2026-11-25) — Android development commands
 
-- Added Linux development shell commands to build and install the Android
-  APK through the existing flake pipeline. Renamed the installer app to
-  `install-xanatoo-android`.
-- Verified the APK dry run and installer command routing. No device install
-  was performed.
+- Grouped the Nix shell help by target. The Linux shell provides
+  `xanatoo-android-build` and `xanatoo-android-install`.
+- Android uses a Nix-managed build directory and a separate
+  `result-android` output link. The installer flake app shares the shell
+  command's name.
+- Verified the shell banner, APK dry run and installer app resolution.
 
 ## Status (2026-11-25) — Press feedback
 

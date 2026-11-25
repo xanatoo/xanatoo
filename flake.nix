@@ -304,7 +304,7 @@
           default = run;
           xanatoo = run;
         } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
-          install-xanatoo-android = (androidFor system).installApp;
+          xanatoo-android-install = (androidFor system).installApp;
         } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           xanatoo-wasm = (import ./nix/wasm.nix {
             pkgs = import nixpkgs { inherit system; };
@@ -321,12 +321,12 @@
           pkg = self.packages.${system}.xanatoo-unwrapped;
 
           isLinux = pkgs.stdenv.hostPlatform.isLinux;
-          androidHelper = name: action: pkgs.writeShellScriptBin name ''
+          androidHelper = name: command: pkgs.writeShellScriptBin name ''
             if [ -z "''${XANATOO_SOURCE:-}" ]; then
               echo "$0: XANATOO_SOURCE is not set (enter the shell with: nix develop)" >&2
               exit 1
             fi
-            exec nix ${action} "$XANATOO_SOURCE#${name}" "$@"
+            exec nix ${command} "$@"
           '';
 
           dejavuFont =
@@ -483,8 +483,10 @@ except Exception:
               xanatooTest
               pandoc  # EPUB → Markdown import (optional at runtime)
             ] ++ pkgs.lib.optionals isLinux [
-              (androidHelper "xanatoo-android" "build")
-              (androidHelper "install-xanatoo-android" "run")
+              (androidHelper "xanatoo-android-build"
+                ''build --out-link result-android "$XANATOO_SOURCE#xanatoo-android"'')
+              (androidHelper "xanatoo-android-install"
+                ''run "$XANATOO_SOURCE#xanatoo-android-install"'')
             ];
             CMAKE_BUILD_TYPE = "Debug";
             shellHook = ''
@@ -503,55 +505,32 @@ except Exception:
               # C-only FLAGS_DEBUG omitted — project is CXX-only.
               export CMAKE_CXX_FLAGS_DEBUG="''${CMAKE_CXX_FLAGS_DEBUG:--g3 -Og -fno-omit-frame-pointer}"
               cat <<'XANATOO_DEV_BANNER'
-xanatoo — nix develop (out-of-tree CMake)
+xanatoo — Nix development shell
 
-  Pattern: deps + env + PATH scripts here; packaged wrappers stay for
-  `nix build` / `nix run`. Same idea as biltoo / Pingus.
+PC
+  xanatoo-configure   configure the CMake build
+  xanatoo-build       configure if needed, then build with Ninja
+  xanatoo-run         build and run the app (forwards arguments)
+  xanatoo-run-gdb     build and run under GDB (stays open on a crash)
+  xanatoo-test        build and run the tests
 
-  Commands (build-before-run; safe outside this shell → clear error):
-    xanatoo-configure   cmake -S $XANATOO_SOURCE -B $XANATOO_BUILD_DIR -G Ninja
-    xanatoo-build       reconfigure if cache missing / source path changed, then ninja
-    xanatoo-run         build, then run the unwrapped binary (args forwarded)
-    xanatoo-run-gdb     build, then gdb auto-run (quit on exit 0; stay on crash)
-    xanatoo-test        build, then xanatoo_tests / ctest${pkgs.lib.optionalString isLinux ''
-
-    ${"    "}xanatoo-android           build the Android APK
-    ${"    "}install-xanatoo-android   build and install the APK on a connected device''}
-
-  One-shot from outside:
-    nix develop -c xanatoo-run examples/welcome.md
-    nix develop -c xanatoo-run-gdb
-    nix develop -c xanatoo-test
-
-  Why this shape:
-    • Helpers are writeShellScriptBin on PATH (not shellHook functions) so
-      `nix develop -c …` works.
-    • XANATOO_SOURCE is set only in shellHook — helpers refuse to run without it.
-    • xanatoo-build compares CMAKE_HOME_DIRECTORY to $XANATOO_SOURCE and
-      reconfigures when the checkout moved or the cache is stale/gone.
-    • Develop defaults to Debug; `nix build` packages use RelWithDebInfo.
-    • Unwrapped binary gets the package wrapper's font (XANATOO_FONT) and
-      --data-dir $XANATOO_BUILD_DIR/share/xanatoo (icons + live sources).
-
-  Env (override anytime):
-    XANATOO_SOURCE      this tree ($PWD)
-    XANATOO_BUILD_DIR   default /tmp/xanatoo-build
-    CMAKE_BUILD_TYPE    default Debug
-    XANATOO_FONT        DejaVu Sans from nixpkgs
-
-  Typical loop:
-    xanatoo-configure && xanatoo-build
-    xanatoo-run
-    # or: xanatoo-run-gdb
-
-  Debug symbols: CMAKE_BUILD_TYPE=Debug with -g3 -Og -fno-omit-frame-pointer
-  (set at configure time). After changing flags: rm -rf $XANATOO_BUILD_DIR &&
-  xanatoo-configure && xanatoo-build
-
-  Full write-up: docs/ENVIRONMENT.md
+  XANATOO_BUILD_DIR defaults to /tmp/xanatoo-build.
+  From outside the shell: nix develop -c xanatoo-run examples/welcome.md
+  See docs/ENVIRONMENT.md.
 XANATOO_DEV_BANNER
-              echo "  source=$XANATOO_SOURCE"
-              echo "  build=$XANATOO_BUILD_DIR  type=''${CMAKE_BUILD_TYPE:-Debug}"
+              echo "  Build directory: $XANATOO_BUILD_DIR (''${CMAKE_BUILD_TYPE:-Debug})"
+              ${pkgs.lib.optionalString isLinux ''
+                cat <<'XANATOO_ANDROID_BANNER'
+
+Android
+  xanatoo-android-build     build the APK and link it under result-android/
+  xanatoo-android-install   build and install with adb on a connected device
+
+  Nix configures and builds the APK in its own build directory.
+  From outside the shell: nix develop -c xanatoo-android-build
+  See docs/ANDROID.md.
+XANATOO_ANDROID_BANNER
+              ''}
             '';
           };
         });

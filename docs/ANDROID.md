@@ -3,15 +3,21 @@
 On Linux, the development shell provides both commands:
 
 ```sh
-nix develop -c xanatoo-android          # Build the APK
-nix develop -c install-xanatoo-android  # Build and install with adb install -r
+nix develop -c xanatoo-android-build    # Build the APK under result-android/
+nix develop -c xanatoo-android-install  # Build and install with adb install -r
 ```
+
+The flake configures the SDK, NDK and target ABIs and builds the APK in a
+Nix-managed directory. The desktop CMake build directory
+(`XANATOO_BUILD_DIR`, default `/tmp/xanatoo-build`) is separate. To check the
+Android build plan without building, pass `--dry-run` to
+`xanatoo-android-build`.
 
 You can also call the flake outputs directly:
 
 ```sh
 nix build .#xanatoo-android
-nix run .#install-xanatoo-android
+nix run .#xanatoo-android-install
 ```
 
 Same pipeline as Kurvenrausch / Pingus (`nix/android.nix`, `mk/android/`):

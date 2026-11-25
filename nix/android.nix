@@ -14,7 +14,7 @@
 # mk/android/scripts/build-apk.sh).
 #
 #   nix build .#xanatoo-android        the APK
-#   nix run .#install-xanatoo-android  install it with adb
+#   nix run .#xanatoo-android-install  install it with adb
 
 { pkgs
 , nixpkgs           # for the cross-built image libraries
