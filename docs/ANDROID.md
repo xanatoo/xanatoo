@@ -1,20 +1,23 @@
 # Android port
 
-On Linux, the development shell provides both commands:
+On Linux, enter the Android development shell with `nix develop .#android`
+or invoke a command directly:
 
 ```sh
-nix develop -c xanatoo-android-build    # Build the APK under result-android/
-nix develop -c xanatoo-android-install  # Build and install with adb install -r
+nix develop .#android -c xanatoo-android-configure  # Stage the NDK project
+nix develop .#android -c xanatoo-android-build      # Build and package the APK
+nix develop .#android -c xanatoo-android-install    # Build and install with adb
 ```
 
-The flake configures the SDK, NDK and target ABIs and builds the APK in a
-Nix-managed directory. Both helpers print the Nix command they invoke.
-The desktop CMake build directory
-(`XANATOO_BUILD_DIR`, default `/tmp/xanatoo-build`) is separate. To check the
-Android build plan without building, pass `--dry-run` to
-`xanatoo-android-build`.
+The build and install commands stage the current checkout automatically.
+They preserve unchanged native inputs and reuse the NDK object files. Each
+build packages a fresh APK at
+`/tmp/xanatoo-android-build/out/xanatoo.apk`. Set
+`XANATOO_ANDROID_BUILD_DIR` to use a different work directory, for example
+when building multiple checkouts. The desktop shell has its own CMake build
+directory and does not load the Android SDK.
 
-You can also call the flake outputs directly:
+For packaged builds and installs, use the flake outputs directly:
 
 ```sh
 nix build .#xanatoo-android

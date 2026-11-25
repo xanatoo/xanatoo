@@ -42,6 +42,14 @@ let
     APP_PLATFORM := android-${packagePlatform}
   '';
 
+  sdlBuildScripts = pkgs.lib.fileset.toSource {
+    root = ../mk/android/scripts;
+    fileset = pkgs.lib.fileset.unions [
+      ../mk/android/scripts/build-sdl-libs.sh
+      ../mk/android/scripts/ndk.sh
+    ];
+  };
+
   sdlAndroidLibs = pkgs.stdenvNoCC.mkDerivation {
     pname = "sdl3-android-libs";
     version = sdlVersion;
@@ -58,12 +66,12 @@ let
     buildPhase = ''
       runHook preBuild
       export ANDROID_HOME=${androidSdk}/libexec/android-sdk
-      bash ${../mk/android/scripts}/build-sdl-libs.sh
+      bash ${sdlBuildScripts}/build-sdl-libs.sh
       runHook postBuild
     '';
     installPhase = ''
       runHook preInstall
-      TARGET_ABIS=${pkgs.lib.escapeShellArg abis} bash ${../mk/android/scripts}/install-sdl-libs.sh
+      TARGET_ABIS=${pkgs.lib.escapeShellArg abis} bash ${../mk/android/scripts/install-sdl-libs.sh}
       runHook postInstall
     '';
     # Android ELF: the host's patchelf and strip must keep off.
@@ -111,49 +119,46 @@ let
 
   apkName = "xanatoo-${version}.apk";
 
+  buildTools = [
+    androidSdk pkgs.jdk17 pkgs.zip pkgs.gnumake pkgs.xz pkgs.rsync
+    pkgs.python3 pkgs.librsvg
+  ];
+
+  buildEnv = {
+    ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
+    BUILD_TOOLS_VERSION = buildToolsVersion;
+    PACKAGE_PLATFORM = packagePlatform;
+    COMPILE_PLATFORM = compilePlatform;
+    TARGET_ABIS = abis;
+    APP_NAME = "xanatoo";
+    FREETYPE_SRC = "${pkgs.freetype.src}";
+    DEJAVU_DIR = "${pkgs.dejavu_fonts}/share/fonts/truetype";
+    # Mozilla's roots (follows nixpkgs); old Android stores lack ISRG Root X1.
+    CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    SQLITE_SRC = sqliteAmalgamation;
+    MBEDTLS_SRC = "${pkgs.mbedtls.src}";
+    SECP256K1_SRC = "${pkgs.secp256k1.src}";
+    IMAGELIBS = imageLibs;
+    APPLICATION_MK = applicationMk;
+    TOP_ANDROID_MK = topAndroidMk;
+    SDL_PREBUILT_MK = sdlPrebuiltMk;
+    SDL_ANDROID_LIBS = sdlAndroidLibs;
+    APP_VERSION = version;
+    VERSION_CODE = toString versionCode;
+  };
+
   apk = pkgs.stdenvNoCC.mkDerivation {
     pname = "xanatoo-android";
     inherit version;
     dontUnpack = true;
-    nativeBuildInputs = [
-      androidSdk pkgs.jdk17 pkgs.zip pkgs.gnumake pkgs.xz
-      # Toolbar icons: rasterize_icons.py uses rsvg-convert (else its
-      # built-in pixel fallback).
-      pkgs.python3 pkgs.librsvg
-    ];
-    env = {
-      BUILD_TOOLS_VERSION = buildToolsVersion;
-      PACKAGE_PLATFORM = packagePlatform;
-      COMPILE_PLATFORM = compilePlatform;
-      TARGET_ABIS = abis;
-      APP_NAME = "xanatoo";
-      APP_DIR = "${../mk/android/app}";
+    nativeBuildInputs = buildTools;
+    env = buildEnv // {
       APP_SRC_DIR = "${appSrc}";
-      FREETYPE_SRC = "${pkgs.freetype.src}";
-      DEJAVU_DIR = "${pkgs.dejavu_fonts}/share/fonts/truetype";
-      # Mozilla's roots (follows nixpkgs); old Android stores lack ISRG Root X1.
-      CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-      FREETYPE_MK = "${../mk/android/freetype/Android.mk}";
-      SQLITE_SRC = sqliteAmalgamation;
-      SQLITE_MK = "${../mk/android/sqlite/Android.mk}";
-      MBEDTLS_SRC = "${pkgs.mbedtls.src}";
-      MBEDTLS_MK = "${../mk/android/mbedtls/Android.mk}";
-      SECP256K1_SRC = "${pkgs.secp256k1.src}";
-      SECP256K1_MK = "${../mk/android/secp256k1/Android.mk}";
-      THUMTOO_MK = "${../mk/android/thumtoo/Android.mk}";
-      IMAGELIBS = imageLibs;
-      APPLICATION_MK = applicationMk;
-      TOP_ANDROID_MK = topAndroidMk;
-      SDL_PREBUILT_MK = sdlPrebuiltMk;
-      SDL_ANDROID_LIBS = sdlAndroidLibs;
-      KEYSTORE = "${../mk/android/keystore/debug.keystore}";
-      APP_VERSION = version;
-      VERSION_CODE = toString versionCode;
+      ANDROID_PROJECT_DIR = "${../mk/android}";
     };
     buildPhase = ''
       runHook preBuild
-      export ANDROID_HOME=${androidSdk}/libexec/android-sdk
-      bash ${../mk/android/scripts}/build-apk.sh
+      bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh"
       runHook postBuild
     '';
     installPhase = ''
@@ -164,6 +169,26 @@ let
     dontStrip = true;
   };
 
+  devCommand = name: action: pkgs.writeShellScriptBin name ''
+    set -euo pipefail
+    source_dir="''${XANATOO_SOURCE:?Enter the Android shell with nix develop .#android}"
+    export APP_SRC_DIR="$(cd "$source_dir" && pwd -P)"
+    export ANDROID_PROJECT_DIR="$APP_SRC_DIR/mk/android"
+    build_dir="''${XANATOO_ANDROID_BUILD_DIR:-/tmp/xanatoo-android-build}"
+    mkdir -p "$build_dir"
+    cd -P "$build_dir"
+    if [ "$PWD" = "$APP_SRC_DIR" ]; then
+      echo "${name}: choose a build directory separate from the checkout" >&2
+      exit 1
+    fi
+    printf '%s: source=%s build=%s\n' "${name}" "$APP_SRC_DIR" "$PWD" >&2
+    # Keep staging, native builds and APK packaging serial in this directory.
+    {
+      flock 9
+      ${action}
+    } 9>.xanatoo-build.lock
+  '';
+
   installApp = {
     type = "app";
     program = toString (pkgs.writeShellScript "install-xanatoo-apk" ''
@@ -172,6 +197,37 @@ let
     meta.description = "Install the xanatoo APK on a connected Android device with adb";
   };
 
+  devShell = pkgs.mkShell (buildEnv // {
+    packages = buildTools ++ [
+      pkgs.android-tools
+      pkgs.util-linux
+      (devCommand "xanatoo-android-configure" ''
+        bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh" --configure
+      '')
+      (devCommand "xanatoo-android-build" ''
+        bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh"
+      '')
+      (devCommand "xanatoo-android-install" ''
+        bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh"
+        adb install -r "$@" "$PWD/out/$APP_NAME.apk" 9>&-
+      '')
+    ];
+    shellHook = ''
+      export XANATOO_SOURCE="$PWD"
+      export XANATOO_ANDROID_BUILD_DIR="''${XANATOO_ANDROID_BUILD_DIR:-/tmp/xanatoo-android-build}"
+      cat <<'XANATOO_ANDROID_BANNER'
+xanatoo — Android development shell
+
+  xanatoo-android-configure   stage the NDK project
+  xanatoo-android-build       build incrementally and package the APK
+  xanatoo-android-install     build and install the APK on a connected device
+
+  XANATOO_ANDROID_BUILD_DIR defaults to /tmp/xanatoo-android-build.
+  See docs/ANDROID.md.
+XANATOO_ANDROID_BANNER
+    '';
+  });
+
 in {
-  inherit sdlAndroidLibs sqliteAmalgamation imageLibs apk installApp;
+  inherit sdlAndroidLibs sqliteAmalgamation imageLibs apk installApp devShell;
 }

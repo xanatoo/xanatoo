@@ -329,16 +329,6 @@
           '';
 
           isLinux = pkgs.stdenv.hostPlatform.isLinux;
-          androidHelper = name: command: pkgs.writeShellScriptBin name (printInvocation + ''
-            if [ -z "''${XANATOO_SOURCE:-}" ]; then
-              echo "$0: XANATOO_SOURCE is not set (enter the shell with: nix develop)" >&2
-              exit 1
-            fi
-            printf '%s: build directory managed by Nix\n' "${name}" >&2
-            _xanatoo_print_invocation nix ${command} "$@"
-            exec nix ${command} "$@"
-          '');
-
           dejavuFont =
             "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
 
@@ -502,11 +492,6 @@ except Exception:
               xanatooRunGdb
               xanatooTest
               pandoc  # EPUB → Markdown import (optional at runtime)
-            ] ++ pkgs.lib.optionals isLinux [
-              (androidHelper "xanatoo-android-build"
-                ''build --out-link result-android "$XANATOO_SOURCE#xanatoo-android"'')
-              (androidHelper "xanatoo-android-install"
-                ''run "$XANATOO_SOURCE#xanatoo-android-install"'')
             ];
             CMAKE_BUILD_TYPE = "Debug";
             shellHook = ''
@@ -543,16 +528,14 @@ XANATOO_DEV_BANNER
                 cat <<'XANATOO_ANDROID_BANNER'
 
 Android
-  xanatoo-android-build     build the APK and link it under result-android/
-  xanatoo-android-install   build and install with adb on a connected device
-
-  Nix configures and builds the APK in its own build directory.
-  From outside the shell: nix develop -c xanatoo-android-build
-  See docs/ANDROID.md.
+  nix develop .#android                          open the Android shell
+  nix develop .#android -c xanatoo-android-build  build the APK incrementally
 XANATOO_ANDROID_BANNER
               ''}
             '';
           };
+        } // pkgs.lib.optionalAttrs isLinux {
+          android = (androidFor system).devShell;
         });
     };
 }

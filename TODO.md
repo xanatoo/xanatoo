@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Incremental Android development
+
+- The Linux Android shell runs the NDK and packaging tools directly. It
+  stages the live checkout and retains native objects in
+  `XANATOO_ANDROID_BUILD_DIR` (default `/tmp/xanatoo-android-build`).
+- Added a configure-only command. The build command packages the APK
+  locally, and the installer builds and passes that APK to adb.
+- Kept the Android toolchain in a dedicated shell, separate from the PC
+  toolchain. The packaged Android flake outputs share the build script.
+- Built and signed the APK for all three ABIs. A repeat build recompiled
+  and relinked no native libraries. Verified the local APK passed to adb
+  with a stub. The desktop suite passed 14,797 checks.
+
 ## Status (2026-11-25) — Development command startup summaries
 
 - Desktop helpers print their source and build directories. The build helper

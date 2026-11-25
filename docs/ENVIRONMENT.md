@@ -150,6 +150,9 @@ helper reports the build type from the CMake cache and prints the build
 command with its parallelism setting. The run helpers show the executable,
 default data directory and font.
 
+For the incremental Android workflow on Linux, use `nix develop .#android`.
+See [Android development](ANDROID.md).
+
 ---
 
 ## Minimal flake shape (conceptual)
