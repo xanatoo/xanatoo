@@ -136,9 +136,10 @@ static bool has_sfnt_table(FT_Face face, FT_ULong tag) {
 // Colour that FreeType cannot draw by itself: only an SVG table, no
 // bitmap strikes (CBDT / sbix) or COLR layers.
 static bool svg_only_color(FT_Face face) {
-  return FT_HAS_COLOR(face) && has_sfnt_table(face, TTAG_SVG) &&
+  // The ArkOS FreeType headers predate the named SVG and COLR constants.
+  return FT_HAS_COLOR(face) && has_sfnt_table(face, FT_MAKE_TAG('S', 'V', 'G', ' ')) &&
          !has_sfnt_table(face, TTAG_CBDT) && !has_sfnt_table(face, TTAG_sbix) &&
-         !has_sfnt_table(face, TTAG_COLR);
+         !has_sfnt_table(face, FT_MAKE_TAG('C', 'O', 'L', 'R'));
 }
 
 // A face that maps `codepoint`, opening fallback files on first need.

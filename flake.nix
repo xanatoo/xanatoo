@@ -174,6 +174,7 @@
               sdl3-android = android.sdlAndroidLibs;
               imagedeps-android = android.imageLibs;
               arkos-sysroot = r36s.sysroot;
+              arkos-cross-gcc = r36s.toolchain;
               xanatoo-r36s = r36s.r36s;
               xanatoo-r36s-portmaster = r36s.portmaster;
               xanatoo-r36s-portmaster-zip = r36s.portmasterZip;

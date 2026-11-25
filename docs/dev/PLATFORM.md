@@ -23,18 +23,20 @@ ports, the SDL3 transition and Android.
   `docs/PORTS.md`.
 - SDL3 transition (in progress): Win32/Win64 flake packages use nixpkgs'
   SDL2-compatible API over an SDL3 runtime, explicitly packaging SDL3.dll.
-  The app and vendored ImGui still compile against SDL2 headers; WASM,
-  Android, and the default R36S port currently retain SDL2. Do not change
-  their ABI until the SDL3 API/backend migration and platform tests are
-  complete. First-party render, window, surface, time, mouse, input events,
-  gamepads, cursor and SDL diagnostic operations now use `xanatoo/sdl.hpp`
+  The app and vendored ImGui still compile against SDL2 headers for Windows.
+  WASM and Android currently retain SDL2. First-party render, window,
+  surface, time, mouse, input events, gamepads, cursor and SDL diagnostic
+  operations now use `xanatoo/sdl.hpp`
   (switch `XANATOO_SDL3`); `checks.sdl3-api` compiles this
   bridge with real SDL3 headers. `-DXANATOO_SDL3=ON` selects an experimental
   first-party ImGui platform/renderer backend (`src/imgui_sdl3.cpp`) and the
-  flake's separate `xanatoo-sdl3-native` package. `nix/r36s.nix` also has an
-  experimental SDL3 KMS/DRM build and alternative PortMaster package that
-  ships `libSDL3.so.0`; keep the SDL2 package as the default. Do not switch
-  production packages until native SDL3 builds and runtime tests pass.
+  flake's separate `xanatoo-sdl3-native` package. The default R36S
+  PortMaster package ships SDL3 with KMS/DRM. The `xanatoo-r36s-sdl2*`
+  packages retain the device's SDL2 ABI as a fallback.
+- Both R36S app variants use `arkos-cross-gcc` from `nix/r36s.nix`. GCC
+  and its target runtimes are built against the arm64 eoan sysroot so the
+  app can use current C++ headers while keeping glibc 2.30 as the dynamic
+  baseline. The driver links libstdc++ and libgcc statically.
 
 ## Android
 

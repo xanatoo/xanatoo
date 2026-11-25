@@ -71,11 +71,13 @@ cmake --build build/sdl3
 compile-only bridge check. ImGui gamepad navigation and secondary viewports
 are not supported by the minimal backend.
 
-R36S/ArkOS uses SDL3 built for the eoan glibc/libstdc++ sysroot and bundled
-with the PortMaster package, using the KMS/DRM recipe from
-`Grumbel/sdl-jstest`:
+R36S/ArkOS uses the eoan arm64 sysroot with glibc 2.30. The cross toolchain
+builds libstdc++ and libgcc against that sysroot and links them statically
+into xanatoo. The PortMaster package bundles SDL3 with KMS/DRM support,
+following the recipe from `Grumbel/sdl-jstest`.
 
 ```sh
+nix build -L .#arkos-cross-gcc              # cross toolchain only
 nix build -L .#sdl3-r36s                    # SDL3 library for ArkOS
 nix build -L .#xanatoo-r36s                 # application
 nix build -L .#xanatoo-r36s-portmaster-zip

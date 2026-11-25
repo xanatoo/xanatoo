@@ -2,15 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # The R36S handheld (RK3326, 640x480) running ArkOS, whose userland is
-# Ubuntu 19.10 (eoan): glibc 2.30, libstdc++ from GCC 9. A
-# binary built against nixpkgs' glibc does not run there, so this builds
-# against a sysroot made of eoan's arm64 packages, from the Ubuntu archive
-# with their published hashes (Pingus fetches a prebuilt sysroot instead).
-# The compiler is nixpkgs' aarch64 cross GCC, but every header and library
-# comes from the sysroot: libstdc++ 9's headers with its shared library (so
-# no ABI shims are needed), the shared libgcc_s; GCC's own libgcc.a supplies
-# only compiler builtins. SDL3 is built for the same sysroot and shipped with
-# the PortMaster package.
+# Ubuntu 19.10 (eoan), with glibc 2.30. Build GCC and its target
+# runtimes against the eoan arm64 sysroot. The app links libstdc++ and
+# libgcc statically while keeping the device's glibc and system libraries
+# dynamic. SDL3 is built against the same sysroot and shipped with the port.
 #
 # Same approach as kurvenrausch's nix/r36s.nix; FreeType/Fontconfig debs
 # added for xanatoo's text stack. The SDL3 build follows the
@@ -34,7 +29,7 @@
 let
   lib = pkgs.lib;
 
-  # eoan arm64 packages: glibc, kernel headers, GCC 9 runtime / libstdc++,
+  # eoan arm64 packages: glibc, kernel headers, GCC 9 shared runtimes for device libraries,
   # SDL2 2.0.10, FreeType, Fontconfig (+ link deps).
   debs = [
     { file = "pool/main/g/glibc/libc6_2.30-0ubuntu2_arm64.deb"; sha256 = "4853da1e3c9eae109708b30dc5df00b7ced888c09f0e77bf6731015a97fb859a"; }
@@ -42,8 +37,6 @@ let
     { file = "pool/main/l/linux/linux-libc-dev_5.3.0-18.19_arm64.deb"; sha256 = "7575a37b1abf722f950fa8202c49f24b9c887dcf8e1f97bad15b555cb8c483de"; }
     { file = "pool/main/g/gcc-9/libgcc1_9.2.1-9ubuntu2_arm64.deb"; sha256 = "81dfdee2c50f13dab98967b0062e51f1cebb967f407e3593c5a77ed2146ea008"; }
     { file = "pool/main/g/gcc-9/libstdc++6_9.2.1-9ubuntu2_arm64.deb"; sha256 = "5af692b4ecf237979411acf74b7319785e09dd3450a917a94f3ea65cd260436e"; }
-    { file = "pool/main/g/gcc-9/libstdc++-9-dev_9.2.1-9ubuntu2_arm64.deb"; sha256 = "aa0efe55ba5002e2d3572271b6c0106dfb59f7a6c61be0a0c406c4836e12472b"; }
-    { file = "pool/main/g/gcc-9/libgcc-9-dev_9.2.1-9ubuntu2_arm64.deb"; sha256 = "4e4a83c4d83471eff726fd819b4e5d266fd01c0fbb66f1376718b78bfd4ae116"; }
     { file = "pool/universe/libs/libsdl2/libsdl2-2.0-0_2.0.10+dfsg1-1ubuntu1_arm64.deb"; sha256 = "34f06694f13bbee317b89be868768e8fd5b030287431a630881f45ff99dc9264"; }
     { file = "pool/universe/libs/libsdl2/libsdl2-dev_2.0.10+dfsg1-1ubuntu1_arm64.deb"; sha256 = "9eb97797c392b68449045d814f8763ca984853abefff94ababdc72270b7d65ea"; }
     { file = "pool/main/f/freetype/libfreetype6_2.9.1-4_arm64.deb"; sha256 = "e1a18bdec319ab92e02912b6721846907ea13e420123c7225834180ba94360f1"; }
@@ -93,62 +86,61 @@ let
           /*) ln -sfn "$out$target" "$link" ;;
         esac
       done
-      echo 'INPUT ( AS_NEEDED ( -lgcc_s ) )' > $out/usr/lib/gcc/${multiarch}/9/libgcc_s_asneeded.so
     '';
     dontFixup = true;
   };
 
   cross = pkgs.pkgsCross.aarch64-multiplatform.stdenv.cc;
-  gcc = cross.cc;
   binutils = cross.bintools.bintools;
   tp = lib.removeSuffix "-" cross.targetPrefix;
   multiarch = "aarch64-linux-gnu";
-  gccLib = "${gcc}/lib/gcc/${tp}/${gcc.version}";
 
-  cflags = lib.concatStringsSep " " [
-    "-nostdinc"
-    "--sysroot=${sysroot}"
-    "-B${binutils}/${tp}/bin"
-    "-isystem ${gccLib}/include"
-    "-isystem ${sysroot}/usr/include/${multiarch}"
-    "-isystem ${sysroot}/usr/include"
-    "-isystem ${sysroot}/usr/include/SDL2"
-    "-march=armv8-a -mtune=cortex-a35"
-    "-mno-outline-atomics"
-  ];
-  cxxflags = lib.concatStringsSep " " [
-    "-nostdinc -nostdinc++"
-    "--sysroot=${sysroot}"
-    "-B${binutils}/${tp}/bin"
-    "-isystem ${sysroot}/usr/include/c++/9"
-    "-isystem ${sysroot}/usr/include/${multiarch}/c++/9"
-    "-isystem ${sysroot}/usr/include/c++/9/backward"
-    "-isystem ${gccLib}/include"
-    "-isystem ${sysroot}/usr/include/${multiarch}"
-    "-isystem ${sysroot}/usr/include"
-    "-isystem ${sysroot}/usr/include/SDL2"
-    "-march=armv8-a -mtune=cortex-a35"
-    "-mno-outline-atomics"
-  ];
+  toolchain = pkgs.stdenv.mkDerivation {
+    pname = "arkos-cross-gcc";
+    inherit (cross.cc) version src;
+    nativeBuildInputs = [ binutils pkgs.bison pkgs.flex pkgs.texinfo ];
+    buildInputs = [ pkgs.gmp pkgs.mpfr pkgs.libmpc pkgs.zlib ];
+    strictDeps = true;
+    enableParallelBuilding = true;
+    hardeningDisable = [ "all" ];
+    dontAddDisableDepTrack = true;
+    configurePhase = ''
+      runHook preConfigure
+      mkdir build
+      cd build
+      ../configure \
+        --prefix="$out" \
+        --build=${pkgs.stdenv.buildPlatform.config} \
+        --target=${tp} \
+        --with-build-time-tools=${binutils}/${tp}/bin \
+        --with-sysroot=${sysroot} \
+        --with-as=${binutils}/bin/${tp}-as \
+        --with-ld=${binutils}/bin/${tp}-ld \
+        --with-arch=armv8-a --with-tune=cortex-a35 \
+        --enable-multiarch --enable-languages=c,c++ \
+        --disable-bootstrap --disable-multilib --disable-nls \
+        --disable-libsanitizer --disable-libgomp --disable-libquadmath \
+        --disable-libssp --disable-libvtv --disable-libatomic \
+        --with-system-zlib
+      runHook postConfigure
+    '';
+  };
+
   ldflags = lib.concatStringsSep " " [
-    "-B${sysroot}/usr/lib/${multiarch}"
-    "-B${gccLib}"
-    "-L${sysroot}/usr/lib/gcc/${multiarch}/9"
-    "-L${sysroot}/usr/lib/${multiarch}"
-    "-L${sysroot}/lib/${multiarch}"
+    "-static-libgcc"
     "-Wl,-rpath-link,${sysroot}/usr/lib/${multiarch}:${sysroot}/lib/${multiarch}"
     "-Wl,--dynamic-linker=/lib/ld-linux-aarch64.so.1"
   ];
-  driver = name: compiler: flags: linkFlags: libs: pkgs.writeShellScript name ''
+  driver = compiler: linkFlags: pkgs.writeShellScript "arkos-${compiler}" ''
     for a in "$@"; do
       case "$a" in
-        -c|-S|-E|-M|-MM) exec ${gcc}/bin/${tp}-${compiler} ${flags} "$@" ;;
+        -c|-S|-E|-M|-MM) exec ${toolchain}/bin/${tp}-${compiler} "$@" ;;
       esac
     done
-    exec ${gcc}/bin/${tp}-${compiler} ${flags} ${linkFlags} "$@" ${libs}
+    exec ${toolchain}/bin/${tp}-${compiler} ${ldflags} ${linkFlags} "$@"
   '';
-  cc = driver "arkos-gcc" "gcc" cflags ldflags "-lm";
-  cxx = driver "arkos-g++" "g++" cxxflags "-nostdlib++ ${ldflags}" "-lstdc++ -lm";
+  cc = driver "gcc" "";
+  cxx = driver "g++" "-static-libstdc++";
 
   # Link stub: same soname as device SDL2, empty symbols (kurvenrausch pattern).
   sdlStub = pkgs.runCommand "libSDL2-link-stub" { } ''
@@ -264,7 +256,18 @@ let
     dontPatchELF = true;
     dontPatchShebangs = true;
     postInstall = ''
-      ${binutils}/bin/${tp}-strip $out/bin/xanatoo
+      binary="$out/bin/xanatoo"
+      readelf=${binutils}/bin/${tp}-readelf
+      if "$readelf" -d "$binary" | grep -E 'NEEDED.*lib(stdc\+\+|gcc_s)\.so'; then
+        echo "Unexpected shared GCC runtime dependency" >&2
+        exit 1
+      fi
+      glibc_versions=$("$readelf" --version-info "$binary" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu)
+      if [ "$(printf '%s\n' "$glibc_versions" GLIBC_2.30 | sort -V | tail -n1)" != GLIBC_2.30 ]; then
+        echo "Binary requires a newer glibc than ArkOS provides: $glibc_versions" >&2
+        exit 1
+      fi
+      ${binutils}/bin/${tp}-strip "$binary"
     '';
     dontStrip = true;
   };
@@ -330,6 +333,6 @@ let
   portmasterSDL2Zip = mkPortmasterZip { port = portmasterSDL2; withSDL3 = false; };
 
 in {
-  inherit sysroot sdl3 r36s r36sSDL3 r36sSDL2 portmaster portmasterZip
+  inherit sysroot toolchain sdl3 r36s r36sSDL3 r36sSDL2 portmaster portmasterZip
     portmasterSDL3 portmasterSDL3Zip portmasterSDL2 portmasterSDL2Zip;
 }

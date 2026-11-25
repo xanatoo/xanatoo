@@ -364,11 +364,6 @@ target_compile_definitions(xanatoo PRIVATE
 # sources must see the same switch as ui.cpp.
 target_compile_definitions(xanatoo PRIVATE IMGUI_ENABLE_TEST_ENGINE)
 
-# nix/r36s.nix: newer GCC than the sysroot's libstdc++ 9 (__cxa_call_terminate).
-if(XANATOO_R36S)
-  target_sources(xanatoo PRIVATE src/r36s_abi.cpp)
-endif()
-
 if(NOT EMSCRIPTEN)
   find_package(Threads REQUIRED)
   set(XANATOO_THREADS Threads::Threads)

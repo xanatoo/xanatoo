@@ -3,9 +3,10 @@
 
 # xanatoo for the R36S (ArkOS) and other PortMaster handhelds
 
-Native aarch64 build linked against an ArkOS-era (Ubuntu 19.10) userland:
-GCC 16 compiling C++20 against GCC 9's libstdc++ headers and library, so
-the binary needs nothing newer than the device's glibc 2.30 / libstdc++.
+Native aarch64 build using a current GCC with C++20 support. The cross
+toolchain builds libstdc++ and libgcc against the Ubuntu 19.10 (eoan)
+sysroot, and xanatoo links both runtimes statically. The device provides
+glibc 2.30 and the remaining system libraries.
 Image decoding uses stb_image (PNG / JPEG / GIF / BMP): there is no libvips
 in that sysroot, so no thumtoo.
 
@@ -73,6 +74,7 @@ lists the bundled documents.
 ## Build (from the source tree)
 
 ```bash
+nix build .#arkos-cross-gcc                # cross toolchain only
 nix build .#xanatoo-r36s
 nix build .#xanatoo-r36s-portmaster
 nix build .#xanatoo-r36s-portmaster-zip

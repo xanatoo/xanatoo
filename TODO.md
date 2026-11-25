@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — R36S C++ toolchain
+
+- Build current GCC and its runtimes against the ArkOS glibc 2.30 sysroot
+  and link libstdc++ and libgcc statically for both SDL variants.
+- Built the SDL3 PortMaster ZIP and SDL2 fallback. Both binaries use glibc
+  symbols through 2.30 and have no shared GCC runtime dependency.
+- Verified C++20 span, threading, exceptions and SDL3 startup under
+  Cortex-A35 QEMU. The Nix suite passed 14,905 checks.
+
 ## Status (2026-11-25) — Quote rule spacing
 
 - Block quote rules end at the last text line, leaving the configured gap
