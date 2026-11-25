@@ -267,6 +267,9 @@ window title onto the strip (`over_tab_strip`) runs `pop_in_soft`; tab
 reorder is ImGui's own (ids = buffer ids, `ReorderTabs` copies the order
 into `tab_order`). Never add a per-panel
 "docked" flag; set `FloatWindow::dock` through the helpers above.
+Document tabs use dark label ink. The active tab has a raised bevel below
+its accent overline, and selected service tabs use a lighter fill. The
+bevel and favicon share the scrolling tab area's clip.
 Stacking: `float_stack` sorts by layer (docked < free < maximized), then
 `FloatWindow::z`, then its fixed role order. A title click raises the
 window (`raise_float`; document windows raise on any click via

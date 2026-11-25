@@ -56,6 +56,7 @@ struct Palette {
   Rgb tab_idle_bottom = rgb(0xC9, 0xCD, 0xCC);
   Rgb tab_text = rgb(0x2A, 0x24, 0x08);
   // Document tab strip: a tab whose document takes edits is green.
+  Rgb doc_tab_text = rgb(0x42, 0x49, 0x4C); // Inactive label ink
   Rgb doc_tab_edit = rgb(0xCF, 0xE6, 0xC4);
   Rgb doc_tab_edit_hot = rgb(0xEA, 0xF7, 0xE2);
   Rgb doc_tab_edit_selected = rgb(0xE4, 0xF5, 0xDA);

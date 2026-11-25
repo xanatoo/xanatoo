@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Document tab contrast
+
+- Darkened inactive tab labels, lightened the selected service-tab fill,
+  and added a raised bevel under the active tab's accent stripe.
+- Verified the bevel moves with Ctrl+Tab under Xvfb. The Nix suite passed
+  14,797 checks.
+
 ## Status (2026-11-25) — Service bar alignment
 
 - Centered the service icon, navigation labels, and search field above the

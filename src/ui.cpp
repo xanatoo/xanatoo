@@ -3215,20 +3215,17 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                    : static_cast<uint32_t>(i);
           id += "###tab";
           id += std::to_string(bid);
-          const theme::Rgb ink = i == state.active_tab
-                                     ? theme::palette().text
-                                     : theme::palette().text_dim;
+          const bool active = i == state.active_tab;
+          const theme::Palette& pal = theme::palette();
+          const auto col = [](theme::Rgb c) {
+            return ImVec4(c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f);
+          };
           ImGui::PushStyleColor(ImGuiCol_Text,
-                                ImVec4(ink.r / 255.f, ink.g / 255.f,
-                                       ink.b / 255.f, 1.f));
+                                col(active ? pal.text : pal.doc_tab_text));
           int tab_colors = 1;
           if (i < static_cast<int>(state.tab_editable.size()) &&
               state.tab_editable[static_cast<size_t>(i)]) {
             // An editable, unlocked document: a green tab (docs/UI.md).
-            const theme::Palette& pal = theme::palette();
-            auto col = [](theme::Rgb c) {
-              return ImVec4(c.r / 255.f, c.g / 255.f, c.b / 255.f, 1.f);
-            };
             ImGui::PushStyleColor(ImGuiCol_Tab, col(pal.doc_tab_edit));
             ImGui::PushStyleColor(ImGuiCol_TabDimmed, col(pal.doc_tab_edit));
             ImGui::PushStyleColor(ImGuiCol_TabHovered, col(pal.doc_tab_edit_hot));
@@ -3246,13 +3243,12 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             // A native service's page: its accent (docs/UI.md "Service
             // strips").
             const uint32_t c = state.tab_service_color[static_cast<size_t>(i)];
-            const theme::Palette& pal = theme::palette();
             const ImVec4 line = tint_rgb(pal.face, c, 1.f);
             ImGui::PushStyleColor(ImGuiCol_Tab, tint_rgb(pal.face_dark, c, 0.18f));
             ImGui::PushStyleColor(ImGuiCol_TabDimmed, tint_rgb(pal.face_dark, c, 0.18f));
-            ImGui::PushStyleColor(ImGuiCol_TabHovered, tint_rgb(pal.face, c, 0.32f));
-            ImGui::PushStyleColor(ImGuiCol_TabSelected, tint_rgb(pal.face, c, 0.14f));
-            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected, tint_rgb(pal.face, c, 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_TabHovered, tint_rgb(pal.face_light, c, 0.22f));
+            ImGui::PushStyleColor(ImGuiCol_TabSelected, tint_rgb(pal.face_light, c, 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_TabDimmedSelected, tint_rgb(pal.face_light, c, 0.14f));
             ImGui::PushStyleColor(ImGuiCol_TabSelectedOverline, line);
             ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline, line);
             tab_colors += 7;
@@ -3263,19 +3259,40 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           // TabItemEx reports its label before ItemAdd: the hook misses it.
           note_hover_help("tab", nullptr);
           ImGui::PopStyleColor(tab_colors);
-          if (icon) {
+          if ((active || icon) && ImGui::IsItemVisible()) {
             const ImVec2 min = ImGui::GetItemRectMin();
             const ImVec2 max = ImGui::GetItemRectMax();
-            const float side = 16.f * scale_;
-            const ImVec2 size = icon_size(icon, side);
-            const float x = min.x + 8.f * scale_ + (side - size.x) * 0.5f;
-            const float y = min.y + (max.y - min.y - size.y) * 0.5f;
             ImDrawList* draw = ImGui::GetWindowDrawList();
             ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
             draw->PushClipRect(ImVec2(bar->ScrollingRectMinX, min.y),
                                ImVec2(bar->ScrollingRectMaxX, max.y), true);
-            draw->AddImage(reinterpret_cast<ImTextureID>(icon), ImVec2(x, y),
-                           ImVec2(x + size.x, y + size.y));
+            if (active) {
+              // Leave the accent overline visible above the raised top edge.
+              const float inset = std::max(1.f, scale_);
+              const float top = min.y + 4.f * scale_;
+              const float bottom = max.y - 2.f * inset;
+              const float left = min.x + 1.5f * inset;
+              const float right = max.x - 2.f * inset;
+              const float corner = 4.f * scale_;
+              const ImU32 light = ImGui::GetColorU32(col(pal.highlight));
+              const ImU32 shade = ImGui::GetColorU32(col(pal.shadow));
+              draw->AddLine(ImVec2(min.x + corner, top),
+                            ImVec2(max.x - corner, top), light, inset);
+              draw->AddLine(ImVec2(left, top + inset),
+                            ImVec2(left, bottom), light, inset);
+              draw->AddLine(ImVec2(right, top + inset),
+                            ImVec2(right, bottom), shade, inset);
+              draw->AddLine(ImVec2(left + inset, bottom),
+                            ImVec2(right, bottom), shade, inset);
+            }
+            if (icon) {
+              const float side = 16.f * scale_;
+              const ImVec2 size = icon_size(icon, side);
+              const float x = min.x + 8.f * scale_ + (side - size.x) * 0.5f;
+              const float y = min.y + (max.y - min.y - size.y) * 0.5f;
+              draw->AddImage(reinterpret_cast<ImTextureID>(icon), ImVec2(x, y),
+                             ImVec2(x + size.x, y + size.y));
+            }
             draw->PopClipRect();
           }
           tab_item_ids.emplace_back(ImGui::GetItemID(), bid);
