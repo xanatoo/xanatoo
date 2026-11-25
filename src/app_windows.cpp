@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <unordered_map>
 #include <utility>
 
 #include "xanatoo/app.hpp"
@@ -28,6 +29,7 @@ std::pair<int, int> min_size(const FloatWindow& w) {
       return {200, 140};
     case WindowRole::Page:
       return {160, 120};
+    case WindowRole::VerticalTabs:
     case WindowRole::History:
     case WindowRole::Downloads:
     case WindowRole::Backlinks:
@@ -133,6 +135,9 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Page:
       toggle_page_panel(app);
+      break;
+    case WindowRole::VerticalTabs:
+      app.vertical_tabs_open = false;
       break;
     case WindowRole::History:
       app.history_panel_open = false;
@@ -418,6 +423,14 @@ void press_title(App& app, FloatWindow& w, int mx, int my) {
       return;
     }
   }
+  if (w.role == WindowRole::VerticalTabs && !float_shaded(w)) {
+    const SDL_Rect add = title_button_rect(app, w, "+");
+    const SDL_Point point{mx, my};
+    if (SDL_PointInRect(&point, &add)) {
+      execute_command(app, UiCommand::NewTab);
+      return;
+    }
+  }
   // Double-click maximizes / restores; a drag moves the window (a docked
   // or maximized one tears off first, see float_motion).
   const Uint32 now = xanatoo::sdl::ticks();
@@ -441,6 +454,130 @@ void tear_off(App& app, FloatWindow& w, int mx, int my) {
   w.drag_dy = my - w.y;
 }
 
+struct VerticalTabRow {
+  size_t tab_index;
+  int depth;
+};
+
+std::vector<VerticalTabRow> vertical_tab_rows(App& app) {
+  const size_t root = app.tab_order.size();
+  std::unordered_map<BufferId, size_t> positions;
+  for (size_t i = 0; i < root; ++i) positions.emplace(app.tab_order[i], i);
+
+  // Follow opener links through floating documents to the nearest visible tab.
+  std::vector<std::vector<size_t>> children(root + 1);
+  for (size_t i = 0; i < root; ++i) {
+    size_t parent = root;
+    const DocBuffer* tab = find_buf(app, app.tab_order[i]);
+    while (tab && tab->tab_parent != kNoBuffer) {
+      if (const auto it = positions.find(tab->tab_parent); it != positions.end()) {
+        parent = it->second;
+        break;
+      }
+      tab = find_buf(app, tab->tab_parent);
+    }
+    children[parent].push_back(i);
+  }
+
+  // Rebuild the tree even if the horizontal bar was reordered or sorted.
+  std::vector<VerticalTabRow> rows;
+  std::vector<VerticalTabRow> pending;
+  auto push_children = [&](size_t parent, int depth) {
+    const auto& branch = children[parent];
+    for (auto it = branch.rbegin(); it != branch.rend(); ++it)
+      pending.push_back({*it, depth});
+  };
+  push_children(root, 0);
+  while (!pending.empty()) {
+    const VerticalTabRow row = pending.back();
+    pending.pop_back();
+    rows.push_back(row);
+    push_children(row.tab_index, row.depth + 1);
+  }
+  return rows;
+}
+
+int vertical_tab_row_height(const App& app) {
+  return std::max(1, app.ui_font.line_height() +
+                        static_cast<int>(8.f * app.ui_scale));
+}
+
+struct VerticalTabClient {
+  SDL_Rect rect;
+  int close_width;
+};
+
+VerticalTabClient vertical_tab_client(App& app, const FloatWindow& w) {
+  auto [x, y, width, height] = float_client_rect(app, w);
+  width = std::max(0, std::min(x + width, client_scrollbar_rect(app, w).x + 2) - x);
+  return {{x, y, width, height}, std::min(width / 3, vertical_tab_row_height(app))};
+}
+
+void click_vertical_tabs(App& app, FloatWindow& w, int mx, int my) {
+  const auto [rect, close_width] = vertical_tab_client(app, w);
+  const SDL_Point point{mx, my};
+  if (float_shaded(w) || !SDL_PointInRect(&point, &rect)) return;
+  const auto rows = vertical_tab_rows(app);
+  const int row = static_cast<int>(my - rect.y + w.scroll) /
+                  vertical_tab_row_height(app);
+  if (static_cast<size_t>(row) >= rows.size()) return;
+  const bool close = mx >= rect.x + rect.w - close_width;
+  execute_command(app, close ? UiCommand::CloseTab : UiCommand::SelectTab,
+                  std::to_string(rows[row].tab_index));
+}
+
+void draw_vertical_tabs(App& app, FloatWindow& w) {
+  const SDL_Rect add = title_button_rect(app, w, "+");
+  const bool open = draw_floating_frame(app, w, "Vertical Tabs", float_active(app, w),
+                                        title_shade_zone(w).x - add.x);
+  if (!open) return;
+  draw_title_button(app, w, add, "+", false);
+
+  const auto [rect, close_width] = vertical_tab_client(app, w);
+  if (rect.w <= 0 || rect.h <= 0) return;
+  const float max_scroll = float_max_scroll(app, w);
+  w.scroll = std::clamp(w.scroll, 0.f, max_scroll);
+  const auto rows = vertical_tab_rows(app);
+  const int step = vertical_tab_row_height(app);
+  const int offset = static_cast<int>(w.scroll);
+  const auto& pal = theme::palette();
+  Font& font = app.ui_font;
+  const int indent = std::max(1, static_cast<int>(14.f * app.ui_scale));
+  const int padding = std::max(1, static_cast<int>(6.f * app.ui_scale));
+  const int close_x = rect.x + rect.w - close_width;
+  const BufferId active = app.panes[app.centre_focus].buf;
+  const SDL_Point mouse{static_cast<int>(app.mouse_x), static_cast<int>(app.mouse_y)};
+  const bool hovered = SDL_PointInRect(&mouse, &rect) &&
+                       float_at(app, mouse.x, mouse.y) == &w &&
+                       !app.ui.want_capture_mouse();
+
+  sdl::set_clip_rect(app.sdl, &rect);
+  for (size_t i = offset / step; i < rows.size(); ++i) {
+    const int y = rect.y + static_cast<int>(i) * step - offset;
+    if (y >= rect.y + rect.h) break;
+    const auto [tab_index, depth] = rows[i];
+    const BufferId id = app.tab_order[tab_index];
+    const SDL_Rect row{rect.x, y, rect.w, step};
+    const bool hot = hovered && SDL_PointInRect(&mouse, &row);
+    if (id == active || hot)
+      theme::fill(app.sdl, row, id == active ? pal.accent_soft : pal.face_light);
+    const int baseline = y + (step - font.line_height()) / 2 + font.ascender();
+    const int max_indent = std::max(0, rect.w / 2 - close_width);
+    const int x = rect.x + padding + std::min(depth * indent, max_indent);
+    app.renderer.draw_text(font, x, baseline,
+                           fit_text(font, buffer_tab_label(app, id),
+                                    std::max(0, close_x - padding - x)),
+                           pal.text.r, pal.text.g, pal.text.b);
+    if (close_width >= font.measure("×")) {
+      const auto& ink = hot && mouse.x >= close_x ? pal.text : pal.text_dim;
+      app.renderer.draw_text(font, close_x + (close_width - font.measure("×")) / 2,
+                             baseline, "×", ink.r, ink.g, ink.b);
+    }
+  }
+  sdl::set_clip_rect(app.sdl, nullptr);
+  draw_client_scrollbar(app, w, max_scroll);
+}
+
 void press_client(App& app, FloatWindow& w, int mx, int my) {
   // Scrollbar strip (out to the window edge when docked against it): only
   // natively scrolled roles reserve it for click-free jump/drag.
@@ -454,6 +591,9 @@ void press_client(App& app, FloatWindow& w, int mx, int my) {
   switch (w.role) {
     case WindowRole::Backlinks:
       click_backlinks(app, w, my);
+      break;
+    case WindowRole::VerticalTabs:
+      click_vertical_tabs(app, w, mx, my);
       break;
     case WindowRole::History:
       click_history_panel(app, w, my);
@@ -559,6 +699,7 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.backlinks_mode) st.push_back(&app.bl);
   if (app.sitemap.shown) st.push_back(&app.sm);
   if (app.page.shown) st.push_back(&app.pg);
+  if (app.vertical_tabs_open) st.push_back(&app.vertical_tabs_win);
   if (app.history_panel_open) st.push_back(&app.history_win);
   if (app.annotation_panel_open) st.push_back(&app.annotation_win);
   if (app.revision_panel_open) st.push_back(&app.revision_win);
@@ -698,6 +839,7 @@ std::tuple<int, int, int, int> float_client_rect(App& app,
       return sitemap_client_rect(app);
     case WindowRole::Page:
       return page_client_rect(app);
+    case WindowRole::VerticalTabs:
     case WindowRole::History:
       return window_client_rect(w);
     case WindowRole::Styles:
@@ -764,6 +906,9 @@ float float_max_scroll(App& app, const FloatWindow& w) {
       return std::max(0.f, static_cast<float>(app.backlinks.size()) *
                                    backlinks_row_step(app) +
                                8.f - view_h);
+    case WindowRole::VerticalTabs:
+      return std::max(0.f, static_cast<float>(app.tab_order.size()) *
+                               vertical_tab_row_height(app) - view_h);
     case WindowRole::History:
       return history_panel_max_scroll(app, w);
     case WindowRole::Styles:
@@ -1154,6 +1299,9 @@ void draw_floats(App& app) {
         break;
       case WindowRole::Page:
         draw_page_panel(app);
+        break;
+      case WindowRole::VerticalTabs:
+        draw_vertical_tabs(app, *w);
         break;
       case WindowRole::History:
         draw_history_panel(app);

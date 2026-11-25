@@ -606,6 +606,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
           xanatoo::stretch_folded(sd, id, &buf(app, fp.buf).folds) ? 2 : 1;
   }
   ui_state.can_nav_forward = can_nav_step(app, 1);
+  ui_state.vertical_tabs_open = app.vertical_tabs_open;
+  ui_state.tab_bar_visible = app.tab_bar_visible;
   ui_state.history_open = app.history_panel_open;
   ui_state.recent_visited.clear();
   for (size_t i = app.visited.size(), n = 0; i > 0 && n < 25; --i, ++n)
@@ -1522,6 +1524,17 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::OpenAbout:
       navigate_to_url(app, kAboutPage);
+      break;
+    case C::ToggleTabBar:
+      keep_views(app);
+      app.tab_bar_visible = !app.tab_bar_visible;
+      break;
+    case C::ToggleVerticalTabs:
+      app.vertical_tabs_open = !app.vertical_tabs_open;
+      if (app.vertical_tabs_open)
+        focus_panel(app, WindowRole::VerticalTabs);
+      else if (float_active(app, app.vertical_tabs_win))
+        app.key_focus = KeyFocus::Document;
       break;
     case C::ToggleHistory:
       app.history_panel_open = !app.history_panel_open;

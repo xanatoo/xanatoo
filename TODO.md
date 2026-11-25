@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Vertical Tabs
+
+- Added View → Tab Bar and a dockable Vertical Tabs panel with opener
+  indentation and row controls. The session remembers both settings.
+- Verified nested link tabs, left docking, row selection, and session
+  restore under Xvfb. The Nix suite passed 14,901 checks.
+
 ## Status (2026-11-25) — Middle-click in the Subscriptions menu
 
 - Middle-click opens the source in a new tab and clears its unread count.

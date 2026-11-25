@@ -545,7 +545,9 @@ void dock_split_release(App& app) {
 }
 
 bool over_tab_strip(App& app, int x, int y) {
-  if (app.tab_order.empty() || x < 0 || x >= app.win_w) return false;
+  if (!app.tab_bar_visible || app.chrome_hidden || media_fullscreen(app) ||
+      app.tab_order.empty() || x < 0 || x >= app.win_w)
+    return false;
   const int h = static_cast<int>(28.f * app.ui_scale);
   const int bottom = static_cast<int>(app.ui_top);
   return y >= bottom - h && y < bottom;

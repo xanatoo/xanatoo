@@ -41,12 +41,13 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 22> panels(App& app) {
+std::array<PanelRef, 23> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
            {"sitemap", &app.sm, app.sitemap.shown},
            {"page", &app.pg, app.page.shown},
+           {"vertical-tabs", &app.vertical_tabs_win, app.vertical_tabs_open},
            {"history", &app.history_win, app.history_panel_open},
            {"styles", &app.styles_win, app.styles_panel_open},
            {"style-manager", &app.styles_manager_win,
@@ -174,6 +175,7 @@ std::string session_text(App& app) {
   out << "lemmy.instance_only=" << (app.lemmy_instance_only ? 1 : 0) << "\n";
   out << "matrix.server=" << app.matrix_server << "\n";
   out << "matrix.tab=" << app.matrix_tab << "\n";
+  out << "tab-bar.visible=" << (app.tab_bar_visible ? 1 : 0) << "\n";
   out << "related-sites.follow=" << (app.related.follow ? 1 : 0) << "\n";
   for (const PanelRef& r : panels(app)) {
     const FloatWindow& w = *r.win;
@@ -409,6 +411,10 @@ void restore_session(App& app) {
     }
     if (const std::string* v = get("focus"))
       focus_view(app, split && *v == "1" ? 1 : 0);
+    if (const auto* visible = get("tab-bar.visible"))
+      app.tab_bar_visible = *visible != "0";
+    app.vertical_tabs_open = get("vertical-tabs.open") &&
+                             *get("vertical-tabs.open") == "1";
     // Panels last: they read the pages just opened.
     if (get("help.open") && *get("help.open") == "1") app.help_mode = true;
     if (get("hover-help.open") && *get("hover-help.open") == "1" &&

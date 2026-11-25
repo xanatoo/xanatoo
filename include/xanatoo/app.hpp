@@ -468,7 +468,7 @@ struct Pane {
 enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 
 enum class WindowRole : uint8_t {
-  Help, Outline, Backlinks, Sitemap, Page, History, Styles, StyleManager, Bookmarks, Downloads, Reply,
+  Help, Outline, Backlinks, Sitemap, Page, History, VerticalTabs, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, LemmyExplorer,
   Subscriptions, Certificates, Identities, RelatedSites, MatrixExplorer, HoverHelp, Media,
   Document
@@ -1446,6 +1446,8 @@ struct App {
   bool record_visits = true;
   std::string bookmark_menu;   // bookmark of the open margin-icon menu
   bool history_panel_open = false;
+  bool vertical_tabs_open = false;
+  bool tab_bar_visible = true;
   bool styles_panel_open = false;
   bool styles_manager_panel_open = false;
   xanatoo::StylePins style_pins;
@@ -1560,6 +1562,7 @@ struct App {
   FloatWindow bl = make_float_panel(WindowRole::Backlinks, 80, 120, 360, 320);
   FloatWindow ol = make_float_panel(WindowRole::Outline, 40, 100, 320, 420);
   FloatWindow sm = make_float_panel(WindowRole::Sitemap, 140, 110, 340, 460);
+  FloatWindow vertical_tabs_win = make_float_panel(WindowRole::VerticalTabs, 50, 130, 260, 440);
   FloatWindow history_win = make_float_panel(WindowRole::History, 100, 130, 440, 360);
   FloatWindow styles_win = make_float_panel(WindowRole::Styles, 140, 100, 320, 420);
   FloatWindow styles_manager_win =

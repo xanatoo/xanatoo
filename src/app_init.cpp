@@ -72,7 +72,7 @@ bool app_init(App& app) {
   app.heading_px = static_cast<int>(std::lround(app.heading_px * app.ui_scale));
   // Panel geometry defaults (px at scale 1).
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
-                         &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
+                         &app.vertical_tabs_win, &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,
@@ -87,7 +87,7 @@ bool app_init(App& app) {
   for (int& w : app.dock_w)
     w = static_cast<int>(std::lround(w * app.ui_scale));
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
-                         &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
+                         &app.vertical_tabs_win, &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,

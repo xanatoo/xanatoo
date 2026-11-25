@@ -3214,7 +3214,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   result.top_reserved += browse_h;
 
   // ---- Document tab strip (browser-style) ----
-  if (!state.tab_labels.empty()) {
+  if (state.tab_bar_visible && !state.tab_labels.empty()) {
     const float tab_h = 32.f * scale_;
     // Tab-strip spacing is intentionally tight, but its context popup must
     // use the same comfortable padding as the other menus.
@@ -3849,6 +3849,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     force_menu("View");
     if (bar_menu("View")) {
+      if (ImGui::MenuItem("Tab Bar", nullptr, state.tab_bar_visible))
+        cmd = UiCommand::ToggleTabBar;
       menu_item_cmd(state.native_view ? "Web Page View" : "Native View",
                     UiCommand::ToggleNative, cmd, !state.alternate_url.empty());
       menu_item_cmd(state.archive_view ? "Live Page" : "Old Version (archive.org)",
@@ -3964,6 +3966,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     force_menu("Panels");
     if (bar_menu("Panels")) {
+      if (ImGui::MenuItem("Vertical Tabs", nullptr, state.vertical_tabs_open))
+        cmd = UiCommand::ToggleVerticalTabs;
       if (menu_item_with_icon("Keyboard Reference", "keyboard", "F1", state.help))
         cmd = UiCommand::ToggleHelp;
       if (menu_item_with_icon("Help Panel", "help", "Shift+F1", state.hover_help))

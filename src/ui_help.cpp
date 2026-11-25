@@ -562,6 +562,9 @@ const std::vector<UiHelpTopic> kTopics = {
      "middle-click for a new tab."},
     {"@history-this-tab", "This Tab",
      "Show visits from the current tab. Click again for all visits."},
+    {"@panel:vertical-tabs", "Vertical Tabs",
+     "Click a tab to switch to it or × to close it. Indented tabs were "
+     "opened from the tab above their branch. The + opens a new tab."},
     {"@panel:history", "History panel",
      "Visits newest first, each linked to the visit it came from, like "
      "`git log --graph`: a lane continues where you followed links, a fork "

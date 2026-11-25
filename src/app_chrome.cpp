@@ -68,7 +68,7 @@ void apply_ui_scale(App& app) {
   app.body_px = static_cast<int>(std::lround(app.body_px * ratio));
   app.heading_px = static_cast<int>(std::lround(app.heading_px * ratio));
   for (FloatWindow* w : {&app.help, &app.bl, &app.ol, &app.sm, &app.pg,
-                         &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
+                         &app.vertical_tabs_win, &app.history_win, &app.styles_win, &app.downloads_win, &app.media_win,
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
@@ -210,6 +210,7 @@ static xanatoo::theme::Tint window_tint(WindowRole role) {
   switch (role) {
     case WindowRole::Document: return Tint::Yellow;
     case WindowRole::Outline:
+    case WindowRole::VerticalTabs:
     case WindowRole::Page: return Tint::Blue;
     case WindowRole::Backlinks:
     case WindowRole::Context: return Tint::Teal;

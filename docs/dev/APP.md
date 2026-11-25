@@ -114,6 +114,13 @@ the strip order while preserving parent links. Removing a buffer reparents its
 children to its parent. Tear-off keeps the buffer and its parent links.
 The session stores parent links by saved tab position so they survive new buffer
 IDs. Older sessions restore their saved tabs as roots.
+**View → Tab Bar** toggles the horizontal strip. **Panels → Vertical Tabs**
+opens a native tool window that can dock using the usual title drag.
+It groups the same tabs by opener, indents children beneath their parent,
+and keeps siblings in tab order. An opener in a floating document is skipped
+in favor of its nearest ancestor that is still a tab. Click a row to switch,
+its × to close, or the title's + to open a new tab. The session saves the
+horizontal strip's visibility and the panel's open state and placement.
 The Services menu also uses that renderer, with icon names assigned alongside
 service targets in `app_frame.cpp`.
 The native document-window

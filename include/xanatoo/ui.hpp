@@ -43,6 +43,8 @@ enum class UiCommand {
   GoHome,      // Alt+Home: home page (welcome.md for now)
   GoUp,        // one level up the page hierarchy (UiState::up_url)
   StopLoading, // cancel running page fetches (toolbar Stop, Esc)
+  ToggleTabBar,
+  ToggleVerticalTabs,
   ToggleHistory,   // View → History panel
   ToggleDownloads, // Panels → Downloads
   ToggleMedia,     // Panels → Media (the sound player)
@@ -714,6 +716,8 @@ struct UiState {
   float collection_thumb = 160.f;
   bool loading = false;  // a page fetch is running (Reload becomes Stop)
   bool history_open = false;
+  bool vertical_tabs_open = false;
+  bool tab_bar_visible = true;
   std::vector<std::string> recent_visited;  // newest first, for the History menu
   bool downloads_open = false;
   bool media_open = false;

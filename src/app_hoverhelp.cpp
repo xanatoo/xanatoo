@@ -25,6 +25,7 @@ const char* role_key(WindowRole role) {
     case WindowRole::Sitemap: return "sitemap";
     case WindowRole::Page: return "page";
     case WindowRole::History: return "history";
+    case WindowRole::VerticalTabs: return "vertical-tabs";
     case WindowRole::Styles: return "styles";
     case WindowRole::StyleManager: return "style-manager";
     case WindowRole::Bookmarks: return "bookmarks";
