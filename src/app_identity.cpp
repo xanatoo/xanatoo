@@ -429,6 +429,11 @@ std::string create_identity(App& app, std::string name) {
     report(app, false, "give the identity a name", "No identity created");
     return {};
   }
+#if !(defined(XANATOO_GEMINI) && XANATOO_GEMINI)
+  // No TLS backend in this build (minimal ports): nothing makes certificates.
+  report(app, false, "this build has no TLS support", "No identity created");
+  return {};
+#else
   std::string err;
   auto made = xanatoo::tls_make_client_identity(name, &err);
   if (!made) {
@@ -455,6 +460,7 @@ std::string create_identity(App& app, std::string name) {
   app.identities.selected = *sha;
   flash_status(app, "Created identity " + name);
   return *sha;
+#endif
 }
 
 void use_identity(App& app, const std::string& sha, const std::string& scope) {
