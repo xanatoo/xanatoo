@@ -1347,6 +1347,17 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         navigate_to_url(app, up);
       break;
     }
+    case C::RestoreClosedTab:
+      if (restore_closed_tab(app)) {
+        if (prompt_active(app)) close_prompt(app);
+        app.ui.release_input_capture();
+        app.key_focus = KeyFocus::Document;
+        reset_blink(app);
+        flash_status(app, "Tab restored");
+      } else {
+        flash_status(app, "No closed tabs to restore");
+      }
+      break;
     case C::CloseTab: {
       int tab_i = -1;
       if (!arg.empty()) {

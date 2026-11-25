@@ -2140,6 +2140,11 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
     return;
   }
 
+  if (ctrl && shift && !alt && key == SDLK_t) {
+    if (!ev.key.repeat) execute_command(app, UiCommand::RestoreClosedTab);
+    return;
+  }
+
   // Alt+letter opens the matching top-level menu (Windows/GNOME style).
   // Handled before status-prompt isolation so chrome stays reachable.
   if (alt && !ctrl && !shift) {
@@ -2830,7 +2835,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
       break;
 
     case SDLK_t:
-      if (ctrl && shift) {
+      if (ctrl && alt && !shift) {
         // Cycle task item state
         edit(app);
         if (xanatoo::toggle_task_item(d, p.sel.focus)) {

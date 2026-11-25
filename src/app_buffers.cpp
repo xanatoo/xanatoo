@@ -450,7 +450,8 @@ static void leave_tab(App& app, BufferId id) {
   update_title(app);
 }
 
-void remove_buffer(App& app, BufferId id) {
+static void drop_buffer(App& app, BufferId id,
+                        std::optional<DocBuffer>* closed) {
   if (!find_buf(app, id)) return;
   stash_draft(app, id);
   for (size_t i = app.soft_wins.size(); i-- > 0;) {
@@ -463,6 +464,7 @@ void remove_buffer(App& app, BufferId id) {
   for (auto& b : app.buffers)
     if (b.tab_parent == id) b.tab_parent = parent;
   leave_tab(app, id);
+  if (closed) closed->emplace(std::move(buf(app, id)));
   app.buffers.erase(
       std::remove_if(app.buffers.begin(), app.buffers.end(),
                      [&](const DocBuffer& b) { return b.id == id; }),
@@ -470,7 +472,19 @@ void remove_buffer(App& app, BufferId id) {
   update_title(app);
 }
 
+void remove_buffer(App& app, BufferId id) {
+  auto closed = std::find_if(app.closed_tabs.rbegin(), app.closed_tabs.rend(),
+                             [&](const ClosedTab& tab) { return tab.id == id; });
+  const bool hidden = std::find(app.tab_order.begin(), app.tab_order.end(), id) ==
+                      app.tab_order.end();
+  drop_buffer(app, id, hidden && closed != app.closed_tabs.rend()
+                           ? &closed->buffer : nullptr);
+}
+
 void close_tab(App& app, BufferId id) {
+  const auto tab = std::find(app.tab_order.begin(), app.tab_order.end(), id);
+  if (tab == app.tab_order.end()) return;
+  ClosedTab closed{id, static_cast<size_t>(tab - app.tab_order.begin()), {}};
   const bool floated =
       std::any_of(app.soft_wins.begin(), app.soft_wins.end(),
                   [&](const FloatWindow& sw) {
@@ -479,7 +493,45 @@ void close_tab(App& app, BufferId id) {
   if (floated)
     leave_tab(app, id);  // MDI: floating windows keep the buffer alive
   else
-    remove_buffer(app, id);
+    drop_buffer(app, id, &closed.buffer);
+
+  std::erase_if(app.closed_tabs, [&](const ClosedTab& tab) {
+    return tab.id == id;
+  });
+  constexpr size_t max_closed_tabs = 10;
+  if (app.closed_tabs.size() == max_closed_tabs)
+    app.closed_tabs.erase(app.closed_tabs.begin());
+  app.closed_tabs.push_back(std::move(closed));
+}
+
+bool restore_closed_tab(App& app) {
+  while (!app.closed_tabs.empty()) {
+    ClosedTab closed = std::move(app.closed_tabs.back());
+    app.closed_tabs.pop_back();
+    if (std::find(app.tab_order.begin(), app.tab_order.end(), closed.id) !=
+        app.tab_order.end())
+      continue;
+    if (closed.buffer) {
+      auto& b = *closed.buffer;
+      if (!find_buf(app, b.tab_parent)) b.tab_parent = kNoBuffer;
+      app.buffers.push_back(std::move(b));
+    } else if (!find_buf(app, closed.id)) {
+      continue;
+    }
+
+    const auto index = std::min(closed.index, app.tab_order.size());
+    app.tab_order.insert(app.tab_order.begin() + index, closed.id);
+    focus_view(app, app.centre_focus);
+    select_view_tab(app, app.centre_focus, closed.id);
+    const DocBuffer& b = buf(app, closed.id);
+    // A background load may have finished while its buffer was closed.
+    if (b.placeholder && !b.path.empty() &&
+        std::none_of(app.fetches.begin(), app.fetches.end(),
+                     [&](const FetchJob& job) { return job.buf == closed.id; }))
+      start_fetch(app, FetchPurpose::Tab, -1, b.path, false, closed.id);
+    return true;
+  }
+  return false;
 }
 
 std::string buffer_tab_label(App& app, BufferId bi) {

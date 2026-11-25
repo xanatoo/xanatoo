@@ -1099,7 +1099,7 @@ void Ui::edit_bars(const UiState& state, UiFrameResult& result,
         menu_item_cmd("Unordered list", UiCommand::ToggleUnorderedList, cmd);
         menu_item_cmd("Ordered list", UiCommand::ToggleOrderedList, cmd);
         menu_item_cmd("Task item", UiCommand::ToggleTask, cmd, true,
-                      "Ctrl+Shift+T");
+                      "Ctrl+Alt+T");
         menu_item_cmd("Block quote", UiCommand::ToggleBlockQuote, cmd);
         ImGui::Separator();
         menu_item_cmd("Indent", UiCommand::IndentList, cmd,
@@ -2019,7 +2019,7 @@ static void menu_structure_items(const UiState& state, UiCommand& cmd) {
                 "Ctrl+Shift+8");
   menu_item_cmd("Ordered List", UiCommand::ToggleOrderedList, cmd, true,
                 "Ctrl+Shift+7");
-  menu_item_cmd("Task Item", UiCommand::ToggleTask, cmd, true, "Ctrl+Shift+T");
+  menu_item_cmd("Task Item", UiCommand::ToggleTask, cmd, true, "Ctrl+Alt+T");
   menu_item_cmd("Block Quote", UiCommand::ToggleBlockQuote, cmd);
   menu_item_cmd("Indent List Item", UiCommand::IndentList, cmd,
                 state.on_list_item, "Tab");

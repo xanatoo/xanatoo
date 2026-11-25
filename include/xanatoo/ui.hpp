@@ -164,6 +164,7 @@ enum class UiCommand {
   // Tabs / MDI
   NewTab,          // new empty buffer + tab
   CloseOtherTabs, CloseTabsRight, CloseTabsLeft, SortTabsByTitle,
+  RestoreClosedTab,
   CloseTab,        // close focused buffer (Ctrl+W)
   NextTab,
   PrevTab,

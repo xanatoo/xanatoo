@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Restore closed tabs
+
+- Ctrl+Shift+T reopens closed tabs in reverse close order. Ctrl+Alt+T
+  cycles the current task item.
+- Verified restored order, focus, and Back / Forward under Xvfb. The Nix
+  suite passed 14,905 checks.
+
 ## Status (2026-11-25) — R36S C++ toolchain
 
 - Build current GCC and its runtimes against the ArkOS glibc 2.30 sysroot

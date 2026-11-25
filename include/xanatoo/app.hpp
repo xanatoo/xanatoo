@@ -175,6 +175,12 @@ struct DocBuffer {
   bool lock_choice = false;
 };
 
+struct ClosedTab {
+  BufferId id = kNoBuffer;
+  size_t index = 0;
+  std::optional<DocBuffer> buffer;  // A floating view may still own the buffer.
+};
+
 // Cached raster of a pane's document layer (background, selection, text) so
 // scrolling only shifts the old pixels and draws the newly exposed strip.
 // Two render-target textures ping-pong because SDL cannot copy a texture onto
@@ -1254,6 +1260,7 @@ struct App {
   std::unordered_set<std::string> binary_paths;
   BufferId next_buffer_id = 1;
   std::vector<BufferId> tab_order;
+  std::vector<ClosedTab> closed_tabs;
   ImageCache images;
   LayoutEngine layout_engine;
   xanatoo::ViewSettings view_settings;
@@ -1853,6 +1860,7 @@ void remove_buffer(App& app, BufferId id);
 // Close a tab: like remove_buffer, but keeps the buffer while a floating
 // window still shows it.
 void close_tab(App& app, BufferId id);
+bool restore_closed_tab(App& app);
 void insert_tab(App& app, BufferId id, BufferId opener = kNoBuffer);
 BufferId tab_root(App& app, BufferId id);
 void pop_out_focused(App& app);

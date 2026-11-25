@@ -112,6 +112,9 @@ opened independently start their own trees. The horizontal strip adds space
 between adjacent tabs with different roots. Dragging and title sorting change
 the strip order while preserving parent links. Removing a buffer reparents its
 children to its parent. Tear-off keeps the buffer and its parent links.
+Ctrl+Shift+T restores the most recently closed tab at its former position.
+A ten-entry in-memory stack keeps closed buffers and their Back / Forward
+trails for the current session.
 The session stores parent links by saved tab position so they survive new buffer
 IDs. Older sessions restore their saved tabs as roots.
 **View → Tab Bar** toggles the horizontal strip. **Panels → Vertical Tabs**
