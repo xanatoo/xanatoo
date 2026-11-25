@@ -4144,8 +4144,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           IM_COL32(240, 130, 20, 255));
     }
     if (subs_open) {
-      if (ImGui::MenuItem(state.current_subscribed ? "Unsubscribe current feed" :
-                          "Subscribe to current feed", nullptr, false,
+      if (ImGui::MenuItem(state.current_subscribed ? "Unsubscribe current page" :
+                          "Subscribe to current page", nullptr, false,
                           state.current_subscribed || state.current_subscribable)) {
         cmd = state.current_subscribed ? UiCommand::Unsubscribe : UiCommand::Subscribe;
         result.arg = state.subscription_address;
@@ -5658,10 +5658,6 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::TextColored(ImVec4(0.18f, 0.40f, 0.75f, 1.f),
                            "  %d new", unread_total);
       }
-      ImGui::PushStyleColor(ImGuiCol_Text,
-                            ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-      ImGui::TextWrapped("Lemmy communities/people, Nostr authors/groups, RSS/Atom and more");
-      ImGui::PopStyleColor();
       ImGui::Separator();
       if (state.current_subscribable && !state.current_subscribed &&
           classic_button("Subscribe to current page")) {
@@ -5672,7 +5668,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::Unsubscribe;
         result.arg = state.subscription_address;
       }
-      ImGui::TextUnformatted("Add a feed or community address:");
+      ImGui::TextUnformatted("Source address");
       ImGui::SetNextItemWidth(-1.f);
       ImGui::InputText("##subscription_url", subscription_input_,
                        sizeof(subscription_input_));
@@ -5682,13 +5678,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       if (ImGui::IsItemHovered())
         ImGui::SetTooltip("For example: lemmy:lemmy.world/c/technology,\n"
-                          "nostr:npub1..., or https://example.org/feed.xml");
+                          "nostr:npub1..., or https://example.org/news");
       same_line_if_fits("Refresh all");
       if (classic_button("Refresh all")) cmd = UiCommand::SubscriptionRefresh;
       ImGui::Separator();
       if (state.subscriptions.empty()) {
-        ImGui::TextWrapped("No subscriptions yet. Add a source above or navigate "
-                           "to a Lemmy community or Nostr profile and subscribe.");
+        ImGui::TextWrapped("No subscriptions yet.");
       }
       for (const auto& s : state.subscriptions) {
         ImGui::PushID(s.address.c_str());

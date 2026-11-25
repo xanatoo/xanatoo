@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — HTML page subscriptions
+
+- Plain web pages use a fingerprint of reader XML with page chrome dropped.
+  A changed fingerprint adds one unread update and a status notification.
+- All 33 CTest targets passed, including 14,975 unit checks. A loopback HTTP
+  smoke test verified persistence across restarts, ignored chrome and script
+  edits, visible content changes, reverts, and HTTP error handling.
+
 ## Status (2026-11-25) — Native forum subscriptions
 
 - Enabled subscriptions for Bluesky, Lobsters and the other native forum

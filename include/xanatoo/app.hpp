@@ -728,6 +728,8 @@ struct FetchShared {
   // feed the view, such as a PDF shown as pages, stop early.
   std::atomic<bool> abandoned{false};
   bool force_download = false;  // set before the worker starts
+  bool subscription_check = false;  // set before the worker starts
+  std::string html_change_key;  // worker's XML fingerprint for an HTML watch
   // PDF / DjVu / comic answers may open as pages (set before the worker
   // starts): Navigate / Tab, and Context panel previews.
   bool allow_pages = false;

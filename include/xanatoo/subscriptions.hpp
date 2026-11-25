@@ -14,10 +14,10 @@
 
 namespace xanatoo {
 
-// Read-only watch on a changing collection, separate from a position bookmark.
-// The last successful list of stable item IDs is a *rolling baseline*, not a
-// complete archive. First fetch establishes the baseline without marking old
-// posts unread. All times are wall-clock Unix seconds, for restarts/sleep.
+// Read-only watch on a changing collection or web page. The rolling baseline
+// holds stable item IDs for a collection or one XML fingerprint for HTML.
+// The first successful check establishes the baseline without adding unread
+// updates. All times are wall-clock Unix seconds, for restarts/sleep.
 struct Subscription {
   std::string address;
   std::string title;

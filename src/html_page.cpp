@@ -425,7 +425,9 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   bool force_download,
                                   HttpStreamHeaders* response,
                                   std::string_view download_name,
-                                  std::string_view request_headers) {
+                                  std::string_view request_headers,
+                                  std::string* html_change_key) {
+  if (html_change_key) html_change_key->clear();
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
       "; +https://github.com/xanatoo/xanatoo)";
@@ -584,8 +586,12 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
   if (raw_source) *raw_source = body;  // decoded text, before semantic parsing
 
   if (!failed && looks_like_feed(body)) return parse_feed(body, fin, err);
-  if (type.empty() || type == "text/html" || type == "application/xhtml+xml")
-    return parse_html_page(body, fin);
+  if (type.empty() || type == "text/html" || type == "application/xhtml+xml") {
+    Document doc = parse_html_page(body, fin, html_change_key == nullptr);
+    if (!failed && html_change_key)
+      *html_change_key = "html-xml:" + sha256_hex(serialize_stored_document(doc));
+    return doc;
+  }
   if (type == "text/markdown" || type == "text/x-markdown")
     return parse_document(body, "remote.md");
   if (type == "text/gemini") return parse_gemtext(body);

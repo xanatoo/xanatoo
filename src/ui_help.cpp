@@ -69,7 +69,7 @@ const std::vector<UiHelpTopic> kTopics = {
      "Back / forward and the pages visited in this session; *Show "
      "History…* opens the History panel (**Ctrl+Shift+H**)."},
     {"subscriptions", "Subscriptions",
-     "Feeds, communities and accounts you watch. Subscribe to the current "
+     "Web pages, feeds, communities and accounts you watch. Subscribe to the current "
      "page, refresh all, or open the Subscriptions panel with the unread "
      "counts."},
     {"services", "Services menu",
@@ -463,11 +463,10 @@ const std::vector<UiHelpTopic> kTopics = {
      "Deletes this bookmark."},
     {"go to bookmark", "Go to bookmark", "Opens the bookmarked page or passage."},
     {"subscribe", "Subscribe",
-     "Watches this feed, community or account for new posts (Subscriptions "
-     "panel)."},
+     "Watches this source for updates in the Subscriptions panel."},
     {"show subscriptions", "Subscriptions panel",
-     "Watched feeds and communities with unread counts."},
-    {"refresh all", "Refresh all", "Checks every subscription for new posts now."},
+     "Watched sources with unread counts."},
+    {"refresh all", "Refresh all", "Checks every subscription for updates now."},
 
     // ---- Help ----
     {"format reference (format.md)", "Format reference",

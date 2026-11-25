@@ -70,6 +70,8 @@ struct WebPagesFile {
   const std::atomic<bool>* stop = nullptr;  // the view gave up waiting
 };
 // `response` (may be null) receives the final answer's headers.
+// `html_change_key` requests chrome-free HTML conversion and receives a
+// fingerprint of the resulting XML for successful HTML responses only.
 std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   std::string* final_url = nullptr,
                                   int* http_status = nullptr,
@@ -79,7 +81,8 @@ std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   bool force_download = false,
                                   HttpStreamHeaders* response = nullptr,
                                   std::string_view download_name = {},
-                                  std::string_view request_headers = {});
+                                  std::string_view request_headers = {},
+                                  std::string* html_change_key = nullptr);
 #endif
 
 }  // namespace xanatoo

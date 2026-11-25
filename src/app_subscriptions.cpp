@@ -13,6 +13,7 @@
 #include "xanatoo/feed.hpp"
 #include "xanatoo/forums.hpp"
 #include "xanatoo/hackernews.hpp"
+#include "xanatoo/html_page.hpp"
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/locator.hpp"
 #include "xanatoo/native.hpp"
@@ -69,7 +70,7 @@ bool subscribable_source(std::string_view address) {
            url.find("/gallery/") == std::string::npos;
   if (xanatoo::is_hn_ref(url))
     return url.find("item?id=") == std::string::npos;
-  return false;
+  return xanatoo::is_web_url(url);
 }
 
 std::string subscription_source_address(std::string_view address) {
@@ -79,7 +80,7 @@ std::string subscription_source_address(std::string_view address) {
 void add_subscription(App& app, std::string address) {
   address = normalize(address);
   if (!subscribable_source(address)) {
-    flash_status(app, "Subscribe to a supported feed, community, or profile");
+    flash_status(app, "Subscribe to a web page, feed, community, or profile");
     return;
   }
   std::string why;
@@ -103,7 +104,7 @@ void add_subscription(App& app, std::string address) {
   app.subscriptions.push_back(std::move(s));
   save_subscriptions(app.subscriptions);
   app.subscriptions_panel_open = true;
-  flash_status(app, "Subscribed; checking for latest posts");
+  flash_status(app, "Subscribed. Checking for updates");
 }
 
 void remove_subscription(App& app, const std::string& address) {
@@ -190,15 +191,20 @@ void finish_subscription_fetch(App& app, const FetchJob& job) {
   if (!job.shared->doc || job.shared->http_status != 0) {
     s->error = job.shared->error.empty() ? "Fetch failed" : job.shared->error;
   } else {
-    auto ids = subscription_item_keys(*job.shared->doc);
+    const auto& html_key = job.shared->html_change_key;
+    auto ids = html_key.empty() ? subscription_item_keys(*job.shared->doc)
+                                : std::vector<std::string>{html_key};
     if (ids.empty()) {
-      s->error = "No identifiable posts in this source";
+      s->error = "No HTML content or identifiable feed items";
     } else {
       const uint32_t new_count = subscription_update(*s, std::move(ids), s->checked_at);
-      if (new_count) flash_status(app, std::to_string(new_count) +
-          " new item(s) in " + s->title);
       if (s->title == s->address && !job.shared->doc->meta.title.empty())
         s->title = job.shared->doc->meta.title.substr(0, 180);
+      if (new_count) {
+        flash_status(app, html_key.empty()
+            ? std::to_string(new_count) + " new item(s) in " + s->title
+            : "Page changed: " + s->title);
+      }
     }
   }
   save_subscriptions(app.subscriptions);

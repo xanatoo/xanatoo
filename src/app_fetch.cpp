@@ -399,7 +399,7 @@ void note_response(FetchShared& out, const xanatoo::HttpStreamHeaders& h) {
 // Worker side, once per fetch: what the page was (docs/HISTORY.md "D"),
 // hashed here rather than on the main thread, then hand over.
 void finish_fetch(FetchShared& out) {
-  if (out.doc) {
+  if (out.doc && !out.subscription_check) {
     xanatoo::PageObservation& o = out.observed;
     o.url = out.final_url;
     o.time = xanatoo::now_epoch_ms();
@@ -666,12 +666,15 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     // other previews and subscriptions must not transfer whole files.
     xanatoo::HttpStreamHeaders response;
     out->doc = xanatoo::web_fetch(url, &out->error, &out->final_url,
-                                  &out->http_status, &body,
+                                  &out->http_status,
+                                  out->subscription_check ? nullptr : &body,
                                   allow_download ? out->download.get() : nullptr,
                                   out->allow_pages ? &pages : nullptr,
-                                  out->force_download, &response);
+                                  out->force_download, &response, {}, {},
+                                  out->subscription_check ? &out->html_change_key
+                                                          : nullptr);
     if (out->doc) {
-      out->raw_source = std::move(body);
+      if (!out->subscription_check) out->raw_source = std::move(body);
       note_response(*out, response);
     }
     // PDF / DjVu / comic answer: open the cached copy as pages; the
@@ -1298,6 +1301,7 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
+  job.shared->subscription_check = purpose == FetchPurpose::Subscription;
   // Snapshots: pages that are shown are kept; Back / Forward / History
   // ask for the one they showed (App::open_snapshot).
   job.shared->keep_snapshot = purpose != FetchPurpose::Subscription &&

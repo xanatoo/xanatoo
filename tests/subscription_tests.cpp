@@ -100,22 +100,32 @@ int main() {
       ("xanatoo-subscriptions-" + std::to_string(
           std::chrono::steady_clock::now().time_since_epoch().count()))).string();
   assert(fs::create_directory(test_dir));
+  Subscription page;
+  page.address = "https://example.org/news";
+  assert(subscription_update(page, {"html-xml:first"}, 100) == 0);
+  assert(subscription_update(page, {"html-xml:first"}, 200) == 0);
+  assert(subscription_update(page, {"html-xml:second"}, 300) == 1);
+  assert(subscription_update(page, {"html-xml:first"}, 400) == 1);
+  assert(page.unread == 2);
+
   s.title = "A \"quoted\" community";
   s.recent_ids = {"id:102", "id:101"};
-  std::vector<Subscription> all{s};
+  std::vector<Subscription> all{s, page};
   assert(save_subscriptions(all));
   auto restored = load_subscriptions();
-  assert(restored.size() == 1);
+  assert(restored.size() == 2);
   assert(restored[0].address == s.address);
   assert(restored[0].title == s.title);
   assert(restored[0].interval_minutes == s.interval_minutes);
   assert(restored[0].recent_ids == s.recent_ids);
   assert(restored[0].unread == s.unread);
   assert(restored[0].initialized);
+  assert(restored[1].unread == 2);
+  assert(subscription_update(restored[1], {"html-xml:first"}, 500) == 0);
   saving_disabled = true;
   all.clear();
   assert(save_subscriptions(all));
-  assert(load_subscriptions().size() == 1);  // --no-save does not erase
+  assert(load_subscriptions().size() == 2);  // --no-save does not erase
   fs::remove(fs::path(test_dir) / "subscriptions.txt");
   fs::remove(test_dir);
 }

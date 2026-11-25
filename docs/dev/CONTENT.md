@@ -205,6 +205,8 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   through `html_min` page mode (`sections`, `anchors`, `drop_chrome`,
   `chrome_nodes`); also used for local `.html` files (`parse_document`
   dispatch). HTML is read-only: Save asks for a `.md` name.
+  HTML subscription checks use the same conversion with `keep_chrome = false`
+  and fingerprint the canonical XML.
 - Article / section boxes (page mode, `sections`): `<article>` is always an
   Article node and `<section>` a Section when it has an id or starts with a
   heading; other sections are transparent. The box's first heading becomes

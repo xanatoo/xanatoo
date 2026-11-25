@@ -1,14 +1,14 @@
 # Subscriptions
 
-Subscriptions watch changing collections, unlike **Bookmarks**, which mark a
-specific page, passage or reading position. They are read-only: no account,
+Subscriptions watch changing web pages and collections. **Bookmarks** mark a
+specific page, passage or reading position. Subscriptions are read-only: no account,
 follow API, notification server or posting rights are required.
 
 ## Using the panel
 
 - **Panels → Subscriptions** opens a native, dockable and resizable panel.
-- **Subscribe to current page** watches the currently open feed, community or
-  user profile; alternatively paste a source address and choose **Add
+- **Subscribe to current page** watches the currently open web page, feed,
+  community or user profile; alternatively paste a source address and choose **Add
   subscription**. The Bookmarks menu offers the current-source action too.
 - **Open** navigates to the watched source and clears its unread count.
 - Middle-click a source in the **Subscriptions** menu to open it in a new
@@ -28,6 +28,7 @@ Supported sources, when the corresponding build feature is available:
 | Lemmy user | `lemmy:lemmy.world/u/username` |
 | Nostr author | `nostr:npub1…` or `nostr:nprofile1…` |
 | Nostr group/recent | A `nostr:group@…` link or `nostr:recent` |
+| HTML web page | `https://example.org/news` |
 | RSS/Atom | `https://example.org/feed.xml` |
 | Reddit/Hacker News lists | `reddit:r/linux/`, `hn:news` |
 | Bluesky feeds and profiles | `bsky:`, `bsky:alice.example`, `bsky:alice.example/feed/news` |
@@ -41,13 +42,20 @@ collections and cannot be subscribed to. Unsupported sources show an error.
 ## Change detection and scheduling
 
 The first successful check establishes a **baseline** (existing items are not
-marked new). Subsequent checks compare the last two snapshots of stable
+marked new). For collections, subsequent checks compare snapshots of stable
 message IDs / post permalinks, not their mutable score, summary or displayed
 order. New IDs increment the **new** counter, which stays until the user
 opens or marks the subscription read. For feed items without permalinks the
 visible content is the fallback identity. This is a rolling comparison of up
 to 256 items, not a complete history or a guarantee that items were seen by
 all federated servers.
+
+For HTML pages, xanatoo converts the response to reader content with page
+chrome omitted, serializes it to native XML and compares its fingerprint
+with the previous successful check. Changes to the converted content add
+one to the unread count and show a “Page changed” status message. Changes
+confined to discarded material, such as scripts and navigation, leave the
+count alone.
 
 Automatic checks are due from the time of the previous check, with at most
 two workers checking subscriptions concurrently and an automatic start
@@ -58,8 +66,8 @@ source can be retried. When the application is closed no checks occur; due
 checks resume after launch. A change to the computer's wall clock does not
 stall checks indefinitely.
 
-Subscriptions and their unread counts, last check times and rolling item IDs
+Subscriptions and their unread counts, last check times and rolling snapshot keys
 are persisted atomically in `state_dir()/subscriptions.txt`. `--no-save` keeps
 them in memory only; no credentials are stored. There is a cap of 1024 watched
 sources. No system desktop notifications are currently sent: new content is
-indicated in the panel.
+indicated in the menu and panel, and changes appear in the status line.

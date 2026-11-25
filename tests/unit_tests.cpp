@@ -7604,6 +7604,20 @@ void test_html_page() {
   // Markdown keeps the chrome as content.
   EXPECT(serialize_markup(doc).find("foot") != std::string::npos);
 
+  // Subscriptions compare the converted reader XML.
+  const auto watch_xml = [](std::string_view html) {
+    return serialize_stored_document(parse_html_page(html, "https://ex.org/p",
+                                                     false));
+  };
+  const auto baseline = watch_xml(
+      "<nav>Menu A</nav><main><nav>Links A</nav><p>News</p></main>");
+  EXPECT_EQ(baseline, watch_xml(
+      "<nav>Menu B</nav><main><nav>Links B</nav>"
+      "<script>window.token = 'new';</script><p class='dynamic'>News</p></main>"));
+  EXPECT(baseline != watch_xml("<main><p>Updated news</p></main>"));
+  EXPECT(baseline != watch_xml("<main><p>News</p><p>More news</p></main>"));
+  EXPECT(baseline != watch_xml("<main></main>"));
+
   // Own <h1>: no synthetic title section; no <main>: <body> is used.
   Document d2 = parse_html_page("<title>X</title><h1>Real</h1><p>b", "a.html");
   auto k2 = kids_of(d2, d2.root);
