@@ -101,7 +101,8 @@ to either side (relative to the clicked tab), and stable case-insensitive sortin
 by the displayed title (ignoring the unsaved marker). Bulk closes use
 `stash_or_confirm` for each buffer and stop if confirmation is needed.
 Application order changes are copied into ImGui before tab layout;
-the selected buffer stays selected. The the native document-window
+the selected buffer stays selected. Tab menu items use the shared icon renderer.
+The native document-window
 title context menu moves a specific window back (only `WindowRole::Document`).
 View source projections (`//source-raw`, `//source-xml`; the old `//source-sexpr` is an alias of `//source-xml`) are
 pane-local and switch in View → View Source; see `docs/UI.md`.

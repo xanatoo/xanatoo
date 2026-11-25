@@ -735,6 +735,8 @@ void Ui::load_icons(SDL_Renderer* renderer) {
       "site-file", "site-folder", "site-about", "site-store", "site-web",
       "site-feed", "site-nostr", "language",
       "format", "insert", "view", "lists",
+      "tab-select", "tab-window", "tab-close", "tab-close-others",
+      "tab-close-left", "tab-close-right", "tab-sort",
       // Panels menu
       "keyboard", "backlinks", "related", "media", "subscriptions",
       "certificates", "identities", "style-manager", "annotations",
@@ -3298,12 +3300,15 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, menu_frame_padding);
           if (ImGui::BeginPopupContextItem("##tab_context",
                                            ImGuiPopupFlags_MouseButtonRight)) {
-            if (ImGui::MenuItem("Select Tab", nullptr, i == state.active_tab,
-                                i != state.active_tab) && cmd == UiCommand::None) {
+            if (menu_item_with_icon("Select Tab", "tab-select", nullptr,
+                                    i == state.active_tab,
+                                    i != state.active_tab) &&
+                cmd == UiCommand::None) {
               cmd = UiCommand::SelectTab;
               result.arg = std::to_string(i);
             }
-            if (ImGui::MenuItem("Move Tab to Window") &&
+            if (menu_item_with_icon("Move Tab to Window", "tab-window",
+                                    nullptr, false) &&
                 cmd == UiCommand::None) {
               cmd = UiCommand::TearTab;
               const int x = static_cast<int>(vp->Pos.x + vp->Size.x * 0.5f);
@@ -3312,26 +3317,29 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                            "," + std::to_string(y);
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Close Tab") && cmd == UiCommand::None) {
+            if (menu_item_with_icon("Close Tab", "tab-close", nullptr, false) &&
+                cmd == UiCommand::None) {
               cmd = UiCommand::CloseTab;
               result.arg = std::to_string(i);
             }
-            const auto tab_action = [&](const char* label, UiCommand action,
-                                        bool enabled) {
-              if (ImGui::MenuItem(label, nullptr, false, enabled) &&
+            const auto tab_action = [&](const char* label, const char* icon,
+                                        UiCommand action, bool enabled) {
+              if (menu_item_with_icon(label, icon, nullptr, false, enabled) &&
                   cmd == UiCommand::None) {
                 cmd = action;
                 result.arg = std::to_string(i);
               }
             };
-            tab_action("Close other tabs", UiCommand::CloseOtherTabs,
-                       state.tab_ids.size() > 1);
-            tab_action("Close tabs to the right", UiCommand::CloseTabsRight,
+            tab_action("Close other tabs", "tab-close-others",
+                       UiCommand::CloseOtherTabs, state.tab_ids.size() > 1);
+            tab_action("Close tabs to the right", "tab-close-right",
+                       UiCommand::CloseTabsRight,
                        i + 1 < static_cast<int>(state.tab_ids.size()));
-            tab_action("Close tabs to the left", UiCommand::CloseTabsLeft, i > 0);
+            tab_action("Close tabs to the left", "tab-close-left",
+                       UiCommand::CloseTabsLeft, i > 0);
             ImGui::Separator();
-            tab_action("Sort tabs by title", UiCommand::SortTabsByTitle,
-                       state.tab_ids.size() > 1);
+            tab_action("Sort tabs by title", "tab-sort",
+                       UiCommand::SortTabsByTitle, state.tab_ids.size() > 1);
             ImGui::EndPopup();
           }
           ImGui::PopStyleVar(3);

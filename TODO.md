@@ -3,6 +3,8 @@
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
 ## Status (2026-11-25) — Tab context-menu actions
+- Added seven SVG icons for the tab context menu. All seven rasterized and
+  the Nix test suite passed (14,795 checks). GUI appearance was not tested.
 
 - Added Close other tabs, Close tabs to the right / left, and Sort tabs by
   title to each tab's context menu. Close ranges follow the clicked tab's
