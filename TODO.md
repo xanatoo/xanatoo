@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Git file downloads
+
+- Added `git:` addresses for public GitHub, GitLab.com and Radicle seed
+  files at a revision, streamed through the standard download prompt.
+- Verified historical downloads from all three hosts under Xvfb against the
+  raw response bytes. The Nix suite passed 14,876 checks.
+- Generic Git remotes remain a follow-up. A filtered fetch would require
+  filter support and access to the requested commit and blob on the server.
+
 ## Status (2026-11-25) — Repository About, Releases and Tags
 
 - Added rendered READMEs and license links, paged releases with asset and

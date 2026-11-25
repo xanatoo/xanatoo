@@ -24,6 +24,14 @@ struct ForgeRef {
   std::string after, before;  // GitLab discussion cursors
 };
 
+struct GitFile {
+  std::string url;
+  std::string filename;
+};
+
+bool is_git_ref(std::string_view url);
+std::optional<GitFile> parse_git_ref(std::string_view url);
+
 bool is_forge_ref(std::string_view url);
 std::optional<ForgeRef> parse_forge_ref(std::string_view url);
 std::string forge_ref_string(const ForgeRef& ref);

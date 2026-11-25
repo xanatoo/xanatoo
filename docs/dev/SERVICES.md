@@ -492,6 +492,18 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   GitHub's Contents API caps a directory listing at 1,000 entries. Public
   visibility and anonymous API rate limits apply to both services.
 
+## Git file downloads (`git:`)
+
+- `parse_git_ref` in `forge.cpp` maps `git:github.com/OWNER/REPO?path=PATH&ref=REVISION`
+  and `git:gitlab.com/GROUP/PROJECT?path=PATH&ref=REVISION` to the same raw
+  endpoints as the forge browsers. An omitted revision uses `HEAD`.
+- `git:radicle/SEED/rad:RID?path=PATH&ref=COMMIT` uses the HTTPS seed's
+  `/raw/` endpoint and requires a full commit SHA.
+- Fetch routing offers the standard download prompt and streams the raw
+  response after confirmation. No local Git installation is required.
+  A generic Git transport would need server-side object filtering and
+  access to the requested revision and blob.
+
 ## Internet Archive
 
 - `src/archive.cpp`, no feature switch of its own (needs `XANATOO_HTTPS`).

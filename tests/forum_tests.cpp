@@ -944,6 +944,35 @@ void test_service_bars() {
          2 * service_bar_height(*hn, 1.f));
 }
 
+static void test_git_refs() {
+  const auto github = parse_git_ref(
+      "git:github.com/owner/repo.git?path=docs/a%20b%23%26.md&ref=refs%2Ftags%2Fv1");
+  EXPECT(github.has_value());
+  if (github) {
+    EXPECT_EQ(github->filename, "a b#&.md");
+    EXPECT_EQ(github->url,
+              "https://raw.githubusercontent.com/owner/repo/refs%2Ftags%2Fv1/docs/a%20b%23%26.md");
+  }
+  EXPECT_EQ(web_url_for("git:github.com/owner/repo?path=README.md"),
+            "https://raw.githubusercontent.com/owner/repo/HEAD/README.md");
+  EXPECT_EQ(web_url_for("git:gitlab.com/group/sub/project?ref=0123abcd&path=doc/README.md"),
+            "https://gitlab.com/api/v4/projects/group%2Fsub%2Fproject/repository/files/"
+            "doc%2FREADME.md/raw?ref=0123abcd");
+  EXPECT_EQ(web_url_for("git:radicle/seed.radicle.dev/rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5"
+                        "?path=systemd/radicle-httpd.service"
+                        "&ref=570a7eb141b6ba001713c46345d79b6fead1ca15"),
+            "https://seed.radicle.dev/raw/rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5/"
+            "570a7eb141b6ba001713c46345d79b6fead1ca15/systemd/radicle-httpd.service");
+  EXPECT(!parse_git_ref("git:radicle/seed.example/rad:zabc?path=README.md&ref=HEAD"));
+  EXPECT(!parse_git_ref("git:radicle/user@seed.example/rad:zabc?path=README.md"
+                        "&ref=570a7eb141b6ba001713c46345d79b6fead1ca15"));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?ref=main"));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?path=doc/%2e%2e/test"));
+  EXPECT(!parse_git_ref("git:github.com/owner/repo?path=a&path=b"));
+  EXPECT(!parse_git_ref("git:gitlab.com/group/repo?path=file%00"));
+  EXPECT(!parse_git_ref("git:unknown.example/owner/repo?path=README.md"));
+}
+
 static void test_forge_refs() {
   const auto& engines = builtin_engines();
   EXPECT_EQ(engine_for_address("github:owner/repo", engines), "github");
@@ -1031,6 +1060,7 @@ void test_forums(int& passed, int& failed) {
   test_digg();
   test_service_bars();
   test_forge_refs();
+  test_git_refs();
   passed += g_passed;
   failed += g_failed;
 }

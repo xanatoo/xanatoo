@@ -570,25 +570,32 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     out->service = "YouTube";
     out->doc = xanatoo::youtube_fetch(url, &out->error);
 #endif
-  } else if (xanatoo::is_forge_ref(url)) {
+  } else if (xanatoo::is_git_ref(url) || xanatoo::is_forge_ref(url)) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
     const auto ref = xanatoo::parse_forge_ref(url);
-    if (!ref) {
-      out->error = "Invalid repository address";
-    } else {
+    std::optional<xanatoo::GitFile> file;
+    if (xanatoo::is_git_ref(url)) {
+      out->service = "Git";
+      file = xanatoo::parse_git_ref(url);
+      if (!file) out->error = "Invalid Git file address. See Repositories in the Services directory.";
+    } else if (ref) {
       out->service = ref->github ? "GitHub" : "GitLab";
-      if (ref->view == xanatoo::ForgeView::Raw && allow_download && out->download) {
-        const auto name = xanatoo::forge_filename(*ref);
-        if (out->force_download) {
-          xanatoo::web_fetch(xanatoo::forge_raw_url(*ref), &out->error, nullptr,
-                            nullptr, nullptr, out->download.get(), nullptr,
-                            true, nullptr, name);
-        } else {
-          out->download->name = name;
-          out->download->offered.store(true, std::memory_order_release);
-        }
-      } else {
+      if (ref->view == xanatoo::ForgeView::Raw)
+        file = xanatoo::GitFile{xanatoo::forge_raw_url(*ref), xanatoo::forge_filename(*ref)};
+      else
         out->doc = xanatoo::forge_fetch(*ref, &out->error);
+    } else {
+      out->error = "Invalid repository address";
+    }
+    if (file) {
+      if (!allow_download || !out->download) {
+        out->error = "Open the raw file as a download.";
+      } else if (out->force_download) {
+        xanatoo::web_fetch(file->url, &out->error, nullptr, nullptr, nullptr,
+                          out->download.get(), nullptr, true, nullptr, file->filename);
+      } else {
+        out->download->name = file->filename;
+        out->download->offered.store(true, std::memory_order_release);
       }
     }
 #endif
@@ -1189,7 +1196,7 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     return no("YouTube needs build with -DXANATOO_YOUTUBE=ON");
 #endif
   }
-  if (xanatoo::is_forge_ref(url)) {
+  if (xanatoo::is_git_ref(url) || xanatoo::is_forge_ref(url)) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
     return true;
 #else
@@ -1323,6 +1330,9 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
 }
 
 static bool downloadable_address(const std::string& url) {
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+  if (xanatoo::is_git_ref(url)) return xanatoo::parse_git_ref(url).has_value();
+#endif
   if (const auto ref = xanatoo::parse_forge_ref(url))
     return ref->view == xanatoo::ForgeView::Raw;
   return xanatoo::starts_with_ci(url, "https://") ||

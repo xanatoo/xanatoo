@@ -28,6 +28,20 @@ Open a file to preview it or choose **Download** to save it. To browse a branch,
 tag or commit, append `/tree?ref=REVISION` on GitHub or `/-/tree?ref=REVISION`
 on GitLab. Encode a slash in a revision as `%2F`.
 
+### Download a file at a revision
+
+Paste a `git:` address to open the download prompt. The file is streamed
+directly from the host.
+
+- [GitHub README](git:github.com/xanatoo/xanatoo?path=README.md) · `git:github.com/OWNER/REPO?path=PATH&ref=REVISION`
+- [GitLab README](git:gitlab.com/gitlab-org/gitlab?path=README.md) · `git:gitlab.com/GROUP/PROJECT?path=PATH&ref=REVISION`
+- [Radicle file at a commit](git:radicle/seed.radicle.dev/rad:z3gqcJUoA1n9HaHKufZs5FCSGazv5?path=systemd/radicle-httpd.service&ref=570a7eb141b6ba001713c46345d79b6fead1ca15) · `git:radicle/SEED/rad:RID?path=PATH&ref=COMMIT`
+
+On GitHub and GitLab, omit `ref` for the default branch or supply a branch,
+tag, or commit SHA. Radicle requires an HTTPS seed serving the repository
+and a full 40-digit commit SHA. Percent-encode special characters in query
+values, for example `%20` for a space and `%23` for a hash.
+
 ## News and forums
 
 - [Hacker News](hn:) · [new](hn:newest) · [Ask HN](hn:ask) · [Show HN](hn:show)

@@ -826,6 +826,7 @@ add_executable(xanatoo_tests
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
+  src/http_url.cpp
   src/forge.cpp
   src/wayback.cpp
   src/time.cpp

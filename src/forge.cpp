@@ -6,6 +6,7 @@
 #include "forum_common.hpp"
 #include "xanatoo/html_min.hpp"
 #include "xanatoo/http_status.hpp"
+#include "xanatoo/http_url.hpp"
 #include "xanatoo/https.hpp"
 #include "xanatoo/parse.hpp"
 #include "xanatoo/text_escape.hpp"
@@ -346,6 +347,61 @@ std::string forge_raw_url(const ForgeRef& ref) {
 
 std::string forge_filename(const ForgeRef& ref) {
   return ref.path.substr(ref.path.rfind('/') + 1);
+}
+
+bool is_git_ref(std::string_view url) {
+  return starts_with_ci(url, "git:");
+}
+
+std::optional<GitFile> parse_git_ref(std::string_view url) {
+  if (!is_git_ref(url)) return std::nullopt;
+  url.remove_prefix(4);
+  url = url.substr(0, url.find('#'));
+  std::string_view address = url;
+  const auto repository = take(address, '?');
+  std::string_view project = repository;
+  const auto provider = take(project);
+  std::string path, revision;
+  while (!address.empty()) {
+    const auto field = take(address, '&');
+    std::string_view value = field;
+    const auto key = take(value, '=');
+    auto decoded = percent_decode(value);
+    if (!safe_path(decoded)) return std::nullopt;
+    if (key == "path" && path.empty()) path = std::move(decoded);
+    else if (key == "ref" && revision.empty()) revision = std::move(decoded);
+    else return std::nullopt;
+  }
+  if (path.empty()) return std::nullopt;
+
+  if (provider == "github.com" || provider == "gitlab.com") {
+    const bool github = provider == "github.com";
+    if (ends_with(project, ".git")) project.remove_suffix(4);
+    if (!safe_path(project, true) || project.find('/') == project.npos ||
+        (github && project.find('/') != project.rfind('/'))) return std::nullopt;
+    ForgeRef ref;
+    ref.github = github;
+    ref.view = View::Raw;
+    ref.project = project;
+    ref.path = std::move(path);
+    ref.revision = std::move(revision);
+    return GitFile{forge_raw_url(ref), forge_filename(ref)};
+  }
+
+  if (provider == "radicle") {
+    const auto seed = take(project);
+    const auto host = parse_http_url("https://" + seed + "/");
+    if (!host || !starts_with(project, "rad:z") || project.size() <= 5 ||
+        project.substr(5).find_first_not_of(
+            "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz") != project.npos ||
+        revision.size() != 40 ||
+        revision.find_first_not_of("0123456789abcdefABCDEF") != revision.npos)
+      return std::nullopt;
+    return GitFile{"https://" + host->authority + "/raw/" + std::string(project) +
+                       "/" + revision + "/" + encoded_path(path),
+                   path.substr(path.rfind('/') + 1)};
+  }
+  return std::nullopt;
 }
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS

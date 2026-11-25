@@ -216,7 +216,7 @@ bool is_in_app_remote_url(std::string_view s) {
          xanatoo::is_hn_ref(s) || xanatoo::is_forum_ref(s) ||
          xanatoo::is_youtube_ref(s) ||
          xanatoo::is_video_site_ref(s) || xanatoo::is_ia_ref(s) ||
-         xanatoo::is_forge_ref(s) ||
+         xanatoo::is_forge_ref(s) || xanatoo::is_git_ref(s) ||
          xanatoo::is_ebook_url(s) || xanatoo::is_wayback_ref(s) ||
          xanatoo::is_feed_url(s) || xanatoo::is_wikipedia_ref(s) ||
          xanatoo::is_sitemap_ref(s) || xanatoo::is_search_ref(s) ||
