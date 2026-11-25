@@ -497,57 +497,59 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     struct Entry {
       const char* group;  // heading before this entry, or nullptr
       const char* label;
+      const char* icon;
       const char* target;
       bool example;
       const char* probe;
     };
     static const Entry kServices[] = {
-        {"Reference", "Wikipedia", "wikipedia:Main_Page", false, nullptr},
-        {nullptr, "Internet Archive (Prelinger films)", "ia:prelinger", false,
+        {"Reference", "Wikipedia", "language", "wikipedia:Main_Page", false, nullptr},
+        {nullptr, "Internet Archive (Prelinger films)", "history", "ia:prelinger", false,
          nullptr},
-        {nullptr, "Standard Ebooks", "https://standardebooks.org/ebooks", false,
+        {nullptr, "Standard Ebooks", "reader", "https://standardebooks.org/ebooks", false,
          nullptr},
-        {"News and forums", "Hacker News", "hn:", false, nullptr},
-        {nullptr, "Lobsters", "lobsters:", false, nullptr},
-        {nullptr, "Digg", "digg:", false, nullptr},
-        {nullptr, "LessWrong", "lesswrong:", false, nullptr},
-        {nullptr, "Reddit (r/popular)", "reddit:r/popular/", false, nullptr},
-        {nullptr, "4chan (boards)", "fourchan:", false, nullptr},
-        {nullptr, "Lemmy instances", "services/lemmy.md", true,
+        {"News and forums", "Hacker News", "site-feed", "hn:", false, nullptr},
+        {nullptr, "Lobsters", "link", "lobsters:", false, nullptr},
+        {nullptr, "Digg", "bookmark", "digg:", false, nullptr},
+        {nullptr, "LessWrong", "note", "lesswrong:", false, nullptr},
+        {nullptr, "Reddit (r/popular)", "related", "reddit:r/popular/", false, nullptr},
+        {nullptr, "4chan (boards)", "image", "fourchan:", false, nullptr},
+        {nullptr, "Lemmy instances", "lemmy", "services/lemmy.md", true,
          "lemmy:lemmy.world/"},
-        {nullptr, "Discourse forums", "services/discourse.md", true,
+        {nullptr, "Discourse forums", "context", "services/discourse.md", true,
          "discourse:discourse.nixos.org"},
-        {nullptr, "Flarum forums", "services/flarum.md", true,
+        {nullptr, "Flarum forums", "quote", "services/flarum.md", true,
          "flarum:discuss.flarum.org"},
-        {nullptr, "Stack Exchange sites", "services/stackexchange.md", true,
+        {nullptr, "Stack Exchange sites", "lists", "services/stackexchange.md", true,
          "stackexchange:stackoverflow.com"},
-        {"Social and chat", "Bluesky (feeds, tags, people)", "services/bluesky.md",
+        {"Social and chat", "Bluesky (feeds, tags, people)", "identities", "services/bluesky.md",
          true, "bsky:bsky.app"},
-        {nullptr, "Nostr (recent notes)", "nostr:recent", false, nullptr},
-        {nullptr, "Matrix homeservers", "services/matrix.md", true,
+        {nullptr, "Nostr (recent notes)", "site-nostr", "nostr:recent", false, nullptr},
+        {nullptr, "Matrix homeservers", "matrix", "services/matrix.md", true,
          "matrix:directory/matrix.org"},
-        {"Video", "YouTube (Google for Developers)", "youtube:@GoogleDevelopers",
+        {"Video", "YouTube (Google for Developers)", "media", "youtube:@GoogleDevelopers",
          false, nullptr},
-        {nullptr, "media.ccc.de (talks)", "mediaccc:", false, nullptr},
-        {nullptr, "PeerTube instances", "services/peertube.md", true,
+        {nullptr, "media.ccc.de (talks)", "media", "mediaccc:", false, nullptr},
+        {nullptr, "PeerTube instances", "media", "services/peertube.md", true,
          "peertube:video.blender.org"},
-        {"Small net", "Gemini capsules", "services/gemini.md", true,
+        {"Small net", "Gemini capsules", "gemini", "services/gemini.md", true,
          "gemini://geminiprotocol.net/"},
-        {nullptr, "Gopher holes", "services/gopher.md", true,
+        {nullptr, "Gopher holes", "site-folder", "services/gopher.md", true,
          "gopher://gopher.floodgap.com/1/"},
-        {nullptr, "Spartan hosts", "services/spartan.md", true,
+        {nullptr, "Spartan hosts", "site-web", "services/spartan.md", true,
          "spartan://spartan.mozz.us/"},
-        {nullptr, "Nex hosts", "services/nex.md", true, "nex://nightfall.city/"},
-        {nullptr, "Finger hosts", "finger.md", true, "finger://tilde.town/"},
-        {nullptr, "Usenet servers", "usenet.md", true, "news://news.gmane.io/"},
-        {"Directories", "All services", "services.md", true, nullptr},
-        {nullptr, "Directory (links and feeds)", "directory.md", true, nullptr},
-        {nullptr, "Books and long reads", "books.md", true, nullptr},
-        {nullptr, "Feeds (RSS / Atom)", "feeds.md", true, nullptr},
+        {nullptr, "Nex hosts", "site-web", "services/nex.md", true, "nex://nightfall.city/"},
+        {nullptr, "Finger hosts", "identities", "finger.md", true, "finger://tilde.town/"},
+        {nullptr, "Usenet servers", "context", "usenet.md", true, "news://news.gmane.io/"},
+        {"Directories", "All services", "sitemap", "services.md", true, nullptr},
+        {nullptr, "Directory (links and feeds)", "site-folder", "directory.md", true, nullptr},
+        {nullptr, "Books and long reads", "reader", "books.md", true, nullptr},
+        {nullptr, "Feeds (RSS / Atom)", "site-feed", "feeds.md", true, nullptr},
     };
     for (const Entry& e : kServices) {
       xanatoo::UiService s;
       s.label = e.label;
+      s.icon = e.icon;
       s.target = e.target;
       s.example = e.example;
       if (e.group) s.group = e.group;

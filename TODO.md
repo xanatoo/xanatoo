@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Services menu icons
+
+- Added icons to service and directory rows and Open URL using the shared
+  menu renderer and existing icon assets.
+- Verified menu rendering under Xvfb. The Nix suite passed 14,795 checks.
+
 ## Status (2026-11-25) — Tab context-menu actions
 - Added seven SVG icons for the tab context menu. All seven rasterized and
   the Nix test suite passed (14,795 checks). GUI appearance was not tested.

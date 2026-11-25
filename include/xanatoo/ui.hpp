@@ -354,6 +354,7 @@ enum class UiCommand {
 // with many hosts a directory page of them under examples/services/.
 struct UiService {
   std::string label;
+  std::string icon;      // name in the shared menu icon set
   std::string target;    // URL / ref, or example file name when `example`
   bool example = false;  // local page from examples/ (OpenExample)
   bool enabled = true;

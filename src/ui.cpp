@@ -4055,7 +4055,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     if (bar_menu("Services")) {
       for (const UiService& s : state.services) {
         if (!s.group.empty()) ImGui::SeparatorText(s.group.c_str());
-        if (ImGui::MenuItem(s.label.c_str(), nullptr, false, s.enabled)) {
+        if (menu_item_with_icon(s.label.c_str(), s.icon.c_str(), nullptr,
+                                false, s.enabled)) {
           cmd = s.example ? UiCommand::OpenExample : UiCommand::NavigateUrl;
           result.arg = s.target;
         }
@@ -4066,7 +4067,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           ImGui::SetTooltip("%s", s.tip.c_str());
       }
       ImGui::Separator();
-      if (ImGui::MenuItem("Open URL…", "Ctrl+L")) cmd = UiCommand::OpenUrlBar;
+      if (menu_item_with_icon("Open URL…", "site-web", "Ctrl+L", false))
+        cmd = UiCommand::OpenUrlBar;
       ImGui::EndMenu();
     }
     force_menu("Help");
