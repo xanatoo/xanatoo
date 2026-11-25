@@ -1666,8 +1666,8 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         text_w = max_width - 8.f;
       }
       layout_role_text(doc, node, BlockRole::BlockQuote, text_x, y, text_w, out);
-      y += after(BlockRole::BlockQuote);
       out.quote_bars.push_back({id, x, start_y, bar_w, y - start_y});
+      y += after(BlockRole::BlockQuote);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
     }

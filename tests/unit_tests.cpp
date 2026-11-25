@@ -3252,6 +3252,31 @@ void test_layout_reader_mode() {
   EXPECT(saw_section);
 }
 
+void test_layout_quote_bar_spacing() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_quote_bar_spacing (no font)\n");
+    return;
+  }
+  Document doc = parse_document("> Quoted text.\n\nFollowing text.\n", "q.md");
+  DocStyle style = builtin_style();
+  apply_style_source(style, "(role block-quote (space-after 0))");
+  LayoutEngine engine(fonts, nullptr);
+  engine.set_style(&style);
+  LayoutResult tight = engine.layout(doc, 800.f);
+  apply_style_source(style, "(role block-quote (space-after 30))");
+  engine.set_style(&style);
+  LayoutResult spaced = engine.layout(doc, 800.f);
+  EXPECT_EQ(tight.quote_bars.size(), 1u);
+  EXPECT_EQ(spaced.quote_bars.size(), 1u);
+  if (tight.quote_bars.size() == 1 && spaced.quote_bars.size() == 1) {
+    EXPECT_EQ(spaced.quote_bars.front().height, tight.quote_bars.front().height);
+    EXPECT_EQ(spaced.glyphs.back().y, tight.glyphs.back().y + 30.f);
+  }
+}
+
 // Articles are separate sheets on a margin: gaps between them, the page
 // sheet only when the style has a margin.
 void test_layout_article_gaps() {
@@ -9666,6 +9691,7 @@ int main() {
   test_named_style_scopes();
   test_style_choice_mix();
   test_style_choice_variants();
+  test_layout_quote_bar_spacing();
   test_layout_article_gaps();
   test_layout_inline_metadata();
   test_layout_figure_rows();

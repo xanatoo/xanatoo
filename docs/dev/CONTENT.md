@@ -10,6 +10,8 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   rules, inline-code runs, *then the selection*, then glyphs. Sheets may use
   opaque fills; the selection is never passed to `draw_selection` before
   `draw`. Marks / bookmarks / quote washes are overlays after the text.
+- Block quote bars span the laid-out text lines. The role's `space-after`
+  still advances the next block below the bar.
 - Shipped sheets keep text ≥ 4.5:1 on its background (metadata, meta,
   footnotes included — dark sheets must override the default's dark
   footnote / strike colours), a selection that differs from `mark`, every

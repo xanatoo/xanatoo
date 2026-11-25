@@ -2,6 +2,11 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Quote rule spacing
+
+- Block quote rules end at the last text line, leaving the configured gap
+  before the next block. The Nix suite passed 14,905 checks.
+
 ## Status (2026-11-25) — Vertical Tabs
 
 - Added View → Tab Bar and a dockable Vertical Tabs panel with opener
