@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Tab context-menu actions
+
+- Added Close other tabs, Close tabs to the right / left, and Sort tabs by
+  title to each tab's context menu. Close ranges follow the clicked tab's
+  position; existing draft protection applies to every close. Sorting is
+  stable and case-insensitive, ignores unsaved markers, and keeps the
+  selected buffer. ImGui's retained order follows application-side sorting.
+- Validation: `nix develop -c xanatoo-test` passed (14,795 checks,
+  zero failures); application built successfully. Menu interaction has not
+  been checked in a running GUI.
+
 ## Status (2026-11-24) — Touch long press: menu on the timer, chrome too
 
 - The context menu now opens once the finger has rested 500 ms, not on the

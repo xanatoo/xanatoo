@@ -160,6 +160,7 @@ enum class UiCommand {
   SendReply,       // posts to Nostr (unlocked account); a mockup elsewhere
   // Tabs / MDI
   NewTab,          // new empty buffer + tab
+  CloseOtherTabs, CloseTabsRight, CloseTabsLeft, SortTabsByTitle,
   CloseTab,        // close focused buffer (Ctrl+W)
   NextTab,
   PrevTab,
@@ -1129,6 +1130,7 @@ private:
   // Tab bar: one-shot SetSelected so keyboard Next/Prev syncs ImGui without
   // fighting click selection every frame (which caused flicker).
   bool tab_force_select_ = false;
+  std::vector<uint32_t> tab_submitted_ids_;
   int tab_synced_active_ = -1;
   // Tab being dragged off the strip (buffer id, 0 = none) until release.
   uint32_t tab_tear_id_ = 0;

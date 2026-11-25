@@ -1365,6 +1365,39 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       flash_status(app, "Tab closed");
       break;
     }
+    case C::CloseOtherTabs:
+    case C::CloseTabsRight:
+    case C::CloseTabsLeft: {
+      size_t target;
+      try {
+        target = std::stoul(arg);
+      } catch (...) {
+        break;
+      }
+      if (target >= app.tab_order.size()) break;
+      std::vector<BufferId> closing;
+      for (size_t i = 0; i < app.tab_order.size(); ++i)
+        if ((cmd == C::CloseOtherTabs && i != target) ||
+            (cmd == C::CloseTabsRight && i > target) ||
+            (cmd == C::CloseTabsLeft && i < target))
+          closing.push_back(app.tab_order[i]);
+      for (BufferId id : closing) {
+        if (!stash_or_confirm(app, id)) break;
+        close_tab(app, id);
+      }
+      break;
+    }
+    case C::SortTabsByTitle: {
+      auto title = [&](BufferId id) {
+        std::string label = buffer_tab_label(app, id);
+        if (const DocBuffer* b = find_buf(app, id); b && b->dirty)
+          label.erase(0, 1);
+        return xanatoo::ascii_lower(label);
+      };
+      std::stable_sort(app.tab_order.begin(), app.tab_order.end(),
+                       [&](BufferId a, BufferId b) { return title(a) < title(b); });
+      break;
+    }
     case C::SelectTab: {
       int tab_i = 0;
       try {

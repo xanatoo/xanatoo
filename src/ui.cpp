@@ -3173,6 +3173,21 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                              ImGuiTabBarFlags_FittingPolicyScroll |
                                  ImGuiTabBarFlags_Reorderable |
                                  ImGuiTabBarFlags_DrawSelectedOverline)) {
+        // ImGui retains drag order; apply application-side sorting before layout.
+        if (tab_submitted_ids_ != state.tab_ids) {
+          if (ImGuiTabBar* bar = ImGui::GetCurrentTabBar()) {
+            std::vector<ImGuiID> ids;
+            for (uint32_t bid : state.tab_ids)
+              ids.push_back(ImGui::GetID(("###tab" + std::to_string(bid)).c_str()));
+            if (bar->Tabs.Size > 1)
+              std::stable_sort(bar->Tabs.Data, bar->Tabs.Data + bar->Tabs.Size,
+                               [&](const ImGuiTabItem& a, const ImGuiTabItem& b) {
+                return std::find(ids.begin(), ids.end(), a.ID) <
+                       std::find(ids.begin(), ids.end(), b.ID);
+              });
+          }
+          tab_submitted_ids_ = state.tab_ids;
+        }
         const bool force_sel = tab_force_select_;
         tab_force_select_ = false;
         for (int i = 0; i < static_cast<int>(state.tab_labels.size()); ++i) {
@@ -3301,6 +3316,22 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
               cmd = UiCommand::CloseTab;
               result.arg = std::to_string(i);
             }
+            const auto tab_action = [&](const char* label, UiCommand action,
+                                        bool enabled) {
+              if (ImGui::MenuItem(label, nullptr, false, enabled) &&
+                  cmd == UiCommand::None) {
+                cmd = action;
+                result.arg = std::to_string(i);
+              }
+            };
+            tab_action("Close other tabs", UiCommand::CloseOtherTabs,
+                       state.tab_ids.size() > 1);
+            tab_action("Close tabs to the right", UiCommand::CloseTabsRight,
+                       i + 1 < static_cast<int>(state.tab_ids.size()));
+            tab_action("Close tabs to the left", UiCommand::CloseTabsLeft, i > 0);
+            ImGui::Separator();
+            tab_action("Sort tabs by title", UiCommand::SortTabsByTitle,
+                       state.tab_ids.size() > 1);
             ImGui::EndPopup();
           }
           ImGui::PopStyleVar(3);
