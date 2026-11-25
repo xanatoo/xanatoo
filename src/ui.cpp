@@ -3199,6 +3199,8 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         }
         const bool force_sel = tab_force_select_;
         tab_force_select_ = false;
+        ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
+        const float tab_offset = std::max(1.f, std::round(scale_));
         for (int i = 0; i < static_cast<int>(state.tab_labels.size()); ++i) {
           // One-shot SetSelected when main changed active_tab (Next/Prev tab).
           // Continuous SetSelected fights ImGui clicks → flicker / stacked docs.
@@ -3253,9 +3255,8 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             ImGui::PushStyleColor(ImGuiCol_TabDimmedSelectedOverline, line);
             tab_colors += 7;
           }
-          if (ImGui::BeginTabItem(id.c_str(), &open, flags)) {
-            ImGui::EndTabItem();
-          }
+          ImGui::TabItemEx(bar, id.c_str(), &open, flags, nullptr,
+                           active ? -tab_offset : tab_offset);
           // TabItemEx reports its label before ItemAdd: the hook misses it.
           note_hover_help("tab", nullptr);
           ImGui::PopStyleColor(tab_colors);
@@ -3263,7 +3264,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             const ImVec2 min = ImGui::GetItemRectMin();
             const ImVec2 max = ImGui::GetItemRectMax();
             ImDrawList* draw = ImGui::GetWindowDrawList();
-            ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
             draw->PushClipRect(ImVec2(bar->ScrollingRectMinX, min.y),
                                ImVec2(bar->ScrollingRectMaxX, max.y), true);
             if (active) {
@@ -3281,8 +3281,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
               draw->AddLine(ImVec2(left, top + inset),
                             ImVec2(left, bottom), light, inset);
               draw->AddLine(ImVec2(right, top + inset),
-                            ImVec2(right, bottom), shade, inset);
-              draw->AddLine(ImVec2(left + inset, bottom),
                             ImVec2(right, bottom), shade, inset);
             }
             if (icon) {

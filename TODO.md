@@ -4,6 +4,9 @@
 
 ## Status (2026-11-25) — Document tab contrast
 
+- Removed the bottom bevel shadow and staggered active and inactive tabs
+  by one scaled pixel in each direction. Verified keyboard switching at
+  100% and 125% UI scale under Xvfb.
 - Darkened inactive tab labels, lightened the selected service-tab fill,
   and added a raised bevel under the active tab's accent stripe.
 - Verified the bevel moves with Ctrl+Tab under Xvfb. The Nix suite passed
