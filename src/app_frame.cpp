@@ -508,6 +508,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
          nullptr},
         {nullptr, "Standard Ebooks", "reader", "https://standardebooks.org/ebooks", false,
          nullptr},
+        {"Repositories", "GitHub", "code", "github:", false, nullptr},
+        {nullptr, "GitLab", "code", "gitlab:", false, nullptr},
         {"News and forums", "Hacker News", "site-feed", "hn:", false, nullptr},
         {nullptr, "Lobsters", "link", "lobsters:", false, nullptr},
         {nullptr, "Digg", "bookmark", "digg:", false, nullptr},

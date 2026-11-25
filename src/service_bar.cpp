@@ -7,6 +7,8 @@
 // forum_*.cpp), nntp_service_bar (nntp.cpp). The others are small enough
 // to live here.
 
+#include "xanatoo/forge.hpp"
+
 #include "xanatoo/service_bar.hpp"
 
 #include "xanatoo/archive.hpp"
@@ -243,6 +245,7 @@ std::optional<ServiceBar> small_net_bar(std::string_view address) {
 
 // The strip of a native ref or non-web address (no forms mixed).
 std::optional<ServiceBar> ref_bar(std::string_view a) {
+  if (is_forge_ref(a)) return forge_service_bar(a);
   if (is_hn_ref(a)) return hn_service_bar(web_url_for(a));
   if (auto r = parse_forum_ref(a)) return forum_service_bar(*r);
   if (auto r = parse_nntp_url(a)) return nntp_service_bar(*r);

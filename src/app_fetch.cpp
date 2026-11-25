@@ -4,6 +4,8 @@
 // Background page fetches: remote documents are fetched and parsed on a
 // detached worker thread; the frame loop picks up finished jobs.
 
+#include "xanatoo/forge.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -567,6 +569,28 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
 #if defined(XANATOO_YOUTUBE) && XANATOO_YOUTUBE
     out->service = "YouTube";
     out->doc = xanatoo::youtube_fetch(url, &out->error);
+#endif
+  } else if (xanatoo::is_forge_ref(url)) {
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+    const auto ref = xanatoo::parse_forge_ref(url);
+    if (!ref) {
+      out->error = "Invalid repository address";
+    } else {
+      out->service = ref->github ? "GitHub" : "GitLab";
+      if (ref->view == xanatoo::ForgeView::Raw && allow_download && out->download) {
+        const auto name = xanatoo::forge_filename(*ref);
+        if (out->force_download) {
+          xanatoo::web_fetch(xanatoo::forge_raw_url(*ref), &out->error, nullptr,
+                            nullptr, nullptr, out->download.get(), nullptr,
+                            true, nullptr, name);
+        } else {
+          out->download->name = name;
+          out->download->offered.store(true, std::memory_order_release);
+        }
+      } else {
+        out->doc = xanatoo::forge_fetch(*ref, &out->error);
+      }
+    }
 #endif
   } else if (xanatoo::is_ia_ref(url)) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
@@ -1165,6 +1189,13 @@ bool remote_fetch_supported(std::string_view url, std::string* why) {
     return no("YouTube needs build with -DXANATOO_YOUTUBE=ON");
 #endif
   }
+  if (xanatoo::is_forge_ref(url)) {
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
+    return true;
+#else
+    return no("Repository services require HTTPS support");
+#endif
+  }
   if (xanatoo::is_ia_ref(url)) {
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
     return true;
@@ -1291,11 +1322,16 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   return app.fetches.back().id;
 }
 
+static bool downloadable_address(const std::string& url) {
+  if (const auto ref = xanatoo::parse_forge_ref(url))
+    return ref->view == xanatoo::ForgeView::Raw;
+  return xanatoo::starts_with_ci(url, "https://") ||
+         xanatoo::starts_with_ci(url, "http://") || xanatoo::is_gopher_url(url);
+}
+
 void start_download(App& app, const std::string& url) {
-  if (!xanatoo::starts_with_ci(url, "https://") &&
-      !xanatoo::starts_with_ci(url, "http://") &&
-      !xanatoo::is_gopher_url(url)) {
-    flash_status(app, "Only web or gopher links can be downloaded: " + url);
+  if (!downloadable_address(url)) {
+    flash_status(app, "This address cannot be downloaded: " + url);
     return;
   }
   app.download_confirm.open = true;
@@ -1303,10 +1339,8 @@ void start_download(App& app, const std::string& url) {
 }
 
 void begin_download(App& app, const std::string& url, std::string dest_dir) {
-  if (!xanatoo::starts_with_ci(url, "https://") &&
-      !xanatoo::starts_with_ci(url, "http://") &&
-      !xanatoo::is_gopher_url(url)) {
-    flash_status(app, "Only web or gopher links can be downloaded: " + url);
+  if (!downloadable_address(url)) {
+    flash_status(app, "This address cannot be downloaded: " + url);
     return;
   }
   app.pending_download_dir = std::move(dest_dir);

@@ -461,6 +461,26 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   original. Hovering such a block image sets `hover.href` to that link too,
   so the Context panel and status line name the original. Bluesky's `…@jpeg` CDN names pass `is_image_url`.
 
+## GitHub and GitLab (`forge.hpp`)
+
+- `github:owner/repo` and `gitlab:group[/subgroup]/project` open the
+  default-branch file tree. GitLab uses gitlab.com. Routes mirror the web
+  sections (`issues`, GitHub `pulls` / `pull/N`, GitLab
+  `-/merge_requests[/N]`). Native file routes keep the revision in
+  `?ref=`, so slash-containing branches can be percent-encoded without
+  ambiguity. The path after `tree`, `blob` or `raw` is the file path.
+- `src/forge.cpp` uses public APIs through the shared HTTPS
+  transport. The service strip switches between files, issues and change
+  requests. Lists and discussions page through results on demand. GitHub
+  pull requests have separate conversation, review and inline comment views.
+  GitLab uses anonymous GraphQL for discussions and retains reply relationships. Descriptions and comments
+  use Thread + Message markup, with GitHub's rendered HTML or ordinary
+  Markdown blocks from GitLab.
+- File previews show up to 256 KiB of UTF-8 content. Raw refs offer the
+  standard download confirmation and stream the file after confirmation.
+  GitHub's Contents API caps a directory listing at 1,000 entries. Public
+  visibility and anonymous API rate limits apply to both services.
+
 ## Internet Archive
 
 - `src/archive.cpp`, no feature switch of its own (needs `XANATOO_HTTPS`).

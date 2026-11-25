@@ -2,6 +2,16 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — GitHub and GitLab services
+
+- Added native public repository browsers with directory navigation, file
+  previews and downloads, issue discussions, pull request conversations
+  and reviews, and GitLab merge request discussions.
+- Added service-strip navigation, links in the Services menu and hub, and
+  offline coverage for address parsing, web links and parent navigation.
+- The Nix suite passed 14,822 checks. Opened live discussion pages under
+  Xvfb and verified that downloads from both hosts matched the source bytes.
+
 ## Status (2026-11-25) — Document tab contrast
 
 - Extended the raised tab to the shared bottom edge and curved the bevel

@@ -51,7 +51,7 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
 // text/plain body: blank-line separated chunks as code blocks.
 Document plain_text_document(std::string_view text);
 
-#if defined(XANATOO_WEB) && XANATOO_WEB
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 // GET (redirects followed) and convert by Content-Type: HTML pages, feeds,
 // text/plain, text/markdown, text/gemini. `final_url` receives the URL
 // after redirects (fragment dropped). A 4xx / 5xx answer with a readable
@@ -77,7 +77,8 @@ std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   DownloadProgress* download = nullptr,
                                   WebPagesFile* pages = nullptr,
                                   bool force_download = false,
-                                  HttpStreamHeaders* response = nullptr);
+                                  HttpStreamHeaders* response = nullptr,
+                                  std::string_view download_name = {});
 #endif
 
 }  // namespace xanatoo

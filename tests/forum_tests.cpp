@@ -6,6 +6,8 @@
 // Part of xanatoo_tests (test_forums is called from unit_tests.cpp).
 
 #include "xanatoo/forums.hpp"
+#include "xanatoo/forge.hpp"
+#include "xanatoo/native.hpp"
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/json_dom.hpp"
 #include "xanatoo/layout.hpp"
@@ -941,6 +943,50 @@ void test_service_bars() {
          2 * service_bar_height(*hn, 1.f));
 }
 
+static void test_forge_refs() {
+  const std::string file = "github:owner/repo/blob/dir/a%20%23%25.cpp?ref=topic%2Fbranch";
+  const auto gh = parse_forge_ref(file);
+  EXPECT(gh.has_value());
+  if (gh) {
+    EXPECT_EQ(gh->view, ForgeView::Blob);
+    EXPECT_EQ(gh->path, "dir/a #%.cpp");
+    EXPECT_EQ(forge_ref_string(*gh), file);
+    EXPECT_EQ(forge_filename(*gh), "a #%.cpp");
+    EXPECT_EQ(forge_raw_url(*gh),
+              "https://raw.githubusercontent.com/owner/repo/topic%2Fbranch/dir/a%20%23%25.cpp");
+    EXPECT_EQ(forge_ref_from_web(forge_web_url(*gh)), file);
+    EXPECT_EQ(up_url(file), "github:owner/repo/tree/dir?ref=topic%2Fbranch");
+  }
+
+  const auto raw = parse_forge_ref("gitlab:group/subgroup/project/-/raw/doc/manual.pdf");
+  EXPECT(raw.has_value());
+  if (raw) {
+    EXPECT_EQ(raw->project, "group/subgroup/project");
+    EXPECT_EQ(forge_filename(*raw), "manual.pdf");
+    EXPECT_EQ(forge_raw_url(*raw),
+              "https://gitlab.com/api/v4/projects/group%2Fsubgroup%2Fproject/"
+              "repository/files/doc%2Fmanual.pdf/raw?ref=HEAD");
+  }
+  const std::string discussion = "gitlab:group/subgroup/project/-/merge_requests/42";
+  EXPECT_EQ(native_url_for(web_url_for(discussion)), discussion);
+  EXPECT_EQ(up_url(discussion + "?after=Mg"), discussion);
+  const auto cursor = parse_forge_ref(discussion + "?before=Mg%3D%3D");
+  EXPECT(cursor && forge_ref_string(*cursor) == discussion + "?before=Mg%3D%3D");
+  EXPECT(!parse_forge_ref(discussion + "?before=Mg&after=Mw"));
+  EXPECT_EQ(up_url(discussion), "gitlab:group/subgroup/project/-/merge_requests");
+
+  const std::string review = "github:owner/repo/pull/3/files";
+  EXPECT_EQ(native_url_for(web_url_for(review)), review);
+  EXPECT_EQ(up_url(review), "github:owner/repo/pull/3");
+  const auto bar = service_bar(review);
+  EXPECT(bar && bar->rows.size() == 2 && bar->rows[1].links[2].current);
+  EXPECT(!parse_forge_ref("github:owner/repo/blob/%2e%2e/file"));
+  EXPECT(!parse_forge_ref("gitlab:group/project/-/blob/file?ref=%0d%0a"));
+  EXPECT(!parse_forge_ref("github:owner/repo/issues/3/extra"));
+  EXPECT(!parse_forge_ref("gitlab:group/project/-/issues?page=0"));
+  EXPECT(forge_ref_from_web("https://gitlab.com.evil.test/group/project").empty());
+}
+
 void test_forums(int& passed, int& failed) {
   test_refs();
   test_discourse();
@@ -952,6 +998,7 @@ void test_forums(int& passed, int& failed) {
   test_lesswrong();
   test_digg();
   test_service_bars();
+  test_forge_refs();
   passed += g_passed;
   failed += g_failed;
 }

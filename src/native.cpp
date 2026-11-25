@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
+#include "xanatoo/forge.hpp"
+
 #include "xanatoo/native.hpp"
 
 #include "xanatoo/feed.hpp"
@@ -112,6 +114,7 @@ std::string web_url_for(std::string_view ref) {
     return "https://" + std::string(after_prefix(ref, kLemmyPrefix));
   if (auto r = parse_youtube_ref(ref)) return youtube_web_url(*r);
   if (auto r = parse_video_site_ref(ref)) return video_site_web_url(*r);
+  if (auto r = parse_forge_ref(ref)) return forge_web_url(*r);
   if (auto r = parse_ia_ref(ref)) return ia_web_url(*r);
   if (auto r = parse_forum_ref(ref)) return forum_web_url(*r);
   if (std::string web = matrix_to_url(ref); !web.empty()) return web;
@@ -145,6 +148,7 @@ std::string native_url_for(std::string_view url) {
   if (std::string r = lemmy_ref_from_url(url); !r.empty()) return r;
   if (std::string r = youtube_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = video_site_ref_from_web_url(url); !r.empty()) return r;
+  if (std::string r = forge_ref_from_web(url); !r.empty()) return r;
   if (std::string r = ia_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = matrix_ref_from_url(url); !r.empty()) return r;
   if (std::string r = forum_ref_from_web_url(url); !r.empty()) return r;
@@ -179,6 +183,7 @@ std::string up_url(std::string_view url) {
       return {};
     return "/" + up;
   }
+  if (auto r = parse_forge_ref(url)) return forge_up_url(*r);
   if (auto r = parse_nntp_url(url)) return nntp_up_url(*r);
   if (size_t sep = url.find("://"); sep != std::string_view::npos) {
     const size_t path_at = url.find_first_of("/?#", sep + 3);

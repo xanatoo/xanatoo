@@ -16,6 +16,16 @@ directory page, but its links say what is missing.
 - **Wayback Machine** — `wayback:URL` shows the newest archived copy, `wayback:YYYYMMDD/URL` the one nearest that date (View → *Old Version*). Example: [xanadu.com in 1999](wayback:19990101/http://www.xanadu.com/)
 - [Standard Ebooks](https://standardebooks.org/ebooks) and more in [Books and long reads](books.md) — EPUBs open as documents
 
+## Repositories
+
+- [GitHub](github:) · [xanatoo](github:xanatoo/xanatoo) — enter `github:owner/repo`.
+- [GitLab](gitlab:) · [GitLab project](gitlab:gitlab-org/gitlab) — enter `gitlab:group/project`, including any subgroups.
+
+Use the service strip to switch between files, issues and pull or merge requests.
+Open a file to preview it or choose **Download** to save it. To browse a branch,
+tag or commit, append `/tree?ref=REVISION` on GitHub or `/-/tree?ref=REVISION`
+on GitLab. Encode a slash in a revision as `%2F`.
+
 ## News and forums
 
 - [Hacker News](hn:) · [new](hn:newest) · [Ask HN](hn:ask) · [Show HN](hn:show)

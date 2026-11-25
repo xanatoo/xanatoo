@@ -278,6 +278,7 @@ add_executable(xanatoo
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
+  src/forge.cpp
   src/wayback.cpp
   src/time.cpp
   src/ebooks.cpp
@@ -825,6 +826,7 @@ add_executable(xanatoo_tests
   src/youtube.cpp
   src/video_sites.cpp
   src/archive.cpp
+  src/forge.cpp
   src/wayback.cpp
   src/time.cpp
   src/ebooks.cpp

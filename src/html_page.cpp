@@ -15,7 +15,7 @@
 #include "xanatoo/gallery.hpp"
 #include "xanatoo/url_cache.hpp"
 
-#if defined(XANATOO_WEB) && XANATOO_WEB
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
 #include "xanatoo/version.hpp"
 #include "xanatoo/paths.hpp"
@@ -319,7 +319,7 @@ Document plain_text_document(std::string_view text) {
   return doc;
 }
 
-#if defined(XANATOO_WEB) && XANATOO_WEB
+#if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 
 namespace {
 
@@ -423,7 +423,8 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   DownloadProgress* download,
                                   WebPagesFile* pages,
                                   bool force_download,
-                                  HttpStreamHeaders* response) {
+                                  HttpStreamHeaders* response,
+                                  std::string_view download_name) {
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
       "; +https://github.com/xanatoo/xanatoo)";
@@ -477,7 +478,8 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
         }
         downloading = h.status == 200 && download && force_download;
         if (!downloading) return true;
-        const std::string name = download_filename(url, h.content_disposition);
+        const std::string name = download_name.empty() ?
+            download_filename(url, h.content_disposition) : std::string(download_name);
         download->name = name;
         download->mime = h.content_type;
         if (!file.begin(name, err, download->dest_dir)) return false;
@@ -593,6 +595,6 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
   return std::nullopt;
 }
 
-#endif  // XANATOO_WEB
+#endif  // XANATOO_HTTPS
 
 }  // namespace xanatoo
