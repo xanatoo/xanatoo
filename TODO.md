@@ -2,6 +2,11 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Bluesky native links
+
+- Native view resolves Bluesky post URLs before applying Lemmy's path heuristic.
+  The Nix suite passed 14,907 checks.
+
 ## Status (2026-11-25) — Restore closed tabs
 
 - Ctrl+Shift+T reopens closed tabs in reverse close order. Ctrl+Alt+T

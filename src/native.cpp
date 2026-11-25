@@ -147,14 +147,14 @@ std::string native_url_for(std::string_view url) {
   if (auto r = wikipedia_ref_from_url(url)) return wikipedia_ref_string(*r);
   if (std::string r = hn_ref_from_url(url); !r.empty()) return r;
   if (std::string r = reddit_ref_from_url(url); !r.empty()) return r;
-  if (std::string r = lemmy_ref_from_url(url); !r.empty()) return r;
   if (std::string r = youtube_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = video_site_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = forge_ref_from_web(url); !r.empty()) return r;
   if (std::string r = ia_ref_from_web_url(url); !r.empty()) return r;
   if (std::string r = matrix_ref_from_url(url); !r.empty()) return r;
   if (std::string r = forum_ref_from_web_url(url); !r.empty()) return r;
-  return {};
+  // Lemmy accepts path patterns on arbitrary hosts, including /post/.
+  return lemmy_ref_from_url(url);
 }
 
 std::string alternate_view_url(std::string_view url) {

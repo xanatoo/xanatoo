@@ -182,6 +182,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   (often `Local`) and comments from federated users vanish.
 - Gated by `XANATOO_LEMMY` (default ON; needs OpenSSL).
 - `lemmy:<instance>/c/<community>`, `/u/<person>` and `/post/<id>` refs.
+- Native view tries service-specific URL mappings before the Lemmy path
+  heuristic, so a Bluesky post URL opens as `bsky:`.
 - `lemmy:<instance>/` is the instance's post listing (the explicit ref only;
   `is_lemmy_url` keeps rejecting bare site roots). Lemmy UI's
   `?listingType=All|Local|Subscribed` becomes the API's `type_`;

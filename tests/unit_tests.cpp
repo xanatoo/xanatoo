@@ -7734,6 +7734,8 @@ void test_wikipedia() {
   EXPECT(!is_hn_ref("https://news.ycombinator.com/"));
   // Forum refs (forums.hpp) take part in the same mappings.
   EXPECT_EQ(native_url_for("https://lobste.rs/s/abc/title"), "lobsters:s/abc");
+  EXPECT_EQ(native_url_for("https://bsky.app/profile/dps2004.bsky.social/post/3n344fvjuy22t"),
+            "bsky:dps2004.bsky.social/post/3n344fvjuy22t");
   EXPECT_EQ(web_url_for("fourchan:g/thread/1"), "https://boards.4chan.org/g/thread/1");
   EXPECT_EQ(alternate_view_url("stackexchange:superuser.com/questions/5"),
             "https://superuser.com/questions/5");
@@ -7747,6 +7749,8 @@ void test_wikipedia() {
   EXPECT_EQ(web_url_for("reddit:r/popular/"), "https://www.reddit.com/r/popular/");
   EXPECT_EQ(native_url_for("https://lemmy.world/c/technology"),
             "lemmy:lemmy.world/c/technology");
+  EXPECT_EQ(native_url_for("https://programming.dev/post/7"),
+            "lemmy:programming.dev/post/7");
   EXPECT_EQ(native_url_for("https://lemmy.world/api/v3/post/list"), "");
   // The instance front page is native only as an explicit ref; a bare
   // https:// root stays a web page.
