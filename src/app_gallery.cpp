@@ -355,7 +355,7 @@ void gallery_step(App& app, int pi, int delta, bool wrap) {
   gv.index = to;
   reset_zoom(gv);
   p.locator.pipes.back().value = xanatoo::gallery_item_value(to);
-  NavHistory& h = p.nav;
+  NavHistory& h = view_nav(app, pi);
   if (h.pos >= 0 && h.pos < static_cast<int>(h.entries.size()) &&
       h.entries[static_cast<size_t>(h.pos)].url == before)
     h.entries[static_cast<size_t>(h.pos)].url = pane_address(app, p);
@@ -369,7 +369,7 @@ void gallery_image_was_page(App& app, const std::string& url) {
       continue;
     // The click meant "go to url": its page replaces the image entry.
     const std::string shown = pane_address(app, p);
-    NavHistory& h = p.nav;
+    NavHistory& h = view_nav(app, pi);
     if (h.pos >= 0 && h.pos < static_cast<int>(h.entries.size()) &&
         h.entries[static_cast<size_t>(h.pos)].url == shown) {
       h.entries.erase(h.entries.begin() + h.pos);

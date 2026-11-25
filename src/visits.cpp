@@ -288,7 +288,7 @@ size_t remove_visits(const std::vector<int64_t>& ids) {
 }
 
 std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
-                                    std::string_view filter) {
+                                    std::string_view filter, std::string_view tab) {
   std::vector<VisitRecord> out;
   sqlite3* d = statedb_connection();
   if (!d || limit == 0) return out;
@@ -303,13 +303,15 @@ std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
       "WHERE (?1 = 0 OR time < ?2 OR (time = ?2 AND id < ?1)) "
       "AND (?3 = '' OR title LIKE ?4 ESCAPE '\\' "
       "OR address LIKE ?4 ESCAPE '\\') "
+      "AND (?6 = '' OR window = ?6) "
       "ORDER BY time DESC, id DESC LIMIT ?5;";
   sqlite::Stmt s(d, sql.c_str());
   s.bind(1, after ? after->id : int64_t{0})
       .bind(2, after ? after->time : int64_t{0})
       .bind(3, filter)
       .bind(4, pattern)
-      .bind(5, static_cast<int64_t>(limit));
+      .bind(5, static_cast<int64_t>(limit))
+      .bind(6, tab);
   while (s.row()) out.push_back(visit_from(s));
   return out;
 }
@@ -326,7 +328,7 @@ bool page_visited(std::string_view) { return false; }
 std::vector<VisitRecord> recent_visits(size_t, int64_t) { return {}; }
 bool visit_log_available() { return false; }
 std::vector<VisitRecord> visit_page(size_t, const VisitRecord*,
-                                    std::string_view) {
+                                    std::string_view, std::string_view) {
   return {};
 }
 

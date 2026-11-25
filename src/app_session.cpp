@@ -20,6 +20,7 @@
 #include "xanatoo/lemmy_directory.hpp"
 #include "xanatoo/matrix_directory.hpp"
 #include "xanatoo/paths.hpp"
+#include "xanatoo/parse.hpp"
 #include "xanatoo/util.hpp"
 
 namespace fs = std::filesystem;
@@ -88,6 +89,7 @@ namespace {
 std::string session_text(App& app) {
   std::ostringstream out;
   out << "# xanatoo session (restored at the next start)\n";
+  out << "history.current-tab=" << app.history.current_tab << "\n";
   out << "split=" << (app.split ? 1 : 0) << "\n";
   out << "split_ratio=" << app.split_ratio << "\n";
   out << "tile_axis=" << (app.tile_axis == TileAxis::Rows ? "rows" : "columns") << "\n";
@@ -110,25 +112,6 @@ std::string session_text(App& app) {
     out << "scroll" << pi << "=" << p.scroll_y << "\n";
     if (p.reader) out << "reader" << pi << "=" << (*p.reader ? 1 : 0) << "\n";
     if (p.paged) out << "paged" << pi << "=" << (*p.paged ? 1 : 0) << "\n";
-    if (p.nav.pos >= 0) {
-      out << "navpos" << pi << "=" << p.nav.pos << "\n";
-      for (size_t ni = 0; ni < p.nav.entries.size(); ++ni) {
-        const NavHistoryEntry& e = p.nav.entries[ni];
-        if (e.url.find('\n') != std::string::npos) continue;
-        const std::string key = std::to_string(pi) + "." + std::to_string(ni);
-        out << "nav" << pi << "=" << e.url << "\n";
-        out << "navscroll" << key << "=" << e.scroll << "\n";
-        if (xanatoo::is_snapshot_id(e.snapshot))
-          out << "navsnap" << key << "=" << e.snapshot << "\n";
-        if (!e.via.href.empty() && e.via.href.find('\n') == std::string::npos &&
-            e.via.from_url.find('\n') == std::string::npos) {
-          out << "navvia" << key << "=" << e.via.href << "\n";
-          out << "navfrom" << key << "=" << e.via.from_url << "\n";
-          out << "navlink" << key << "=" << e.via.node << " "
-              << e.via.span << "\n";
-        }
-      }
-    }
   }
   std::unordered_map<BufferId, size_t> saved_tabs;
   for (BufferId id : app.tab_order) {
@@ -142,6 +125,28 @@ std::string session_text(App& app) {
       path = fs::absolute(path, ec).string();
     saved_tabs.emplace(id, saved_tabs.size());
     out << "tab=" << path << "\n";
+    const std::string index = std::to_string(saved_tabs.at(id));
+    out << "tabidentity" << index << "=" << b->history_tab << "\n";
+    if (b->tab_nav.pos >= 0) {
+      out << "tabnavpos" << index << "=" << b->tab_nav.pos << "\n";
+      for (size_t ni = 0; ni < b->tab_nav.entries.size(); ++ni) {
+        const NavHistoryEntry& e = b->tab_nav.entries[ni];
+        if (e.url.find('\n') != std::string::npos) continue;
+        const std::string key = index + "." + std::to_string(ni);
+        out << "tabnav" << index << "=" << e.url << "\n";
+        if (e.visit) out << "tabnavvisit" << key << "=" << e.visit << "\n";
+        out << "tabnavscroll" << key << "=" << e.scroll << "\n";
+        if (xanatoo::is_snapshot_id(e.snapshot))
+          out << "tabnavsnap" << key << "=" << e.snapshot << "\n";
+        if (!e.via.href.empty() && e.via.href.find('\n') == std::string::npos &&
+            e.via.from_url.find('\n') == std::string::npos) {
+          out << "tabnavvia" << key << "=" << e.via.href << "\n";
+          out << "tabnavfrom" << key << "=" << e.via.from_url << "\n";
+          out << "tabnavlink" << key << "=" << e.via.node << " "
+              << e.via.span << "\n";
+        }
+      }
+    }
   }
   for (BufferId id : app.tab_order) {
     const auto child = saved_tabs.find(id);
@@ -151,6 +156,11 @@ std::string session_text(App& app) {
       parent = buf(app, parent).tab_parent;
     if (parent != kNoBuffer)
       out << "tabparent" << child->second << "=" << saved_tabs.at(parent) << "\n";
+  }
+  for (int pi = 0; pi < kCentreViews; ++pi) {
+    const auto tab = saved_tabs.find(app.panes[pi].buf);
+    if (view_live(app, pi) && tab != saved_tabs.end())
+      out << "panetab" << pi << "=" << tab->second << "\n";
   }
   for (const std::string& v : app.visited)
     if (v.find('\n') == std::string::npos) out << "visit=" << v << "\n";
@@ -264,7 +274,20 @@ void restore_session(App& app) {
       }
     }
     app.visited = lists["visit"];
+    app.history.current_tab = get("history.current-tab") &&
+                              *get("history.current-tab") == "1";
     const bool split = get("split") && *get("split") == "1";
+    const auto& tabs = lists["tab"];
+    std::vector<BufferId> restored(tabs.size(), kNoBuffer);
+    auto pane_tab = [&](int pi) {
+      const auto* value = get("panetab" + std::to_string(pi));
+      size_t index = restored.size();
+      if (value) {
+        std::istringstream in(*value);
+        in >> index;
+      }
+      return index;
+    };
     for (int pi = 0; pi < kCentreViews; ++pi) {
       const std::string* a = get("pane" + std::to_string(pi));
       if (!a || (pi == 1 && !split)) continue;
@@ -273,67 +296,77 @@ void restore_session(App& app) {
         p.reader = (*v == "1");
       if (const std::string* v = get("paged" + std::to_string(pi)))
         p.paged = (*v == "1");
-      app.visit_hint = xanatoo::VisitKind::Restore;
-      const bool opened = navigate_pane(app, pi, *a, /*record_history=*/true);
-      app.visit_hint.reset();
-      if (!opened) continue;
+      const size_t index = pane_tab(pi);
+      if (index < restored.size() && restored[index] != kNoBuffer) {
+        p.buf = restored[index];
+        reset_pane_locator(p);
+        auto loc = xanatoo::parse_locator(*a);
+        if (loc.has_selectors()) apply_locator(app, pi, std::move(loc));
+      } else {
+        // A startup placeholder can be shared by both panes.
+        if (pi > 0 && p.buf == app.panes[0].buf)
+          p.buf = add_buffer(app, xanatoo::parse_document("", {}), {});
+        view_nav(app, pi) = {};
+        const bool record_visits = std::exchange(app.record_visits, false);
+        const bool opened = navigate_pane(app, pi, *a);
+        app.record_visits = record_visits;
+        if (!opened) continue;
+        if (index < restored.size()) restored[index] = p.buf;
+      }
       if (const std::string* v = get("scroll" + std::to_string(pi)))
         if (!pane_paged(app, p)) {
           app.pending_scroll[pi].y = std::stof(*v);
           app.pending_scroll[pi].base = xanatoo::parse_locator(*a).base;
         }
     }
-    for (int pi = 0; pi < kCentreViews; ++pi) {
-      // Back / Forward trail, when it still ends at the page just opened.
-      auto it = lists.find("nav" + std::to_string(pi));
-      const std::string* pos = get("navpos" + std::to_string(pi));
-      if (it == lists.end() || !pos || !get("pane" + std::to_string(pi)))
-        continue;
-      const int at = std::stoi(*pos);
-      NavHistory& h = app.panes[pi].nav;
-      if (at < 0 || at >= static_cast<int>(it->second.size()) ||
-          it->second[static_cast<size_t>(at)] != *get("pane" + std::to_string(pi)))
-        continue;
-      h.entries.clear();
-      for (size_t ni = 0; ni < it->second.size(); ++ni) {
-        NavHistoryEntry e;
-        e.url = it->second[ni];
-        const std::string key = std::to_string(pi) + "." + std::to_string(ni);
-        if (const std::string* v = get("navscroll" + key)) {
-          const float scroll = std::stof(*v);
-          if (std::isfinite(scroll)) e.scroll = std::max(0.f, scroll);
-        }
-        if (const std::string* v = get("navsnap" + key);
-            v && xanatoo::is_snapshot_id(*v))
-          e.snapshot = *v;
-        if (const std::string* v = get("navvia" + key)) {
-          e.via.href = *v;
-          if (const std::string* from = get("navfrom" + key))
-            e.via.from_url = *from;
-          if (const std::string* loc = get("navlink" + key)) {
-            std::istringstream in(*loc);
-            in >> e.via.node >> e.via.span;
-          }
-        }
-        h.entries.push_back(std::move(e));
-      }
-      h.pos = at;
-    }
     {
-      // Further tabs, in their saved order.
-      std::vector<std::string> tabs = lists["tab"];
-      for (const std::string& t : tabs)
-        if (find_buffer(app, t) == kNoBuffer) open_link_in_tab(app, 0, t);
       std::vector<BufferId> order;
-      std::vector<BufferId> restored;
-      for (const std::string& t : tabs) {
-        const BufferId id = find_buffer(app, t);
-        restored.push_back(id);
-        if (id != kNoBuffer &&
-            std::find(order.begin(), order.end(), id) == order.end()) {
-          buf(app, id).tab_parent = kNoBuffer;
-          order.push_back(id);
+      for (size_t i = 0; i < tabs.size(); ++i) {
+        const std::string index = std::to_string(i);
+        BufferId id = restored[i];
+        const auto* identity = get("tabidentity" + index);
+        if (id == kNoBuffer && !identity) id = find_buffer(app, tabs[i]);
+        if (id == kNoBuffer) id = open_link_in_tab(app, 0, tabs[i], true);
+        restored[i] = id;
+        if (id == kNoBuffer ||
+            std::find(order.begin(), order.end(), id) != order.end()) continue;
+        DocBuffer& tab = buf(app, id);
+        tab.tab_parent = kNoBuffer;
+        if (identity && !identity->empty()) tab.history_tab = *identity;
+        order.push_back(id);
+
+        auto it = lists.find("tabnav" + index);
+        const auto* pos = get("tabnavpos" + index);
+        if (it == lists.end() || !pos) continue;
+        const int at = std::stoi(*pos);
+        if (at < 0 || at >= static_cast<int>(it->second.size())) continue;
+        NavHistory& h = tab.tab_nav;
+        h.entries.clear();
+        for (size_t ni = 0; ni < it->second.size(); ++ni) {
+          NavHistoryEntry e;
+          e.url = it->second[ni];
+          const std::string key = index + "." + std::to_string(ni);
+          if (const auto* v = get("tabnavvisit" + key)) e.visit = std::stoll(*v);
+          if (const auto* v = get("tabnavscroll" + key)) {
+            const float scroll = std::stof(*v);
+            if (std::isfinite(scroll)) e.scroll = std::max(0.f, scroll);
+          }
+          if (const auto* v = get("tabnavsnap" + key);
+              v && xanatoo::is_snapshot_id(*v))
+            e.snapshot = *v;
+          if (const auto* v = get("tabnavvia" + key)) {
+            e.via.href = *v;
+            if (const auto* from = get("tabnavfrom" + key)) e.via.from_url = *from;
+            if (const auto* loc = get("tabnavlink" + key)) {
+              std::istringstream in(*loc);
+              in >> e.via.node >> e.via.span;
+            }
+          }
+          h.entries.push_back(std::move(e));
         }
+        h.pos = at;
+        tab.origin_kind.reset();
+        tab.origin_visit = 0;
       }
       for (size_t i = 0; i < restored.size(); ++i) {
         const auto* value = get("tabparent" + std::to_string(i));

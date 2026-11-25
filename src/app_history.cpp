@@ -54,10 +54,15 @@ const std::string& effective_filter(const App& app) {
                                                       : app.history.filter;
 }
 
+std::string_view current_tab(App& app) {
+  const DocBuffer* b = find_buf(app, focused_pane(app).buf);
+  return b ? std::string_view(b->history_tab) : std::string_view{};
+}
+
 // Entries, lanes and lines (with day headers) from `visits`.
 void rebuild(App& app) {
   HistoryPanel& h = app.history;
-  const bool filtered = !h.loaded_filter.empty();
+  const bool filtered = h.current_tab || !h.loaded_filter.empty();
   h.entries = xanatoo::collapse_page_runs(h.visits);
   h.lanes = xanatoo::history_lanes(
       xanatoo::trail_nodes(h.visits, h.entries, filtered));
@@ -97,17 +102,27 @@ void reload(App& app) {
       sel_id = h.visits[h.entries[static_cast<size_t>(e)].first].id;
   const size_t want = std::max(
       kPageSize, filter == h.loaded_filter ? h.visits.size() : size_t{0});
-  h.from_db = xanatoo::visit_log_available();
+  h.loaded_tab = h.current_tab ? current_tab(app) : std::string_view{};
+  h.from_db = xanatoo::visit_log_available() &&
+              !(h.current_tab && xanatoo::no_save());
   if (h.from_db) {
-    h.visits = xanatoo::visit_page(want, nullptr, filter);
+    h.visits = h.current_tab && h.loaded_tab.empty()
+                   ? std::vector<xanatoo::VisitRecord>{}
+                   : xanatoo::visit_page(want, nullptr, filter, h.loaded_tab);
     h.more = h.visits.size() == want;
   } else {
     // No visit log: this session's addresses, newest first, unlinked.
     h.visits.clear();
-    for (auto it = app.visited.rbegin(); it != app.visited.rend(); ++it) {
+    auto append = [&](const std::string& address) {
       xanatoo::VisitRecord v;
-      v.address = *it;
+      v.address = address;
       if (xanatoo::visit_matches(v, filter)) h.visits.push_back(std::move(v));
+    };
+    if (h.current_tab) {
+      const auto& entries = view_nav(app, app.focus).entries;
+      for (auto it = entries.rbegin(); it != entries.rend(); ++it) append(it->url);
+    } else {
+      for (auto it = app.visited.rbegin(); it != app.visited.rend(); ++it) append(*it);
     }
     h.more = false;
   }
@@ -124,7 +139,8 @@ void reload(App& app) {
 void load_more(App& app) {
   HistoryPanel& h = app.history;
   if (!h.more || h.visits.empty()) return;
-  auto older = xanatoo::visit_page(kPageSize, &h.visits.back(), h.loaded_filter);
+  auto older = xanatoo::visit_page(kPageSize, &h.visits.back(), h.loaded_filter,
+                                   h.loaded_tab);
   h.more = older.size() == kPageSize;
   if (older.empty()) return;
   h.visits.insert(h.visits.end(), std::make_move_iterator(older.begin()),
@@ -134,6 +150,11 @@ void load_more(App& app) {
 
 void refresh(App& app) {
   HistoryPanel& h = app.history;
+  if (h.current_tab && h.loaded_tab != current_tab(app)) {
+    app.history_win.scroll = 0.f;
+    h.sel = -1;
+    h.stale = true;
+  }
   if (h.stale || effective_filter(app) != h.loaded_filter) reload(app);
 }
 
@@ -167,7 +188,7 @@ std::string entry_label(const HistoryPanel& h, const xanatoo::TrailEntry& e) {
 std::unordered_set<int64_t> shown_visits(App& app) {
   std::unordered_set<int64_t> out;
   for (int pi : live_views(app)) {
-    const NavHistory& n = app.panes[pi].nav;
+    const NavHistory& n = view_nav(app, pi);
     if (n.pos >= 0 && n.pos < static_cast<int>(n.entries.size()))
       if (const int64_t id = n.entries[static_cast<size_t>(n.pos)].visit)
         out.insert(id);
@@ -206,7 +227,7 @@ void open_line(App& app, int line, bool invert = false) {
   // the picked one's trail (its newest visit).
   app.visit_hint = xanatoo::VisitKind::History;
   app.visit_from = h.visits[e.first].id;
-  app.visit_resume = rewind;
+  app.visit_resume = rewind && h.visits[e.first].window == current_tab(app);
   // The page as that visit saw it (snapshot.hpp); the live page when it
   // was not kept. Reload shows the page now.
   if (const int64_t obs = h.visits[e.first].observation)
@@ -256,10 +277,16 @@ void remove_line(App& app, int line) {
       flash_status(app, "Could not remove the visit");
       return;
     }
-    for (Pane& p : app.panes)
-      for (NavHistoryEntry& n : p.nav.entries)
+    auto relink = [&](NavHistory& nav) {
+      for (NavHistoryEntry& n : nav.entries)
         if (std::find(ids.begin(), ids.end(), n.visit) != ids.end())
           n.visit = source;
+    };
+    for (BufferId id : app.tab_order) relink(buf(app, id).tab_nav);
+    for (int pi : live_views(app))
+      if (pi >= kCentreViews) relink(view_nav(app, pi));
+  } else if (h.current_tab) {
+    return;
   } else {
     std::erase(app.visited, h.visits[e.first].address);
   }
@@ -339,9 +366,11 @@ void draw_history_panel(App& app) {
   std::string title = "History";
   if (const std::string& f = effective_filter(app); !f.empty())
     title += " \xE2\x80\x94 \xE2\x80\x9C" + f + "\xE2\x80\x9D";
-  if (!draw_floating_frame(app, w, title,
-                           panel_has_keys(app, KeyFocus::History)))
-    return;
+  const SDL_Rect tab = title_button_rect(app, w, "This Tab");
+  const bool open = draw_floating_frame(app, w, title,
+      panel_has_keys(app, KeyFocus::History), title_shade_zone(w).x - tab.x);
+  draw_title_button(app, w, tab, "This Tab", h.current_tab);
+  if (!open) return;
 
   // Pointer row (topmost window only).
   h.hover = -1;
@@ -446,6 +475,7 @@ void draw_history_panel(App& app) {
   }
   if (h.lines.empty()) {
     const char* msg = !effective_filter(app).empty() ? "No matching visits"
+                      : h.current_tab ? "No visits in this tab"
                       : h.from_db ? "No visits recorded yet"
                                   : "No pages visited this session";
     app.renderer.draw_text(font, static_cast<float>(cx + 8),
@@ -457,6 +487,7 @@ void draw_history_panel(App& app) {
 }
 
 void click_history_panel(App& app, FloatWindow& w, int my) {
+  refresh(app);
   const int line = line_at(app, w, my);
   if (line < 0) return;
   app.history.sel = line;
@@ -465,6 +496,7 @@ void click_history_panel(App& app, FloatWindow& w, int my) {
 
 bool right_click_history_panel(App& app, int mx, int my) {
   if (!app.history_panel_open) return false;
+  refresh(app);
   FloatWindow& w = app.history_win;
   auto [cx, cy, cw, ch] = float_client_rect(app, w);
   if (mx < cx || mx >= cx + cw || my < cy || my >= cy + ch) return false;
@@ -517,6 +549,7 @@ void history_action(App& app, const std::string& action) {
 }
 
 bool history_panel_key(App& app, SDL_Keycode k, bool ctrl, bool shift) {
+  refresh(app);
   HistoryPanel& h = app.history;
   const int n = static_cast<int>(h.lines.size());
   // Moves `delta` rows from `from` (-1: from the outside edge).

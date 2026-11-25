@@ -128,6 +128,8 @@ struct SummaryScan {
 
 struct DocBuffer {
   BufferId id = kNoBuffer;
+  NavHistory tab_nav;
+  std::string history_tab;  // Visit log identity, saved with the session
   BufferId tab_parent = kNoBuffer;  // Opener, independent of the current page
   xanatoo::Document doc;
   // Lists and stretches the reader folded / unfolded (fold.hpp); gone with `doc`.
@@ -392,7 +394,7 @@ struct GalleryView {
 
 struct Pane {
   BufferId buf = kNoBuffer;
-  NavHistory nav;  // this view's own Back / Forward
+  NavHistory nav;  // floating window trail (centre panes use the tab)
   xanatoo::Selection sel{};
   // Scrollbar strip sits left of the rect (left pane of a split: the middle
   // stays a bare divider). pane.x is then the content origin.
@@ -1128,6 +1130,8 @@ struct HistoryPanel {
   std::string loaded_filter;   // the filter `visits` were loaded with
   bool stale = true;           // reload from the visit log
   bool more = false;           // older visits may exist (loaded on scroll)
+  bool current_tab = false;
+  std::string loaded_tab;
   bool from_db = false;        // false: this session's addresses only
   int sel = -1;                // keyboard selection (line index)
   int hover = -1;              // line under the pointer, -1 none
@@ -2336,7 +2340,12 @@ struct LinkTarget {
 LinkTarget resolve_link(App& app, int pi, const std::string& href);
 // Middle click: open `href` (in pane `pi`) in a new tab right after the
 // current one; the view stays. Anchors into the page itself just jump.
-void open_link_in_tab(App& app, int pi, const std::string& href);
+BufferId open_link_in_tab(App& app, int pi, const std::string& href,
+                          bool duplicate = false);
+NavHistory& view_nav(App& app, int pi);
+void select_view_tab(App& app, int pi, BufferId id);
+void note_background_navigation(App& app, BufferId id, const std::string& url,
+                                bool record_history);
 // Panel rows (History, Sitemap, Page…) open an address here: a new tab while
 // `App::click_new_tab` is set (middle-click), else the focused view.
 void open_address(App& app, const std::string& url);

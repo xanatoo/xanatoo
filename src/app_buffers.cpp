@@ -333,6 +333,7 @@ DocBuffer* find_buf(App& app, BufferId id) {
 BufferId add_buffer(App& app, xanatoo::Document doc, std::string path) {
   DocBuffer b;
   b.id = app.next_buffer_id++;
+  b.history_tab = xanatoo::visit_instance_id() + "/tab/" + std::to_string(b.id);
   b.doc = std::move(doc);
   b.path = std::move(path);
   b.content_path = derived_content_path(b.path);
@@ -385,6 +386,47 @@ void insert_tab(App& app, BufferId id, BufferId opener) {
   order.insert(pos, id);
 }
 
+NavHistory& view_nav(App& app, int pi) {
+  Pane& p = app.panes[pi];
+  if (pi < kCentreViews)
+    if (DocBuffer* b = find_buf(app, p.buf)) return b->tab_nav;
+  return p.nav;
+}
+
+void select_view_tab(App& app, int pi, BufferId id) {
+  Pane& p = app.panes[pi];
+  revert_split_preview(app);
+  if (p.buf == id) return;
+  nav_history_capture(view_nav(app, pi), pane_address(app, p), p.sel, p.scroll_y);
+  p.buf = id;
+  reset_pane_locator(p);
+  p.view_anchor.reset();
+  p.sel = {};
+  p.scroll_y = 0.f;
+  p.layout = {};
+  p.height_cache.clear();
+  app.pending_scroll[pi] = {};
+  app.split_history = {};
+  app.split_trail = {};
+  retarget_fetches(app);
+
+  NavHistory& h = view_nav(app, pi);
+  if (h.pos >= 0 && h.restoring < 0) {
+    const NavHistoryEntry& e = h.entries[static_cast<size_t>(h.pos)];
+    xanatoo::Locator loc = xanatoo::parse_locator(e.url);
+    if (loc.has_selectors()) apply_locator(app, pi, std::move(loc));
+    p.sel = e.sel;
+    p.scroll_y = e.scroll;
+  } else if (const DocBuffer* b = find_buf(app, id);
+             h.pos < 0 && b && !b->path.empty()) {
+    push_nav_history(app, pi, pane_address(app, p));
+  }
+  xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
+  xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.anchor);
+  app.needs_layout = true;
+  update_title(app);
+}
+
 // Drop `id` from the tab strip (keeping at least one tab) and repoint panes
 // that showed it at the neighbouring tab. The buffer itself is untouched.
 static void leave_tab(App& app, BufferId id) {
@@ -401,17 +443,9 @@ static void leave_tab(App& app, BufferId id) {
   }
   const BufferId next =
       app.tab_order[std::min(tab_i, app.tab_order.size() - 1)];
-  for (int pi = 0; pi < 2; ++pi) {
-    Pane& p = app.panes[pi];
-    if (p.buf != id && find_buf(app, p.buf)) continue;
-    p.buf = next;
-    p.sel = {};
-    p.scroll_y = 0.f;
-    p.layout = {};
-    p.height_cache.clear();
-    xanatoo::ensure_valid_caret(buf(app, next).doc, p.sel.focus);
-    p.sel.anchor = p.sel.focus;
-  }
+  for (int pi = 0; pi < kCentreViews; ++pi)
+    if (app.panes[pi].buf == id || !find_buf(app, app.panes[pi].buf))
+      select_view_tab(app, pi, next);
   app.needs_layout = true;
   update_title(app);
 }
@@ -726,7 +760,7 @@ void pop_out_focused(App& app) {
   FloatWindow* w = new_doc_window(app, bi);
   if (!w) return;
   Pane& v = app.panes[w->view];
-  v.nav = p.nav;  // the window takes the tab's trail along
+  v.nav = view_nav(app, app.focus);  // the window takes the tab's trail along
   v.sel = sel;
   v.scroll_y = p.scroll_y;
   v.locator = p.locator;
@@ -787,7 +821,7 @@ void tear_tab(App& app, BufferId bi, int mx, int my) {
     if (app.panes[pi].buf == bi) from = &app.panes[pi];
   const xanatoo::Selection sel = from ? from->sel : xanatoo::Selection{};
   const float scroll = from ? from->scroll_y : 0.f;
-  const NavHistory nav = from ? from->nav : NavHistory{};
+  const NavHistory nav = buf(app, bi).tab_nav;
   const xanatoo::Locator locator = from ? from->locator : xanatoo::Locator{};
   const BufferId locator_buf = from ? from->locator_buf : kNoBuffer;
   const std::optional<xanatoo::Document> source_doc =
@@ -843,7 +877,9 @@ void pop_in_soft(App& app, size_t si) {
   if (find_buf(app, v.buf)) {
     Pane& c = app.panes[to];
     c.buf = v.buf;
-    c.nav = std::move(v.nav);
+    buf(app, v.buf).tab_nav = std::move(v.nav);
+    app.split_history = {};
+    app.split_trail = {};
     c.sel = v.sel;
     c.scroll_y = v.scroll_y;
     c.locator = std::move(v.locator);

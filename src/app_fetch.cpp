@@ -934,8 +934,6 @@ void finish_tab(App& app, const FetchJob& job) {
   b->path = r.doc ? r.final_url : job.url;
   b->content_path = r.doc ? r.content_path : std::string();
   b->observation_id = 0;
-  b->origin_kind.reset();
-  b->origin_visit = 0;
   b->placeholder = false;
   b->dirty = false;
   const std::string path = b->path;
@@ -946,6 +944,16 @@ void finish_tab(App& app, const FetchJob& job) {
   sel.anchor = sel.focus;
   nb.history.reset(nb.doc, sel);
   drop_height_hints_for_buf(app, job.buf);
+  if (job.left_view) {
+    xanatoo::Locator loc = job.locator;
+    loc.base = path;
+    note_background_navigation(app, job.buf, xanatoo::format_locator(loc),
+                               job.record_history);
+  } else {
+    for (int pi : live_views(app))
+      if (app.panes[pi].buf == job.buf)
+        push_nav_history(app, pi, pane_address(app, app.panes[pi]));
+  }
   if (r.doc) note_page_seen(app, path, nb.doc);
   refresh_views_of_buf(app, job.buf, -1, true);
   app.needs_layout = true;
@@ -971,7 +979,7 @@ void finish_navigate(App& app, const FetchJob& job) {
   const std::string service = r.service;
   if (r.download && r.download->playable.load(std::memory_order_acquire)) {
     // The page stays; the player opens the address itself (streaming).
-    NavHistory& h = app.panes[job.pane].nav;
+    NavHistory& h = view_nav(app, job.pane);
     const NavLink via = std::exchange(h.pending_link, {});
     const auto hint = std::exchange(h.pending_kind, std::nullopt);
     const int64_t from = std::exchange(h.pending_from, 0);
@@ -987,9 +995,9 @@ void finish_navigate(App& app, const FetchJob& job) {
     return;
   }
   if (r.download && r.download->offered.load(std::memory_order_acquire)) {
-    app.panes[job.pane].nav.pending_link = {};
-    app.panes[job.pane].nav.pending_kind.reset();
-    app.panes[job.pane].nav.restoring = -1;
+    view_nav(app, job.pane).pending_link = {};
+    view_nav(app, job.pane).pending_kind.reset();
+    view_nav(app, job.pane).restoring = -1;
     const std::string url =
         !r.final_url.empty() ? r.final_url : job.url;
     start_download(app, url);
@@ -998,17 +1006,17 @@ void finish_navigate(App& app, const FetchJob& job) {
     return;  // keep the previous page; user confirms in the dialog
   }
   if (r.download && r.download->phase.load() != xanatoo::DownloadPhase::Skipped) {
-    app.panes[job.pane].nav.pending_link = {};
-    app.panes[job.pane].nav.pending_kind.reset();
-    app.panes[job.pane].nav.restoring = -1;
+    view_nav(app, job.pane).pending_link = {};
+    view_nav(app, job.pane).pending_kind.reset();
+    view_nav(app, job.pane).restoring = -1;
     app.downloads_panel_open = true;
     flash_status(app, "Download: " + r.download->name);
     return;  // keep the page visible; no navigation to a binary file
   }
   if (r.input_status != 0) {
-    app.panes[job.pane].nav.pending_link = {};
-    app.panes[job.pane].nav.pending_kind.reset();
-    app.panes[job.pane].nav.restoring = -1;
+    view_nav(app, job.pane).pending_link = {};
+    view_nav(app, job.pane).pending_kind.reset();
+    view_nav(app, job.pane).restoring = -1;
     // Input request — open URL bar with query for the user to complete.
     std::string q = r.final_url;
     if (!q.empty() && q.back() != '?') q.push_back('?');
@@ -1020,9 +1028,9 @@ void finish_navigate(App& app, const FetchJob& job) {
     return;
   }
   if (!r.doc) {
-    app.panes[job.pane].nav.pending_link = {};
-    app.panes[job.pane].nav.pending_kind.reset();
-    app.panes[job.pane].nav.restoring = -1;
+    view_nav(app, job.pane).pending_link = {};
+    view_nav(app, job.pane).pending_kind.reset();
+    view_nav(app, job.pane).restoring = -1;
     flash_status(app, service + " failed: " + r.error);
     std::cerr << service << ": " << r.error << "\n";
     // A changed Gemini certificate: the page explains, the Certificates
@@ -1060,9 +1068,9 @@ void finish_navigate(App& app, const FetchJob& job) {
   if (job.record_history) {
     push_nav_history(app, job.pane,
                      pane_address(app, app.panes[job.pane]));
-  } else if (app.panes[job.pane].nav.pending_kind ==
+  } else if (view_nav(app, job.pane).pending_kind ==
              xanatoo::VisitKind::Reload) {
-    app.panes[job.pane].nav.pending_kind.reset();
+    view_nav(app, job.pane).pending_kind.reset();
     record_reload_visit(app, job.pane);
   }
   note_entry_snapshot(app, job.pane);  // Reload: the entry shows the new one
@@ -1483,10 +1491,6 @@ void retarget_fetches(App& app) {
     if (j.purpose != FetchPurpose::Navigate || j.buf == kNoBuffer ||
         app.panes[j.pane].buf == j.buf)
       continue;
-    Pane& p = app.panes[j.pane];
-    p.nav.pending_link = {};
-    p.nav.pending_kind.reset();
-    p.nav.restoring = -1;
     j.purpose = FetchPurpose::Tab;
     j.pane = -1;
     j.left_view = true;

@@ -272,25 +272,17 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
         return true;
       }
       const BufferId existing = find_buffer(app, path);
-      nav_history_capture(p.nav, pane_address(app, p), p.sel, p.scroll_y);
-      p.nav.pending_link = {};
-      p.nav.restoring = -1;
-      if (existing != kNoBuffer) {
-        // Already open — switch the focused pane to that tab.
-        p.buf = existing;
-        p.sel = {};
-        xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
-        p.sel.anchor = p.sel.focus;
-        p.scroll_y = 0.f;
-        p.view_anchor.reset();
-        app.needs_layout = true;
-        update_title(app);
-        push_nav_history(app, app.focus, path);
+      if (existing != kNoBuffer && app.focus < kCentreViews) {
+        select_view_tab(app, app.focus, existing);
         flash_status(app, "Switched to " + path);
         minibuf_commit_path_hist(app);
         close_prompt(app);
         return true;
       }
+      NavHistory& nav = view_nav(app, app.focus);
+      nav_history_capture(nav, pane_address(app, p), p.sel, p.scroll_y);
+      nav.pending_link = {};
+      nav.restoring = -1;
       if (!stash_or_confirm(app, p.buf)) return true;
       DocBuffer& b = buf(app, p.buf);
       b.doc = load_doc(app, path);

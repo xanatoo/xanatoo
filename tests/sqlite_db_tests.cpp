@@ -389,6 +389,7 @@ void test_visits() {
   v.kind = VisitKind::Address;
   v.observation = o1;
   v.title = "X";
+  v.window = "session/tab/1";
   const int64_t v1 = store_visit(v);
   v.address = "https://a.example/y//id:intro";
   v.time = 20;
@@ -438,6 +439,7 @@ void test_visits() {
     w.time = 20;  // same time as v2
     w.address = "https://b.example/100%_off";
     w.title = "Closures";
+    w.window = "session/tab/2";
     w.kind = VisitKind::Address;
     const int64_t v3 = store_visit(w);
     auto p1 = visit_page(2, nullptr);
@@ -454,6 +456,15 @@ void test_visits() {
     EXPECT_EQ(visit_page(10, nullptr, "%_").size(), 1u);
     EXPECT_EQ(visit_page(10, nullptr, "0%_o").size(), 1u);
     EXPECT_EQ(visit_page(10, nullptr, "x_y").size(), 0u);
+    auto tab_page = visit_page(1, nullptr, "a.example", "session/tab/1");
+    EXPECT_EQ(tab_page.size(), 1u);
+    if (!tab_page.empty()) {
+      EXPECT_EQ(tab_page[0].id, v2);
+      auto older = visit_page(1, &tab_page[0], {}, "session/tab/1");
+      EXPECT(older.size() == 1 && older[0].id == v1);
+    }
+    EXPECT(visit_page(10, nullptr, "a.example", "session/tab/2").empty());
+    EXPECT(visit_page(10, nullptr, {}, "session/tab/3").empty());
   }
   {
     // Removing a visit: the visits reached from it take its source, and

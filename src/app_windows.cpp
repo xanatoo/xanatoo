@@ -408,6 +408,16 @@ void press_title(App& app, FloatWindow& w, int mx, int my) {
       return;
     }
   }
+  if (w.role == WindowRole::History) {
+    const SDL_Rect tab = title_button_rect(app, w, "This Tab");
+    if (mx >= tab.x - 2 && mx < tab.x + tab.w + 2) {
+      app.history.current_tab = !app.history.current_tab;
+      app.history.stale = true;
+      app.history.sel = -1;
+      w.scroll = 0.f;
+      return;
+    }
+  }
   // Double-click maximizes / restores; a drag moves the window (a docked
   // or maximized one tears off first, see float_motion).
   const Uint32 now = xanatoo::sdl::ticks();

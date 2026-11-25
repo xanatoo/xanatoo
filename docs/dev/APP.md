@@ -130,7 +130,10 @@ An address is `base//selector#selector` (`locator.hpp`, `docs/PASSAGES.md`):
 pipes cut the view to a passage, `#` marks one in the whole page. Only the base
 reaches buffers, caches and fetches. Use `pane_address` for what a view shows,
 never `path_of`, where the address is shown or stored.
-Back / Forward are per view (`Pane::nav`): `NavHistoryEntry` keeps the address,
+Back / Forward follow the tab (`DocBuffer::tab_nav`) or floating document
+window (`Pane::nav`). Use `view_nav` to get the trail for a view;
+`select_view_tab` restores its current entry when switching tabs.
+`NavHistoryEntry` keeps the address,
 caret, scroll offset, and source link. Record a shown page with
 `push_nav_history(app, pi, url)`, step with `nav_step`; `sync_nav_history`
 captures the current position and completes deferred restores after fetching.
@@ -140,7 +143,13 @@ anchors use `navigate_anchor_link` so Back can return to the source. `App::visit
 is the session log (History menu, and the History panel's fallback without
 a visit log). The History panel (`app_history.cpp`, state `App::history`)
 draws the visit log as a trail tree: `visit_page` loads 200 visits at a time
-(more on scroll, filter as SQL `LIKE`), `history_trail.hpp` collapses
+(more on scroll, text filter as SQL `LIKE`). The **This Tab** title button
+filters by the active tab’s persistent visit identity. Without a visit log,
+it shows the active tab’s Back / Forward entries. Session files store the
+identity and trail for each tab, including background tabs. Older session
+files have view-level trails with no tab ownership, so tabs open with fresh
+trails and existing visits remain in the full History panel.
+`history_trail.hpp` collapses
 in-page runs and assigns lanes, `history_changed` marks it stale (after
 `record_visit`, and when `poll_shared_state` sees another process write).
 A click steps a view's trail to a visit it still holds (`nav_rewind_to_visit`
@@ -160,7 +169,8 @@ centre panes share one trail instead (`App::split_history`, levels = left
 page + pages opened from it on the right): `push_nav_history` forwards to
 it and `nav_step` / `can_nav_step` walk it (`app_split.cpp`). The split trail
 already tracks scroll/selection; `split_history_forward_href` identifies its
-next link for the same wash.
+next link for the same wash. Selecting a different tab reseeds the paired
+trail from the current tiles.
 
 Buffers are addressed by stable `BufferId` (`DocBuffer::id`, never reused,
 `kNoBuffer` = 0): use `buf(app, id)` / `find_buf` / `add_buffer` /

@@ -44,9 +44,8 @@ namespace xanatoo::app {
 
 namespace {
 
-// The visit view `p` currently shows (0 = none recorded).
-int64_t current_visit(const Pane& p) {
-  const NavHistory& h = p.nav;
+// The visit currently selected in a trail (0 = none recorded).
+int64_t current_visit(const NavHistory& h) {
   return h.pos >= 0 && h.pos < static_cast<int>(h.entries.size())
              ? h.entries[static_cast<size_t>(h.pos)].visit
              : 0;
@@ -83,20 +82,14 @@ int64_t buffer_observation(DocBuffer& b) {
   return b.observation_id;
 }
 
-// Visit log (visits.hpp, docs/HISTORY.md "B"): the current entry of view
-// `pi`, which nav_history_push just made (`pushed`) or which was there
-// already (an entry restored with the session has no visit yet; a Reload
-// hint records the page again). `prev`: the visit shown before; `hint`:
-// how it was asked for.
-void record_visit(App& app, int pi, bool pushed, int64_t prev,
-                  std::optional<xanatoo::VisitKind> hint) {
+// Record the current trail entry. A Reload hint records the page again.
+// `prev` is the visit shown before this navigation.
+void record_visit(App& app, NavHistory& h, DocBuffer* b, bool pushed,
+                  int64_t prev, std::optional<xanatoo::VisitKind> hint) {
   using xanatoo::VisitKind;
   if (xanatoo::no_save() || !app.record_visits) return;
-  Pane& p = app.panes[pi];
-  NavHistory& h = p.nav;
   if (h.pos < 0 || h.pos >= static_cast<int>(h.entries.size())) return;
   NavHistoryEntry& cur = h.entries[static_cast<size_t>(h.pos)];
-  DocBuffer* b = find_buf(app, p.buf);
   if (b && b->placeholder) {  // recorded once the page is there
     if (hint) h.pending_kind = hint;
     return;
@@ -126,9 +119,7 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
       v.source_node = std::to_string(cur.via.node);
   } else if (hint && !reload) {
     v.kind = *hint;
-    if (*hint == VisitKind::Restore)
-      v.source = xanatoo::latest_visit_of(cur.url);  // across restarts
-    else if (*hint == VisitKind::History && h.pending_from)
+    if (*hint == VisitKind::History && h.pending_from)
       v.source = h.pending_from;  // continues the picked visit's trail
     else if (!xanatoo::visit_kind_starts_trail(*hint))
       v.source = prev;
@@ -147,7 +138,7 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
     v.observation = buffer_observation(*b);
     v.title = b->doc.meta.title;
   }
-  v.window = xanatoo::visit_instance_id() + "/" + std::to_string(pi);
+  if (b) v.window = b->history_tab;
   const int64_t left = pushed ? prev : cur.visit;
   if (const int64_t id = xanatoo::store_visit(v)) {
     if (left) xanatoo::store_visit_leave(left, v.time);
@@ -160,7 +151,8 @@ void record_visit(App& app, int pi, bool pushed, int64_t prev,
 
 void record_reload_visit(App& app, int pi) {
   if (pi < 0 || pi >= kMaxViews) return;
-  record_visit(app, pi, false, 0, xanatoo::VisitKind::Reload);
+  record_visit(app, view_nav(app, pi), find_buf(app, app.panes[pi].buf),
+               false, 0, xanatoo::VisitKind::Reload);
 }
 
 namespace {
@@ -199,7 +191,7 @@ void record_media_visit(App& app, int pi, const std::string& url,
     return;
   }
   const bool in_view = pi >= 0 && pi < kMaxViews;
-  const int64_t prev = in_view ? current_visit(app.panes[pi]) : 0;
+  const int64_t prev = in_view ? current_visit(view_nav(app, pi)) : 0;
   xanatoo::VisitRecord v;
   if (!via.href.empty()) {
     v.kind = VisitKind::Link;
@@ -220,8 +212,9 @@ void record_media_visit(App& app, int pi, const std::string& url,
   v.address = address;
   v.time = xanatoo::now_epoch_ms();
   v.title = app.audio.title;
-  v.window = xanatoo::visit_instance_id() + "/" +
-             (in_view ? std::to_string(pi) : std::string("media"));
+  if (in_view)
+    if (const DocBuffer* b = find_buf(app, app.panes[pi].buf))
+      v.window = b->history_tab;
   if (const int64_t id = xanatoo::store_visit(v)) {
     app.audio.visit = id;  // left when the player stops or plays another
     history_changed(app);
@@ -235,7 +228,7 @@ void push_nav_history(App& app, int pi, const std::string& raw) {
   note_visited_address(app, url);
   split_history_note(app, pi, raw);  // no-op unless split browsing (paths)
   Pane& p = app.panes[pi];
-  NavHistory& h = p.nav;
+  NavHistory& h = view_nav(app, pi);
   NavHistoryEntry e;
   e.url = url;
   if (pane_address(app, p) == url) {
@@ -247,18 +240,46 @@ void push_nav_history(App& app, int pi, const std::string& raw) {
     e.via = h.pending_link;
   h.pending_link = {};
   h.restoring = -1;
-  const int64_t prev = current_visit(p);
+  const int64_t prev = current_visit(h);
   std::optional<xanatoo::VisitKind> hint;
   std::swap(hint, h.pending_kind);
   const bool pushed = nav_history_push(h, std::move(e), kMaxNavHistory);
-  record_visit(app, pi, pushed, prev, hint);
+  record_visit(app, h, find_buf(app, p.buf), pushed, prev, hint);
+  app.history.stale = true;
   note_entry_snapshot(app, pi);
+}
+
+void note_background_navigation(App& app, BufferId id, const std::string& url,
+                                bool record_history) {
+  DocBuffer& b = buf(app, id);
+  NavHistory& h = b.tab_nav;
+  const std::string address = canonical_address(url);
+  const auto hint = std::exchange(h.pending_kind, std::nullopt);
+  if (record_history) {
+    NavHistoryEntry entry;
+    entry.url = address;
+    entry.via = std::exchange(h.pending_link, {});
+    entry.snapshot = b.observed.snapshot;
+    const int64_t prev = current_visit(h);
+    const bool pushed = nav_history_push(h, std::move(entry), kMaxNavHistory);
+    note_visited_address(app, address);
+    record_visit(app, h, &b, pushed, prev, hint);
+  } else if (h.pos >= 0) {
+    auto& entry = h.entries[static_cast<size_t>(h.pos)];
+    entry.url = address;
+    if (hint == xanatoo::VisitKind::Reload) {
+      entry.snapshot = b.observed.snapshot;
+      record_visit(app, h, &b, false, 0, hint);
+    }
+  }
+  h.restoring = -1;
+  app.history.stale = true;
 }
 
 void note_entry_snapshot(App& app, int pi) {
   if (pi < 0 || pi >= kMaxViews) return;
   Pane& p = app.panes[pi];
-  NavHistory& h = p.nav;
+  NavHistory& h = view_nav(app, pi);
   if (h.pos < 0 || h.pos >= static_cast<int>(h.entries.size())) return;
   const DocBuffer* b = find_buf(app, p.buf);
   if (!b || b->placeholder || b->observed.snapshot.empty()) return;
@@ -274,7 +295,7 @@ void sync_nav_history(App& app) {
   for (int pi : live_views(app)) {
     if (split_browsing(app) && pi < kCentreViews) continue;
     Pane& p = app.panes[pi];
-    NavHistory& h = p.nav;
+    NavHistory& h = view_nav(app, pi);
     const std::string visible = pane_address(app, p);
     if (h.restoring >= 0) {
       if (h.restoring >= static_cast<int>(h.entries.size()) ||
@@ -308,7 +329,7 @@ const NavLink* forward_nav_link(App& app, int pi) {
       (split_browsing(app) && pi < kCentreViews))
     return nullptr;
   Pane& p = app.panes[pi];
-  return nav_history_forward_link(p.nav, pane_address(app, p));
+  return nav_history_forward_link(view_nav(app, pi), pane_address(app, p));
 }
 
 const NavLink* pending_nav_link(App& app, int pi) {
@@ -318,7 +339,7 @@ const NavLink* pending_nav_link(App& app, int pi) {
   const FetchJob* f = pane_fetch(app, pi);
   if (!f || f->purpose != FetchPurpose::Navigate) return nullptr;
   Pane& p = app.panes[pi];
-  const NavLink& l = p.nav.pending_link;
+  const NavLink& l = view_nav(app, pi).pending_link;
   if (l.href.empty() || l.from_url != pane_address(app, p)) return nullptr;
   return &l;
 }
@@ -480,7 +501,7 @@ void update_playing_links(App& app, int pi) {
 bool can_nav_step(App& app, int dir) {
   if (split_browsing(app) && app.focus < kCentreViews)
     return split_history_can_step(app, dir);
-  const NavHistory& h = focused_pane(app).nav;
+  const NavHistory& h = view_nav(app, app.focus);
   const int to = h.pos + dir;
   return h.pos >= 0 && to >= 0 && to < static_cast<int>(h.entries.size());
 }
@@ -490,7 +511,8 @@ namespace {
 // over several entries) without recording a new visit.
 bool nav_go(App& app, int to) {
   Pane& p = focused_pane(app);
-  NavHistory& h = p.nav;
+  const int pi = app.focus;
+  NavHistory& h = view_nav(app, pi);
   if (h.pos < 0 || to < 0 || to >= static_cast<int>(h.entries.size()))
     return false;
   nav_history_capture(h, pane_address(app, p), p.sel, p.scroll_y);
@@ -504,10 +526,10 @@ bool nav_go(App& app, int to) {
   const bool went = navigate_to_url(app, url, /*record_history=*/false);
   app.open_snapshot.clear();
   if (!went) {
-    h.restoring = -1;
+    view_nav(app, pi).restoring = -1;
     return false;
   }
-  h.pos = to;
+  view_nav(app, pi).pos = to;
   sync_nav_history(app);  // cached/local pages can be restored immediately
   return true;
 }
@@ -517,7 +539,7 @@ bool nav_step(App& app, int dir) {
   if (split_browsing(app) && app.focus < kCentreViews)
     return split_history_step(app, dir);
   if (!can_nav_step(app, dir)) return false;
-  return nav_go(app, focused_pane(app).nav.pos + dir);
+  return nav_go(app, view_nav(app, app.focus).pos + dir);
 }
 
 bool nav_rewind_to_visit(App& app, const std::vector<int64_t>& visits) {
@@ -529,7 +551,7 @@ bool nav_rewind_to_visit(App& app, const std::vector<int64_t>& visits) {
   for (int pi : order) {
     if (pi < 0 || pi >= kMaxViews) continue;
     if (split_browsing(app) && pi < kCentreViews) continue;  // split trail
-    const NavHistory& h = app.panes[pi].nav;
+    const NavHistory& h = view_nav(app, pi);
     if (h.pos < 0) continue;
     // The entry nearest to the current one, should the page be there twice.
     int best = -1;
@@ -874,7 +896,26 @@ void show_doc_in_pane(App& app, int pi, xanatoo::Document doc,
                       std::string content_path,
                       xanatoo::PageObservation observed) {
   Pane& p = app.panes[pi];
-  p.buf = page_buffer(app, pi);
+  const BufferId previous = p.buf;
+  const BufferId next = page_buffer(app, pi);
+  if (pi < kCentreViews && next != previous && find_buf(app, previous)) {
+    NavHistory& old = buf(app, previous).tab_nav;
+    NavHistory& fresh = buf(app, next).tab_nav;
+    if (old.restoring >= 0) {
+      // A history step can split off a view of a shared document.
+      fresh = old;
+      old.restoring = -1;
+    } else {
+      fresh.pending_kind = old.pending_kind;
+      fresh.pending_from = old.pending_from;
+      fresh.pending_resume = old.pending_resume;
+      old.pending_kind.reset();
+      old.pending_from = 0;
+      old.pending_resume = false;
+    }
+    old.pending_link = {};
+  }
+  p.buf = next;
   DocBuffer& b = buf(app, p.buf);
   b.doc = std::move(doc);
   b.path = label;
@@ -915,12 +956,13 @@ void open_address(App& app, const std::string& url) {
     navigate_to_url(app, url);
 }
 
-void open_link_in_tab(App& app, int pi, const std::string& href) {
+BufferId open_link_in_tab(App& app, int pi, const std::string& href,
+                          bool duplicate) {
   const LinkTarget t = resolve_link(app, pi, href);
   BufferId bi = kNoBuffer;
   switch (t.kind) {
     case LinkKind::None:
-      return;
+      return kNoBuffer;
     case LinkKind::Anchor: {
       Pane& p = app.panes[pi];
       expand_ancestors_for_node(app, t.dest.node);
@@ -928,24 +970,24 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
       p.sel.anchor = t.dest;
       scroll_caret_into_view(app, p);
       flash_status(app, "Followed " + href);
-      return;
+      return kNoBuffer;
     }
     case LinkKind::External:
-      if (open_link_image(app, pi, t.url)) return;
+      if (open_link_image(app, pi, t.url)) return kNoBuffer;
       if (xanatoo::is_playable_url(t.url)) {
         if (play_audio(app, t.url))
           record_media_visit(app, pi, t.url, std::nullopt, 0,
                              NavLink{href, {}, xanatoo::INVALID_NODE, 0});
-        return;
+        return kNoBuffer;
       }
       flash_status(app, "Opening " + t.url);
       xanatoo::open_external_url(t.url);
-      return;
+      return kNoBuffer;
     case LinkKind::Doc: {
       std::string path = xanatoo::parse_locator(t.url).base;
       if (path == kDocumentsPage) {
         flash_status(app, "Use File → Local documents to open the index");
-        return;
+        return kNoBuffer;
       }
       if (is_stored_original_ref(path)) {
         const std::string key = path.substr(12);
@@ -955,9 +997,9 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
                                  : std::nullopt;
         if (!body) {
           flash_status(app, "Original source snapshot not found");
-          return;
+          return kNoBuffer;
         }
-        bi = find_buffer(app, path);
+        bi = duplicate ? kNoBuffer : find_buffer(app, path);
         if (bi == kNoBuffer)
           bi = add_buffer(app, xanatoo::parse_stored_document(*body), path);
         break;
@@ -975,9 +1017,9 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
                                : std::nullopt;
         if (!body) {
           flash_status(app, "Local document not found");
-          return;
+          return kNoBuffer;
         }
-        bi = find_buffer(app, path);
+        bi = duplicate ? kNoBuffer : find_buffer(app, path);
         if (bi == kNoBuffer) {
           bi = add_buffer(app, xanatoo::parse_stored_document(*body), path);
           DocBuffer& b = buf(app, bi);
@@ -996,12 +1038,12 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
         if (!ec) path = dir;
         if (!xanatoo::ends_with(path, "/")) path += '/';
       }
-      bi = find_buffer(app, path);
+      bi = duplicate ? kNoBuffer : find_buffer(app, path);
       if (bi == kNoBuffer) {
         const std::string open_path = resolve_open_path(app, path);
         if (open_path.empty()) {
           flash_status(app, "Import failed (need pandoc on PATH)");
-          return;
+          return kNoBuffer;
         }
         // The address stays the original (book.epub), not the cache file.
         bi = add_buffer(app, load_doc(app, open_path), path);
@@ -1011,13 +1053,13 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
     case LinkKind::Remote: {
       if (const auto stored = xanatoo::find_imported_document(t.url)) {
         const std::string ref = "db:" + stored->key;
-        bi = find_buffer(app, ref);
+        bi = duplicate ? kNoBuffer : find_buffer(app, ref);
         if (bi == kNoBuffer) {
           const auto body = xanatoo::load_stored_document_revision(
               stored->key, stored->working);
           if (!body) {
             flash_status(app, "Local document not found");
-            return;
+            return kNoBuffer;
           }
           bi = add_buffer(app, xanatoo::parse_stored_document(*body), ref);
           DocBuffer& b = buf(app, bi);
@@ -1033,7 +1075,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
       std::string why;
       if (!remote_fetch_supported(t.url, &why)) {
         flash_status(app, why);
-        return;
+        return kNoBuffer;
       }
       if (const CachedPage* c = find_cached_page(app, t.url)) {
         bi = add_buffer(app, c->doc, c->final_url);
@@ -1051,13 +1093,14 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
     }
   }
   // Its first visit (when the tab is shown) comes from this view's page.
-  if (DocBuffer* nb = find_buf(app, bi); nb && !nb->origin_kind) {
+  if (DocBuffer* nb = find_buf(app, bi);
+      nb && nb->tab_nav.entries.empty() && !nb->origin_kind) {
     const xanatoo::VisitKind kind =
         app.visit_hint.value_or(xanatoo::VisitKind::NewTab);
     nb->origin_kind = kind;
     nb->origin_visit = kind == xanatoo::VisitKind::History ? app.visit_from
                        : xanatoo::visit_kind_starts_trail(kind)
-                           ? 0 : current_visit(app.panes[pi]);
+                           ? 0 : current_visit(view_nav(app, pi));
   }
   app.visit_hint.reset();
   app.visit_from = 0;
@@ -1065,6 +1108,7 @@ void open_link_in_tab(App& app, int pi, const std::string& href) {
   insert_tab(app, bi, app.panes[pi].buf);
   update_title(app);
   flash_status(app, "Opened in new tab: " + buf(app, bi).path);
+  return bi;
 }
 
 std::string home_page(App& app) {
@@ -1145,7 +1189,7 @@ void refetch_page(App& app, int pi) {
   open_at(app, pi, std::move(loc), /*record_history=*/false);
   // finish_navigate records the reloaded page as a Reload visit.
   if (pane_fetch(app, pi))
-    app.panes[pi].nav.pending_kind = xanatoo::VisitKind::Reload;
+    view_nav(app, pi).pending_kind = xanatoo::VisitKind::Reload;
 }
 
 // Pipes and fragment are view state: only the base gets opened or fetched.
@@ -1174,13 +1218,14 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   Pane& p = app.panes[pi];
   if (record_history) {
     const std::string shown = pane_address(app, p);
-    nav_history_capture(p.nav, shown, p.sel, p.scroll_y);
-    p.nav.restoring = -1;  // a new navigation supersedes a pending Back
+    NavHistory& h = view_nav(app, pi);
+    nav_history_capture(h, shown, p.sel, p.scroll_y);
+    h.restoring = -1;  // a new navigation supersedes a pending Back
     if (!via.href.empty()) via.from_url = shown;
-    p.nav.pending_link = std::move(via);
-    p.nav.pending_kind = hint;
-    p.nav.pending_from = from;
-    p.nav.pending_resume = resume;
+    h.pending_link = std::move(via);
+    h.pending_kind = hint;
+    h.pending_from = from;
+    h.pending_resume = resume;
   }
   if (xanatoo::starts_with(target, "draft:") ||
       target == kDocumentsPage || is_stored_document_ref(target) ||
@@ -1362,39 +1407,11 @@ static bool open_page(App& app, int pi, std::string target,
     if (!ec) path = dir;
     if (!xanatoo::ends_with(path, "/")) path += '/';
   }
-  // Prefer an already-open buffer for this path (avoid double-load).
-  {
-    std::string canon = path;
-    try {
-      canon = fs::weakly_canonical(path).string();
-    } catch (...) {
-    }
-    for (const DocBuffer& b : app.buffers) {
-      if (b.path.empty()) continue;
-      const BufferId i = b.id;
-      std::string bp = b.path;
-      try {
-        bp = fs::weakly_canonical(bp).string();
-      } catch (...) {
-      }
-      if (bp == canon) {
-        p.buf = i;
-        p.sel = {};
-        if (std::find(app.tab_order.begin(), app.tab_order.end(), i) ==
-            app.tab_order.end())
-          app.tab_order.push_back(i);
-        xanatoo::ensure_valid_caret(doc_of(app, p), p.sel.focus);
-        p.sel.anchor = p.sel.focus;
-        p.scroll_y = 0.f;
-        p.view_anchor.reset();
-        p.layout = {};
-        app.needs_layout = true;
-        update_title(app);
-        if (record_history) push_nav_history(app, pi, path);
-        flash_status(app, "Switched to " + path);
-        return true;
-      }
-    }
+  // A local page already in this tab can be reused without replacing edits.
+  if (same_page(path, path_of(app, p))) {
+    reset_pane_locator(p);
+    if (record_history) push_nav_history(app, pi, pane_address(app, p));
+    return true;
   }
   if (!stash_or_confirm(app, p.buf)) return false;
   // PDF / DjVu / comics: page sizes come from thumtoo on a worker, which may

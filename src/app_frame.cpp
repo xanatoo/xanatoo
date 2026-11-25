@@ -151,7 +151,7 @@ static void build_history_menu(App& app, xanatoo::UiState& state) {
       }
     }
   } else {
-    const NavHistory& h = focused_pane(app).nav;
+    const NavHistory& h = view_nav(app, app.focus);
     pos = h.pos;
     for (const NavHistoryEntry& e : h.entries) urls.push_back(e.url);
   }
@@ -1193,7 +1193,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.tab_order.push_back(bi);
       Pane& np = app.panes[app.centre_focus];
       if (app.focus != app.centre_focus) focus_view(app, app.centre_focus);
-      np.buf = bi;
+      select_view_tab(app, app.centre_focus, bi);
       np.sel = {};
       np.scroll_y = 0.f;
       np.layout = {};
@@ -1414,15 +1414,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       if (tab_i < 0 || tab_i >= static_cast<int>(app.tab_order.size())) break;
       const BufferId bi = app.tab_order[static_cast<size_t>(tab_i)];
       focus_view(app, app.centre_focus);  // tabs are the centre's buffers
-      Pane& c = focused_pane(app);
-      if (c.buf == bi) break;  // already showing
-      c.buf = bi;
-      // Fresh layout + caret for the newly focused buffer.
-      xanatoo::ensure_valid_caret(doc_of(app, c), c.sel.focus);
-      c.sel.anchor = c.sel.focus;
-      c.layout = {};
-      app.needs_layout = true;
-      update_title(app);
+      select_view_tab(app, app.centre_focus, bi);
       break;
     }
     case C::OpenBlock:
@@ -1459,13 +1451,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         else
           cur = (cur - 1 + ntabs) % ntabs;
         focus_view(app, app.centre_focus);
-        Pane& c = focused_pane(app);
-        c.buf = app.tab_order[static_cast<size_t>(cur)];
-        xanatoo::ensure_valid_caret(doc_of(app, c), c.sel.focus);
-        c.sel.anchor = c.sel.focus;
-        c.layout = {};
-        app.needs_layout = true;
-        update_title(app);
+        select_view_tab(app, app.centre_focus,
+                        app.tab_order[static_cast<size_t>(cur)]);
       }
       break;
     case C::ReorderTabs: {
@@ -2043,7 +2030,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       else if (cmd == C::ViewSourceXml)
         loc.pipes.push_back({xanatoo::SelectorKind::SourceXml, {}});
       if (!previous.empty())
-        nav_history_capture(p.nav, previous, p.sel, p.scroll_y);
+        nav_history_capture(view_nav(app, app.focus), previous, p.sel, p.scroll_y);
       apply_locator(app, app.focus, std::move(loc));
       if (!previous.empty())
         push_nav_history(app, app.focus, pane_address(app, p));

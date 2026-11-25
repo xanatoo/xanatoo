@@ -560,13 +560,16 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@panel:page", "Page navigation panel",
      "Navigation and side bars of the web page as links; click to follow, "
      "middle-click for a new tab."},
+    {"@history-this-tab", "This Tab",
+     "Show visits from the current tab. Click again for all visits."},
     {"@panel:history", "History panel",
      "Visits newest first, each linked to the visit it came from, like "
      "`git log --graph`: a lane continues where you followed links, a fork "
      "is a tab opened from a page, a hollow dot starts a trail (typed, "
      "bookmark). Clicking a visit goes back to it (no new entry), so "
      "browsing on grows that branch. Anchor jumps and reloads in one page share a row (*×n*). "
-     "Click to open, middle-click for a new tab, hover for details. With "
+     "**This Tab** shows only the current tab’s visits. Click to open, "
+     "middle-click for a new tab, hover for details. With "
      "the panel focused: **/** or **Ctrl+F** filters, arrows / Home / End "
      "move, **Enter** opens, **Delete** removes the visit from the history, "
      "**Esc** clears the filter or closes. Right-click a row for its menu."},

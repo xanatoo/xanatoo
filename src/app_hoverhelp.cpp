@@ -66,6 +66,10 @@ const char* title_key(App& app, const FloatWindow& w, int mx) {
     const SDL_Rect fb = outline_focus_rect(app, w);
     if (mx >= fb.x - 2 && mx < fb.x + fb.w + 2) return "@outline-focus";
   }
+  if (w.role == WindowRole::History) {
+    const SDL_Rect tab = title_button_rect(app, w, "This Tab");
+    if (mx >= tab.x - 2 && mx < tab.x + tab.w + 2) return "@history-this-tab";
+  }
   return w.role == WindowRole::Document ? "@doc-window-title" : "@float-title";
 }
 

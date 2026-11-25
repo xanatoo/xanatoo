@@ -282,7 +282,7 @@ bool app_init(App& app) {
     if (const DocBuffer* b = find_buf(app, app.panes[pi].buf)) {
       app.record_visits =
           from_cli && pi < (app.buffers.size() > 1 ? 2 : 1);
-      app.panes[pi].nav.pending_kind = xanatoo::VisitKind::External;
+      view_nav(app, pi).pending_kind = xanatoo::VisitKind::External;
       push_nav_history(app, pi, b->path);
     }
   app.record_visits = true;
