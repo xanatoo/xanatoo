@@ -8,7 +8,8 @@ nix develop -c xanatoo-android-install  # Build and install with adb install -r
 ```
 
 The flake configures the SDK, NDK and target ABIs and builds the APK in a
-Nix-managed directory. The desktop CMake build directory
+Nix-managed directory. Both helpers print the Nix command they invoke.
+The desktop CMake build directory
 (`XANATOO_BUILD_DIR`, default `/tmp/xanatoo-build`) is separate. To check the
 Android build plan without building, pass `--dry-run` to
 `xanatoo-android-build`.

@@ -320,26 +320,37 @@
           # Main package for inputsFrom (pulls buildInputs into the shell).
           pkg = self.packages.${system}.xanatoo-unwrapped;
 
+          printInvocation = ''
+            _xanatoo_print_invocation() {
+              printf '%s:' "''${0##*/}" >&2
+              printf ' %q' "$@" >&2
+              printf '\n' >&2
+            }
+          '';
+
           isLinux = pkgs.stdenv.hostPlatform.isLinux;
-          androidHelper = name: command: pkgs.writeShellScriptBin name ''
+          androidHelper = name: command: pkgs.writeShellScriptBin name (printInvocation + ''
             if [ -z "''${XANATOO_SOURCE:-}" ]; then
               echo "$0: XANATOO_SOURCE is not set (enter the shell with: nix develop)" >&2
               exit 1
             fi
+            printf '%s: build directory managed by Nix\n' "${name}" >&2
+            _xanatoo_print_invocation nix ${command} "$@"
             exec nix ${command} "$@"
-          '';
+          '');
 
           dejavuFont =
             "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
 
           # Shared preamble: require shell entry, resolve build dir.
-          xanatooDevPreamble = ''
+          xanatooDevPreamble = printInvocation + ''
             set -euo pipefail
             if [ -z "''${XANATOO_SOURCE:-}" ]; then
               echo "$0: XANATOO_SOURCE is not set (enter the shell with: nix develop)" >&2
               exit 1
             fi
             XANATOO_BUILD_DIR="''${XANATOO_BUILD_DIR:-/tmp/xanatoo-build}"
+            printf '%s: source=%s build=%s\n' "''${0##*/}" "$XANATOO_SOURCE" "$XANATOO_BUILD_DIR" >&2
 
             _xanatoo_canon_path() {
               local p="$1"
@@ -366,13 +377,12 @@
             xanatooDevPreamble
             + ''
               mkdir -p "$XANATOO_BUILD_DIR"
-              echo "xanatoo-configure: source=$XANATOO_SOURCE"
-              echo "xanatoo-configure: build=$XANATOO_BUILD_DIR"
-              echo "xanatoo-configure: CMAKE_BUILD_TYPE=''${CMAKE_BUILD_TYPE:-Debug}"
-              cmake -S "$XANATOO_SOURCE" -B "$XANATOO_BUILD_DIR" -G Ninja \
-                -DCMAKE_BUILD_TYPE="''${CMAKE_BUILD_TYPE:-Debug}" \
-                -DCMAKE_CXX_FLAGS_DEBUG="''${CMAKE_CXX_FLAGS_DEBUG:--g3 -Og -fno-omit-frame-pointer}" \
-                "$@"
+              configure_args=(-S "$XANATOO_SOURCE" -B "$XANATOO_BUILD_DIR" -G Ninja
+                -DCMAKE_BUILD_TYPE="''${CMAKE_BUILD_TYPE:-Debug}"
+                -DCMAKE_CXX_FLAGS_DEBUG="''${CMAKE_CXX_FLAGS_DEBUG:--g3 -Og -fno-omit-frame-pointer}"
+                "$@")
+              _xanatoo_print_invocation cmake "''${configure_args[@]}"
+              cmake "''${configure_args[@]}"
             ''
           );
 
@@ -402,13 +412,19 @@
                   xanatoo-configure || exit 1
                 fi
               fi
-              cmake --build "$XANATOO_BUILD_DIR" -j "''${XANATOO_BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}" "$@"
+              build_type=$(sed -n 's/^CMAKE_BUILD_TYPE:[^=]*=//p' "$XANATOO_BUILD_DIR/CMakeCache.txt")
+              printf 'xanatoo-build: CMAKE_BUILD_TYPE=%s (CMake cache)\n' "''${build_type:-<unset>}" >&2
+              build_args=(--build "$XANATOO_BUILD_DIR" -j "''${XANATOO_BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}" "$@")
+              _xanatoo_print_invocation cmake "''${build_args[@]}"
+              cmake "''${build_args[@]}"
             ''
           );
 
           xanatooRun = pkgs.writeShellScriptBin "xanatoo-run" (
             xanatooDevPreamble
             + ''
+              printf 'xanatoo-run: executable=%s data=%s font=%s\n' \
+                "$XANATOO_BUILD_DIR/xanatoo" "''${XANATOO_DATA_ARGS[1]}" "$XANATOO_FONT" >&2
               xanatoo-build || exit 1
               if [ ! -x "$XANATOO_BUILD_DIR/xanatoo" ]; then
                 echo "xanatoo-run: $XANATOO_BUILD_DIR/xanatoo missing after build" >&2
@@ -421,6 +437,8 @@
           xanatooRunGdb = pkgs.writeShellScriptBin "xanatoo-run-gdb" (
             xanatooDevPreamble
             + ''
+              printf 'xanatoo-run-gdb: executable=%s data=%s font=%s\n' \
+                "$XANATOO_BUILD_DIR/xanatoo" "''${XANATOO_DATA_ARGS[1]}" "$XANATOO_FONT" >&2
               xanatoo-build || exit 1
               if [ ! -x "$XANATOO_BUILD_DIR/xanatoo" ]; then
                 echo "xanatoo-run-gdb: $XANATOO_BUILD_DIR/xanatoo missing after build" >&2
@@ -454,8 +472,10 @@ except Exception:
             + ''
               xanatoo-build || exit 1
               if [ -x "$XANATOO_BUILD_DIR/xanatoo_tests" ]; then
+                _xanatoo_print_invocation "$XANATOO_BUILD_DIR/xanatoo_tests" "$@"
                 "$XANATOO_BUILD_DIR/xanatoo_tests" "$@"
               elif [ -f "$XANATOO_BUILD_DIR/CTestTestfile.cmake" ]; then
+                _xanatoo_print_invocation ctest --test-dir "$XANATOO_BUILD_DIR" --output-on-failure "$@"
                 ctest --test-dir "$XANATOO_BUILD_DIR" --output-on-failure "$@"
               else
                 echo "xanatoo-test: no xanatoo_tests binary or CTest files in $XANATOO_BUILD_DIR" >&2

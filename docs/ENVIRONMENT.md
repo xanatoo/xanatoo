@@ -145,6 +145,11 @@ nix develop -c xanatoo-test
 Helpers are **PATH scripts** (`writeShellScriptBin`), not `shellHook` functions.
 Only real binaries work with `nix develop -c xanatoo-run`.
 
+The helpers print the source and build directories to stderr. The build
+helper reports the build type from the CMake cache and prints the build
+command with its parallelism setting. The run helpers show the executable,
+default data directory and font.
+
 ---
 
 ## Minimal flake shape (conceptual)

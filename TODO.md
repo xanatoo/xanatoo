@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Development command startup summaries
+
+- Desktop helpers print their source and build directories. The build helper
+  reports the cached build type and the CMake invocation. Android helpers
+  print their Nix invocation and indicate that Nix manages the build directory.
+- Desktop suite passed (14,797 checks). Verified the Android build summary
+  in a dry run and the configure and installer summaries with stubs.
+
 ## Status (2026-11-25) — Android development commands
 
 - Grouped the Nix shell help by target. The Linux shell provides
