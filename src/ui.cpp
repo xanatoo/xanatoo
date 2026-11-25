@@ -3178,6 +3178,12 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           std::max(1.f, available - 2.f * button_w - 6.f * scale_);
       ImGui::BeginChild("##tab-scroll-area", ImVec2(tabs_w, tab_h - 6.f * scale_), false,
                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+      const float tab_offset = std::max(1.f, std::round(scale_));
+      ImDrawList* strip_draw = ImGui::GetWindowDrawList();
+      ImVec2 clip_top = strip_draw->GetClipRectMin();
+      // Let the raised accent use the strip padding above the child.
+      clip_top.y = std::max(strip_top, clip_top.y - tab_offset - 1.f);
+      ImGui::PushClipRect(clip_top, strip_draw->GetClipRectMax(), false);
       if (ImGui::BeginTabBar("##doctabs",
                              ImGuiTabBarFlags_FittingPolicyScroll |
                                  ImGuiTabBarFlags_Reorderable |
@@ -3200,7 +3206,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         const bool force_sel = tab_force_select_;
         tab_force_select_ = false;
         ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
-        const float tab_offset = std::max(1.f, std::round(scale_));
         for (int i = 0; i < static_cast<int>(state.tab_labels.size()); ++i) {
           // One-shot SetSelected when main changed active_tab (Next/Prev tab).
           // Continuous SetSelected fights ImGui clicks → flicker / stacked docs.
@@ -3256,7 +3261,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             tab_colors += 7;
           }
           ImGui::TabItemEx(bar, id.c_str(), &open, flags, nullptr,
-                           active ? -tab_offset : tab_offset);
+                           active ? -tab_offset : tab_offset, tab_offset);
           // TabItemEx reports its label before ItemAdd: the hook misses it.
           note_hover_help("tab", nullptr);
           ImGui::PopStyleColor(tab_colors);
@@ -3269,25 +3274,33 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
             if (active) {
               // Leave the accent overline visible above the raised top edge.
               const float inset = std::max(1.f, scale_);
-              const float top = min.y + 4.f * scale_;
-              const float bottom = max.y - 2.f * inset;
+              const ImGuiStyle& style = ImGui::GetStyle();
+              const float top = min.y + 1.f +
+                                (style.TabBarOverlineSize + inset) * 0.5f;
+              const float bottom = max.y - style.TabBarBorderSize;
               const float left = min.x + 1.5f * inset;
-              const float right = max.x - 2.f * inset;
-              const float corner = 4.f * scale_;
+              const float right = max.x - 1.5f * inset;
+              const float radius = std::max(
+                  0.f, std::min(style.TabRounding - 1.5f * inset,
+                                (right - left) * 0.5f));
+              const ImVec2 upper_left(left + radius, top + radius);
+              const ImVec2 upper_right(right - radius, top + radius);
               const ImU32 light = ImGui::GetColorU32(col(pal.highlight));
               const ImU32 shade = ImGui::GetColorU32(col(pal.shadow));
-              draw->AddLine(ImVec2(min.x + corner, top),
-                            ImVec2(max.x - corner, top), light, inset);
-              draw->AddLine(ImVec2(left, top + inset),
-                            ImVec2(left, bottom), light, inset);
-              draw->AddLine(ImVec2(right, top + inset),
-                            ImVec2(right, bottom), shade, inset);
+              draw->PathLineTo(ImVec2(left, bottom));
+              draw->PathArcToFast(upper_left, radius, 6, 9);
+              draw->PathArcToFast(upper_right, radius, 9, 10);
+              draw->PathStroke(light, 0, inset);
+              draw->PathArcToFast(upper_right, radius, 10, 12);
+              draw->PathLineTo(ImVec2(right, bottom));
+              draw->PathStroke(shade, 0, inset);
             }
             if (icon) {
               const float side = 16.f * scale_;
               const ImVec2 size = icon_size(icon, side);
               const float x = min.x + 8.f * scale_ + (side - size.x) * 0.5f;
-              const float y = min.y + (max.y - min.y - size.y) * 0.5f;
+              const float y = min.y + (max.y - min.y - size.y) * 0.5f -
+                              (active ? tab_offset : 0.f);
               draw->AddImage(reinterpret_cast<ImTextureID>(icon), ImVec2(x, y),
                              ImVec2(x + size.x, y + size.y));
             }
@@ -3399,6 +3412,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           tab_force_select_ = true;
         }
       }
+      ImGui::PopClipRect();
       ImGui::EndChild();
       if (tab_tear_id_ != 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         const ImVec2 mp = ImGui::GetMousePos();

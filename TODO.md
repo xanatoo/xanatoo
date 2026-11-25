@@ -4,6 +4,8 @@
 
 ## Status (2026-11-25) — Document tab contrast
 
+- Extended the raised tab to the shared bottom edge and curved the bevel
+  around the top corners.
 - Removed the bottom bevel shadow and staggered active and inactive tabs
   by one scaled pixel in each direction. Verified keyboard switching at
   100% and 125% UI scale under Xvfb.
