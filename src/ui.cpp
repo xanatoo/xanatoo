@@ -1086,7 +1086,8 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
       ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoFocusOnAppearing;
   const theme::Palette& pal = theme::palette();
   const float row_h = service_bar_row_h(scale_);
-  const float button_h = row_h - 4.f * scale_;
+  const float control_h = row_h - 4.f * scale_;
+  const float line = std::max(2.f, std::round(2.f * scale_));
   for (const UiServiceBar& bar : state.service_bars) {
     if (bar.w <= 0 || bar.h <= 0) continue;
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(bar.x),
@@ -1098,8 +1099,8 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
     ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.f, 1.f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
                         ImVec2(kServiceBarPadX, kServiceBarPadY));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(6.f * scale_, ImGui::GetStyle().FramePadding.y));
+    const float pad_y = std::max(0.f, (control_h - ImGui::GetFontSize()) * 0.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.f * scale_, pad_y));
     const float field_border = ImGui::GetStyle().FrameBorderSize;
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);  // flat links
     ImGui::PushStyleColor(ImGuiCol_WindowBg, tint_rgb(pal.face, bar.color, 0.14f));
@@ -1120,7 +1121,6 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
     if (ImGui::Begin(name, nullptr, flags)) {
       const ImVec2 at = ImGui::GetWindowPos();
       const float width = ImGui::GetWindowWidth();
-      const float line = std::max(2.f, std::round(2.f * scale_));
       ImGui::GetWindowDrawList()->AddRectFilled(
           ImVec2(at.x, at.y + static_cast<float>(bar.h) - line),
           ImVec2(at.x + width, at.y + static_cast<float>(bar.h)),
@@ -1142,7 +1142,7 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
           ImGui::PushStyleColor(ImGuiCol_Button,
                                 tint_rgb(pal.face, bar.color, 0.40f));
         ImGui::BeginDisabled(l.ref.empty() && !hot);
-        if (ImGui::Button(l.text.c_str(), ImVec2(0.f, button_h)) && !l.ref.empty())
+        if (ImGui::Button(l.text.c_str(), ImVec2(0.f, control_h)) && !l.ref.empty())
           open(l.ref);
         if (!l.ref.empty() && ImGui::IsItemHovered())
           ImGui::SetTooltip("%s", l.ref.c_str());
@@ -1154,9 +1154,9 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
       auto separator = [&] {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::GetWindowDrawList()->AddLine(
-            ImVec2(p.x + 3.f, p.y + 4.f), ImVec2(p.x + 3.f, p.y + button_h - 4.f),
+            ImVec2(p.x + 3.f, p.y + 4.f), ImVec2(p.x + 3.f, p.y + control_h - 4.f),
             ImGui::GetColorU32(ImGuiCol_Separator));
-        ImGui::Dummy(ImVec2(7.f, button_h));
+        ImGui::Dummy(ImVec2(7.f, control_h));
         ImGui::SameLine();
       };
       std::string& query = service_search_[bar.id];
@@ -1167,24 +1167,27 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
       const float more_w = ImGui::CalcTextSize("\xC2\xBB").x +
                            2.f * style.FramePadding.x + style.ItemSpacing.x;
       for (size_t r = 0; r < std::max<size_t>(1, bar.rows.size()); ++r) {
-        ImGui::SetCursorPos(ImVec2(kServiceBarPadX,
-                                   kServiceBarPadY + static_cast<float>(r) * row_h +
-                                       (row_h - button_h) * 0.5f));
+        const float row_y = kServiceBarPadY + static_cast<float>(r) * row_h;
+        // Center in the strip above the accent rule.
+        const float control_y = std::round(row_y + (row_h - control_h - line) * 0.5f);
+        ImGui::SetCursorPos(ImVec2(kServiceBarPadX, control_y));
         ImGui::PushID(static_cast<int>(r));
         if (r == 0) {
           if (bar.icon) {
             const float side = 16.f * scale_;
             const ImVec2 size = icon_size(bar.icon, side);
-            const ImVec2 c = ImGui::GetCursorPos();
-            ImGui::SetCursorPos(ImVec2(c.x + 2.f, c.y + (button_h - size.y) * 0.5f));
-            ImGui::Image(reinterpret_cast<ImTextureID>(bar.icon), size);
+            const ImVec2 c = ImGui::GetCursorScreenPos();
+            const ImVec2 p(c.x + 2.f, c.y + std::round((control_h - size.y) * 0.5f));
+            ImGui::GetWindowDrawList()->AddImage(
+                reinterpret_cast<ImTextureID>(bar.icon), p,
+                ImVec2(p.x + size.x, p.y + size.y));
+            ImGui::Dummy(ImVec2(2.f + size.x, control_h));
             ImGui::SameLine();
-            ImGui::SetCursorPosY(c.y);
           }
           ImGui::PushStyleColor(ImGuiCol_Text,
                                 tint_rgb(pal.text, bar.color, 0.35f));
           ImGui::BeginDisabled(bar.home.empty());
-          if (ImGui::Button(bar.name.c_str(), ImVec2(0.f, button_h)))
+          if (ImGui::Button(bar.name.c_str(), ImVec2(0.f, control_h)))
             open(bar.home);
           if (!bar.home.empty() && ImGui::IsItemHovered())
             ImGui::SetTooltip("Front page — %s", bar.home.c_str());
@@ -1215,7 +1218,7 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
           }
           for (size_t i = 0; i < fit; ++i) link(links[i], i);
           if (fit < links.size()) {
-            if (ImGui::Button("\xC2\xBB", ImVec2(0.f, button_h)))
+            if (ImGui::Button("\xC2\xBB", ImVec2(0.f, control_h)))
               ImGui::OpenPopup("##more");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("More");
             if (ImGui::BeginPopup("##more")) {
@@ -1232,7 +1235,7 @@ void Ui::service_bars(const UiState& state, UiFrameResult& result,
           }
         }
         if (r == 0 && search_w > 0.f) {
-          ImGui::SetCursorPosX(width - kServiceBarPadX - search_w);
+          ImGui::SetCursorPos(ImVec2(width - kServiceBarPadX - search_w, control_y));
           ImGui::SetNextItemWidth(search_w);
           ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, field_border);
           char buf[512];
