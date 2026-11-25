@@ -1727,7 +1727,7 @@ static bool handle_sitemap_key(App& app, const SDL_Event& ev, bool ctrl,
 }
 
 // Page panel: Ctrl+Alt+P toggles; with keyboard focus Esc closes, arrows /
-// Home / End move, Enter follows the link. True = consumed.
+// Home / End move and follow links, Enter activates the current row.
 static bool handle_page_key(App& app, const SDL_Event& ev, bool ctrl,
                             bool alt) {
   const SDL_Keycode k = xanatoo::sdl::keycode(ev);
@@ -1817,25 +1817,21 @@ static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool sh
       app.ol.resize = 0;
       return true;
     }
-    bool outline_consumed = false;
+    const int previous = app.outline_sel;
     switch (xanatoo::sdl::keycode(ev)) {
       case SDLK_UP:
         if (app.outline_sel > 0) --app.outline_sel;
-        outline_consumed = true;
         break;
       case SDLK_DOWN:
         if (app.outline_sel + 1 < static_cast<int>(app.outline.size()))
           ++app.outline_sel;
-        outline_consumed = true;
         break;
       case SDLK_HOME:
         app.outline_sel = 0;
-        outline_consumed = true;
         break;
       case SDLK_END:
         if (!app.outline.empty())
           app.outline_sel = static_cast<int>(app.outline.size()) - 1;
-        outline_consumed = true;
         break;
       case SDLK_LEFT: {
         if (app.outline_sel >= 0 &&
@@ -1844,8 +1840,7 @@ static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool sh
           if (er.section != xanatoo::INVALID_NODE && !er.folded)
             toggle_section_fold(app, er.section);
         }
-        outline_consumed = true;
-        break;
+        return true;
       }
       case SDLK_RIGHT: {
         if (app.outline_sel >= 0 &&
@@ -1854,20 +1849,27 @@ static bool handle_outline_key(App& app, const SDL_Event& ev, bool ctrl, bool sh
           if (er.section != xanatoo::INVALID_NODE && er.folded)
             toggle_section_fold(app, er.section);
         }
-        outline_consumed = true;
-        break;
+        return true;
       }
       case SDLK_RETURN:
       case SDLK_KP_ENTER:
         jump_outline_sel(app);
         app.key_focus = KeyFocus::Document;
-        outline_consumed = true;
-        break;
+        return true;
       default:
-        break;
+        panel_key_unused(app, ev, ctrl, alt);
+        return false;
     }
-    if (outline_consumed) return true;
-    panel_key_unused(app, ev, ctrl, alt);
+    if (app.outline_sel != previous) {
+      const auto [cx, cy, cw, ch] = outline_client_rect(app);
+      const float step = outline_row_step(app);
+      const float top = static_cast<float>(app.outline_sel) * step;
+      const float bottom_scroll = top + step - static_cast<float>(ch);
+      const float scroll = std::clamp(app.ol.scroll, std::min(top, bottom_scroll), top);
+      app.ol.scroll = std::clamp(scroll, 0.f, float_max_scroll(app, app.ol));
+      jump_outline_sel(app);
+    }
+    return true;
   }
   return false;
 }

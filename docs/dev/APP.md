@@ -188,7 +188,11 @@ writing it, `note_saved`. Mark edits with `mark_dirty` / `note_edit`, not
 Keyboard focus: `App::key_focus` (`KeyFocus::Document/Outline/Backlinks/Sitemap/Page/Styles/Panel`).
 Panels handle plain keys only while `panel_has_keys(app, …)`; opening or
 clicking a panel focuses it, a pane click / jump / unused plain key returns
-focus to the document. Never let a panel consume keys just because it is open.
+focus to the document. In Outline, clicking a heading or moving with
+Up, Down, Home or End jumps the document while keeping panel focus.
+Enter jumps and returns focus to the document. Page Navigation follows
+link rows on clicks and when those movement keys select them. Enter
+activates the selected row. Never let a panel consume keys just because it is open.
 Panels without native keys (embedded ImGui panels, Help, Revisions,
 Downloads) share `KeyFocus::Panel` + `App::panel_focus` (`focus_panel`,
 `focus_float`). The lit (yellow) title bar is `float_active(app, w)` for

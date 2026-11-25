@@ -289,7 +289,6 @@ void click_outline(App& app, FloatWindow& w, int mx, int my) {
     toggle_section_fold(app, er.section);
   } else {
     jump_outline_sel(app);
-    app.key_focus = KeyFocus::Document;  // clicked a heading: edit there
   }
 }
 

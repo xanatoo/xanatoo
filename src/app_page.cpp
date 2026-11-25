@@ -246,6 +246,7 @@ bool page_key(App& app, SDL_Keycode sym) {
   const auto& rows = app.page.rows;
   if (rows.empty()) return false;
   const int last = static_cast<int>(rows.size()) - 1;
+  const int previous = app.page.sel;
   // Up / Down skip nothing: labels and text rows can be selected too, so
   // the whole list can be read with the keys.
   switch (sym) {
@@ -263,12 +264,15 @@ bool page_key(App& app, SDL_Keycode sym) {
       break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
+      scroll_sel_into_view(app);
       activate(app, rows[static_cast<size_t>(app.page.sel)]);
-      break;
+      return true;
     default:
       return false;
   }
   scroll_sel_into_view(app);
+  if (app.page.sel != previous)
+    activate(app, rows[static_cast<size_t>(app.page.sel)]);
   return true;
 }
 

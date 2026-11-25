@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Outline and Page Navigation keys
+
+- Up, Down, Home and End navigate the document as the panel selection moves.
+  Clicking an Outline heading gives the panel keyboard focus.
+- Verified Outline clicks followed by keyboard jumps and Page Navigation
+  anchor jumps under Xvfb. The Nix suite passed 14,889 checks.
+
 ## Status (2026-11-25) — Dialog chrome
 
 - Gave Download confirmation, Preferences and Credentials the panel palette,
