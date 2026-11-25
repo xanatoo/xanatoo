@@ -249,6 +249,7 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
   w.slot = float_control_w(win);
   w.flush = win.dock != Dock::None;
   w.active = active;
+  w.title_pressed = win.dragging;
   w.tint = window_tint(win.role);
   w.resizable = win.dock == Dock::None;
   w.maximized = win.dock == Dock::Max;

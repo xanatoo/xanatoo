@@ -2147,6 +2147,7 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf);
 void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf);
 // Per frame: long-press timer and fling momentum.
 void update_touch(App& app);
+void draw_touch_hold(const App& app);
 
 // ---- nav ----
 // Records `url` as the page view `pi` now shows (its trail + session log).

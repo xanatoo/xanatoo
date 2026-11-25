@@ -301,3 +301,7 @@ pointer not away) and turn accent blue while dragged — `theme::Hot`,
 comes from the drag state (`dragging_split`, `dock_split_drag`, a docked
 window's `resize`, `dragging_scroll`, `scroll_dragging`), so a touch shows
 which strip it grabbed even though touches leave no hover behind.
+Panel titles darken and take a sunken bevel while held for dragging.
+Pending touches on content and ImGui controls show a progress bar offset
+from the contact. It follows the context-menu timer and disappears on
+release, when motion cancels the hold, or when the menu gesture fires.

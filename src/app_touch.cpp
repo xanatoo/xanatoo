@@ -27,6 +27,7 @@
 #include "xanatoo/app.hpp"
 #include "xanatoo/editor.hpp"
 #include "xanatoo/layout.hpp"
+#include "xanatoo/theme.hpp"
 #include "xanatoo/touch_gutter.hpp"
 
 namespace xanatoo::app {
@@ -538,6 +539,40 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
     // under where it was (links, tooltips, title buttons, ImGui items).
     pointer_leave(app);
   }
+}
+
+void draw_touch_hold(const App& app) {
+  const Touch& t = app.touch;
+  if (t.mode != TouchMode::Pending &&
+      (t.mode != TouchMode::UiHold || t.ui_moved))
+    return;
+
+  namespace th = xanatoo::theme;
+  const auto& p = th::palette();
+  const auto px = [&](int size) {
+    return static_cast<int>(std::lround(size * app.ui_scale));
+  };
+  const int width = px(48);
+  const int height = px(8);
+  if (width < 3 || height < 3 || app.win_w < width || app.win_h < height)
+    return;
+  // Keep the indicator clear of the finger, even near the top edge.
+  const int x = static_cast<int>(t.start_x);
+  const int y = static_cast<int>(t.start_y);
+  const int above = y - px(28) - height;
+  const SDL_Rect track{
+      std::clamp(x - width / 2, 0, app.win_w - width),
+      std::clamp(above >= 0 ? above : y + px(28), 0, app.win_h - height),
+      width, height};
+  const auto elapsed = std::min<Uint32>(
+      xanatoo::sdl::ticks() - t.start_ticks, kLongPressMs);
+  const int fill_width = 1 + (width - 3) * static_cast<int>(elapsed) /
+                                 static_cast<int>(kLongPressMs);
+  th::fill(app.sdl, track, p.dark);
+  th::fill(app.sdl, {track.x + 1, track.y + 1, width - 2, height - 2},
+           p.face_light);
+  th::fill(app.sdl, {track.x + 1, track.y + 1, fill_width, height - 2},
+           p.accent_dark);
 }
 
 void update_touch(App& app) {

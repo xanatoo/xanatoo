@@ -5765,6 +5765,7 @@ void present_frame(App& app) {
     set_cursor(app, pointer);
   }
   app.ui.end_frame(app.sdl);
+  draw_touch_hold(app);
   if (stick_cursor_visible(app)) {
     draw_stick_cursor(app, app.sdl, static_cast<int>(app.stick_cx),
                       static_cast<int>(app.stick_cy),

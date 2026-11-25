@@ -112,6 +112,7 @@ struct WindowChrome {
   int slot = 0;           // control hit-zone width (0: 28px · scale)
   bool flush = false;     // controls fill their zone + the strip (docked)
   bool active = true;     // tinted tab vs. muted
+  bool title_pressed = false;  // title held for dragging
   Tint tint = Tint::Yellow;  // panel family colour (`title_tint`)
   bool close_box = true;  // left-aligned close widget (hit zone: first 28px)
   bool resizable = true;  // SE grip

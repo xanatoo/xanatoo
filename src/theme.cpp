@@ -243,8 +243,13 @@ void draw_window_chrome(SDL_Renderer* r, const WindowChrome& w) {
     vgradient(r, title, tt.top, tt.bottom);
   else
     vgradient(r, title, tt.idle_top, tt.idle_bottom);
-  // Light edge under the top line, dark line below the strip
-  hline(r, title.x, title.x + title.w - 1, title.y, p.highlight);
+  if (w.title_pressed) {
+    fill(r, title, p.dark, 64);
+    bevel(r, title, Bevel::Sunken);
+  } else {
+    hline(r, title.x, title.x + title.w - 1, title.y, p.highlight);
+  }
+  // Dark line below the strip
   hline(r, o.x + 1, o.x + o.w - 2, o.y + w.title_h,
         w.active ? tt.line : p.shadow);
   // Outer frame

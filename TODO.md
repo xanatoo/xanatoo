@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — Press feedback
+
+- Held panel titles darken and take a sunken bevel. Pending touchscreen
+  long presses show progress toward the context-menu threshold.
+- Nix suite passed (14,797 checks). Touchscreen hardware remains untested.
+
 ## Status (2026-11-25) — Two-finger gutter grabs
 
 - Route the second contact to the visible gutter first, including when the
