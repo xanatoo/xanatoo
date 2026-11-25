@@ -6123,7 +6123,7 @@ void test_search() {
   EXPECT_EQ(search_target("search:nope:x", eng), "");
   EXPECT_EQ(search_target("https://x.org/", eng), "");
 
-  // Every built-in is well formed: unique id / keyword, one %s, https (or a native youtube: ref).
+  // Every built-in has a unique id and keyword and a single query placeholder.
   std::unordered_set<std::string> ids, keys;
   for (const SearchEngine& e : eng) {
     EXPECT(ids.insert(e.id).second);
@@ -6133,7 +6133,8 @@ void test_search() {
            starts_with(e.url, "peertube:") || starts_with(e.url, "odysee:") ||
            starts_with(e.url, "mediaccc:") ||
            starts_with(e.url, "dailymotion:") || starts_with(e.url, "lesswrong:") ||
-           starts_with(e.url, "digg:") || starts_with(e.url, "bsky:"));
+           starts_with(e.url, "digg:") || starts_with(e.url, "bsky:") ||
+           starts_with(e.url, "github:") || starts_with(e.url, "gitlab:"));
     const size_t at = e.url.find("%s");
     EXPECT(at != std::string::npos && e.url.find("%s", at + 2) == std::string::npos);
     EXPECT(is_search_ref(search_ref(e.id, "x")));

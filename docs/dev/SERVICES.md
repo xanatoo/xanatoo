@@ -476,6 +476,10 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   GitLab uses anonymous GraphQL for discussions and retains reply relationships. Descriptions and comments
   use Thread + Message markup, with GitHub's rendered HTML or ordinary
   Markdown blocks from GitLab.
+- The built-in GitHub and GitLab search engines put a project search field
+  in each service strip. Their `search?q=` refs page through GitHub's
+  repository search and GitLab's public project list. Result links open
+  the native file tree for the selected project.
 - File previews show up to 256 KiB of UTF-8 content. Raw refs offer the
   standard download confirmation and stream the file after confirmation.
   GitHub's Contents API caps a directory listing at 1,000 entries. Public

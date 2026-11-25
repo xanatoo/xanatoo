@@ -12,6 +12,7 @@
 #include "xanatoo/json_dom.hpp"
 #include "xanatoo/layout.hpp"
 #include "xanatoo/service_bar.hpp"
+#include "xanatoo/search.hpp"
 
 #include <cstdio>
 #include <string>
@@ -944,6 +945,21 @@ void test_service_bars() {
 }
 
 static void test_forge_refs() {
+  const auto& engines = builtin_engines();
+  EXPECT_EQ(engine_for_address("github:owner/repo", engines), "github");
+  EXPECT_EQ(engine_for_address("gitlab:group/subgroup/project", engines), "gitlab");
+  const auto search = search_target(search_ref("github", "C++ # & /"), engines);
+  EXPECT_EQ(search, "github:search?q=C%2B%2B%20%23%20%26%20%2F");
+  const auto result = parse_forge_ref(search + "&page=2");
+  EXPECT(result && result->view == ForgeView::Search && result->query == "C++ # & /");
+  EXPECT(result && forge_ref_string(*result) == search + "&page=2");
+  EXPECT_EQ(up_url(search + "&page=2"), search);
+  EXPECT_EQ(up_url(search), "github:");
+  EXPECT_EQ(search_target(search_ref("gitlab", "render tools"), engines),
+            "gitlab:search?q=render%20tools");
+  EXPECT(service_bar(search).has_value());
+  EXPECT(!parse_forge_ref("gitlab:search?q=%20"));
+  EXPECT(!parse_forge_ref("github:search?q=project%00"));
   const std::string file = "github:owner/repo/blob/dir/a%20%23%25.cpp?ref=topic%2Fbranch";
   const auto gh = parse_forge_ref(file);
   EXPECT(gh.has_value());

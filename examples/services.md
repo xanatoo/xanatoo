@@ -21,7 +21,8 @@ directory page, but its links say what is missing.
 - [GitHub](github:) · [xanatoo](github:xanatoo/xanatoo) — enter `github:owner/repo`.
 - [GitLab](gitlab:) · [GitLab project](gitlab:gitlab-org/gitlab) — enter `gitlab:group/project`, including any subgroups.
 
-Use the service strip to switch between files, issues and pull or merge requests.
+Search for projects in the service strip or use it to switch between files,
+issues and pull or merge requests.
 Open a file to preview it or choose **Download** to save it. To browse a branch,
 tag or commit, append `/tree?ref=REVISION` on GitHub or `/-/tree?ref=REVISION`
 on GitLab. Encode a slash in a revision as `%2F`.

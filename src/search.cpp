@@ -283,6 +283,10 @@ std::vector<SearchEngine> builtin_table() {
       {"digg", "Digg", "digg", "Dg", "digg:search?query=%s",
        "page", "+",
        {"digg:", "digg.com"}},
+      {"github", "GitHub repositories", "gh", "GH", "github:search?q=%s",
+       "page", "%20", {"github:", "github.com"}},
+      {"gitlab", "GitLab projects", "gl", "GL", "gitlab:search?q=%s",
+       "page", "%20", {"gitlab:", "gitlab.com"}},
       {"dailymotion", "Dailymotion", "dm", "DM",
        "dailymotion:search?search=%s", "page", "+",
        {"dailymotion:", "dailymotion.com"}},
@@ -353,7 +357,7 @@ uint32_t engine_color(const SearchEngine& e) {
       {"mediaccc", 0x2a6e3f},
       {"dailymotion", 0x0066dc}, {"duckduckgo", 0xde5833},
       {"grokipedia", 0x111111},  {"lesswrong", 0x5f9b65},
-      {"digg", 0x333333},
+      {"digg", 0x333333},          {"github", 0x57606a}, {"gitlab", 0xc55327},
       {"freeserp", 0x5b21b6},  {"firecrawl", 0xf97316},
   };
   for (const auto& [id, c] : kColors)

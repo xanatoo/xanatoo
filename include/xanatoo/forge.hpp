@@ -7,12 +7,13 @@
 
 namespace xanatoo {
 
-enum class ForgeView { Home, Tree, Blob, Raw, Issues, Changes, Issue, Change, Reviews, ReviewComments };
+enum class ForgeView { Home, Search, Tree, Blob, Raw, Issues, Changes, Issue, Change, Reviews, ReviewComments };
 
 struct ForgeRef {
   bool github = false;
   ForgeView view = ForgeView::Home;
   std::string project;
+  std::string query;
   std::string path;      // decoded repository path
   std::string revision;  // empty = default branch
   std::string number;

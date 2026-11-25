@@ -58,6 +58,7 @@ const char* changes(const ForgeRef& ref) { return ref.github ? "pulls" : "merge_
 std::string route(const ForgeRef& ref) {
   switch (ref.view) {
     case View::Home: return {};
+    case View::Search: return "search";
     case View::Tree: return "tree";
     case View::Blob: return "blob";
     case View::Raw: return "raw";
@@ -112,7 +113,9 @@ std::optional<ForgeRef> parse_forge_ref(std::string_view url) {
     std::string field = take(query, '&');
     std::string_view value = field;
     const auto key = take(value, '=');
-    if (key == "ref") {
+    if (key == "q" && path == "search") {
+      ref.query = percent_decode(value);
+    } else if (key == "ref") {
       ref.revision = percent_decode(value);
       if (!safe_path(ref.revision)) return std::nullopt;
     } else if (key == "after" || key == "before") {
@@ -131,6 +134,17 @@ std::optional<ForgeRef> parse_forge_ref(std::string_view url) {
   const bool cursor = !ref.after.empty() || !ref.before.empty();
   if (path.empty()) {
     if (cursor) return std::nullopt;
+    return ref;
+  }
+  if (path == "search") {
+    std::string_view query_text = ref.query;
+    trim_ascii(query_text);
+    if (cursor || !ref.revision.empty() || query_text.empty() ||
+        !is_valid_utf8(query_text) || std::any_of(query_text.begin(), query_text.end(),
+            [](unsigned char c) { return c < 32 || c == 127; }))
+      return std::nullopt;
+    ref.query = query_text;
+    ref.view = View::Search;
     return ref;
   }
   if (ref.github) {
@@ -179,6 +193,11 @@ std::optional<ForgeRef> parse_forge_ref(std::string_view url) {
 }
 
 std::string forge_ref_string(const ForgeRef& ref) {
+  if (ref.view == View::Search) {
+    auto url = prefix(ref) + "search?q=" + forum::url_encode(ref.query);
+    if (ref.page > 1) url += "&page=" + std::to_string(ref.page);
+    return url;
+  }
   std::string url = project_ref(ref);
   const auto section = route(ref);
   if (!section.empty()) url += route_separator(ref) + section;
@@ -194,6 +213,11 @@ std::string forge_ref_string(const ForgeRef& ref) {
 }
 
 std::string forge_web_url(const ForgeRef& ref) {
+  if (ref.view == View::Search) {
+    const auto query = forum::url_encode(ref.query);
+    return ref.github ? "https://github.com/search?type=repositories&q=" + query :
+                        "https://gitlab.com/explore/projects?name=" + query;
+  }
   std::string url = origin(ref) + ref.project;
   const auto section = route(ref);
   if (section.empty()) return url;
@@ -242,6 +266,7 @@ std::string forge_ref_from_web(std::string_view url) {
 }
 
 std::string forge_up_url(ForgeRef ref) {
+  if (ref.view == View::Search && ref.page == 1) return prefix(ref);
   if (ref.page > 1 || !ref.after.empty() || !ref.before.empty()) {
     ref.page = 1;
     ref.after.clear();
@@ -348,8 +373,8 @@ std::string paging(const ForgeRef& ref) {
   return "per_page=" + std::to_string(kPageSize) + "&page=" + std::to_string(ref.page);
 }
 
-void add_pager(Document& doc, ForgeRef ref, size_t count) {
-  if (ref.page == 1 && count < kPageSize) return;
+void add_pager(Document& doc, ForgeRef ref, bool has_next) {
+  if (ref.page == 1 && !has_next) return;
   const auto nav = doc.create(NodeKind::Paragraph, doc.root);
   if (ref.page > 1) {
     --ref.page;
@@ -358,11 +383,51 @@ void add_pager(Document& doc, ForgeRef ref, size_t count) {
     forum::add_sep(doc, nav);
   }
   forum::add_text(doc, nav, "Page " + std::to_string(ref.page));
-  if (count >= kPageSize && ref.page < std::numeric_limits<int>::max() - 1) {
+  if (has_next && ref.page < std::numeric_limits<int>::max() - 1) {
     ++ref.page;
     forum::add_sep(doc, nav);
     forum::add_link(doc, nav, "Next →", forge_ref_string(ref));
   }
+}
+
+std::optional<Document> project_search(const ForgeRef& ref, std::string* err) {
+  const auto query = forum::url_encode(ref.query);
+  const auto url = ref.github
+      ? "https://api.github.com/search/repositories?q=" + query + "&" + paging(ref)
+      : "https://gitlab.com/api/v4/projects?visibility=public&order_by=star_count&sort=desc&search=" +
+            query + "&" + paging(ref);
+  const auto data = get_json(url, err);
+  if (!data) return std::nullopt;
+  const auto* results = ref.github ? json_get(*data, "items") : &*data;
+  if (!results || results->type != Json::Type::Array) {
+    *err = "Expected search results from the repository API";
+    return std::nullopt;
+  }
+
+  Document doc;
+  const auto root = start_page(doc, (ref.github ? "GitHub repositories · " : "GitLab projects · ") +
+                                  ref.query);
+  bool found = false;
+  for (const auto& item : results->items) {
+    const auto project = forum::str(item, ref.github ? "full_name" : "path_with_namespace");
+    const auto target = parse_forge_ref(prefix(ref) + project);
+    if (!target || target->view != View::Home || target->project != project) continue;
+    found = true;
+    const auto article = doc.create(NodeKind::Article, root);
+    forum::add_link(doc, doc.create(NodeKind::Header, article), project, forge_ref_string(*target));
+    const auto description = forum::str(item, "description");
+    if (!description.empty()) forum::add_note(doc, article, description);
+    const auto stars = forum::num(item, ref.github ? "stargazers_count" : "star_count");
+    const auto caption = doc.create(NodeKind::Caption, article);
+    forum::add_meta(doc, caption, forum::count(stars, "star", "stars"));
+  }
+  if (!found) forum::add_note(doc, root, "No projects match this search.");
+
+  const long long offset = static_cast<long long>(ref.page) * kPageSize;
+  const bool has_next = results->items.size() >= kPageSize &&
+      (ref.github ? offset < std::min(1000LL, forum::num(*data, "total_count")) : offset < 50000);
+  add_pager(doc, ref, has_next);
+  return doc;
 }
 
 std::optional<Document> tree_page(const ForgeRef& ref, std::string* err) {
@@ -415,7 +480,7 @@ std::optional<Document> tree_page(const ForgeRef& ref, std::string* err) {
       forum::add_link(doc, row, "Download", forge_ref_string(item), InlineRole::Metadata);
     }
   }
-  if (!ref.github) add_pager(doc, ref, data->items.size());
+  if (!ref.github) add_pager(doc, ref, data->items.size() >= kPageSize);
   if (ref.github && data->items.size() >= 1000)
     forum::add_note(doc, root, "GitHub's Contents API returns at most 1,000 entries per directory.");
   return doc;
@@ -495,7 +560,7 @@ std::optional<Document> item_list(const ForgeRef& ref, std::string* err) {
     forum::add_meta(doc, caption, forum::short_time(forum::str(entry, "updated_at")));
   }
   if (!listed) forum::add_note(doc, root, "No entries on this page.");
-  add_pager(doc, ref, data->items.size());
+  add_pager(doc, ref, data->items.size() >= kPageSize);
   return doc;
 }
 
@@ -676,7 +741,7 @@ std::optional<Document> thread_page(const ForgeRef& ref, std::string* err) {
         if (!path.empty()) forum::add_note(doc, post, path);
       }
     }
-    add_pager(doc, ref, comments->items.size());
+    add_pager(doc, ref, comments->items.size() >= kPageSize);
   }
   forum::map_links(doc, [&](std::string& href) {
     if (starts_with(href, web + "#issuecomment-"))
@@ -696,6 +761,7 @@ std::optional<Document> thread_page(const ForgeRef& ref, std::string* err) {
 std::optional<Document> forge_fetch(const ForgeRef& ref, std::string* err) {
   std::string ignored;
   if (!err) err = &ignored;
+  if (ref.view == View::Search) return project_search(ref, err);
   if (ref.project.empty()) {
     Document doc;
     const auto root = start_page(doc, ref.github ? "GitHub" : "GitLab");
@@ -707,6 +773,7 @@ std::optional<Document> forge_fetch(const ForgeRef& ref, std::string* err) {
     return doc;
   }
   switch (ref.view) {
+    case View::Search: break;
     case View::Home: case View::Tree: return tree_page(ref, err);
     case View::Blob: return file_page(ref, err);
     case View::Issues: case View::Changes: return item_list(ref, err);
