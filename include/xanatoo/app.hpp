@@ -129,6 +129,7 @@ struct SummaryScan {
 struct DocBuffer {
   BufferId id = kNoBuffer;
   NavHistory tab_nav;
+  std::vector<int64_t> inherited_visits;  // Visit rows copied from the opener
   std::string history_tab;  // Visit log identity, saved with the session
   BufferId tab_parent = kNoBuffer;  // Opener, independent of the current page
   xanatoo::Document doc;
@@ -2341,9 +2342,10 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href);
 // Middle click: open `href` (in pane `pi`) in a new tab right after the
 // current one; the view stays. Anchors into the page itself just jump.
 BufferId open_link_in_tab(App& app, int pi, const std::string& href,
-                          bool duplicate = false);
+                          bool inherit_history = true);
 NavHistory& view_nav(App& app, int pi);
 void select_view_tab(App& app, int pi, BufferId id);
+void finish_new_tab_history(App& app, BufferId id);
 void note_background_navigation(App& app, BufferId id, const std::string& url,
                                 bool record_history);
 // Panel rows (History, Sitemap, Page…) open an address here: a new tab while

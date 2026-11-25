@@ -9,6 +9,7 @@
 // (no SQLite, --no-save) nothing is recorded and the store calls return 0 /
 // nothing.
 
+#include <span>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -100,9 +101,10 @@ std::vector<VisitRecord> recent_visits(size_t limit, int64_t before = 0);
 // (older than) the visit `after` (0 = from the newest; ties in time are
 // ordered by id, so paging loses nothing), and with a non-empty `filter`
 // only visits whose title or address contains it (ASCII case-insensitive).
-// A non-empty `tab` matches the tab identity stored in VisitRecord::window.
+// A non-empty `tab` matches its own rows and the supplied inherited IDs.
 std::vector<VisitRecord> visit_page(size_t limit, const VisitRecord* after,
                                     std::string_view filter = {},
-                                    std::string_view tab = {});
+                                    std::string_view tab = {},
+                                    std::span<const int64_t> inherited = {});
 
 }  // namespace xanatoo

@@ -133,6 +133,8 @@ never `path_of`, where the address is shown or stored.
 Back / Forward follow the tab (`DocBuffer::tab_nav`) or floating document
 window (`Pane::nav`). Use `view_nav` to get the trail for a view;
 `select_view_tab` restores its current entry when switching tabs.
+`open_link_in_tab` copies the opener’s trail through its displayed page
+and appends the link destination. The opener retains its Forward entries.
 `NavHistoryEntry` keeps the address,
 caret, scroll offset, and source link. Record a shown page with
 `push_nav_history(app, pi, url)`, step with `nav_step`; `sync_nav_history`
@@ -144,7 +146,7 @@ is the session log (History menu, and the History panel's fallback without
 a visit log). The History panel (`app_history.cpp`, state `App::history`)
 draws the visit log as a trail tree: `visit_page` loads 200 visits at a time
 (more on scroll, text filter as SQL `LIKE`). The **This Tab** title button
-filters by the active tab’s persistent visit identity. Without a visit log,
+shows visits owned by the active tab and visits it inherited at opening. Without a visit log,
 it shows the active tab’s Back / Forward entries. Session files store the
 identity and trail for each tab, including background tabs. Older session
 files have view-level trails with no tab ownership, so tabs open with fresh

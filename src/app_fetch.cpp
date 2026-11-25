@@ -949,7 +949,9 @@ void finish_tab(App& app, const FetchJob& job) {
     loc.base = path;
     note_background_navigation(app, job.buf, xanatoo::format_locator(loc),
                                job.record_history);
-  } else {
+  } else if (nb.origin_kind) {
+    finish_new_tab_history(app, job.buf);
+  } else if (nb.tab_nav.entries.empty()) {
     for (int pi : live_views(app))
       if (app.panes[pi].buf == job.buf)
         push_nav_history(app, pi, pane_address(app, app.panes[pi]));

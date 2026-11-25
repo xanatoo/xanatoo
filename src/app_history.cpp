@@ -59,6 +59,13 @@ std::string_view current_tab(App& app) {
   return b ? std::string_view(b->history_tab) : std::string_view{};
 }
 
+std::span<const int64_t> inherited_visits(App& app) {
+  if (app.history.current_tab)
+    if (const DocBuffer* b = find_buf(app, focused_pane(app).buf))
+      return b->inherited_visits;
+  return {};
+}
+
 // Entries, lanes and lines (with day headers) from `visits`.
 void rebuild(App& app) {
   HistoryPanel& h = app.history;
@@ -108,7 +115,8 @@ void reload(App& app) {
   if (h.from_db) {
     h.visits = h.current_tab && h.loaded_tab.empty()
                    ? std::vector<xanatoo::VisitRecord>{}
-                   : xanatoo::visit_page(want, nullptr, filter, h.loaded_tab);
+                   : xanatoo::visit_page(want, nullptr, filter, h.loaded_tab,
+                                         inherited_visits(app));
     h.more = h.visits.size() == want;
   } else {
     // No visit log: this session's addresses, newest first, unlinked.
@@ -140,7 +148,7 @@ void load_more(App& app) {
   HistoryPanel& h = app.history;
   if (!h.more || h.visits.empty()) return;
   auto older = xanatoo::visit_page(kPageSize, &h.visits.back(), h.loaded_filter,
-                                   h.loaded_tab);
+                                   h.loaded_tab, inherited_visits(app));
   h.more = older.size() == kPageSize;
   if (older.empty()) return;
   h.visits.insert(h.visits.end(), std::make_move_iterator(older.begin()),

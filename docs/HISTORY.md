@@ -32,7 +32,8 @@ Machine ("was this the same text?"). Without them that history is lost.
 - `DocBuffer::tab_nav` and `Pane::nav` — Back/Forward for tabs and floating
   documents respectively. The History panel’s **This Tab** button scopes
   the visit graph to the active tab, using the identity stored with the
-  session and in the visit row’s `window` field. `NavLink`
+  session and in the visit row’s `window` field, plus inherited visit IDs
+  copied from the opener. `NavLink`
   knows the source page, href and node of the followed link, but it is
   thrown away when the entry falls off.
 - `minibuf_hist_url` — persistent URL ring, a text file rewritten on every

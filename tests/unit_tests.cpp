@@ -3123,6 +3123,20 @@ void test_nav_history_positions_and_forward_link() {
   EXPECT_EQ(h.entries[0].scroll, 524.5f);
   h.restoring = -1;
 
+  // An opener at Back branches from its displayed page. The new tab
+  // gets a fresh caret snapshot and leaves the opener's Forward intact.
+  NavHistoryEntry visible;
+  visible.url = "hn:";
+  visible.sel = at_link;
+  visible.scroll = 42.f;
+  NavHistory child = branch_nav_history(h, std::move(visible), 100);
+  EXPECT_EQ(child.entries.size(), 1u);
+  EXPECT_EQ(child.pos, 0);
+  EXPECT_EQ(child.entries.front().scroll, 42.f);
+  EXPECT(child.entries.front().sel.focus == at_link.focus);
+  EXPECT_EQ(h.entries.size(), 2u);
+  EXPECT_EQ(h.entries.front().scroll, 524.5f);
+
   // Following a different link after Back replaces Forward history.
   NavHistoryEntry other;
   other.url = "hn:item?id=3";

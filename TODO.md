@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-25) — History branches in new tabs
+
+- Link-opened tabs copy the opener’s trail through the displayed page,
+  then append the destination. The This Tab filter includes inherited visits.
+- Verified middle-click from a page reached with Back, independent Forward
+  trails, and branch restoration under Xvfb. The Nix suite passed 14,901
+  checks.
+
 ## Status (2026-11-25) — Tab-local browsing history
 
 - Back and Forward follow each tab’s trail, including after session restore.

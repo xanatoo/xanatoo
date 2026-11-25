@@ -465,6 +465,9 @@ void test_visits() {
     }
     EXPECT(visit_page(10, nullptr, "a.example", "session/tab/2").empty());
     EXPECT(visit_page(10, nullptr, {}, "session/tab/3").empty());
+    const int64_t inherited[] = {v1};
+    const auto branch = visit_page(2, nullptr, {}, "session/tab/2", inherited);
+    EXPECT(branch.size() == 2 && branch[0].id == v3 && branch[1].id == v1);
   }
   {
     // Removing a visit: the visits reached from it take its source, and

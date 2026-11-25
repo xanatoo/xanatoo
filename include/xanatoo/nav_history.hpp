@@ -58,9 +58,9 @@ inline void nav_history_capture(NavHistory& h, std::string_view visible,
 }
 
 inline bool nav_history_push(NavHistory& h, NavHistoryEntry entry,
-                             size_t limit) {
+                             size_t limit, bool allow_same_url = false) {
   if (entry.url.empty()) return false;
-  if (h.pos >= 0 && h.pos < static_cast<int>(h.entries.size()) &&
+  if (!allow_same_url && h.pos >= 0 && h.pos < static_cast<int>(h.entries.size()) &&
       h.entries[static_cast<size_t>(h.pos)].url == entry.url)
     return false;
   if (h.pos + 1 < static_cast<int>(h.entries.size()))
@@ -71,6 +71,22 @@ inline bool nav_history_push(NavHistory& h, NavHistoryEntry entry,
                     h.entries.begin() + (h.entries.size() - limit));
   h.pos = static_cast<int>(h.entries.size()) - 1;
   return true;
+}
+
+inline NavHistory branch_nav_history(const NavHistory& source,
+                                     NavHistoryEntry visible, size_t limit) {
+  NavHistory branch;
+  const int end = static_cast<int>(source.entries.size()) - 1;
+  const int current = source.restoring >= 0 ? end : std::min(source.pos, end);
+  for (int i = current; i >= 0; --i) {
+    if (source.entries[static_cast<size_t>(i)].url != visible.url) continue;
+    branch.entries.assign(source.entries.begin(), source.entries.begin() + i + 1);
+    branch.pos = i;
+    nav_history_capture(branch, visible.url, visible.sel, visible.scroll);
+    return branch;
+  }
+  nav_history_push(branch, std::move(visible), limit);
+  return branch;
 }
 
 inline const NavLink* nav_history_forward_link(const NavHistory& h,

@@ -127,6 +127,8 @@ std::string session_text(App& app) {
     out << "tab=" << path << "\n";
     const std::string index = std::to_string(saved_tabs.at(id));
     out << "tabidentity" << index << "=" << b->history_tab << "\n";
+    for (const int64_t visit : b->inherited_visits)
+      out << "tabinherited" << index << "=" << visit << "\n";
     if (b->tab_nav.pos >= 0) {
       out << "tabnavpos" << index << "=" << b->tab_nav.pos << "\n";
       for (size_t ni = 0; ni < b->tab_nav.entries.size(); ++ni) {
@@ -326,7 +328,7 @@ void restore_session(App& app) {
         BufferId id = restored[i];
         const auto* identity = get("tabidentity" + index);
         if (id == kNoBuffer && !identity) id = find_buffer(app, tabs[i]);
-        if (id == kNoBuffer) id = open_link_in_tab(app, 0, tabs[i], true);
+        if (id == kNoBuffer) id = open_link_in_tab(app, 0, tabs[i], /*inherit_history=*/false);
         restored[i] = id;
         if (id == kNoBuffer ||
             std::find(order.begin(), order.end(), id) != order.end()) continue;
@@ -334,6 +336,10 @@ void restore_session(App& app) {
         tab.tab_parent = kNoBuffer;
         if (identity && !identity->empty()) tab.history_tab = *identity;
         order.push_back(id);
+        if (const auto inherited = lists.find("tabinherited" + index);
+            inherited != lists.end())
+          for (const std::string& value : inherited->second)
+            tab.inherited_visits.push_back(std::stoll(value));
 
         auto it = lists.find("tabnav" + index);
         const auto* pos = get("tabnavpos" + index);
