@@ -91,6 +91,9 @@ public:
   // remote → its download target).
   std::string resolve(const std::string& path, const std::string& base = {}) const;
 
+  // Put full-resolution pixels on the SDL3 clipboard. Returns an error on failure.
+  std::string copy_to_clipboard(const std::string& address) const;
+
   // Remote URLs requested since the last call (each URL once).
   std::vector<std::string> take_requests();
   // The fetcher finished `url`: its file is in place (ok) or never will be

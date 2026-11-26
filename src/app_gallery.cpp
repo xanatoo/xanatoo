@@ -112,6 +112,15 @@ float fit_scale(const Area& a, const xanatoo::Image& img) {
                    static_cast<float>(a.h) / img.height, 1.f});
 }
 
+SDL_Rect picture_rect(const GalleryView& gv, const Area& a,
+                      const xanatoo::Image& img) {
+  const float scale = gv.scale > 0.f ? gv.scale : fit_scale(a, img);
+  const float w = img.width * scale, h = img.height * scale;
+  return {static_cast<int>(a.cx() + gv.pan_x - w / 2),
+          static_cast<int>(a.cy() + gv.pan_y - h / 2),
+          std::max(1, static_cast<int>(w)), std::max(1, static_cast<int>(h))};
+}
+
 // Keep the picture covering the area when larger, centred when smaller.
 void clamp_pan(GalleryView& gv, const Area& a, float w, float h) {
   const float mx = std::max(0.f, (w - a.w) / 2.f);
@@ -711,6 +720,16 @@ void draw_context_image(App& app, const SDL_Rect& all, const std::string& src,
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
 }
 
+std::string gallery_image_at(App& app, Pane& p, int x, int y) {
+  const auto* item = current_item(p);
+  if (!item || !in_rect(view_rect(p), x, y)) return {};
+  const Area a = picture_area(app, p);
+  if (!in_rect({a.x, a.y, a.w, a.h}, x, y)) return {};
+  const auto* img = loaded_image(app, p);
+  if (img && !in_rect(picture_rect(p.gallery, a, *img), x, y)) return {};
+  return item->src;
+}
+
 void draw_gallery_image(App& app, int pi) {
   Pane& p = app.panes[pi];
   const xanatoo::GalleryItem* item = current_item(p);
@@ -740,10 +759,7 @@ void draw_gallery_image(App& app, int pi) {
     clamp_pan(gv, area, fw, fh);
     const SDL_Rect clip{area.x, area.y, area.w, area.h};
     xanatoo::sdl::set_clip_rect(app.sdl, &clip);
-    SDL_Rect dst{static_cast<int>(area.cx() + gv.pan_x - fw / 2),
-                 static_cast<int>(area.cy() + gv.pan_y - fh / 2),
-                 std::max(1, static_cast<int>(fw)),
-                 std::max(1, static_cast<int>(fh))};
+    const SDL_Rect dst = picture_rect(gv, area, img);
     xanatoo::sdl::copy(app.sdl, img.texture, nullptr, &dst);
     xanatoo::sdl::set_clip_rect(app.sdl, &all);
     dims = std::to_string(img.width) + "×" + std::to_string(img.height) +

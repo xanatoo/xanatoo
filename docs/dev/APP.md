@@ -238,6 +238,12 @@ nearest-first targets derived from the focused pane's `NavHistory`, or
 `SplitHistory` when split browsing. `NavJump` uses a signed offset and must
 preserve the destination's caret/scroll state.
 
+Right-clicking a document image or a single gallery image adds actions to
+copy its full-resolution pixels, copy its source address, and open the
+source in a new gallery tab. Linked images also keep their link actions.
+Copy image uses SDL3's bitmap clipboard. The address and tab actions
+are available in SDL2 builds as well.
+
 Primary selection (X11 / Wayland, `sdl::kMiddleClickPastesPrimary`: Linux
 desktop, SDL3 or SDL2 >= 2.26):
 - Document views: `publish_primary_selection` (in `run_frame` after the

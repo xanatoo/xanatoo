@@ -281,6 +281,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.selection = !focused_pane(app).sel.empty();
   ui_state.context_comment_native = app.context_comment_native;
   ui_state.context_comment_web = app.context_comment_web;
+  ui_state.context_image_address = app.context_image_address;
   ui_state.context_link = app.context_link;
   ui_state.context_link_href = app.context_link_href;
   ui_state.context_link_web = app.context_link_web;
@@ -2281,6 +2282,15 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     case C::MediaAction:
       media_action(app, arg);
+      break;
+    case C::OpenImageInTab:
+      if (!arg.empty()) open_image_in_tab(app, app.focus, arg);
+      break;
+    case C::CopyImage:
+      if (!arg.empty()) {
+        const std::string error = app.images.copy_to_clipboard(arg);
+        flash_status(app, error.empty() ? "Copied image" : error);
+      }
       break;
     case C::CopyText:
       if (!arg.empty()) {

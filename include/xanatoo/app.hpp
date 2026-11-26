@@ -1611,6 +1611,7 @@ struct App {
   std::string context_comment_web;
   // Right-clicked link: its target as the address bar would show it, and
   // whether it is a web URL ("Download Link").
+  std::string context_image_address;  // source of the right-clicked image
   std::string context_link;
   std::string context_link_href;  // as written in the page (new tab)
   bool context_link_web = false;
@@ -2356,6 +2357,7 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href);
 // current one; the view stays. Anchors into the page itself just jump.
 BufferId open_link_in_tab(App& app, int pi, const std::string& href,
                           bool inherit_history = true);
+void open_image_in_tab(App& app, int pi, const std::string& address);
 NavHistory& view_nav(App& app, int pi);
 void select_view_tab(App& app, int pi, BufferId id);
 void finish_new_tab_history(App& app, BufferId id);
@@ -2541,6 +2543,7 @@ void gallery_step(App& app, int pi, int delta, bool wrap = false);
 void gallery_image_was_page(App& app, const std::string& url);
 // Input for single-image views. Pointer events go to the image view under
 // the pointer, keys to the focused one. True = consumed.
+std::string gallery_image_at(App& app, Pane& p, int x, int y);
 bool gallery_pointer_down(App& app, int pi, int x, int y, int button);
 bool gallery_pointer_motion(App& app, int x, int y);
 bool gallery_pointer_up(App& app);

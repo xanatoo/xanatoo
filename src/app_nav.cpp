@@ -284,7 +284,8 @@ void finish_new_tab_history(App& app, BufferId id) {
   NavHistory& h = b.tab_nav;
   if (!b.origin_kind || h.pos < 0) return;
   auto& entry = h.entries[static_cast<size_t>(h.pos)];
-  entry.url = canonical_address(b.path);  // a background fetch can redirect
+  if (!xanatoo::parse_locator(entry.url).has_selectors())
+    entry.url = canonical_address(b.path);  // a background fetch can redirect
   entry.snapshot = b.observed.snapshot;
   note_visited_address(app, entry.url);
   record_visit(app, h, &b, false, 0, std::nullopt);
@@ -973,6 +974,54 @@ void open_address(App& app, const std::string& url) {
     navigate_to_url(app, url);
 }
 
+static void finish_open_tab(App& app, int pi, BufferId bi,
+                            const std::string& href, std::string address,
+                            bool inherit_history) {
+  if (inherit_history) {
+    Pane& opener = app.panes[pi];
+    NavHistoryEntry visible;
+    visible.url = pane_address(app, opener);
+    visible.sel = opener.sel;
+    visible.scroll = opener.scroll_y;
+
+    DocBuffer& child = buf(app, bi);
+    child.tab_nav = branch_nav_history(view_nav(app, pi), std::move(visible),
+                                      kMaxNavHistory);
+    for (const auto& entry : child.tab_nav.entries)
+      if (entry.visit) child.inherited_visits.push_back(entry.visit);
+    const auto kind = app.visit_hint.value_or(xanatoo::VisitKind::NewTab);
+    child.origin_kind = kind;
+    child.origin_visit = kind == xanatoo::VisitKind::History ? app.visit_from
+                         : xanatoo::visit_kind_starts_trail(kind)
+                             ? 0 : current_visit(child.tab_nav);
+
+    NavHistoryEntry destination;
+    destination.url = std::move(address);
+    if (kind == xanatoo::VisitKind::NewTab && child.tab_nav.pos >= 0)
+      destination.via = {href, child.tab_nav.entries.back().url};
+    nav_history_push(child.tab_nav, std::move(destination), kMaxNavHistory,
+                     /*allow_same_url=*/true);
+    if (!child.placeholder) finish_new_tab_history(app, bi);
+  }
+  app.visit_hint.reset();
+  app.visit_from = 0;
+  app.visit_resume = false;  // a new tab is a new visit
+  insert_tab(app, bi, app.panes[pi].buf);
+  update_title(app);
+  flash_status(app, "Opened in new tab: " + buf(app, bi).path);
+}
+
+void open_image_in_tab(App& app, int pi, const std::string& address) {
+  const BufferId bi = add_buffer(app, xanatoo::image_url_document(address), address);
+  xanatoo::Locator loc;
+  loc.base = canonical_address(address);
+  if (!xanatoo::is_remote_image(address))
+    loc.base = xanatoo::file_url(fs::path(address).generic_string());
+  loc.pipes = {{xanatoo::SelectorKind::Gallery, {}},
+               {xanatoo::SelectorKind::Item, xanatoo::gallery_item_value(0)}};
+  finish_open_tab(app, pi, bi, address, xanatoo::format_locator(loc), true);
+}
+
 BufferId open_link_in_tab(App& app, int pi, const std::string& href,
                           bool inherit_history) {
   const LinkTarget t = resolve_link(app, pi, href);
@@ -1098,38 +1147,8 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
       break;
     }
   }
-  if (inherit_history) {
-    Pane& opener = app.panes[pi];
-    NavHistoryEntry visible;
-    visible.url = pane_address(app, opener);
-    visible.sel = opener.sel;
-    visible.scroll = opener.scroll_y;
-
-    DocBuffer& child = buf(app, bi);
-    child.tab_nav = branch_nav_history(view_nav(app, pi), std::move(visible),
-                                      kMaxNavHistory);
-    for (const auto& entry : child.tab_nav.entries)
-      if (entry.visit) child.inherited_visits.push_back(entry.visit);
-    const auto kind = app.visit_hint.value_or(xanatoo::VisitKind::NewTab);
-    child.origin_kind = kind;
-    child.origin_visit = kind == xanatoo::VisitKind::History ? app.visit_from
-                         : xanatoo::visit_kind_starts_trail(kind)
-                             ? 0 : current_visit(child.tab_nav);
-
-    NavHistoryEntry destination;
-    destination.url = canonical_address(child.path);
-    if (kind == xanatoo::VisitKind::NewTab && child.tab_nav.pos >= 0)
-      destination.via = {href, child.tab_nav.entries.back().url};
-    nav_history_push(child.tab_nav, std::move(destination), kMaxNavHistory,
-                     /*allow_same_url=*/true);
-    if (!child.placeholder) finish_new_tab_history(app, bi);
-  }
-  app.visit_hint.reset();
-  app.visit_from = 0;
-  app.visit_resume = false;  // a new tab is a new visit
-  insert_tab(app, bi, app.panes[pi].buf);
-  update_title(app);
-  flash_status(app, "Opened in new tab: " + buf(app, bi).path);
+  finish_open_tab(app, pi, bi, href, canonical_address(buf(app, bi).path),
+                  inherit_history);
   return bi;
 }
 

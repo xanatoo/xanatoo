@@ -826,6 +826,34 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
       app.context_link_text.clear();
       // A link in the footnote strip, else on the page.
       const bool in_strip = in_footnote_overlay(app, app.focus, lx, my);
+      app.context_image_address.clear();
+      std::string image_src;
+      std::string image_base;
+      if (pane_image_view(p)) {
+        image_src = gallery_image_at(app, p, rx, ry);
+        image_base = base_of(app, p);
+      } else if (!in_strip) {
+        const float y = my + p.scroll_y;
+        // Images are drawn in layout order, so hit the frontmost one first.
+        for (auto it = p.layout.images.rbegin(); it != p.layout.images.rend(); ++it) {
+          if (it->page_w > 0 || it->src.empty() ||
+              lx < it->x || lx >= it->x + it->width ||
+              y < it->y || y >= it->y + it->height)
+            continue;
+          image_src = it->src;
+          image_base = it->base;
+          break;
+        }
+      }
+      if (!image_src.empty()) {
+        if (xanatoo::is_remote_image(image_src)) {
+          app.context_image_address = std::move(image_src);
+        } else {
+          std::error_code ec;
+          auto path = fs::absolute(app.images.resolve(image_src, image_base), ec);
+          if (!ec) app.context_image_address = path.lexically_normal().string();
+        }
+      }
       if (auto hit = in_strip ? footnote_overlay_link(app, app.focus, lx, my)
                               : xanatoo::hit_test_link_ex(doc_of(app, p),
                                                           p.layout, lx, my,

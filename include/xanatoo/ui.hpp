@@ -136,6 +136,8 @@ enum class UiCommand {
   NewBookmarkFolder,     // arg = folder path
   MoveBookmarkFolder,    // arg = from + "\n" + to (rename / re-parent)
   RemoveBookmarkFolder,  // arg = folder path; contents move up one level
+  CopyImage,
+  OpenImageInTab,
   CopyText,        // arg = text for the clipboard (an address)
   OpenLinkInTab,   // arg = href of a link in the focused view: new tab
   OpenLinkInTrail, // arg = href of a link in the focused view: Trail tiles
@@ -624,6 +626,7 @@ struct UiState {
   std::string context_comment_web;     // external HN per-comment permalink
   bool context_can_reply = false;
   std::vector<std::string> context_quote_items;  // "Go to Quoted Message (…)"
+  std::string context_image_address;
   std::string context_link;       // right-clicked link target, if any
   std::string context_link_href;  // … as written in the page
   bool context_link_web = false;  // … and it is http(s): can be downloaded

@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Image context menu
+
+- Added Copy image, Copy image address, and Open image in new tab for
+  document and gallery images. The image actions use the source independently
+  of any enclosing link.
+- Nix suite passed 15,035 checks. An Xvfb smoke test verified bitmap
+  contents, the copied address, and the new gallery tab.
+
 ## Status (2026-11-26) — Standalone image boxes
 
 - Matched standalone remote image boxes to the drawn image or placeholder

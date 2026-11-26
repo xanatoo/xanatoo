@@ -4431,6 +4431,22 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     context_open_ = false;
   }
   if (ImGui::BeginPopup("##doc_context")) {
+    if (!state.context_image_address.empty()) {
+      auto item = [&](const char* label, UiCommand action, bool enabled = true) {
+        if (ImGui::MenuItem(label, nullptr, false, enabled)) {
+          cmd = action;
+          result.arg = state.context_image_address;
+        }
+      };
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+      item("Copy image", UiCommand::CopyImage);
+#else
+      item("Copy image", UiCommand::CopyImage, false);
+#endif
+      item("Copy image address", UiCommand::CopyText);
+      item("Open image in new tab", UiCommand::OpenImageInTab);
+      ImGui::Separator();
+    }
     if (!state.context_link.empty()) {
       if (ImGui::MenuItem("Open Link in New Tab")) {
         cmd = UiCommand::OpenLinkInTab;

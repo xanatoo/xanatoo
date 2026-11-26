@@ -392,6 +392,78 @@ std::string ImageCache::resolve(const std::string& path,
   return resolved.string();
 }
 
+std::string ImageCache::copy_to_clipboard(const std::string& address) const {
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  const std::string path = resolve(address);
+  std::error_code ec;
+  if (!fs::is_regular_file(path, ec)) return "Image is unavailable";
+
+  int w = 0, h = 0;
+  std::vector<unsigned char> decoded;
+  std::unique_ptr<unsigned char, decltype(&stbi_image_free)> pixels(
+      nullptr, stbi_image_free);
+#if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
+  if (backend_) image_backend_decode(path, kMaxPixels, decoded, w, h);
+#endif
+  if (decoded.empty()) {
+    std::string error;
+    pixels.reset(load_rgba(path, w, h, error));
+    if (!pixels) return "Cannot decode image for the clipboard";
+  }
+  auto* rgba = decoded.empty() ? pixels.get() : decoded.data();
+  SDL_Surface* surface = sdl::rgba_surface_from(rgba, w, h, w * 4);
+  if (!surface) return SDL_GetError();
+  SDL_IOStream* stream = SDL_IOFromDynamicMem();
+  const bool saved = stream && SDL_SaveBMP_IO(surface, stream, false);
+  SDL_DestroySurface(surface);
+  if (!saved) {
+    const std::string error = SDL_GetError();
+    if (stream) SDL_CloseIO(stream);
+    return error;
+  }
+
+  struct ClipboardImage {
+    void* data;
+    size_t size;
+  };
+  const auto props = SDL_GetIOProperties(stream);
+  auto* image = new ClipboardImage{
+      SDL_GetPointerProperty(props, SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER,
+                             nullptr),
+      static_cast<size_t>(SDL_GetIOSize(stream))};
+  if (!SDL_SetPointerProperty(props, SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER,
+                              nullptr)) {
+    const std::string error = SDL_GetError();
+    SDL_CloseIO(stream);
+    delete image;
+    return error;
+  }
+  SDL_CloseIO(stream);
+
+  const char* types[] = {"image/bmp"};
+  if (!SDL_SetClipboardData(
+          [](void* userdata, const char* mime, size_t* size) -> const void* {
+            if (!mime) return nullptr;
+            const auto& image = *static_cast<const ClipboardImage*>(userdata);
+            *size = image.size;
+            return image.data;
+          },
+          [](void* userdata) {
+            auto* image = static_cast<ClipboardImage*>(userdata);
+            SDL_free(image->data);
+            delete image;
+          },
+          image, types, 1)) {
+    const std::string error = SDL_GetError();
+    SDL_ClearClipboardData();
+    return error;
+  }
+  return {};
+#else
+  return "Image clipboard requires SDL3";
+#endif
+}
+
 const Image& ImageCache::thumb(const std::string& path, const std::string& base,
                                int max_px) {
   const int edge = max_px <= 128 ? 128 : max_px <= 256 ? 256
