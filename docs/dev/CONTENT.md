@@ -491,7 +491,9 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
   `poll_images` (app_images.cpp) downloads it on 4 workers
   (`https_get_follow_pooled`: kept-alive connections, or the small-net
   client in `fetch_smallnet_image`), stores it with `store_remote_image`
-  and calls `remote_done` (with the failure's reason).
+  and calls `remote_done` (with the failure's reason). On native builds these
+  workers also try restoring missing URL bodies from snapshots or the object
+  store before downloading.
 - `Image::error` says why a picture is not ok: "file not found", the
   decoder's reason (`decode_error`), or the download's (HTTP status,
   connect error, "not an image (text/html)"). The `//gallery` viewer and
@@ -566,7 +568,10 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
 - `XANATOO_THUMTOO` (default ON on desktop): `ImageCache` decodes through
   libvips (`image_backend_decode`, every format vips has) and thumbnails
   asynchronously: `thumb()` returns a pending image and queues the request,
-  `ImageCache::poll()` (from `poll_images`) uploads finished ones. Thumbnails
+  `ImageCache::poll()` (from `poll_images`) uploads up to four finished
+  thumbnails per frame. On native builds a submitter thread calls thumtoo's
+  `request_size`: cache hits may invoke the callback inline, and the callback
+  can compose and decode tiles. Thumbnails
   are durable thumtoo tiles (JPEG, WebP with alpha) of the coarse scales
   only, composed by `get_pixels_from_tiles`; the cache is
   `$XDG_CACHE_HOME/thumtoo`, shared with galapix / biltoo.

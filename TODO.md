@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Image-heavy page stalls
+
+- Traced UI-thread stalls to thumtoo's inline cache-hit callbacks, unbounded
+  texture upload batches, and missing URL body restoration during layout.
+- Moved native thumbnail submission and URL body restoration to workers and
+  limited texture uploads to four per frame.
+- An 80-image warm-cache fixture cut thumbnail submission from 3.56 seconds to
+  under 1 ms and completed all 80 thumbnails. Nix suite passed 15,028 checks.
+
 ## Status (2026-11-26) — Code block spacing
 
 - Moved the stylesheet’s trailing gap below the code block frame. Added a

@@ -2,10 +2,10 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 // thumtoo image backend (see image_backend.hpp). A thumbnail request runs on
-// thumtoo's workers: size probe (cached), then the cache-only TileSynth
+// a submitter or thumtoo worker: size probe (cached), then the cache-only TileSynth
 // lookup, and on a miss one tile pyramid from the scale that still covers
 // kMaxThumbEdge up; every waiting edge of that file is then composed from
-// the tiles. Callbacks run inline on the worker (default Executor); results
+// the tiles. Callbacks run inline (default Executor); results
 // are handed to the main thread through `done`.
 
 #include "xanatoo/image_backend.hpp"
@@ -21,11 +21,14 @@
 #include <vips/vips.h>
 
 #include <algorithm>
+#include <condition_variable>
+#include <deque>
 #include <filesystem>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <set>
+#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -92,9 +95,22 @@ struct ImageBackend {
 
   std::mutex mutex;
   std::map<std::string, std::vector<Waiter>> inflight;  // uri → waiting thumbs
-  std::vector<DecodedImage> done;
-  // Last member: destroyed first, joining the workers that use the rest.
+  std::deque<DecodedImage> done;
+  // Destroy after the submitter joins, then join the workers that use the queues.
   std::unique_ptr<thumtoo::Client> client;
+#ifndef __EMSCRIPTEN__
+  struct Request {
+    std::string key;
+    std::string path;
+    int edge;
+  };
+  std::condition_variable_any ready;
+  std::deque<Request> requests;
+  std::jthread submitter;  // stopped and joined before client destruction
+
+  void submit(std::stop_token stop);
+#endif
+  void request_thumb(const std::string& key, const std::string& path, int edge);
 
   void finish(const std::string& uri) {
     std::vector<Waiter> waiters;
@@ -165,6 +181,11 @@ std::shared_ptr<ImageBackend> image_backend_open() {
     b->client = thumtoo::Client::open(root, {}, kWorkers);
     if (!b->client) return nullptr;
     thumtoo::image_library_init();
+#ifndef __EMSCRIPTEN__
+    b->submitter = std::jthread([backend = b.get()](std::stop_token stop) {
+      backend->submit(stop);
+    });
+#endif
     return b;
   } catch (const std::exception& ex) {
     std::cerr << "thumtoo cache " << root.string() << ": " << ex.what()
@@ -196,48 +217,86 @@ bool image_backend_decode(const std::string& path, long long max_pixels,
   return vips_to_rgba(img, rgba, w, h);
 }
 
-void image_backend_request_thumb(ImageBackend& b, const std::string& key,
+void ImageBackend::request_thumb(const std::string& key,
                                  const std::string& path, int edge) {
   std::string uri;
   try {
     uri = thumtoo::file_uri_from_path(fs::absolute(path));
     {
-      std::lock_guard<std::mutex> lock(b.mutex);
-      auto [it, fresh] = b.inflight.try_emplace(uri);
+      std::lock_guard<std::mutex> lock(mutex);
+      auto [it, fresh] = inflight.try_emplace(uri);
       it->second.push_back({key, std::min(edge, kMaxThumbEdge)});
       if (!fresh) return;  // that file's pyramid is already on its way
     }
-    ImageBackend* bp = &b;
-    b.client->request_size(uri, [bp](std::string u, thumtoo::SizeReply r) {
+    client->request_size(uri, [this](std::string u, thumtoo::SizeReply r) {
       try {
-        bp->on_size(u, r);
+        on_size(u, r);
       } catch (...) {
-        bp->finish(u);  // complete as failed rather than wait indefinitely
+        finish(u);  // complete as failed rather than wait indefinitely
       }
     });
   } catch (...) {
     // A request can fail before it reaches the client's queue. Retire all
     // waiters explicitly, including when URI construction itself failed.
-    std::lock_guard<std::mutex> lock(b.mutex);
-    auto it = b.inflight.find(uri);
-    if (it != b.inflight.end()) {
+    std::lock_guard<std::mutex> lock(mutex);
+    auto it = inflight.find(uri);
+    if (it != inflight.end()) {
       for (const ImageBackend::Waiter& wt : it->second) {
         DecodedImage d;
         d.key = wt.key;
-        b.done.push_back(std::move(d));
+        done.push_back(std::move(d));
       }
-      b.inflight.erase(it);
+      inflight.erase(it);
     } else {
       DecodedImage d;
       d.key = key;
-      b.done.push_back(std::move(d));
+      done.push_back(std::move(d));
     }
   }
 }
 
-std::vector<DecodedImage> image_backend_take_done(ImageBackend& b) {
-  std::lock_guard<std::mutex> lock(b.mutex);
-  return std::exchange(b.done, {});
+#ifndef __EMSCRIPTEN__
+void ImageBackend::submit(std::stop_token stop) {
+  while (!stop.stop_requested()) {
+    Request request;
+    {
+      std::unique_lock lock(mutex);
+      ready.wait(lock, stop, [this] { return !requests.empty(); });
+      if (stop.stop_requested()) return;
+      request = std::move(requests.front());
+      requests.pop_front();
+    }
+    // request_size can call back inline on a cache hit. Both the lookup
+    // and any tile composition and decoding it triggers belong here.
+    request_thumb(request.key, request.path, request.edge);
+  }
+}
+#endif
+
+void image_backend_request_thumb(ImageBackend& b, const std::string& key,
+                                 const std::string& path, int edge) {
+#ifndef __EMSCRIPTEN__
+  {
+    std::lock_guard lock(b.mutex);
+    b.requests.push_back({key, path, edge});
+  }
+  b.ready.notify_one();
+#else
+  b.request_thumb(key, path, edge);
+#endif
+}
+
+std::vector<DecodedImage> image_backend_take_done(ImageBackend& b,
+                                                 size_t limit) {
+  std::lock_guard lock(b.mutex);
+  const size_t count = std::min(limit, b.done.size());
+  std::vector<DecodedImage> out;
+  out.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    out.push_back(std::move(b.done.front()));
+    b.done.pop_front();
+  }
+  return out;
 }
 
 std::string image_backend_vips_version() { return vips_version_string(); }

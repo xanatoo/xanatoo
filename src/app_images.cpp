@@ -236,7 +236,13 @@ void image_worker(std::shared_ptr<ImageFetchShared> sh) {
     {
       xanatoo::TransferMeterScope scope(meter.get());
       try {
-        ok = download_image(url, page, why);
+        // A pruned URL body may still be in the object store. The lookup
+        // and restore can touch SQLite and disk, like the download.
+        const std::string path = xanatoo::remote_image_path(url);
+        std::error_code ec;
+        ok = (!path.empty() && fs::exists(path, ec)) ||
+             xanatoo::snapshot_restore_body(url, path) ||
+             download_image(url, page, why);
       } catch (const std::exception& ex) {
         why = ex.what();
         std::cerr << "image: " << url << ": " << why << "\n";

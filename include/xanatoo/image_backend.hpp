@@ -7,6 +7,7 @@
 // the shared thumtoo cache's durable tiles (coarse scales only), built once
 // on its worker threads. ImageCache falls back to stb_image without it.
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -36,8 +37,8 @@ struct DecodedImage {
   int h = 0;
 };
 
-// Thumbnails finished since the last call (any thread → caller).
-std::vector<DecodedImage> image_backend_take_done(ImageBackend& b);
+// Take up to limit finished thumbnails, oldest completion first.
+std::vector<DecodedImage> image_backend_take_done(ImageBackend& b, std::size_t limit);
 
 // For the about: page: libvips version and the file suffixes its loaders
 // accept (".jpg", ".webp", …, sorted).

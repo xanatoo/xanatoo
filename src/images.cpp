@@ -375,9 +375,9 @@ const Image* ImageCache::remote_placeholder(const std::string& url) {
   const std::string p = remote_image_path(url);
   if (p.empty()) return &kNoCache;
   if (fs::exists(p, ec)) return nullptr;
-  // Pruned from the URL cache, but a snapshot (or the object store) still
-  // has the bytes: no download.
+#ifdef __EMSCRIPTEN__
   if (snapshot_restore_body(url, p)) return nullptr;
+#endif
   pending_.insert(url);
   requests_.push_back(url);
   return &kPending;
@@ -419,7 +419,11 @@ const Image& ImageCache::thumb(const std::string& path, const std::string& base,
 bool ImageCache::poll() {
 #if defined(XANATOO_THUMTOO) && XANATOO_THUMTOO
   if (!backend_) return false;
-  std::vector<DecodedImage> done = image_backend_take_done(*backend_);
+  // A large batch can finish between frames, especially on warm caches.
+  // Limit renderer work while keeping the remaining results queued.
+  constexpr size_t kMaxUploadsPerFrame = 4;
+  std::vector<DecodedImage> done =
+      image_backend_take_done(*backend_, kMaxUploadsPerFrame);
   for (DecodedImage& d : done) {
     thumb_pending_.erase(d.key);
     cache_[d.key] = d.rgba.empty() ? Image{} : to_texture(d.rgba.data(), d.w, d.h);
