@@ -43,10 +43,13 @@ std::string html_page_title(std::string_view html);
 // Remote pages use the site hints for their host (site_hints.hpp).
 Document parse_html_page(std::string_view html, std::string_view page_url = {},
                          bool keep_chrome = true);
-// … with these hints (null = none), whatever the host.
+// … with these hints (null = none), whatever the host; `host_line = false`
+// leaves out the "host · Open in browser" line (native views such as
+// wikipedia:, whose URL bar already offers both).
 struct SiteHints;
 Document parse_html_page(std::string_view html, std::string_view page_url,
-                         bool keep_chrome, const SiteHints* hints);
+                         bool keep_chrome, const SiteHints* hints,
+                         bool host_line = true);
 
 // text/plain body: blank-line separated chunks as code blocks.
 Document plain_text_document(std::string_view text);

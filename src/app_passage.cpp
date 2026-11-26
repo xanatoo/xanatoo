@@ -262,6 +262,12 @@ std::string pane_web_url(App& app, Pane& p) {
   return xanatoo::is_web_url(target) ? target : xanatoo::page_web_url(target);
 }
 
+std::string pane_browser_url(App& app, Pane& p) {
+  if (std::string web = pane_web_url(app, p); !web.empty()) return web;
+  const std::string page = pane_page(app, p);
+  return xanatoo::is_web_url(page) ? page : std::string();
+}
+
 void apply_locator(App& app, int pi, xanatoo::Locator loc) {
   Pane& p = app.panes[pi];
   // Source views replace the presentation, not the underlying document.

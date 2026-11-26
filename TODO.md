@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Leaner Wikipedia page top
+
+- `wikipedia:` pages drop the "host · Open in browser · Open as native view"
+  line (`parse_html_page(…, host_line = false)`).
+- New "Open in Browser" (`UiCommand::OpenInBrowser`) in the URL-bar and
+  page context menus, for any page with a web address.
+- The URL-bar site-search button hides when the service strip already has
+  that search field. The Nix suite passed all checks.
+
 ## Status (2026-11-26) — Progressive document selection
 
 - Ctrl+A grows from the current text block through enclosing structures.

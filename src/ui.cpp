@@ -510,6 +510,7 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::CopyPageUrl:
     case UiCommand::CopyPageWebUrl:
     case UiCommand::Link: return "link";
+    case UiCommand::OpenInBrowser: return "site-web";
     case UiCommand::Paste: return "paste";
     case UiCommand::Replace:
     case UiCommand::ReplaceAll: return "replace";
@@ -2785,6 +2786,8 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           cmd = UiCommand::NavigateUrl;
           result.arg = clipboard;
         }
+        if (url_item("Open in Browser", "site-web", !state.browser_url.empty()))
+          cmd = UiCommand::OpenInBrowser;
         if (state.has_path) {
           ImGui::Separator();
           if (state.page_bookmarked) {
@@ -4562,6 +4565,8 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
                     "Ctrl+Shift+U");
       if (!state.web_page_url.empty())
         menu_item_cmd("Copy Web Page URL", UiCommand::CopyPageWebUrl, cmd);
+      if (!state.browser_url.empty())
+        menu_item_cmd("Open in Browser", UiCommand::OpenInBrowser, cmd);
       if (!state.context_comment_native.empty()) {
         if (ImGui::MenuItem("Copy Link to Comment")) {
           cmd = UiCommand::CopyText;

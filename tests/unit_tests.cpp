@@ -8009,6 +8009,18 @@ void test_html_page() {
     EXPECT(found_native_in_empty);
   }
 
+  // Native views (wikipedia:) leave the host line out: the URL bar has the
+  // Native toggle and Open in Browser.
+  {
+    Document w = parse_html_page("<html><body><p>Text</p></body></html>",
+                                 "https://en.wikipedia.org/wiki/X",
+                                 /*keep_chrome=*/true, nullptr,
+                                 /*host_line=*/false);
+    for (NodeId id : kids_of(w, w.root))
+      for (const auto& s : w.get(id).spans)
+        EXPECT(s.href.rfind("external:", 0) != 0);
+  }
+
   EXPECT_EQ(http_status_line(404), "HTTP 404 Not Found");
   EXPECT_EQ(http_status_line(599), "HTTP 599");
 

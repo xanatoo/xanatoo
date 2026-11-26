@@ -326,7 +326,8 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
 }
 
 Document parse_html_page(std::string_view html, std::string_view page_url,
-                         bool keep_chrome, const SiteHints* hints) {
+                         bool keep_chrome, const SiteHints* hints,
+                         bool host_line) {
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
 
@@ -348,7 +349,7 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
 
   const std::string native_ref =
       is_remote(page_url) ? native_url_for(page_url) : std::string();
-  if (is_remote(page_url)) {
+  if (host_line && is_remote(page_url)) {
     NodeId p = doc.create(NodeKind::Paragraph, root);
     auto& spans = doc.get(p).spans;
     spans.push_back(span(InlineKind::Emphasis, url_host(page_url) + " · "));

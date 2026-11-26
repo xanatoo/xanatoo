@@ -240,6 +240,13 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.search_engine = search_engine_id(app);
   ui_state.site_search = xanatoo::engine_for_address(
       path_of(app, focused_pane(app)), app.search.active);
+  // The page's service strip has a search field for it already.
+  if (const Pane& fp = focused_pane(app);
+      !ui_state.site_search.empty() && fp.head_h > 0 && fp.head_service &&
+      fp.service &&
+      xanatoo::engine_for_address(service_address(app, fp.service_addr),
+                                  app.search.active) == ui_state.site_search)
+    ui_state.site_search.clear();
   ui_state.offered_engines.clear();
   if (xanatoo::engine_for_address(path_of(app, focused_pane(app)),
                                   app.search.engines).empty())
@@ -445,6 +452,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     const std::string& path = path_of(app, focused_pane(app));
     ui_state.alternate_url = xanatoo::alternate_view_url(path);
     ui_state.web_page_url = pane_web_url(app, focused_pane(app));
+    ui_state.browser_url = pane_browser_url(app, focused_pane(app));
     ui_state.native_view = !ui_state.alternate_url.empty() &&
                            xanatoo::native_url_for(path).empty();
     if (auto snap = xanatoo::wayback_ref_from_snapshot_url(path)) {
@@ -2305,6 +2313,16 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       }
       SDL_SetClipboardText(url.c_str());
       flash_status(app, "Copied " + url);
+      break;
+    }
+    case C::OpenInBrowser: {
+      const std::string url = pane_browser_url(app, p);
+      if (url.empty()) {
+        flash_status(app, "No web address for this page");
+        break;
+      }
+      xanatoo::open_external_url(url);
+      flash_status(app, "Opened " + url + " in the browser");
       break;
     }
     case C::CopyPageWebUrl: {

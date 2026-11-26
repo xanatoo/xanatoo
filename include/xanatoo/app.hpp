@@ -2253,6 +2253,9 @@ std::string pane_address(App& app, Pane& p);
 // The http(s) address of a page shown under another one (page_web_url, and
 // the result page of a search:); "" for web pages and pages not on the web.
 std::string pane_web_url(App& app, Pane& p);
+// What Open in Browser opens: pane_web_url, else the page's own http(s)
+// address; "" when the page has none.
+std::string pane_browser_url(App& app, Pane& p);
 // The address spelling of a page: a local path (relative to the cwd) as its
 // file: URL, everything else unchanged.
 std::string page_address(std::string_view page);

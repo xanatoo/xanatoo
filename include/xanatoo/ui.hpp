@@ -196,6 +196,7 @@ enum class UiCommand {
   Copy,
   CopyPageUrl,  // current gemini:// or file path
   CopyPageWebUrl,  // http(s) address of a page with another address (hn:, …)
+  OpenInBrowser,   // the focused page in the system browser (browser_url)
   Paste,
   SelectAll,
   SelectBlock,
@@ -683,6 +684,7 @@ struct UiState {
   // http(s) address of a page shown under another one (hn:, feed:, search:,
   // …); "" for web pages themselves and pages not on the web.
   std::string web_page_url;
+  std::string browser_url;  // what Open in Browser opens; "" = nothing
   // Wayback Machine: where ToggleArchive goes ("" = not available), and
   // whether the focused page already is a snapshot (target = the live page).
   std::string archive_url;
