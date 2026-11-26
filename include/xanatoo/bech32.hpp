@@ -5,6 +5,7 @@
 // Bech32 (BIP-173, not bech32m) as NIP-19 / NIP-49 use it: npub, nsec,
 // note, nevent, nprofile, ncryptsec. Dependency-free.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -17,9 +18,9 @@ std::string bech32_encode_bytes(std::string_view hrp,
                                 const std::vector<uint8_t>& bytes);
 
 // Checks the checksum and returns the lower-case hrp and the 8-bit payload.
-// Accepts up to 200 characters (NIP-49 ncryptsec is longer than BIP-173's
-// 90); mixed case is rejected.
+// Rejects mixed case and inputs longer than max_length. The default
+// accommodates NIP-49 ncryptsec, which exceeds the BIP-173 limit.
 bool bech32_decode_bytes(std::string_view s, std::string& hrp,
-                         std::vector<uint8_t>& bytes);
+                         std::vector<uint8_t>& bytes, std::size_t max_length = 200);
 
 }  // namespace xanatoo

@@ -1203,6 +1203,46 @@ void test_nostr_refs() {
   EXPECT(note.has_value());
   if (note) EXPECT_EQ(*note, pk);
   EXPECT(nostr_bech32("npub", "xyz").empty());
+
+  {
+    const std::string profile =
+        "nostr:nprofile1qywhwumn8ghj7mr4de3kscn00qh8xctwv3mkjcmg9enxzund9uq35"
+        "amnwvaz7tms09exzmtfvshxv6tpw34xze3wvdhk6tcpzamhxue69uhhyetvv9ujuurjd"
+        "9kkzmpwdejhgtcpz4mhxue69uhhyetvv9ujuerpd46hxtnfduhszrnhwden5te0dehhx"
+        "tnvdakz7qpquac67zc9er54ln0kl6e4qp2y6ta3enfcg7ywnayshvlw9r5w6ehssz3st"
+        "j";
+    std::vector<std::string> relays;
+    auto pubkey = nostr_decode_pubkey(profile, &relays);
+    EXPECT(pubkey.has_value());
+    if (pubkey)
+      EXPECT_EQ(*pubkey, "e771af0b05c8e95fcdf6feb3500544d2fb1ccd384788e9f490bb3ee28e8ed66f");
+    const std::vector<std::string> expected_relays = {
+        "wss://lunchbox.sandwich.farm/",
+        "wss://pyramid.fiatjaf.com/",
+        "wss://relay.primal.net/",
+        "wss://relay.damus.io/",
+        "wss://nos.lol/"};
+    EXPECT(relays == expected_relays);
+  }
+
+  {
+    const std::string profile =
+        "nostr:nprofile1qy2hwumn8ghj7un9d3shjtnyv9kh2uewd9hj7qg3waehxw309ahx7"
+        "um5wgh8w6twv5hszxnhwden5te0wpuhyctdd9jzuenfv96x5ctx9e3k7mf0qyt8wumn8"
+        "ghj7un9d3shjtnyd968gmewwp6kytcqyqnxs90qeyssm73jf3kt5dtnk997ujw6ggy6j"
+        "3t0jjzw2yrv6sy22h0e9uk";
+    std::vector<std::string> relays;
+    auto pubkey = nostr_decode_pubkey(profile, &relays);
+    EXPECT(pubkey.has_value());
+    if (pubkey)
+      EXPECT_EQ(*pubkey, "266815e0c9210dfa324c6cba3573b14bee49da4209a9456f9484e5106cd408a5");
+    const std::vector<std::string> expected_relays = {
+        "wss://relay.damus.io/",
+        "wss://nostr.wine/",
+        "wss://pyramid.fiatjaf.com/",
+        "wss://relay.ditto.pub/"};
+    EXPECT(relays == expected_relays);
+  }
 }
 
 void test_nostr_content() {

@@ -81,8 +81,8 @@ std::string bech32_encode_bytes(std::string_view hrp,
 }
 
 bool bech32_decode_bytes(std::string_view str, std::string& hrp,
-                         std::vector<uint8_t>& bytes) {
-  if (str.size() < 8 || str.size() > 200) return false;
+                         std::vector<uint8_t>& bytes, std::size_t max_length) {
+  if (str.size() < 8 || str.size() > max_length) return false;
   bool lower = false, upper = false;
   for (char c : str) {
     if (c < 33 || c > 126) return false;

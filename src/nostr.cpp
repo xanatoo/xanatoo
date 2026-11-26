@@ -48,6 +48,7 @@
 namespace xanatoo {
 namespace {
 
+constexpr std::size_t kNip19MaxLength = 5000;
 
 bool is_hex64(std::string_view s) {
   if (s.size() != 64) return false;
@@ -140,7 +141,7 @@ std::optional<std::string> nostr_decode_event_id(
 
   std::string hrp;
   std::vector<uint8_t> data8;
-  if (!bech32_decode_bytes(t, hrp, data8)) return std::nullopt;
+  if (!bech32_decode_bytes(t, hrp, data8, kNip19MaxLength)) return std::nullopt;
 
   if (hrp == "note") {
     if (data8.size() != 32) return std::nullopt;
@@ -159,7 +160,7 @@ std::optional<std::string> nostr_decode_pubkey(
   std::string t = strip_nostr_prefix(ref);
   std::string hrp;
   std::vector<uint8_t> data8;
-  if (!bech32_decode_bytes(t, hrp, data8)) return std::nullopt;
+  if (!bech32_decode_bytes(t, hrp, data8, kNip19MaxLength)) return std::nullopt;
 
   if (hrp == "npub") {
     if (data8.size() != 32) return std::nullopt;
@@ -1608,7 +1609,7 @@ std::optional<Document> nostr_fetch_thread(std::string_view ref,
     if (!author) id = nostr_decode_event_id(ref, &hint_relays);
     if (!author && !id) {
       if (err)
-        *err = "not a valid note1/nevent1/npub1/hex event id (or nostr:recent)";
+        *err = "Expected a note1, nevent1, npub1, nprofile1, hex event ID, or nostr:recent";
       return std::nullopt;
     }
   }
