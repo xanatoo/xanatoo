@@ -21,6 +21,7 @@
 #include "xanatoo/native.hpp"
 #include "xanatoo/nav_history.hpp"
 #include "xanatoo/history_menu.hpp"
+#include "xanatoo/service_bar.hpp"
 #include "xanatoo/wikipedia.hpp"
 #include "xanatoo/hackernews.hpp"
 #include "xanatoo/time.hpp"
@@ -8062,6 +8063,21 @@ void test_wikipedia() {
   EXPECT_EQ(r->title, "Star_Wars:_Episode_IV");
   EXPECT(!is_wikipedia_ref("wikipedia:"));
   EXPECT(!is_wikipedia_ref("https://en.wikipedia.org/wiki/X"));
+
+  const auto nav = service_navigation("wikipedia:de:Ted_Nelson#Leben");
+  EXPECT_EQ(nav.size(), 1u);
+  if (!nav.empty()) {
+    EXPECT_EQ(nav.front().label, "Wikipedia (de)");
+    const auto& links = nav.front().links;
+    EXPECT_EQ(links.size(), 3u);
+    if (links.size() == 3) {
+      EXPECT_EQ(links[0].ref, "https://de.wikipedia.org/");
+      EXPECT_EQ(links[1].ref, "https://de.wikipedia.org/wiki/Special:Random");
+      EXPECT_EQ(links[2].ref, "https://de.wikipedia.org/wiki/Special:RecentChanges");
+    }
+  }
+  EXPECT(service_navigation("https://de.wikipedia.org/wiki/Ted_Nelson").empty());
+  EXPECT(service_navigation("wikipedia:").empty());
 
   WikipediaRef c{"en", "C++/CLI", ""};
   EXPECT_EQ(wikipedia_rest_url(c),

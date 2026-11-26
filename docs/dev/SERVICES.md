@@ -155,6 +155,10 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   "host · Open in browser · Open as native view" line on top; the URL bar
   has the Native toggle, and "Open in Browser" (`UiCommand::OpenInBrowser`,
   `pane_browser_url`) is in the URL-bar and page context menus.
+- `service_navigation` (`service_bar.hpp`) supplies groups of links for Page
+  Navigation from the native address. Wikipedia supplies the edition's main
+  page, a random article and recent changes. The focused page info cache keeps
+  those groups outside the article document and the service strip.
 - The URL bar's site-search button is hidden while the focused page's
   service strip has a search field for the same engine (Wikipedia, HN, …).
 - `https://*.wikipedia.org/wiki/…` stays an ordinary web page; the

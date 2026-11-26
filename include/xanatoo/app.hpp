@@ -978,7 +978,8 @@ struct SitemapPanel {
 // What the focused web page says about itself (<link rel=…>): feeds for the
 // URL-bar feed button, icons, relations for the page panel, OpenSearch,
 // canonical, language versions. Read from the buffer's raw source once per
-// page (app_sitemap.cpp `focused_page_info`); `gen` counts rebuilds.
+// page (app_sitemap.cpp `focused_page_info`), alongside service navigation
+// generated from its address. `gen` counts rebuilds.
 struct PageInfoCache {
   BufferId buf = kNoBuffer;
   std::string path;
@@ -987,6 +988,7 @@ struct PageInfoCache {
   uint64_t gen = 0;
   std::vector<xanatoo::FeedLink> feeds;
   xanatoo::PageLinks links;
+  std::vector<xanatoo::ServiceRow> service_nav;
 };
 
 // Page panel (app_page.cpp): navigation / side bar chrome of the focused page.

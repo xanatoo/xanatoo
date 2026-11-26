@@ -45,6 +45,10 @@ struct ServiceBar {
 // nullopt when the address belongs to no native service.
 std::optional<ServiceBar> service_bar(std::string_view address);
 
+// Extra groups of links for the Page Navigation panel, generated from a
+// native service address independently of both the document and the strip.
+std::vector<ServiceRow> service_navigation(std::string_view address);
+
 // Accent of a service without a colour of its own (a Discourse or Flarum
 // host): a hue derived from the id, dark enough for a light strip.
 uint32_t service_color_for(std::string_view id);

@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Service page navigation
+
+- Page Navigation gets address-based service links outside the document.
+  Native Wikipedia supplies Main page, Random article and Recent changes.
+- Updated Help for the menu, location-field button and panel. Offline tests
+  cover edition-specific links and native-only dispatch. The Nix suite
+  passed all 15,088 checks.
+
 ## Status (2026-11-26) — Leaner Wikipedia page top
 
 - `wikipedia:` pages drop the "host · Open in browser · Open as native view"

@@ -139,8 +139,8 @@ navigation rows any more.
   buttons).
 - Location-field buttons: **Heading outline** (`outline` icon) whenever the
   page has headings, **Page Navigation** (`navigation` icon) for `<nav>` /
-  sidebar regions or page links. Both may show side by side: pages differ in
-  how much the two overlap, so neither hides the other yet.
+  sidebar regions, page links, or native service shortcuts. Both buttons
+  can appear side by side.
 - The document tab's right-click menu restores normal menu item spacing and
   window padding instead of inheriting the tightly packed tab-strip style.
 - **Split Panes** becomes **Join Panes** with a different icon while the

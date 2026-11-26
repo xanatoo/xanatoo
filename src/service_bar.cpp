@@ -314,6 +314,18 @@ std::optional<ServiceBar> service_bar(std::string_view address) {
   return bar;
 }
 
+std::vector<ServiceRow> service_navigation(std::string_view address) {
+  const auto r = parse_wikipedia_ref(address);
+  if (!r) return {};
+
+  const std::string host = "https://" + r->lang + ".wikipedia.org";
+  const bool english = r->lang == "en";
+  return {{english ? "Wikipedia" : "Wikipedia (" + r->lang + ")",
+           {{"Main page", english ? "wikipedia:Main_Page" : host + "/"},
+            {"Random article", host + "/wiki/Special:Random"},
+            {"Recent changes", host + "/wiki/Special:RecentChanges"}}}};
+}
+
 uint32_t service_color_for(std::string_view id) {
   // FNV-1a → hue; fixed saturation and value keep text on the tint legible.
   uint32_t h = 2166136261u;

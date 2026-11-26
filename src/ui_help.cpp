@@ -400,9 +400,11 @@ const std::vector<UiHelpTopic> kTopics = {
      "Tree of the pages of this site from its sitemap.xml. **Ctrl+Alt+M**."},
     {"related sites", "Related sites",
      "Web sites similar to the focused page's site."},
-    {"page navigation", "Page navigation",
-     "The navigation bars and side bars of the web page, moved into a "
-     "panel. **Ctrl+Alt+P**."},
+    {"page navigation|url_nav", "Page Navigation",
+     "Open the focused page's navigation links with **Ctrl+Alt+P**. "
+     "The panel shows HTML `<nav>` and navigation sidebars, page links "
+     "such as Previous and Next, and shortcuts supplied by native services. "
+     "While the panel is open, the document's navigation regions move into it."},
     {"downloads|tb_downloads", "Downloads",
      "Files being downloaded and the ones finished, with progress and "
      "cancel."},
@@ -556,9 +558,10 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@panel:sitemap", "Site map panel",
      "The site's pages as a tree. ↑/↓ move, ←/→ fold, Enter opens; "
      "middle-click opens in a new tab. Seen pages carry a dot."},
-    {"@panel:page", "Page navigation panel",
-     "Navigation and side bars of the web page as links; click to follow, "
-     "middle-click for a new tab."},
+    {"@panel:page", "Page Navigation panel",
+     "Follows the focused page. Click a link or press Enter to follow it. "
+     "Up, Down, Home and End move the selection and follow any link they select. "
+     "For headings within the document, use Heading Outline (**Ctrl+Shift+O**)."},
     {"@history-this-tab", "This Tab",
      "Show visits from the current tab. Click again for all visits."},
     {"@panel:vertical-tabs", "Vertical Tabs",

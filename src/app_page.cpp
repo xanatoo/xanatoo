@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// Page panel: the navigation and side bars of the focused web page
+// Page panel: service links and the navigation and side bars of the focused page
 // (Chrome nodes `margin_chrome` accepts), shown in a dockable, resizable
 // tool window like the heading outline instead of in the text. A tool view
 // of the focused pane: no document of its own. While it is open the panes
@@ -115,6 +115,13 @@ void rebuild(App& app) {
   pg.key = key;
   pg.built = true;
   pg.rows.clear();
+  for (const xanatoo::ServiceRow& group : info.service_nav) {
+    pg.rows.push_back({PageRow::Label, 0, group.label, {}});
+    for (const xanatoo::ServiceLink& link : group.links) {
+      const auto kind = link.ref.empty() ? PageRow::Text : PageRow::Link;
+      pg.rows.push_back({kind, 0, link.text, link.ref});
+    }
+  }
   // What the page declares about its neighbours (<link rel=next> …): the
   // old browsers' site navigation bar, until it finds a better home.
   const xanatoo::PageLinks& links = info.links;
@@ -193,8 +200,10 @@ size_t page_nav_regions(const xanatoo::Document& doc) {
 }
 
 bool page_has_navigation(App& app) {
-  return focused_pane(app).nav_parts > 0 ||
-         !focused_page_info(app).links.relations.empty();
+  const PageInfoCache& info = focused_page_info(app);
+  return focused_pane(app).nav_parts > 0 || !info.service_nav.empty() ||
+         !info.links.relations.empty() ||
+         (!info.links.canonical.empty() && info.links.canonical != info.path);
 }
 
 void toggle_page_panel(App& app) {

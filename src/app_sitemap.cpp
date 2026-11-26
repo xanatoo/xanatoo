@@ -316,6 +316,7 @@ const PageInfoCache& focused_page_info(App& app) {
   c.raw_size = raw_size;
   c.feeds.clear();
   c.links = {};
+  c.service_nav = xanatoo::service_navigation(path);
   ++c.gen;
   const bool web = xanatoo::starts_with_ci(path, "https://") ||
                    xanatoo::starts_with_ci(path, "http://");
