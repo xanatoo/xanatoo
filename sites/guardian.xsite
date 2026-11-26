@@ -1,0 +1,6 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
+
+(site "theguardian.com"
+  ;; Both lists are readable in sequence. The scripted switches aren't URLs.
+  (drop "[data-container-name=news/most-popular] ul[role=tablist]"))

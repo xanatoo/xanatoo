@@ -247,6 +247,15 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
   rebuilds a comment tree as Thread / flat Message nodes (`alt` = parent
   label; empty messages are skipped, their replies move up). Hints are a
   page-structure layer, not styling: they never touch `.xss` sheets.
+- Whole pages reuse the tolerant HTML element tree for named card overlays
+  and WordPress blocks. An empty, ARIA-labelled HTTP(S) link in an article
+  or list item can link its matching headline. Existing headline links
+  take precedence and conflicting destinations are ignored. WordPress core
+  Query Loop entries become Articles and the core date, terms and author-name
+  blocks become Metadata. Decorative heading pilcrows and WordPress.org
+  glossary hover cards are omitted. The Ghost and Guardian sheets remove
+  redundant changelog dates and scripted Most Viewed tab controls.
+  See [Web rendering test cases](../WEB-RENDERING-CASES.md) for live samples.
 - Related content: `is_related_block` (html_min.hpp) gives a div / section
   / aside / nav / list the chrome role "related" when its class / id
   (`kRelatedParts`, not WordPress `tag-*` / `category-*`) or its first

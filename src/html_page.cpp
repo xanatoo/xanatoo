@@ -28,6 +28,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <unordered_map>
 
 namespace xanatoo {
 
@@ -134,6 +136,154 @@ InlineSpan span(InlineKind kind, std::string text, std::string href = {}) {
   return s;
 }
 
+bool heading_tag(std::string_view tag) {
+  return tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6';
+}
+
+using PageTags = std::unordered_map<const char*, HtmlPageTag>;
+
+void recover_headline_links(PageTags& tags, std::string_view html,
+                            std::string_view base,
+                            const std::vector<HtmlElem>& elements) {
+  struct Candidate {
+    int index;
+    int heading;
+  };
+  std::vector<int> cards(elements.size(), -1);
+  std::vector<int> headings(elements.size(), -1);
+  std::vector<bool> linked(elements.size(), false);
+  std::unordered_map<int, std::vector<Candidate>> titles;
+  std::vector<int> overlays;
+  for (int i = 0; i < std::ssize(elements); ++i) {
+    const auto& el = elements[i];
+    const int p = el.parent;
+    if (p >= 0) {
+      cards[i] = cards[p];
+      headings[i] = headings[p];
+      linked[i] = linked[p] || elements[p].tag == "a";
+    }
+    if (el.tag == "article" || el.tag == "li") {
+      cards[i] = i;
+      headings[i] = -1;
+    }
+    if (heading_tag(el.tag)) headings[i] = i;
+    if (cards[i] >= 0 && headings[i] >= 0 && !linked[i] &&
+        el.close > el.open && el.close < el.end &&
+        (heading_tag(el.tag) || el.tag == "span" || el.tag == "strong"))
+      titles[cards[i]].push_back({i, headings[i]});
+    if (el.tag == "a" && !linked[i] && cards[i] >= 0 && el.close < el.end &&
+        html_has_attr(el.attrs, "aria-label")) {
+      auto inner = html.substr(el.open, el.close - el.open);
+      trim_ascii(inner);
+      if (inner.empty()) overlays.push_back(i);
+    }
+  }
+
+  // A named, empty card overlay supplies a link only when one visible
+  // heading matches. A child of the heading can match when it has a kicker.
+  std::unordered_map<int, std::string> recovered;
+  for (int i : overlays) {
+    const auto& overlay = elements[i];
+    const std::string label = html_attr(overlay.attrs, "aria-label");
+    const std::string href = html_attr(overlay.attrs, "href");
+    if (label.empty() || href.empty() || href.starts_with('#')) continue;
+    const std::string url = resolve_url(base, href);
+    if (!starts_with_ci(url, "https://") && !starts_with_ci(url, "http://"))
+      continue;
+    const auto found = titles.find(cards[i]);
+    if (found == titles.end()) continue;
+    int match = -1;
+    int heading = -1;
+    for (const auto& candidate : found->second) {
+      if (candidate.heading == heading) continue;
+      const auto& target = elements[candidate.index];
+      const auto& title = elements[candidate.heading];
+      if (html_to_plain(html.substr(target.open, target.close - target.open)) !=
+          label)
+        continue;
+      // An explicitly linked headline takes precedence.
+      const auto first = elements.begin() + candidate.heading + 1;
+      const auto last = std::lower_bound(first, elements.end(), title.close,
+                                         [](const HtmlElem& child, size_t stop) {
+                                           return child.lt < stop;
+                                         });
+      if (std::any_of(first, last, [](const HtmlElem& child) {
+            return child.tag == "a" && html_has_attr(child.attrs, "href");
+          }))
+        continue;
+      if (match >= 0) {
+        match = -1;
+        break;
+      }
+      match = candidate.index;
+      heading = candidate.heading;
+    }
+    if (match < 0) continue;
+    auto [it, inserted] = recovered.try_emplace(match, url);
+    if (!inserted && it->second != url) it->second.clear();
+  }
+
+  for (auto& [i, url] : recovered) {
+    if (url.empty()) continue;
+    const auto& el = elements[i];
+    auto& tag = tags[html.data() + el.lt];
+    tag.href = std::move(url);
+    tag.close = html.data() + el.close;
+  }
+}
+
+void map_wordpress_blocks(PageTags& tags, std::string_view html,
+                          const std::vector<HtmlElem>& elements) {
+  const auto rename = [&](const HtmlElem& el, std::string_view name) {
+    tags[html.data() + el.lt].name = name;
+    tags[html.data() + el.close].name = name;
+  };
+  std::unordered_map<int, std::vector<int>> post_templates;
+  for (int i = 0; i < std::ssize(elements); ++i) {
+    const auto& el = elements[i];
+    if (el.tag == "ul" && el.close < el.end &&
+        html_has_class(el.attrs, "wp-block-post-template"))
+      post_templates.try_emplace(i);
+    if (auto it = post_templates.find(el.parent); it != post_templates.end())
+      it->second.push_back(i);
+  }
+  // A core Query Loop is a list of post cards. Make each entry an Article
+  // so its title and metadata can use their normal block layout.
+  for (const auto& [list, items] : post_templates) {
+    if (items.empty() || !std::all_of(items.begin(), items.end(), [&](int i) {
+          const auto& el = elements[i];
+          return el.tag == "li" && el.close < el.end &&
+                 html_has_class(el.attrs, "wp-block-post");
+        }))
+      continue;
+    rename(elements[list], "div");
+    for (int i : items) rename(elements[i], "article");
+  }
+  std::vector<bool> inside_article(elements.size(), false);
+  for (int i = 0; i < std::ssize(elements); ++i) {
+    const auto& el = elements[i];
+    const auto mapped = tags.find(html.data() + el.lt);
+    inside_article[i] = el.tag == "article" ||
+                        (mapped != tags.end() && mapped->second.name == "article") ||
+                        (el.parent >= 0 && inside_article[el.parent]);
+    if (!inside_article[i] || el.close >= el.end ||
+        (el.tag != "div" && el.tag != "p"))
+      continue;
+    if (!html_has_class(el.attrs, "wp-block-post-date") &&
+        !html_has_class(el.attrs, "wp-block-post-terms") &&
+        !html_has_class(el.attrs, "wp-block-post-author-name"))
+      continue;
+    // Some themes wrap fields and their labels in one byline group.
+    const auto& parent = elements[el.parent];
+    if (parent.tag == "div" && parent.close < parent.end &&
+        html_has_class(parent.attrs, "wp-block-group") &&
+        html_has_class(parent.attrs, "entry-meta"))
+      rename(parent, "metadata");
+    else
+      rename(el, "metadata");
+  }
+}
+
 }  // namespace
 
 bool path_uses_html(std::string_view path) {
@@ -222,6 +372,21 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
     for (int m : page.main)
       parts.push_back(html.substr(page.els[m].lt,
                                   page.els[m].end - page.els[m].lt));
+  }
+  PageTags tags;
+  const bool named_links = html.find("aria-label") != std::string_view::npos;
+  const bool wordpress_blocks = html.find("wp-block-post-") != std::string_view::npos;
+  if (named_links || wordpress_blocks) {
+    const auto inferred = hints ? std::vector<HtmlElem>{} : html_elements(html);
+    const auto& elements = hints ? page.els : inferred;
+    if (named_links) recover_headline_links(tags, html, opt.base_url, elements);
+    if (wordpress_blocks) map_wordpress_blocks(tags, html, elements);
+  }
+  if (!tags.empty()) {
+    opt.page_tag = [&tags](const char* lt) -> const HtmlPageTag* {
+      const auto it = tags.find(lt);
+      return it == tags.end() ? nullptr : &it->second;
+    };
   }
   const bool hinted_main = !parts.empty();
   if (!hinted_main) parts.push_back(main_content(html));

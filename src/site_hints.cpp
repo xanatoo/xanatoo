@@ -60,25 +60,11 @@ size_t find_ci(std::string_view h, std::string_view needle, size_t from) {
   return std::string_view::npos;
 }
 
-bool has_class(std::string_view attrs, std::string_view cls) {
-  const std::string v = html_attr(attrs, "class");
-  std::string_view s = v;
-  size_t i = 0;
-  while (i < s.size()) {
-    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
-    size_t e = i;
-    while (e < s.size() && !std::isspace(static_cast<unsigned char>(s[e]))) ++e;
-    if (s.substr(i, e - i) == cls) return true;
-    i = e;
-  }
-  return false;
-}
-
 bool compound_matches(const HintCompound& c, const HtmlElem& el) {
   if (!c.tag.empty() && c.tag != "*" && c.tag != el.tag) return false;
   if (!c.id.empty() && html_attr(el.attrs, "id") != c.id) return false;
   for (const std::string& cls : c.classes)
-    if (!has_class(el.attrs, cls)) return false;
+    if (!html_has_class(el.attrs, cls)) return false;
   for (const auto& [name, value] : c.attrs) {
     if (value.empty() ? !html_has_attr(el.attrs, name)
                       : html_attr(el.attrs, name) != value)

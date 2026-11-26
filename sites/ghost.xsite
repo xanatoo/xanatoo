@@ -1,0 +1,6 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
+
+(site "ghost.org"
+  ;; The changelog cards already contain a full publication date.
+  (drop "article.feed .feed-calendar"))

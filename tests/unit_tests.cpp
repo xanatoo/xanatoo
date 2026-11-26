@@ -7561,6 +7561,123 @@ void test_site_hints() {
   }
 }
 
+void test_html_page_publishing_patterns() {
+  using namespace xanatoo;
+  const std::string base = "https://example.org/index";
+  const auto convert = [&](std::string_view html) {
+    return parse_html_page(html, base, true, nullptr);
+  };
+  {
+    const Document doc = convert(R"(<main>
+      <article><h2>A &amp; B</h2><p>Excerpt</p>
+        <a href="/first" aria-label="A &amp; B"></a>
+        <a href="/first" aria-label="A &amp; B"></a></article>
+      <ul><li><a href="/second" aria-label="Headline"></a>
+        <h3><div>Kicker</div><span>Headline</span></h3>
+        <p>Summary</p></li>
+      <li><h3>Headline</h3></li></ul>
+      <article><a href="/overlay" aria-label="Existing"></a>
+        <h2><a href="/explicit">Existing</a></h2></article>
+      <article><a href="/overlay" aria-label="Ambiguous"></a>
+        <h2>Ambiguous</h2><h2>Ambiguous</h2></article>
+      <article><a href="/conflict-1" aria-label="Conflict"></a>
+        <h2>Conflict</h2><a href="/conflict-2" aria-label="Conflict"></a></article>
+      <article><a href="#other" aria-label="Fragment"></a>
+        <h2>Fragment</h2></article>
+    </main>)");
+    std::vector<std::pair<std::string, std::string>> links;
+    for (const Node& n : doc.nodes)
+      for (const InlineSpan& span : n.spans)
+        if (span.href.starts_with("https://example.org/"))
+          links.emplace_back(span.text, span.href);
+    const decltype(links) expected = {
+        {"A & B", "https://example.org/first"},
+        {"Headline", "https://example.org/second"},
+        {"Existing", "https://example.org/explicit"}};
+    EXPECT(links == expected);
+  }
+  {
+    const Document doc = convert(R"(<main><section id="chapter">
+      <h2>Chapter<a href="#chapter" class="headerlink">&para;</a></h2>
+      <p>See <a href="#chapter">chapter</a> and <a href="#notes"
+        class="headerlink">notes</a>. A glossary <span class="glossary-item-container">
+        term<span class="glossary-item-hidden-content">Definition</span></span>
+        remains.</p><h3 id="notes">Notes<a href="#notes" class="headerlink">¶</a></h3>
+      </section></main>)");
+    const std::string xml = serialize_xml(doc);
+    EXPECT(xml.find("¶") == std::string::npos);
+    EXPECT(xml.find("Definition") == std::string::npos);
+    EXPECT(xml.find("term remains.") != std::string::npos);
+    EXPECT(xml.find("label=\"chapter\"") != std::string::npos);
+    EXPECT(xml.find("label=\"notes\"") != std::string::npos);
+    EXPECT(xml.find("<a href=\"#chapter\">chapter</a>") != std::string::npos);
+    EXPECT(xml.find("<a href=\"#notes\">notes</a>") != std::string::npos);
+  }
+  {
+    const Document doc = convert(R"(<main>
+      <ul class="query wp-block-post-template"><li class="wp-block-post">
+        <h2><a href="/entry">Entry</a></h2>
+        <div class="wp-block-post-date"><time datetime="2026-11-26">Nov 26</time></div>
+        <div class="wp-block-post-terms"><a href="/tag" rel="tag">Tag</a></div>
+        <p>Excerpt</p><ul><li>Ordinary list item</li></ul>
+      </li></ul>
+      <article><h2>Single entry</h2>
+        <div class="wp-block-group entry-meta">By<div
+          class="wp-block-post-author-name"><a href="/author">Author</a></div></div>
+      </article>
+    </main>)");
+    int articles = 0;
+    int metadata = 0;
+    int list_items = 0;
+    for (const Node& n : doc.nodes) {
+      articles += n.kind == NodeKind::Article;
+      list_items += n.kind == NodeKind::ListItem;
+      if (n.kind != NodeKind::Metadata) continue;
+      ++metadata;
+      for (const InlineSpan& span : n.spans) {
+        if (span.text == "Nov 26") EXPECT_EQ(span.datetime, "2026-11-26");
+        if (span.text == "Tag") EXPECT_EQ(span.href, "https://example.org/tag");
+        if (span.text == "Author") EXPECT_EQ(span.href, "https://example.org/author");
+      }
+    }
+    EXPECT_EQ(articles, 2);
+    EXPECT_EQ(metadata, 3);
+    EXPECT_EQ(list_items, 1);
+    EXPECT(serialize_xml(doc).find(
+        ">By <a href=\"https://example.org/author\">Author</a></metadata>") !=
+        std::string::npos);
+  }
+  {
+    const auto with_site = [](const char* file, const char* url, const char* html) {
+      std::ifstream in(std::string(XANATOO_SITES_DIR) + "/" + file);
+      std::stringstream source;
+      source << in.rdbuf();
+      std::string errors;
+      const auto hints = parse_site_hints(source.str(), file, &errors);
+      EXPECT(errors.empty());
+      EXPECT_EQ(hints.size(), 1u);
+      return serialize_xml(parse_html_page(
+          html, url, true, hints.empty() ? nullptr : &hints.front()));
+    };
+    const std::string ghost = with_site("ghost.xsite", "https://ghost.org/changelog/",
+        R"(<main><article class="feed"><div class="feed-calendar">Duplicate</div>
+        <h2>Entry</h2><time datetime="2026-11-26">Full date</time>
+        <a href="/changelog/entry/" aria-label="Entry"></a></article>
+        <div class="feed-calendar">Other calendar</div></main>)");
+    EXPECT(ghost.find("Duplicate") == std::string::npos);
+    EXPECT(ghost.find("Full date") != std::string::npos);
+    EXPECT(ghost.find("Other calendar") != std::string::npos);
+    EXPECT(ghost.find("https://ghost.org/changelog/entry/") != std::string::npos);
+    const std::string guardian = with_site("guardian.xsite", "https://www.theguardian.com/",
+        R"(<main><section data-container-name="news/most-popular">
+        <ul role="tablist"><li>Switch</li></ul><ul><li>Popular story</li></ul>
+        </section><ul role="tablist"><li>Other tabs</li></ul></main>)");
+    EXPECT(guardian.find("Switch") == std::string::npos);
+    EXPECT(guardian.find("Popular story") != std::string::npos);
+    EXPECT(guardian.find("Other tabs") != std::string::npos);
+  }
+}
+
 void test_html_page() {
   using namespace xanatoo;
   EXPECT(is_web_url("https://example.org"));
@@ -9681,6 +9798,7 @@ int main() {
   test_html_chrome_regions();
   test_html_article_boxes();
   test_html_page();
+  test_html_page_publishing_patterns();
   test_site_hints();
   test_related_chrome();
   test_html_link_footnotes();

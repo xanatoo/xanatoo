@@ -56,20 +56,26 @@ image downloads and live interaction were outside the probe.
 | [Ghost Changelog](https://ghost.org/changelog/) | Ghost generator, `a.u-permalink` | Card headings, images, excerpts and dates survive. Headlines are plain text because each card's destination is on a separate empty anchor with an accessible name. A split month/day also appears beside the full date. |
 | [The Guardian Technology](https://www.theguardian.com/uk/technology) | Final redirected URL, source card markup with empty labeled anchors | Headline text, image references and descriptions survive. Lead card headline links are lost, while conventional links in Most viewed survive. Both Most viewed tab labels appear in the reading flow. |
 
-## Follow-up rule candidates
+## Fixes and comparison pages — 2026-11-26
 
-1. Recover named empty links used as card overlays. Ghost and The Guardian
-   demonstrate the same failure with different themes. Start with a link
-   limited to its own card and an accessible name matching the visible
-   headline. Preserve explicit headline links and check that repeated
-   image and text overlays don't add duplicate links.
-2. Treat decorative heading permalink glyphs consistently across Sphinx
-   and Zensical while preserving heading IDs and section navigation.
-   Inspect another generator before choosing a shared markup signature.
-3. Compare WordPress post titles and metadata across two independent
-   themes, including a single post and its archive. Use the existing
-   semantic metadata block where the structure is clear. Evaluate
-   glossary expansions against their plugin markup.
-4. Use a site hint when a failure depends on a publisher's particular
-   structure. First check overlays on a second Ghost theme and compare
-   a Guardian article with its section listing.
+- Ghost Changelog and Guardian Technology share headline-link recovery for
+  empty, ARIA-labelled overlays within an article or list item. Scoped site
+  hints remove the redundant Ghost calendar date and the Guardian's scripted
+  Most Viewed tab switches. The full date and both story lists remain.
+- Python, Requests and FastAPI drop decorative heading pilcrows while
+  retaining section targets. FastAPI's terminal example still displays the
+  literal markup that the publisher escaped in its source.
+- WordPress News now maps core Query Loop cards to articles and styles
+  dates, terms and authors as metadata. The
+  [WordPress News post](https://wordpress.org/news/2026/11/wordpress-7-2-release-candidate-3/)
+  exercises the same fields within an article. The
+  [WordPress.com Blog](https://wordpress.com/blog/) and
+  [9to5Mac](https://9to5mac.com/) use custom theme markup for those fields
+  and retain their existing links and layout structure. The core block
+  rule keys on block classes.
+- The WordPress.org glossary filter preserves the visible term and drops
+  the hover definition on both
+  [Make WordPress Core](https://make.wordpress.org/core/) and
+  [Make WordPress Polyglots](https://make.wordpress.org/polyglots/).
+- [404 Media](https://www.404media.co/) provides a second Ghost theme for
+  comparison. Its conventional headline links continue to work.

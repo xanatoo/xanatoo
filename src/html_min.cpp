@@ -165,6 +165,7 @@ class Builder {
     push(std::move(f));
   }
   void close(const std::string& tag);
+  void open_link(std::string href, std::string_view rel = {});
   void text(std::string_view raw);
   // A TeX formula: in the text, or a paragraph of its own when `display`.
   void math(const std::string& tex, bool display) {
@@ -256,8 +257,10 @@ class Builder {
     frames_.push_back(std::move(f));
   }
   void block_boundary() {
-    if (owner() != INVALID_NODE) add_break();
-    else close_para();
+    const NodeId node = owner();
+    if (node == INVALID_NODE) close_para();
+    else if (doc_.get(node).kind == NodeKind::Metadata) text(" ");
+    else add_break();
   }
   int top_index(std::string_view tag) const;
   char last_char(NodeId n) const;
@@ -663,6 +666,21 @@ bool Builder::close_box_tag(const std::string& tag) {
   return true;
 }
 
+void Builder::open_link(std::string href, std::string_view rel) {
+  if (!href.empty()) href = resolve_url(opt_.base_url, href);
+  if (opt_.anchors && !href.empty() && href[0] != '#') {
+    // Same-page link → in-document "#id".
+    std::string_view page =
+        opt_.page_url.empty() ? opt_.base_url : opt_.page_url;
+    page = page.substr(0, page.find('#'));
+    if (!page.empty() && href.size() > page.size() &&
+        starts_with(href, page) && href[page.size()] == '#')
+      href.erase(0, page.size());
+  }
+  links_.push_back(std::move(href));
+  link_rels_.push_back(rel);
+}
+
 void Builder::open_tag(const std::string& tag, std::string_view attrs) {
   const bool in_leaf = owner() != INVALID_NODE;
 
@@ -683,19 +701,7 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
 
   // Inline markup.
   if (tag == "a") {
-    std::string href = html_attr(attrs, "href");
-    if (!href.empty()) href = resolve_url(opt_.base_url, href);
-    if (opt_.anchors && !href.empty() && href[0] != '#') {
-      // Same-page link → in-document "#id".
-      std::string_view page =
-          opt_.page_url.empty() ? opt_.base_url : opt_.page_url;
-      page = page.substr(0, page.find('#'));
-      if (!page.empty() && href.size() > page.size() &&
-          starts_with(href, page) && href[page.size()] == '#')
-        href.erase(0, page.size());
-    }
-    links_.push_back(std::move(href));
-    link_rels_.push_back(html_social_rel(attrs));
+    open_link(html_attr(attrs, "href"), html_social_rel(attrs));
     return;
   }
   if (tag == "time") {
@@ -854,6 +860,18 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
     emit("• ");
     Frame f;
     f.tag = "li";
+    push(std::move(f));
+    return;
+  }
+
+  if (tag == "metadata" && opt_.sections) {
+    block_boundary();
+    Frame f;
+    f.tag = tag;
+    if (!in_leaf && !in_container()) {
+      f.kind = FrameKind::Leaf;
+      f.node = doc_.create(NodeKind::Metadata, container());
+    }
     push(std::move(f));
     return;
   }
@@ -1070,10 +1088,12 @@ void Builder::close(const std::string& tag) {
   if (tag == "ul" || tag == "ol" || tag == "li" || tag == "blockquote" ||
       tag == "pre" || tag == "table" || tag == "tr" || tag == "td" ||
       tag == "th" || tag == "figcaption" || tag == "caption" ||
+      (tag == "metadata" && opt_.sections) ||
       (tag.size() == 2 && tag[0] == 'h' && tag[1] >= '1' && tag[1] <= '6')) {
     // A list / table close also ends its unclosed items / cells.
-    if (pop_to(tag)) {
-      if (owner() != INVALID_NODE) add_break();
+    if (pop_to(tag) && owner() != INVALID_NODE) {
+      if (tag == "metadata") block_boundary();
+      else add_break();
     }
     return;
   }
@@ -1286,7 +1306,8 @@ bool is_hidden(std::string_view attrs) {
   }
   bool hidden = false;
   for_each_class(attrs, [&](std::string_view tok) {
-    if (tok == "hidden") hidden = true;
+    // WordPress.org's Glossary plugin expands definitions on hover.
+    if (tok == "hidden" || tok == "glossary-item-hidden-content") hidden = true;
     for (std::string_view part : kHiddenClassParts)
       if (tok.find(part) != std::string_view::npos) hidden = true;
     return hidden;
@@ -1687,6 +1708,20 @@ size_t html_element_end(std::string_view html, size_t after_open,
   return html.size();
 }
 
+bool html_has_class(std::string_view attrs, std::string_view cls) {
+  const std::string v = html_attr(attrs, "class");
+  std::string_view s = v;
+  size_t i = 0;
+  while (i < s.size()) {
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) ++i;
+    size_t e = i;
+    while (e < s.size() && !std::isspace(static_cast<unsigned char>(s[e]))) ++e;
+    if (s.substr(i, e - i) == cls) return true;
+    i = e;
+  }
+  return false;
+}
+
 std::string resolve_url(std::string_view base, std::string_view href) {
   std::string_view h = href;
   trim_ascii(h);
@@ -1796,6 +1831,7 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
   Builder b(doc, parent, opt);
   size_t i = 0;
   size_t text_start = 0;
+  const char* headline_close = nullptr;
   auto flush_text = [&](size_t end) {
     if (end > text_start) b.text(html.substr(text_start, end - text_start));
   };
@@ -1841,7 +1877,14 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
     }
     std::string_view inside = html.substr(i + name_at, e - i - name_at);
     std::string name = tag_name(inside);
+    const char* lt = html.data() + i;
+    const HtmlPageTag* page_tag = opt.page_tag ? opt.page_tag(lt) : nullptr;
     if (closing) {
+      if (lt == headline_close) {
+        b.close("a");
+        headline_close = nullptr;
+      }
+      if (page_tag && !page_tag->name.empty()) name = page_tag->name;
       b.close(name);
       i = e + 1;
       continue;
@@ -1972,13 +2015,34 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
         continue;
       }
     }
+    // Sphinx and Zensical add a decorative pilcrow to heading links.
+    // The heading or its enclosing section already supplies the target.
+    if (opt.drop_chrome && !hinted_content && !self_close && name == "a" &&
+        html_has_class(attrs, "headerlink") &&
+        !html_has_attr(attrs, "id") && !html_has_attr(attrs, "name") &&
+        starts_with(html_attr(attrs, "href"), "#")) {
+      const size_t end = html_element_end(html, e + 1, name);
+      const auto inner = html.substr(e + 1, end - e - 1);
+      const size_t close = inner.rfind("</");
+      if (close != std::string_view::npos &&
+          html_to_plain(inner.substr(0, close)) == "¶") {
+        i = text_start = end;
+        continue;
+      }
+    }
     if (opt.drop_chrome && name == "table" && !self_close &&
         is_layout_table(html, e + 1, attrs)) {
       b.open_layout_table();
       i = e + 1;
       continue;
     }
+    if (page_tag && !page_tag->name.empty()) name = page_tag->name;
     b.open(name, attrs);
+    if (!headline_close && page_tag && page_tag->close &&
+        page_tag->close < html.data() + html.size()) {
+      b.open_link(page_tag->href);
+      headline_close = page_tag->close;
+    }
     if (self_close && !one_of(name, kVoidTags)) b.close(name);
     i = e + 1;
   }

@@ -31,6 +31,12 @@ struct HtmlHint {
   const char* end = nullptr;        // just past the element
 };
 
+struct HtmlPageTag {
+  std::string_view name;  // replacement tag name, if any
+  std::string href;  // recovered headline link
+  const char* close = nullptr;  // start of the headline's closing tag
+};
+
 struct HtmlOptions {
   std::string base_url;    // relative href / src resolve against this
   bool gt_quotes = false;  // paragraphs starting with ">" → BlockQuote (HN)
@@ -56,6 +62,8 @@ struct HtmlOptions {
   // source) when set; `hint_replace` builds a Replace element's nodes
   // under `parent`.
   std::function<HtmlHint(const char* lt)> hint;
+  // Semantic markup inferred from the page's element tree.
+  std::function<const HtmlPageTag*(const char* lt)> page_tag;
   std::function<void(Document& doc, NodeId parent, const char* lt)>
       hint_replace;
 };
@@ -80,6 +88,7 @@ std::string html_to_plain(std::string_view html);
 // (`href="x" class=y`), entities decoded; empty when absent.
 std::string html_attr(std::string_view attrs, std::string_view name);
 bool html_has_attr(std::string_view attrs, std::string_view name);
+bool html_has_class(std::string_view attrs, std::string_view token);
 
 // Image URL of an <img>'s attributes: the srcset (or data-srcset) pick,
 // else src, else the lazy-loading data-src / data-lazy-src / data-original
