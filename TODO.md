@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Web rendering audit
+
+- Catalogued 71 candidate URLs in [Web rendering test cases](docs/WEB-RENDERING-CASES.md).
+- Ran live HTML from eight pages through the converter and both layout modes.
+  Prioritize shared card-overlay link recovery and heading permalink handling.
+- Compare independent themes before introducing shared WordPress rules.
+
 ## Status (2026-11-26) — Article metadata
 
 - Add a semantic metadata block for bylines, dates, scores and discussion
