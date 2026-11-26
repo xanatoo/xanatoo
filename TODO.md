@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Nostr directory
+
+- Link Services → Nostr and All services to a bundled Markdown directory
+  of public groups, profiles, publications, clients and projects.
+- Checked 78 link targets for duplicates, local paths and profile checksums.
+  The Nix suite passed 15,037 checks.
+
 ## Status (2026-11-26) — Document Revisions panel
 
 - Follow the focused document when switching tabs or panes. Clear the previous

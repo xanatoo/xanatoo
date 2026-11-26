@@ -73,7 +73,7 @@ Forum engines with many sites:
 ## Social and chat
 
 - [**Bluesky**](services/bluesky.md) — feeds, hashtags and accounts to start with; any account as `bsky:HANDLE`. Try [Discover](bsky:bsky.app/feed/whats-hot) · [Science](bsky:bossett.social/feed/for-science) · [#astronomy](bsky:hashtag/astronomy) · [@bsky.app](bsky:bsky.app)
-- [Nostr: recent notes](nostr:recent) — paste any `npub1…`, `note1…` or `nevent1…`; the **Nostr Explorer** panel follows relays
+- [**Nostr**](services/nostr.md) — people, public groups, publications and apps. Try [recent notes](nostr:recent) · [discover groups](nostr:groups)
 - [**Matrix homeservers**](services/matrix.md) — public room directories and rooms: [matrix.org](matrix:directory/matrix.org) · [Matrix HQ](matrix:r/matrix-hq:matrix.org)
 - Mastodon, Pixelfed and other fediverse accounts publish feeds: see [Social and the Fediverse](directory/social.md)
 

@@ -269,6 +269,10 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
 
 ## Nostr
 
+- Services → **Nostr** opens the bundled `examples/services/nostr.md` directory,
+  also linked from All services. It includes native links to recent notes,
+  profiles and public relay groups alongside web links to ecosystem projects.
+
 - WSS over `TlsStream` (`tls.hpp`).
 - Note/thread fetch gated by `XANATOO_NOSTR` (default ON; needs TLS).
 - secp256k1 backend (`nostr_verify.hpp`, `XANATOO_NOSTR_CRYPTO`):
