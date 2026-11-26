@@ -2,6 +2,11 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Icon-only web links
+
+- Fixed empty WordPress footer bullets by retaining screen-reader labels
+  when a link has no rendered text or image. Added an offline regression.
+
 ## Status (2026-11-26) — Web rendering audit and fixes
 
 - Catalogued 71 candidate URLs in [Web rendering test cases](docs/WEB-RENDERING-CASES.md).

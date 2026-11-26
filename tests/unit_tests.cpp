@@ -7568,6 +7568,26 @@ void test_html_page_publishing_patterns() {
     return parse_html_page(html, base, true, nullptr);
   };
   {
+    const Document doc = convert(R"(<main><ul>
+      <li><a href="/social"><svg aria-hidden="true"><path/></svg>
+        <span class="screen-reader-text">Follow &amp; share</span></a></li>
+      <li><a href="/text"><span class="sr-only">Unused label</span>Visible</a></li>
+      <li><a href="/image"><img src="/icon.png" alt="Icon">
+        <span class="visually-hidden">Unused image label</span></a></li>
+      </ul><span class="sr-only">Outside link</span>
+      <a href="/hidden"><span class="sr-only" aria-hidden="true">Hidden label</span></a>
+    </main>)");
+    const std::string xml = serialize_xml(doc);
+    EXPECT(xml.find("href=\"https://example.org/social\">Follow &amp; share</a>") !=
+           std::string::npos);
+    EXPECT(xml.find("href=\"https://example.org/text\">Visible</a>") !=
+           std::string::npos);
+    EXPECT(xml.find("href=\"https://example.org/image\"") != std::string::npos);
+    EXPECT(xml.find("Unused") == std::string::npos);
+    EXPECT(xml.find("Outside link") == std::string::npos);
+    EXPECT(xml.find("Hidden label") == std::string::npos);
+  }
+  {
     const Document doc = convert(R"(<main>
       <article><h2>A &amp; B</h2><p>Excerpt</p>
         <a href="/first" aria-label="A &amp; B"></a>

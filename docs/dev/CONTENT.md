@@ -228,7 +228,9 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
 - Page chrome (nav / aside / footer / form / dialog, landmark roles, navbox /
   share / cookie classes, what lies around `<main>`) is kept as
   `NodeKind::Chrome` nodes (`summary` = what it is); hidden / sr-only /
-  `opacity:0.00…` text is always dropped (`is_hidden`), except React
+  `opacity:0.00…` text is dropped (`is_hidden`). A screen-reader span inside
+  a link serves as its text fallback when no link text or image survives.
+  The hidden-element filter also makes an exception for React
   streaming-SSR segments `<div hidden id="S:n">` (Next.js sites such as
   lesswrong.com), which hold the whole page. Reader mode is view state (`Pane::reader`, `pane_reader` /
   `set_reader`, default `ViewSettings::reader_mode`): layout leaves Chrome out

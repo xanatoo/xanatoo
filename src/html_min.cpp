@@ -103,8 +103,13 @@ constexpr std::array<ChromeClass, 6> kChromeClassParts = {{
 
 // Class tokens (whole or part) of text nobody sees: always dropped in
 // drop_chrome mode, reader mode or not.
-constexpr std::array<std::string_view, 4> kHiddenClassParts = {
-    "sr-only", "visually-hidden", "screen-reader", "skip-link"};
+constexpr std::array<std::string_view, 3> kScreenReaderClassParts = {
+    "sr-only", "visually-hidden", "screen-reader"};
+
+bool screen_reader_class(std::string_view token) {
+  return std::any_of(kScreenReaderClassParts.begin(), kScreenReaderClassParts.end(),
+                     [&](std::string_view part) { return token.find(part) != token.npos; });
+}
 
 // ARIA landmark roles that are not the content.
 constexpr std::array<ChromeClass, 6> kChromeRoles = {{
@@ -166,6 +171,7 @@ class Builder {
   }
   void close(const std::string& tag);
   void open_link(std::string href, std::string_view rel = {});
+  void note_link_label(std::string_view html);
   void text(std::string_view raw);
   // A TeX formula: in the text, or a paragraph of its own when `display`.
   void math(const std::string& tex, bool display) {
@@ -277,8 +283,13 @@ class Builder {
   std::string pending_id_;  // id= waiting for the next block (anchors mode)
   NodeId para_ = INVALID_NODE;
   int em_ = 0, strong_ = 0, code_ = 0, strike_ = 0;
-  std::vector<std::string> links_;  // "" = <a> without href
-  std::vector<std::string_view> link_rels_;  // social rel of each <a>
+  struct Link {
+    std::string href;
+    std::string_view rel;
+    std::string label;
+    bool rendered = false;
+  };
+  std::vector<Link> links_;
   std::vector<std::string> times_;  // <time datetime="…">, independent of links
   bool pre_start_ = false;          // drop the newline right after <pre>
 };
@@ -422,12 +433,17 @@ void Builder::emit(std::string s) {
   if (t == INVALID_NODE) return;
   std::string href;
   std::string_view rel;
-  for (size_t i = links_.size(); i-- > 0;)
-    if (!links_[i].empty()) {
-      href = links_[i];
-      rel = link_rels_[i];
-      break;
+  for (auto it = links_.rbegin(); it != links_.rend(); ++it) {
+    if (it->href.empty()) continue;
+    href = it->href;
+    rel = it->rel;
+    if (!it->rendered) {
+      std::string_view text = s;
+      trim_ascii(text);
+      it->rendered = !text.empty();
     }
+    break;
+  }
   InlineKind kind = InlineKind::Text;
   if (pre_mode() && href.empty()) kind = InlineKind::Text;  // links stay
   else if (!href.empty()) kind = InlineKind::Link;
@@ -677,8 +693,17 @@ void Builder::open_link(std::string href, std::string_view rel) {
         starts_with(href, page) && href[page.size()] == '#')
       href.erase(0, page.size());
   }
-  links_.push_back(std::move(href));
-  link_rels_.push_back(rel);
+  links_.push_back({std::move(href), rel, {}, false});
+}
+
+void Builder::note_link_label(std::string_view html) {
+  if (links_.empty() || links_.back().href.empty() || links_.back().rendered)
+    return;
+  const std::string text = html_to_plain(html);
+  if (text.empty()) return;
+  auto& label = links_.back().label;
+  if (!label.empty()) label += ' ';
+  label += text;
 }
 
 void Builder::open_tag(const std::string& tag, std::string_view attrs) {
@@ -768,10 +793,11 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
         NodeId im = doc_.create(NodeKind::Image, container());
         doc_.get(im).src = std::move(src);
         doc_.get(im).alt = std::move(alt);
-        if (!links_.empty() && !links_.back().empty()) {
+        if (!links_.empty() && !links_.back().href.empty()) {
           InlineSpan link;
           link.kind = InlineKind::Link;
-          link.href = links_.back();
+          link.href = links_.back().href;
+          links_.back().rendered = true;
           doc_.get(im).spans.push_back(std::move(link));
         }
         take_pending_id(im);
@@ -783,10 +809,14 @@ void Builder::open_tag(const std::string& tag, std::string_view attrs) {
     if (opt_.images && !starts_with(src, "data:")) {
       // In the text: an inline image, linked when inside an <a>.
       InlineSpan im = inline_image(std::move(src), std::move(alt), w, h);
-      if (!links_.empty()) im.href = links_.back();
+      if (!links_.empty()) {
+        im.href = links_.back().href;
+        if (!im.href.empty()) links_.back().rendered = true;
+      }
       doc_.get(t).spans.push_back(std::move(im));
       return;
     }
+    if (!links_.empty()) links_.back().rendered = true;
     push_text(t, InlineKind::Link, alt.empty() ? "[image]" : "[image: " + alt + "]",
               src);
     return;
@@ -1055,8 +1085,9 @@ void Builder::close(const std::string& tag) {
   }
   if (tag == "a") {
     if (!links_.empty()) {
+      if (!links_.back().rendered && !links_.back().label.empty())
+        emit(std::move(links_.back().label));
       links_.pop_back();
-      link_rels_.pop_back();
     }
     return;
   }
@@ -1307,9 +1338,8 @@ bool is_hidden(std::string_view attrs) {
   bool hidden = false;
   for_each_class(attrs, [&](std::string_view tok) {
     // WordPress.org's Glossary plugin expands definitions on hover.
-    if (tok == "hidden" || tok == "glossary-item-hidden-content") hidden = true;
-    for (std::string_view part : kHiddenClassParts)
-      if (tok.find(part) != std::string_view::npos) hidden = true;
+    hidden = tok == "hidden" || tok == "glossary-item-hidden-content" ||
+             tok.find("skip-link") != tok.npos || screen_reader_class(tok);
     return hidden;
   });
   return hidden;
@@ -2004,6 +2034,15 @@ void html_append_blocks(Document& doc, NodeId parent, std::string_view html,
       if (is_hidden(attrs) || !role.empty()) {
         i = html_element_end(html, e + 1, name);
         text_start = i;
+        // Keep an icon-only link usable when its SVG or icon font is skipped.
+        if (name == "span" && !html_has_attr(attrs, "hidden") &&
+            ascii_lower(html_attr(attrs, "aria-hidden")) != "true") {
+          for_each_class(attrs, [&](std::string_view token) {
+            if (!screen_reader_class(token)) return false;
+            b.note_link_label(html.substr(e + 1, i - e - 1));
+            return true;
+          });
+        }
         // A block of chrome becomes a Chrome region (reader mode hides it);
         // hidden text and chrome inside running text are dropped.
         if (!role.empty() && opt.chrome_nodes &&
