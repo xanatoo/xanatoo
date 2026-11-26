@@ -15,8 +15,8 @@
 # file. TARGET.json goes last: it marks the target as complete. A build of
 # an older commit (lower revCount) than the published one is skipped, so
 # overlapping runs cannot roll a target back. Asset names carry the
-# version ("file" in TARGET.json), so the previous build's file is deleted
-# once the new TARGET.json is up.
+# version ("file" and optional "additionalFiles" in TARGET.json).
+# Superseded files are deleted once the new TARGET.json is up.
 #
 # Needs GH_TOKEN (contents: write) and GITHUB_REPOSITORY.
 set -euo pipefail
@@ -43,8 +43,8 @@ fi
 assets() { gh api "repos/$repo/releases/tags/$tag" --jq '.assets[] | "\(.id) \(.name)"'; }
 asset_id() { assets | awk -v n="$1" '$2 == n { print $1; exit }'; }
 
-# The previously published file: "file" in the old TARGET.json, or the
-# fixed name used before file names carried the version.
+# The old metadata lists the previously published files. Older records
+# used a fixed name for the main download.
 legacy_file() {
   case $1 in
     android) echo xanatoo.apk ;;
@@ -52,7 +52,7 @@ legacy_file() {
     *) echo "xanatoo-$1.zip" ;;
   esac
 }
-old_file=
+old_files=
 if [ -n "$(asset_id "$target.json")" ]; then
   old_meta=$(curl -fsSL "https://github.com/$repo/releases/download/$tag/$target.json") \
     || old_meta='{}'
@@ -61,7 +61,7 @@ if [ -n "$(asset_id "$target.json")" ]; then
     echo "Release has $target from revCount $old_count, newer than $rev_count: skipping."
     exit 0
   fi
-  old_file=$(jq -r --arg f "$(legacy_file "$target")" '.file // $f' <<<"$old_meta")
+  old_files=$(jq -r --arg f "$(legacy_file "$target")" '(.file // $f), (.additionalFiles[]?)' <<<"$old_meta")
 fi
 
 replace() {
@@ -85,11 +85,11 @@ for f in "$dir"/*; do
 done
 replace "$meta"
 
-new_file=$(jq -r '.file // empty' "$meta")
-if [ -n "$old_file" ] && [ "$old_file" != "$new_file" ]; then
+while IFS= read -r old_file; do
+  [ -n "$old_file" ] && [ ! -e "$dir/$old_file" ] || continue
   old=$(asset_id "$old_file")
   if [ -n "$old" ]; then
     gh api -X DELETE "repos/$repo/releases/assets/$old"
     echo "Removed $old_file"
   fi
-fi
+done <<<"$old_files"

@@ -151,6 +151,7 @@ let
     pname = "xanatoo-android";
     inherit version;
     dontUnpack = true;
+    passthru = { inherit targetAbis apkName; };
     nativeBuildInputs = buildTools;
     env = buildEnv // {
       APP_SRC_DIR = "${appSrc}";
@@ -164,6 +165,9 @@ let
     installPhase = ''
       mkdir -p $out
       cp out/xanatoo.apk $out/${apkName}
+      for abi in $TARGET_ABIS; do
+        cp "out/xanatoo-$abi.apk" "$out/xanatoo-${version}-$abi.apk"
+      done
     '';
     dontPatchELF = true;
     dontStrip = true;

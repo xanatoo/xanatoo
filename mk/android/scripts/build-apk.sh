@@ -170,10 +170,24 @@ for abi in $TARGET_ABIS; do
   mkdir -p "out/lib/$abi"
   cp src/libs/"$abi"/*.so "out/lib/$abi/"
 done
-( cd out && "$BT/aapt" add base.apk classes.dex && zip -r base.apk lib )
+( cd out && "$BT/aapt" add base.apk classes.dex )
 
-"$BT/zipalign" -f 4 out/base.apk out/aligned.apk
-"$BT/apksigner" sign --ks "$ANDROID_PROJECT_DIR/keystore/debug.keystore" --ks-pass pass:android --key-pass pass:android \
-  --v4-signing-enabled false --out "out/$APP_NAME.new.apk" out/aligned.apk
+package_apk() {
+  local name=$1
+  shift
+  cp out/base.apk out/unsigned.apk
+  ( cd out && zip -r unsigned.apk "$@" )
+  "$BT/zipalign" -f 4 out/unsigned.apk out/aligned.apk
+  "$BT/apksigner" sign --ks "$ANDROID_PROJECT_DIR/keystore/debug.keystore" --ks-pass pass:android --key-pass pass:android \
+    --v4-signing-enabled false --out "out/$name.new.apk" out/aligned.apk
+}
+
+package_apk "$APP_NAME" lib
+for abi in $TARGET_ABIS; do
+  package_apk "$APP_NAME-$abi" "lib/$abi"
+done
 mv "out/$APP_NAME.new.apk" "out/$APP_NAME.apk"
+for abi in $TARGET_ABIS; do
+  mv "out/$APP_NAME-$abi.new.apk" "out/$APP_NAME-$abi.apk"
+done
 "$BT/aapt" dump badging "out/$APP_NAME.apk" | sed -n '1,5p'

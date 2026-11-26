@@ -11,8 +11,9 @@ nix develop .#android -c xanatoo-android-install    # Build and install with adb
 
 The build and install commands stage the current checkout automatically.
 They preserve unchanged native inputs and reuse the NDK object files. Each
-build packages a fresh APK at
-`/tmp/xanatoo-android-build/out/xanatoo.apk`. Set
+build packages the universal `xanatoo.apk` and standalone
+`xanatoo-arm64-v8a.apk`, `xanatoo-armeabi-v7a.apk`, and `xanatoo-x86_64.apk`
+in `/tmp/xanatoo-android-build/out/`. Set
 `XANATOO_ANDROID_BUILD_DIR` to use a different work directory, for example
 when building multiple checkouts. The desktop shell has its own CMake build
 directory and does not load the Android SDK.

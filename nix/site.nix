@@ -22,16 +22,20 @@ let
   website = lib.cleanSource ../website;
   lastModified = self.lastModified or 1;
 
-  metaJson = target: file: pkgs.writeText "${target}.json" (builtins.toJSON {
+  metaJson = target: file: pkgs.writeText "${target}.json" (builtins.toJSON ({
     inherit target version lastModified file;
     rev = self.rev or self.dirtyRev or "";
     revCount = self.revCount or 0;
-  });
+  } // lib.optionalAttrs (target == "android") {
+    additionalFiles = map androidAbiFile androidPackage.targetAbis;
+  }));
 
   # Asset names carry the version and the platform, so downloads of
   # different builds never collide (`+` is not safe in GitHub asset names).
   # <target>.json names the file; fetch-builds.sh and assemble.sh read it.
   fileVersion = lib.replaceStrings [ "+" ] [ "-" ] version;
+  androidPackage = packages.xanatoo-android;
+  androidAbiFile = abi: "xanatoo-${fileVersion}-android-${abi}.apk";
   files = {
     android = "xanatoo-${fileVersion}-android-universal.apk";
     # PortMaster installs the zip under the name its port.json gives.
@@ -52,7 +56,10 @@ let
 
   releases = {
     android = release "android" ''
-      cp ${packages.xanatoo-android}/*.apk "$file"
+      cp ${androidPackage}/${androidPackage.apkName} "$file"
+      ${lib.concatMapStrings (abi: ''
+        cp ${androidPackage}/xanatoo-${version}-${abi}.apk "$out/${androidAbiFile abi}"
+      '') androidPackage.targetAbis}
     '';
     r36s = release "r36s" ''
       cp ${packages.xanatoo-r36s-portmaster-zip}/xanatoo.zip "$file"

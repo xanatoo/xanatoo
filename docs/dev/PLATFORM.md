@@ -84,7 +84,10 @@ The website <https://xanatoo.github.io/> is built from `website/`
   `-windows-x86_64.zip`, `-windows-i686.zip`, `-wasm32.tar.gz`; only R36S
   stays `xanatoo.zip` (the name PortMaster's `port.json` gives). The site
   serves `downloads/<file>` and links them through `@file-<target>@`;
-  `publish-build.sh` deletes the previous `file` once the new json is up;
+  Android also publishes standalone APKs with the suffixes `-arm64-v8a`,
+  `-armeabi-v7a`, and `-x86_64` before `.apk`. Its release metadata lists
+  these under `additionalFiles` and uses the universal APK for `file`.
+  `publish-build.sh` deletes superseded assets once the new json is up;
   `fetch-builds.sh` still reads older records (no `file`: the old fixed
   names). `website/404.html` (Pages serves it for missing paths) sends old
   or outdated `downloads/*.apk|zip` links to `/#download`.

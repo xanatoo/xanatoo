@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Android APKs by architecture
+
+- Package the universal APK and standalone arm64-v8a, armeabi-v7a, and
+  x86_64 APKs from one native build. CI publishes all four and removes
+  superseded assets using the release metadata.
+- Verified signing, ZIP alignment, and native library ABIs for all four APKs
+  using cached Android build outputs.
+
 ## Status (2026-11-26) — Service page navigation
 
 - Page Navigation gets address-based service links outside the document.
