@@ -33,8 +33,9 @@ nix build .#xanatoo-android-arm64-v8a
 nix run .#xanatoo-android-install-arm64-v8a
 ```
 
-The per-ABI targets share the Android build and select one APK from it.
-The build target places just that APK in `result/`.
+Each per-ABI target builds native code and dependencies for the selected
+architecture only. The build target places its APK in `result/`, and the
+install target builds that same APK and installs it with adb.
 
 Same pipeline as Kurvenrausch / Pingus (`nix/android.nix`, `mk/android/`):
 

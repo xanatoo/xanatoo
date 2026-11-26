@@ -45,8 +45,8 @@ ports, the SDL3 transition and Android.
   tree persist in `XANATOO_ANDROID_BUILD_DIR` (default
   `/tmp/xanatoo-android-build`). Packaged builds share the recipe in
   `nix/android.nix` and `mk/android/`. Append an ABI suffix to
-  `.#xanatoo-android` or `.#xanatoo-android-install` to select a standalone
-  APK. See `docs/ANDROID.md`.
+  `.#xanatoo-android` or `.#xanatoo-android-install` to build and package
+  only that ABI. See `docs/ANDROID.md`.
 - Built with `XANATOO_FONTCONFIG=0`, SQLite (amalgamation) and the network
   clients on Mbed TLS; keep code compiling with `-DXANATOO_FONTCONFIG=OFF`
   and `-DXANATOO_TLS=mbedtls` (desktop CMake accepts both). New `src/*.cpp`

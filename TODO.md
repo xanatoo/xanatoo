@@ -9,7 +9,10 @@
   superseded assets using the release metadata.
 - Verified signing, ZIP alignment, and native library ABIs for all four APKs
   using cached Android build outputs.
-- Added ABI-suffixed Nix package and adb install targets for all three APKs.
+- ABI-suffixed Nix package and adb install targets compile the app, SDL,
+  and image libraries for the selected architecture only.
+- Built the arm64-v8a Nix target and verified the APK signature, alignment,
+  and ABI. Checked native dependency graphs for all three targets.
 
 ## Status (2026-11-26) — Service page navigation
 

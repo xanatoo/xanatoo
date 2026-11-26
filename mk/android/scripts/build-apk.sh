@@ -183,11 +183,14 @@ package_apk() {
 }
 
 package_apk "$APP_NAME" lib
-for abi in $TARGET_ABIS; do
-  package_apk "$APP_NAME-$abi" "lib/$abi"
-done
+read -r -a abis <<< "$TARGET_ABIS"
+if (( ${#abis[@]} > 1 )); then
+  for abi in "${abis[@]}"; do
+    package_apk "$APP_NAME-$abi" "lib/$abi"
+  done
+  for abi in "${abis[@]}"; do
+    mv "out/$APP_NAME-$abi.new.apk" "out/$APP_NAME-$abi.apk"
+  done
+fi
 mv "out/$APP_NAME.new.apk" "out/$APP_NAME.apk"
-for abi in $TARGET_ABIS; do
-  mv "out/$APP_NAME-$abi.new.apk" "out/$APP_NAME-$abi.apk"
-done
 "$BT/aapt" dump badging "out/$APP_NAME.apk" | sed -n '1,5p'

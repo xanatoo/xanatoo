@@ -30,15 +30,15 @@
 }:
 
 let
-  abis = pkgs.lib.concatStringsSep " " targetAbis;
+  abiList = pkgs.lib.concatStringsSep " ";
 
   # ndk-build entry point: every subdirectory's Android.mk (SDL, FreeType,
   # the app).
   topAndroidMk = pkgs.writeText "Android.mk" "include $(call all-subdir-makefiles)\n";
 
-  applicationMk = pkgs.writeText "Application.mk" ''
+  applicationMkFor = abis: pkgs.writeText "Application.mk" ''
     APP_STL := c++_shared
-    APP_ABI := ${abis}
+    APP_ABI := ${abiList abis}
     APP_PLATFORM := android-${packagePlatform}
   '';
 
@@ -50,7 +50,7 @@ let
     ];
   };
 
-  sdlAndroidLibs = pkgs.stdenvNoCC.mkDerivation {
+  sdlAndroidLibsFor = abis: pkgs.stdenvNoCC.mkDerivation {
     pname = "sdl3-android-libs";
     version = sdlVersion;
     dontUnpack = true;
@@ -60,7 +60,7 @@ let
       COMPILE_PLATFORM = compilePlatform;
       PACKAGE_PLATFORM = packagePlatform;
       SDL_SRC = "${sdlSrc}";
-      APPLICATION_MK = applicationMk;
+      APPLICATION_MK = applicationMkFor abis;
       TOP_ANDROID_MK = topAndroidMk;
     };
     buildPhase = ''
@@ -71,7 +71,7 @@ let
     '';
     installPhase = ''
       runHook preInstall
-      TARGET_ABIS=${pkgs.lib.escapeShellArg abis} bash ${../mk/android/scripts/install-sdl-libs.sh}
+      TARGET_ABIS=${pkgs.lib.escapeShellArg (abiList abis)} bash ${../mk/android/scripts/install-sdl-libs.sh}
       runHook postInstall
     '';
     # Android ELF: the host's patchelf and strip must keep off.
@@ -93,16 +93,16 @@ let
   };
 
   # Prebuilt C libraries for thumtoo, one directory per ABI.
-  imageLibs = pkgs.linkFarm "xanatoo-android-imagelibs" (map (abi: {
+  imageLibsFor = abis: pkgs.linkFarm "xanatoo-android-imagelibs" (map (abi: {
     name = abi;
     path = import ./android-imagelibs.nix { inherit nixpkgs abi; system = pkgs.stdenv.buildPlatform.system; };
-  }) targetAbis);
+  }) abis);
 
-  sdlPrebuiltMk = pkgs.writeText "SDL3-prebuilt-Android.mk" ''
+  sdlPrebuiltMk = sdlLibs: pkgs.writeText "SDL3-prebuilt-Android.mk" ''
     LOCAL_PATH := $(call my-dir)
     include $(CLEAR_VARS)
     LOCAL_MODULE := SDL3
-    LOCAL_SRC_FILES := ${sdlAndroidLibs}/lib/$(TARGET_ARCH_ABI)/libSDL3.so
+    LOCAL_SRC_FILES := ${sdlLibs}/lib/$(TARGET_ARCH_ABI)/libSDL3.so
     include $(PREBUILT_SHARED_LIBRARY)
   '';
 
@@ -125,66 +125,72 @@ let
     pkgs.python3 pkgs.librsvg
   ];
 
-  buildEnv = {
-    ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-    BUILD_TOOLS_VERSION = buildToolsVersion;
-    PACKAGE_PLATFORM = packagePlatform;
-    COMPILE_PLATFORM = compilePlatform;
-    TARGET_ABIS = abis;
-    APP_NAME = "xanatoo";
-    FREETYPE_SRC = "${pkgs.freetype.src}";
-    DEJAVU_DIR = "${pkgs.dejavu_fonts}/share/fonts/truetype";
-    # Mozilla's roots (follows nixpkgs); old Android stores lack ISRG Root X1.
-    CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    SQLITE_SRC = sqliteAmalgamation;
-    MBEDTLS_SRC = "${pkgs.mbedtls.src}";
-    SECP256K1_SRC = "${pkgs.secp256k1.src}";
-    IMAGELIBS = imageLibs;
-    APPLICATION_MK = applicationMk;
-    TOP_ANDROID_MK = topAndroidMk;
-    SDL_PREBUILT_MK = sdlPrebuiltMk;
-    SDL_ANDROID_LIBS = sdlAndroidLibs;
-    APP_VERSION = version;
-    VERSION_CODE = toString versionCode;
-  };
+  sdlAndroidLibs = sdlAndroidLibsFor targetAbis;
+  imageLibs = imageLibsFor targetAbis;
 
-  apk = pkgs.stdenvNoCC.mkDerivation {
-    pname = "xanatoo-android";
-    inherit version;
-    dontUnpack = true;
-    passthru = { inherit targetAbis apkName; };
-    nativeBuildInputs = buildTools;
-    env = buildEnv // {
-      APP_SRC_DIR = "${appSrc}";
-      ANDROID_PROJECT_DIR = "${../mk/android}";
-    };
-    buildPhase = ''
-      runHook preBuild
-      bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh"
-      runHook postBuild
-    '';
-    installPhase = ''
-      mkdir -p $out
-      cp out/xanatoo.apk $out/${apkName}
-      for abi in $TARGET_ABIS; do
-        cp "out/xanatoo-$abi.apk" "$out/xanatoo-${version}-$abi.apk"
-      done
-    '';
-    dontPatchELF = true;
-    dontStrip = true;
-  };
-
-  abiPackages = pkgs.lib.listToAttrs (map (abi:
-    let
-      name = "xanatoo-android-${abi}";
-      file = abiApkName abi;
+  buildEnvFor = abis:
+    let sdlLibs = sdlAndroidLibsFor abis;
     in {
-      inherit name;
-      value = pkgs.runCommand "${name}-${version}" { } ''
-        mkdir -p "$out"
-        cp ${apk}/${file} "$out/${file}"
+      ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
+      BUILD_TOOLS_VERSION = buildToolsVersion;
+      PACKAGE_PLATFORM = packagePlatform;
+      COMPILE_PLATFORM = compilePlatform;
+      TARGET_ABIS = abiList abis;
+      APP_NAME = "xanatoo";
+      FREETYPE_SRC = "${pkgs.freetype.src}";
+      DEJAVU_DIR = "${pkgs.dejavu_fonts}/share/fonts/truetype";
+      # Mozilla's roots (follows nixpkgs); old Android stores lack ISRG Root X1.
+      CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      SQLITE_SRC = sqliteAmalgamation;
+      MBEDTLS_SRC = "${pkgs.mbedtls.src}";
+      SECP256K1_SRC = "${pkgs.secp256k1.src}";
+      IMAGELIBS = imageLibsFor abis;
+      APPLICATION_MK = applicationMkFor abis;
+      TOP_ANDROID_MK = topAndroidMk;
+      SDL_PREBUILT_MK = sdlPrebuiltMk sdlLibs;
+      SDL_ANDROID_LIBS = sdlLibs;
+      APP_VERSION = version;
+      VERSION_CODE = toString versionCode;
+    };
+
+  makeApk = abi:
+    let
+      universal = abi == null;
+      abis = if universal then targetAbis else [ abi ];
+      nameSuffix = pkgs.lib.optionalString (!universal) "-${abi}";
+      file = if universal then apkName else abiApkName abi;
+    in pkgs.stdenvNoCC.mkDerivation {
+      pname = "xanatoo-android${nameSuffix}";
+      inherit version;
+      dontUnpack = true;
+      passthru = pkgs.lib.optionalAttrs universal { inherit targetAbis apkName; };
+      nativeBuildInputs = buildTools;
+      env = buildEnvFor abis // {
+        APP_SRC_DIR = "${appSrc}";
+        ANDROID_PROJECT_DIR = "${../mk/android}";
+      };
+      buildPhase = ''
+        runHook preBuild
+        bash "$ANDROID_PROJECT_DIR/scripts/build-apk.sh"
+        runHook postBuild
       '';
-    }) targetAbis);
+      installPhase = ''
+        mkdir -p $out
+        cp out/xanatoo.apk "$out/${file}"
+      '' + pkgs.lib.optionalString universal ''
+        for abi in $TARGET_ABIS; do
+          cp "out/xanatoo-$abi.apk" "$out/xanatoo-${version}-$abi.apk"
+        done
+      '';
+      dontPatchELF = true;
+      dontStrip = true;
+    };
+
+  apk = makeApk null;
+  abiPackages = pkgs.lib.listToAttrs (map (abi: {
+    name = "xanatoo-android-${abi}";
+    value = makeApk abi;
+  }) targetAbis);
 
   devCommand = name: action: pkgs.writeShellScriptBin name ''
     set -euo pipefail
@@ -224,7 +230,7 @@ let
       "Install the xanatoo APK for ${abi} with adb";
   }) targetAbis);
 
-  devShell = pkgs.mkShell (buildEnv // {
+  devShell = pkgs.mkShell (buildEnvFor targetAbis // {
     packages = buildTools ++ [
       pkgs.android-tools
       pkgs.util-linux
