@@ -84,7 +84,7 @@ Document flarum_list_document(const Json& reply, const ForumRef& ref) {
     NodeId head = doc.create(NodeKind::Header, art);
     add_link(doc, head, str(*a, "title"), fl_ref(ref, "d/" + id));
     if (json_get(*a, "isSticky") && json_get(*a, "isSticky")->b) add_meta(doc, head, " (sticky)");
-    NodeId cap = doc.create(NodeKind::Caption, art);
+    NodeId cap = doc.create(NodeKind::Metadata, art);
     add_meta(doc, cap, count(std::max(0LL, num(*a, "commentCount") - 1), "reply", "replies"));
     if (auto u = users.find(rel_id(d, "user")); u != users.end()) {
       add_sep(doc, cap);

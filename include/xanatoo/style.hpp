@@ -66,6 +66,7 @@ enum class BlockRole : uint8_t {
   Article,        // gap (space-before / -after) between articles on one page
   Page,           // fixed-layout page: gap after, sheet while loading, frame
   Gallery,        // `//gallery` grid view: background (the paper), text colour
+  Metadata,       // bylines and related publication / activity details
   Count
 };
 constexpr size_t kBlockRoleCount = static_cast<size_t>(BlockRole::Count);

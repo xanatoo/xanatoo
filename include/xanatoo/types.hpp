@@ -50,6 +50,7 @@ enum class NodeKind : uint8_t {
   Page,            // fixed-layout page (PDF / DjVu / comic), drawn from tiles
   Summary,  // first child of a Stretch: the blocks shown instead of the rest
             // while it is folded
+  Metadata,  // inline byline, provenance, or activity details for a composition
 };
 
 enum class InlineKind : uint8_t {

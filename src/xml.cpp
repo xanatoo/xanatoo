@@ -210,6 +210,7 @@ const char* block_tag(const Node& n) {
     case NodeKind::Definition: return "def";
     case NodeKind::Figure: return "figure";
     case NodeKind::Caption: return "caption";
+    case NodeKind::Metadata: return "metadata";
     case NodeKind::Biblio: return "biblio";
     case NodeKind::BiblioEntry: return "ref";
     case NodeKind::Table: return "table";
@@ -246,6 +247,7 @@ bool block_kind(std::string_view s, NodeKind& kind, int& level) {
       {"codeblock", NodeKind::CodeBlock}, {"note", NodeKind::Note},
       {"deflist", NodeKind::DefList}, {"term", NodeKind::Term},
       {"def", NodeKind::Definition}, {"figure", NodeKind::Figure},
+      {"metadata", NodeKind::Metadata},
       {"caption", NodeKind::Caption}, {"biblio", NodeKind::Biblio},
       {"ref", NodeKind::BiblioEntry}, {"table", NodeKind::Table},
       {"tr", NodeKind::TableRow}, {"td", NodeKind::TableCell},
@@ -313,6 +315,7 @@ bool accepts_inline(NodeKind kind) {
     case NodeKind::Term:
     case NodeKind::Definition:
     case NodeKind::Caption:
+    case NodeKind::Metadata:
     case NodeKind::BiblioEntry:
     case NodeKind::TableCell:
     case NodeKind::Message: return true;

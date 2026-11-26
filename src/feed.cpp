@@ -759,7 +759,7 @@ void build_articles(Document& doc, NodeId root, const FeedInfo& f,
     const std::string& author = !e.author.empty() ? e.author : f.author;
     const std::string date = format_date(e.date);
     if (!author.empty() || !date.empty()) {
-      NodeId cap = doc.create(NodeKind::Caption, art);
+      NodeId cap = doc.create(NodeKind::Metadata, art);
       std::string meta = author;
       if (!author.empty() && !date.empty()) meta += " · ";
       meta += date;

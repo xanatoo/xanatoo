@@ -28,7 +28,7 @@ bool is_text_node_kind(NodeKind k) {
          k == NodeKind::BlockQuote ||
          k == NodeKind::Note || k == NodeKind::CodeBlock ||
          k == NodeKind::Term || k == NodeKind::Definition ||
-         k == NodeKind::Caption || k == NodeKind::BiblioEntry ||
+         k == NodeKind::Caption || k == NodeKind::Metadata || k == NodeKind::BiblioEntry ||
          k == NodeKind::TableCell;
 }
 

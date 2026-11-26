@@ -211,7 +211,7 @@ std::optional<Document> decode_document(std::string_view bytes) {
     n.label = r.s();
     n.tags = r.s();
     n.style = r.s();
-    if (n.kind > NodeKind::Summary || !in_range(n.id) || !in_range(n.parent))
+    if (n.kind > NodeKind::Metadata || !in_range(n.id) || !in_range(n.parent))
       return std::nullopt;
     doc.nodes.push_back(std::move(n));
   }

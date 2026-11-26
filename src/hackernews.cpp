@@ -290,7 +290,7 @@ void append_link(Document& doc, NodeId para, std::string text, std::string href)
 }
 
 // A story is an article in a ranked list, and a message when opened with its
-// comments. Both use a heading for the story and a caption for its metadata.
+// comments. Both use a heading for the story and a metadata block beneath it.
 // The source hostname is part of the heading, but is semantically metadata
 // so the style sheet can make it small without changing the story link.
 NodeId append_story(Document& doc, NodeId thread, const HnItem& st,
@@ -322,7 +322,7 @@ NodeId append_story(Document& doc, NodeId thread, const HnItem& st,
     doc.get(title).spans.push_back(std::move(source));
   }
 
-  NodeId foot = doc.create(NodeKind::Caption, entry);
+  NodeId foot = doc.create(NodeKind::Metadata, entry);
   if (!rank.empty()) doc.append_text(foot, rank + " · ");
   if (!with_text) {
     doc.append_text(foot, std::to_string(st.points) +

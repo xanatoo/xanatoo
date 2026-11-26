@@ -767,9 +767,12 @@ Document parse_markup(std::string_view source) {
       continue;
     }
     if (trimmed == ":::heading" || starts_with(trimmed, ":::heading ") ||
-        trimmed == ":::header" || starts_with(trimmed, ":::header ")) {
+        trimmed == ":::header" || starts_with(trimmed, ":::header ") ||
+        trimmed == ":::metadata" || starts_with(trimmed, ":::metadata ")) {
       // Legacy :::header is an input alias; :::heading is canonical.
-      NodeId n = doc.create(NodeKind::Header, current_parent());
+      const bool metadata = starts_with(trimmed, ":::metadata");
+      NodeId n = doc.create(metadata ? NodeKind::Metadata : NodeKind::Header,
+                            current_parent());
       read_fence_style(doc, n, trimmed);
       std::string id = fence_attr(trimmed, "id");
       if (id.empty()) id = fence_attr(trimmed, "label");
@@ -1883,9 +1886,10 @@ void serialize_node(const Document& doc, NodeId id, std::string& out,
       break;
     }
 
-    case NodeKind::Header: {
+    case NodeKind::Header:
+    case NodeKind::Metadata: {
       out += pad;
-      out += ":::heading";
+      out += node.kind == NodeKind::Metadata ? ":::metadata" : ":::heading";
       out += style_attr;
       if (!node.label.empty()) {
         out += " id=\"";
@@ -3119,8 +3123,9 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
     return;
   }
 
-  if (tag == "caption") {
-    NodeId n = doc.create(NodeKind::Caption, parent);
+  if (tag == "caption" || tag == "metadata") {
+    NodeId n = doc.create(tag == "metadata" ? NodeKind::Metadata : NodeKind::Caption,
+                          parent);
     fill_inlines(doc.get(n), e.kids, 1);
     return;
   }

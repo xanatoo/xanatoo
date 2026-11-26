@@ -1,7 +1,7 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;
 ;; Hacker News — beige page, orange thread band, readable story headings with
-;; small inline hostnames and quiet metadata captions, plain comment threads.
+;; small inline hostnames and quiet bylines, plain comment threads.
 
 (stylesheet
   (name "Hacker News")
@@ -26,6 +26,7 @@
   (role section     (indent 0) (space-before 0) (space-after 0))
   (role article     (space-after 0.7em))
   (role caption     (font small) (color grey) (space-after 0.1em))
+  (role metadata-block (color grey) (space-after 0.1em))
   (role thread      (background orange) (color "#000000")
                     (space-before 0.4em) (space-after 0.6em))
   (role message     (font small) (space-before 0.3em) (space-after 0.85em)

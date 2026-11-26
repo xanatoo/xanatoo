@@ -341,10 +341,18 @@ void LayoutEngine::contain_floats(size_t first, float& y) {
   floats_.resize(first);
 }
 
+static bool next_is_metadata(const Document& doc,
+                             const std::vector<NodeId>& children,
+                             size_t index) {
+  return index + 1 < children.size() &&
+         doc.get(children[index + 1]).kind == NodeKind::Metadata;
+}
+
 void LayoutEngine::layout_children_sequential(
     const Document& doc, const std::vector<NodeId>& children, float x, float& y,
     float max_width, LayoutResult& out) {
-  for (NodeId child : children) {
+  for (size_t i = 0; i < children.size(); ++i) {
+    const NodeId child = children[i];
     if (child == INVALID_NODE) continue;
     const NodeKind kind = doc.get(child).kind;
     const bool floating = (kind == NodeKind::Image || kind == NodeKind::Figure ||
@@ -369,7 +377,8 @@ void LayoutEngine::layout_children_sequential(
     if (kind != NodeKind::Aside && !floating && !row_follower &&
         try_skip_block(child, x, y, max_width, out))
       continue;
-    layout_node(doc, child, x, y, max_width, out);
+    layout_node(doc, child, x, y, max_width, out,
+                next_is_metadata(doc, children, i));
   }
 }
 
@@ -1328,7 +1337,7 @@ void seed_table_weights(Document& doc, const LayoutResult& layout, NodeId table)
 
 void LayoutEngine::layout_node(const Document& doc, NodeId id,
                                float x, float& y, float max_width,
-                               LayoutResult& out) {
+                               LayoutResult& out, bool followed_by_metadata) {
   if (id == INVALID_NODE) return;
   const Node& node = doc.get(id);
   if (node.id != id) return;  // stale child id → invalid-node sentinel
@@ -1509,7 +1518,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       y += (node.level == 1) ? 12.f : 8.f;
       layout_paragraph(doc, node, x, y, max_width, out, role,
                        BlockRole::Header);
-      y += (node.level == 1) ? 14.f : 10.f;
+      if (!followed_by_metadata) y += (node.level == 1) ? 14.f : 10.f;
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
     }
@@ -1560,7 +1569,7 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       float_band(text_y, y, band_x, band_w);
       if (band_w > 0.f)
         add_role_band(BlockRole::Header, id, band_x, text_y, band_w, y, out);
-      y += after(BlockRole::Header);
+      if (!followed_by_metadata) y += after(BlockRole::Header);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
     }
@@ -1614,12 +1623,20 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       // Always materialise title headers so fold state stays visible.
       std::vector<NodeId> body;
       body.reserve(node.children.size());
-      for (NodeId child : node.children) {
+      for (size_t i = 0; i < node.children.size(); ++i) {
+        const NodeId child = node.children[i];
         const Node& ch = doc.get(child);
-        if (ch.kind == NodeKind::Header || ch.kind == NodeKind::Heading)
-          layout_node(doc, child, x + inset, y, max_width - inset, out);
-        else
+        if (ch.kind == NodeKind::Header || ch.kind == NodeKind::Heading) {
+          const bool with_metadata =
+              !folded && next_is_metadata(doc, node.children, i);
+          layout_node(doc, child, x + inset, y, max_width - inset, out,
+                      with_metadata);
+          if (with_metadata)
+            layout_node(doc, node.children[++i], x + inset, y,
+                        max_width - inset, out);
+        } else {
           body.push_back(child);
+        }
       }
       if (folded) {
         // Compact cue under the header (view-local fold; not Stretch).
@@ -1901,8 +1918,9 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
       // A message card holds its pictures: a floated thumbnail never runs
       // into the next message.
       const size_t first_float = floats_.size();
-      for (NodeId child : node.children)
-        layout_node(doc, child, body_x, y, body_w, out);
+      for (size_t i = 0; i < node.children.size(); ++i)
+        layout_node(doc, node.children[i], body_x, y, body_w, out,
+                    next_is_metadata(doc, node.children, i));
       contain_floats(first_float, y);
       out.message_cards.push_back(
           {{id, x + indent, start_y, max_width - indent, y - start_y},
@@ -2045,6 +2063,17 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         layout_node(doc, c, x, y, max_width, out);
       in_image_float_ = was_in_image_float;
       y += after(BlockRole::Figure);
+      out.boxes.push_back({id, x, start_y, max_width, y - start_y});
+      break;
+    }
+
+    case NodeKind::Metadata: {
+      const float start_y = y;
+      const float inset = indent(BlockRole::Metadata);
+      y += before(BlockRole::Metadata);
+      layout_role_text(doc, node, BlockRole::Metadata, x + inset, y,
+                       max_width - inset, out);
+      y += after(BlockRole::Metadata);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
     }

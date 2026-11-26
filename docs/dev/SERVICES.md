@@ -78,7 +78,7 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   level re-ordered by the Firebase item's `kids` (HN rank).
 - Lists contain semantic `Article` entries: `Header` for the linked story
   title (source hostname is an inline `Metadata` span on the same line),
-  `Caption` for rank / points / author / time / discussion link. Item pages
+  `Metadata` for rank / points / author / time / discussion link. Item pages
   remain `Message` threads. `styles/hackernews.xss` controls sizes and colours;
   do not add site-specific geometry to the layout engine.
 - `hn_append_html` maps comment HTML → Paragraph / BlockQuote (`> …`) /
@@ -116,7 +116,7 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   RSS 1.0 (RDF) and Atom (text / html / xhtml content). A feed with any
   titled entry is a list of articles: `Section` (label `feed`, `Header` =
   feed title linked to the site) of `Article`s (label `e1`…, `Header` =
-  title linked to the entry, `(untitled)` when missing; `Caption` = author
+  title linked to the entry, `(untitled)` when missing; `Metadata` = author
   · date), like the HN / StackExchange lists, so the Heading Outline lists
   the entries. The entry's own `<h1>`… are demoted so the shallowest is
   level 3 (`demote_headings`). An entry with a summary (RSS `description`

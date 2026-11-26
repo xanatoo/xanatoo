@@ -174,6 +174,14 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 - Layout: `style_role(base, kind, marks)` picks the face; `PositionedGlyph`
   carries `marks` so render strikes through a marked link.
 
+## Title and metadata blocks
+
+`NodeKind::Metadata` holds inline publication and activity details. When it
+immediately follows a heading, flow layout uses the `metadata-block` role's
+before spacing for the gap. Article and section layout carries the paired row
+with the title in the unfolded view. The row has its own node and spans for
+link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
+
 ## HTML fragments (`html_min.hpp`)
 
 - `html_append_blocks`: tag soup → Paragraph / Heading / List / ListItem /

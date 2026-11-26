@@ -114,7 +114,7 @@ void add_post_entry(Document& doc, NodeId thread, const Json& p) {
   add_link(doc, head, title, post_ref(p));
   if (const std::string host = url_host(str(p, "url")); !host.empty())
     add_meta(doc, head, " (" + host + ")");
-  NodeId cap = doc.create(NodeKind::Caption, art);
+  NodeId cap = doc.create(NodeKind::Metadata, art);
   add_meta(doc, cap, karma(num(p, "baseScore")) + " · ");
   add_authors(doc, cap, p);
   add_date(doc, cap, str(p, "postedAt"));
@@ -391,7 +391,7 @@ Document lesswrong_search_document(const Json& reply, const ForumRef& ref) {
       add_link(doc, head, str(h, "title"), lw_ref(path));
       if (const std::string host = url_host(str(h, "url")); !host.empty())
         add_meta(doc, head, " (" + host + ")");
-      NodeId cap = doc.create(NodeKind::Caption, art);
+      NodeId cap = doc.create(NodeKind::Metadata, art);
       add_meta(doc, cap, karma(num(h, "baseScore")) + " · ");
       add_link(doc, cap, str(h, "authorDisplayName"), user_ref(str(h, "authorSlug")),
                InlineRole::Metadata);

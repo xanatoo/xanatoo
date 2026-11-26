@@ -42,6 +42,7 @@ constexpr RoleName kBlockRoles[] = {
     {"definition", BlockRole::Definition},
     {"figure", BlockRole::Figure},
     {"caption", BlockRole::Caption},
+    {"metadata-block", BlockRole::Metadata},
     {"bibliography-entry", BlockRole::BiblioEntry},
     {"footnote", BlockRole::Footnote},
     {"thread", BlockRole::Thread},
@@ -563,6 +564,9 @@ DocStyle builtin_style() {
   blk(BlockRole::Figure).align = TextAlign::Center;
   blk(BlockRole::Caption).space_after = px(6);
   blk(BlockRole::Caption).font = FontRole::BodyItalic;
+  blk(BlockRole::Metadata).font = FontRole::Small;
+  blk(BlockRole::Metadata).space_before = px(2);
+  blk(BlockRole::Metadata).space_after = px(6);
   blk(BlockRole::BiblioEntry).indent = px(16);
   blk(BlockRole::BiblioEntry).space_after = px(8);
   {

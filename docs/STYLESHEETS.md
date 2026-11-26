@@ -195,13 +195,18 @@ recolours every parent rule that uses `accent` (see `night-amber.xss`).
 
 **Block roles:** `paragraph`, `heading`, `section`, `list`, `list-item`,
 `block-quote`, `note`, `code-block`, `term`, `definition`, `figure`,
-`caption`, `bibliography-entry`, `footnote`, `thread`, `message`,
+`caption`, `metadata-block`, `bibliography-entry`, `footnote`, `thread`, `message`,
 `message-alt`, `message-author`, `message-op`, `message-meta`, `table`,
 `rule`, `transclusion`, `aside`, `article`, `page` (sheet of a PDF / DjVu /
 comic page: `background` = paper before tiles arrive, `border`, `space-after`;
 `docs/FIXED_LAYOUT.md`), `gallery` (the `//gallery` views: `background`
 replaces the paper and margin behind the grid and the single image, `color`
 the ink of its count line and captions; `gallery_view_style`).
+
+`metadata-block` styles the full byline or activity row. When it immediately
+follows a heading, its `space-before` sets the gap between the two blocks.
+`metadata` is the inline role used for details such as a source hostname
+within a title.
 
 `(role header ...)` remains an input alias for older stylesheets, but
 `(role heading ...)` is the preferred spelling. It styles the title node,
@@ -312,7 +317,7 @@ status line reports how many there were. The rest of the sheet still applies.
 `hackernews.xss`, `reddit.xss` (old.reddit) and `wikipedia.xss` imitate those
 sites in broad strokes: HN uses Verdana at `body-scale` 0.85 under an orange
 `thread` band, article headings with small inline source hostnames and
-caption-sized points / discussion links; Reddit uses blue authors with zebra
+small points / discussion links; Reddit uses blue authors with zebra
 nesting under a pale blue band; Wikipedia uses serif titles over grey `heading`
 rules. They are ordinary sheets: pin them per domain/service in the manager,
 or select one as the global fallback.

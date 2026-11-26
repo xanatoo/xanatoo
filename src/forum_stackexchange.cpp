@@ -66,7 +66,7 @@ Document se_list_document(const Json& reply, const ForumRef& ref) {
     NodeId head = doc.create(NodeKind::Header, art);
     add_link(doc, head, html_decode_entities(str(q, "title")),
              se_ref(ref, "questions/" + id));
-    NodeId cap = doc.create(NodeKind::Caption, art);
+    NodeId cap = doc.create(NodeKind::Metadata, art);
     add_meta(doc, cap, count(num(q, "score"), "vote", "votes"));
     add_sep(doc, cap);
     std::string answers = count(num(q, "answer_count"), "answer", "answers");

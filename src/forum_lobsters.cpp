@@ -86,7 +86,7 @@ Document lobsters_list_document(const Json& reply, const ForumRef& ref) {
     NodeId art = doc.create(NodeKind::Article, thread);
     doc.get(art).label = str(s, "short_id");
     add_title(doc, art, s, false);
-    NodeId cap = doc.create(NodeKind::Caption, art);
+    NodeId cap = doc.create(NodeKind::Metadata, art);
     add_meta(doc, cap, count(num(s, "score"), "point", "points") + " by ");
     add_user(doc, cap, str(s, "submitter_user"));
     const std::string created = str(s, "created_at");

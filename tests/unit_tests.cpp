@@ -3252,6 +3252,74 @@ void test_layout_reader_mode() {
   EXPECT(saw_section);
 }
 
+void test_article_metadata() {
+  using namespace xanatoo;
+  const Document doc = parse_xml(
+      "<doc><article><h>Headline</h><metadata>By Ada · "
+      "<a href=\"hn:item?id=42\" datetime=\"2026-11-26T16:57:26Z\">"
+      "Discuss</a></metadata><p>Body</p></article></doc>");
+  const Node& article = doc.get(doc.get(doc.root).children.front());
+  EXPECT_EQ(article.children.size(), 3u);
+  if (article.children.size() != 3) return;
+  const NodeId title = article.children[0];
+  const NodeId metadata = article.children[1];
+  const NodeId body = article.children[2];
+  EXPECT(doc.get(metadata).kind == NodeKind::Metadata);
+  EXPECT_EQ(doc.get(metadata).spans.size(), 2u);
+  if (doc.get(metadata).spans.size() == 2)
+    EXPECT_EQ(doc.get(metadata).spans.back().href, "hn:item?id=42");
+  const std::string xml = serialize_xml(doc);
+  EXPECT_EQ(serialize_xml(parse_xml(xml)), xml);
+  const auto decoded = decode_document(encode_document(doc));
+  EXPECT(decoded.has_value());
+  if (decoded) EXPECT_EQ(serialize_xml(*decoded), xml);
+
+  const std::string markup = serialize_markup(doc);
+  EXPECT(markup.find(":::metadata") != std::string::npos);
+  EXPECT_EQ(serialize_markup(parse_markup(markup)), markup);
+  const Document sexpr = parse_document(
+      "(doc (article (heading \"Title\") (metadata \"By Ada\")))", "test.sexp");
+  EXPECT(serialize_xml(sexpr).find(">By Ada</metadata>") != std::string::npos);
+
+  FontSet fonts;
+  const std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP article metadata layout (no font)\n");
+    return;
+  }
+  DocStyle style = builtin_style();
+  LayoutEngine engine(fonts, nullptr);
+  engine.set_style(&style);
+  const LayoutResult original = engine.layout(doc, 800.f);
+  auto baseline = [](const LayoutResult& result, NodeId id) {
+    for (const auto& glyph : result.glyphs)
+      if (glyph.node == id) return glyph.y;
+    EXPECT(false);
+    return 0.f;
+  };
+  EXPECT(baseline(original, title) < baseline(original, metadata));
+  EXPECT(baseline(original, metadata) < baseline(original, body));
+
+  apply_style_source(style, "(role heading (space-after 40))");
+  engine.set_style(&style);
+  const LayoutResult wider_heading_gap = engine.layout(doc, 800.f);
+  EXPECT_EQ(baseline(wider_heading_gap, metadata), baseline(original, metadata));
+  EXPECT_EQ(baseline(wider_heading_gap, body), baseline(original, body));
+
+  Document no_metadata = doc;
+  no_metadata.get(article.id).children.erase(
+      no_metadata.get(article.id).children.begin() + 1);
+  const LayoutResult prose = engine.layout(no_metadata, 800.f);
+  apply_style_source(style, "(role heading (space-after 12))"
+                            "(role metadata-block (space-before 12))");
+  engine.set_style(&style);
+  const LayoutResult tighter_prose = engine.layout(no_metadata, 800.f);
+  EXPECT_EQ(baseline(prose, body), baseline(tighter_prose, body) + 28.f);
+  const LayoutResult wider_metadata_gap = engine.layout(doc, 800.f);
+  EXPECT_EQ(baseline(wider_metadata_gap, metadata),
+            baseline(original, metadata) + 10.f);
+}
+
 void test_layout_quote_bar_spacing() {
   using namespace xanatoo;
   FontSet fonts;
@@ -6808,12 +6876,12 @@ void test_parse_feeds() {
       const Node& a = rss->get(arts[0]);
       EXPECT_EQ(a.label, "e1");
       auto parts = a.children;
-      EXPECT_EQ(parts.size(), 5u);  // title, caption, 2 paragraphs, enclosure
+      EXPECT_EQ(parts.size(), 5u);  // title, metadata, 2 paragraphs, enclosure
       if (parts.size() == 5) {
         EXPECT(rss->get(parts[0]).kind == NodeKind::Header);
         EXPECT_EQ(plain_text(*rss, parts[0]), "First & best");
         EXPECT_EQ(rss->get(parts[0]).spans.at(0).href, "https://b.example/1");
-        EXPECT(rss->get(parts[1]).kind == NodeKind::Caption);
+        EXPECT(rss->get(parts[1]).kind == NodeKind::Metadata);
         EXPECT_EQ(plain_text(*rss, parts[1]), "Ann · 2026-10-27 10:05 UTC");
         EXPECT_EQ(plain_text(*rss, parts[2]), "Full text");
         EXPECT_EQ(plain_text(*rss, parts[4]), "\xE2\x96\xB6 Play: audio/mpeg (2.5 MB)");
@@ -6848,7 +6916,7 @@ void test_parse_feeds() {
       EXPECT_EQ(plain_text(*atom, e1.children.at(1)), "Zed · 2026-10-01 08:30 UTC");
       EXPECT_EQ(atom->get(e1.children.at(2)).spans.at(1).href, "https://a.example/x");
       const Node& e2 = atom->get(arts[1]);
-      EXPECT_EQ(e2.children.size(), 4u);  // title, caption, 2 text paragraphs
+      EXPECT_EQ(e2.children.size(), 4u);  // title, metadata, 2 text paragraphs
     } else {
       EXPECT(false);
     }
@@ -9709,6 +9777,7 @@ int main() {
   test_named_style_scopes();
   test_style_choice_mix();
   test_style_choice_variants();
+  test_article_metadata();
   test_layout_quote_bar_spacing();
   test_layout_article_gaps();
   test_layout_inline_metadata();

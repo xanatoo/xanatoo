@@ -51,6 +51,7 @@ error view in the app instead of an editable replacement for the source.
 | Role | Block tags |
 | --- | --- |
 | Document and grouping | `doc`, `article`, `section`, `h`, `h1`…`h6`, `chrome`, `aside` |
+| Publication and activity details | `metadata` |
 | Paragraphs and lists | `p`, `ul`, `ol`, `li`, `quote`, `hr`, `codeblock`, `note` |
 | Media and layout | `image`, `figure`, `caption`, `stretch`, `summary` (in `stretch`: shown while collapsed, instead of the rest), `columns`, `column`, `include`, `collection` |
 | Definitions and references | `deflist`, `term`, `def`, `biblio`, `ref`, `footnote` |
@@ -67,6 +68,22 @@ using `<heading>` or `<header>` as a title are still accepted on import and
 exported as `<h>`. Before this change `<h level="2">` meant a ranked
 heading; such files now read it as a title (with a depth hint). The `<header>` name is reserved for future
 page-layout semantics, like `<footer>`; it is not a new layout node yet.
+
+Use `<metadata>` for an article's byline, source, date, score, or discussion
+links. It contains inline content and belongs to the enclosing composition.
+Place it immediately after the title for a compact title and byline, followed
+by any excerpt or body. For example:
+
+```xml
+<article>
+  <h><a href="https://example.org/story">Story title</a></h>
+  <metadata>By Ada · <a href="hn:item?id=42">3 comments</a></metadata>
+</article>
+```
+
+The equivalent forms are `(metadata ...)` in S-expressions and
+`:::metadata` in Markdown. Use `<caption>` to describe or identify media
+or a table.
 
 Every block may carry `nid` (the source document's numeric node identity),
 `label`, `style`, `tags`, `level`, `src`, `alt`, `summary`, `expanded` (`true`

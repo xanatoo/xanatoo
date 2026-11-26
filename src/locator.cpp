@@ -504,6 +504,7 @@ std::vector<NodeId> cut_blocks(const Document& doc, NodeId node) {
       case NodeKind::TableRow:
       case NodeKind::TableCell:
       case NodeKind::Caption:
+      case NodeKind::Metadata:
         continue;
       default:
         break;

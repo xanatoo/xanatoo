@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Article metadata
+
+- Add a semantic metadata block for bylines, dates, scores and discussion
+  links. A metadata row immediately after a heading controls the gap above it.
+- Use it in Hacker News stories and in feed, Lobsters, Stack Exchange,
+  Flarum and LessWrong listing entries.
+- Verified spacing and format round trips. All 33 CTest targets passed.
+
 ## Status (2026-11-25) — HTML page subscriptions
 
 - Plain web pages use a fingerprint of reader XML with page chrome dropped.

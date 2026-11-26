@@ -475,7 +475,7 @@ private:
 
   void layout_node(const Document& doc, NodeId id,
                    float x, float& y, float max_width,
-                   LayoutResult& out);
+                   LayoutResult& out, bool followed_by_metadata = false);
   // Tables (docs/TABLES.md): plan_table measures the cells and picks the
   // column widths for at most `avail`; place_table lays the planned table
   // out with its left edge at x.
