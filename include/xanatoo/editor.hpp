@@ -269,6 +269,8 @@ bool advance_caret(Document& doc, Caret& caret, size_t n);
 
 // Select the entire text node (paragraph / heading / list item / quote).
 void select_node(Document& doc, Selection& sel, NodeId node);
+// Select the smallest enclosing text range larger than the current selection.
+void expand_selection(Document& doc, Selection& sel);
 // Select the whole document (first → last text node).
 void select_all(Document& doc, Selection& sel);
 // Expand selection to the word under the focus caret.

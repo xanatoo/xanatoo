@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Progressive document selection
+
+- Ctrl+A grows from the current text block through enclosing structures.
+  Offline tests cover nested blocks and backward selections. An Xvfb smoke
+  test verified block, list, and document selection via the clipboard.
+- The Nix suite passed 15,079 checks.
+
 ## Status (2026-11-26) — Clickable Nostr profile mentions
 
 - Keep full `nprofile1` destinations and their relay hints when rendering

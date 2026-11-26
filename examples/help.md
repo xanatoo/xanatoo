@@ -40,7 +40,8 @@ Export via *File → Export as XML…* or *Export as Markdown…*.
 - **Ctrl+Z** / **Ctrl+Y** — Undo / redo
 - **Ctrl+C** / **X** / **V** — Copy / cut / paste
 - **Ctrl+B** / **I** / **`** / **K** — Bold / italic / code / link
-- **Ctrl+A** — Select current block
+- **Ctrl+A** — Select the current paragraph or text block. Press again to
+  expand through enclosing structures up to the whole document.
 - **Ctrl+Shift+A** — Select all
 - **Double-click** / **triple-click** — Select word / block
 - **Ctrl+D** — Duplicate block

@@ -8846,6 +8846,45 @@ public:
   xanatoo::MathConstants k;
 };
 
+void test_expand_selection() {
+  using namespace xanatoo;
+  Document doc;
+  doc.root = doc.create(NodeKind::Document);
+  const NodeId article = doc.create(NodeKind::Article, doc.root);
+  const NodeId section = doc.create(NodeKind::Section, article);
+  const NodeId intro = doc.create(NodeKind::Paragraph, section);
+  const NodeId subsection = doc.create(NodeKind::Section, section);
+  const NodeId list = doc.create(NodeKind::List, subsection);
+  const NodeId first = doc.create(NodeKind::ListItem, list);
+  const NodeId last = doc.create(NodeKind::ListItem, list);
+  const NodeId outro = doc.create(NodeKind::Paragraph, article);
+  const NodeId appendix = doc.create(NodeKind::Paragraph, doc.root);
+  doc.append_text(intro, "Intro");
+  doc.append_text(first, "First");
+  doc.append_text(first, "é", InlineKind::Emphasis);
+  doc.append_text(last, "Last");
+  doc.append_text(outro, "Outro");
+  doc.append_text(appendix, "Appendix");
+
+  Selection sel{{first, 0, 2}, {first, 0, 2}};
+  auto expect_expansion = [&](Caret start, Caret end) {
+    expand_selection(doc, sel);
+    EXPECT(sel.anchor == start);
+    EXPECT(sel.focus == end);
+  };
+  expect_expansion({first, 0, 0}, {first, 1, 1});
+  expect_expansion({first, 0, 0}, {last, 0, 4});
+  expect_expansion({intro, 0, 0}, {last, 0, 4});
+  expect_expansion({intro, 0, 0}, {outro, 0, 5});
+  expect_expansion({intro, 0, 0}, {appendix, 0, 8});
+  expect_expansion({intro, 0, 0}, {appendix, 0, 8});
+
+  sel = {{last, 0, 2}, {first, 0, 1}};
+  expect_expansion({first, 0, 0}, {last, 0, 4});
+  std::swap(sel.anchor, sel.focus);
+  expect_expansion({intro, 0, 0}, {last, 0, 4});
+}
+
 // Double-click word selection: the caret from the hit test sits between
 // characters; at a word's start it must pick that word, not the one before.
 void test_select_word_at() {
@@ -10065,6 +10104,7 @@ int main() {
   test_bookmark_folders();
   test_math();
   test_select_word_at();
+  test_expand_selection();
   test_forums(g_passed, g_failed);
   test_nntp(g_passed, g_failed);
   test_ui_help(g_passed, g_failed);

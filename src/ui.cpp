@@ -3800,7 +3800,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Copy Web Page URL", UiCommand::CopyPageWebUrl, cmd,
                     !state.web_page_url.empty());
       menu_item_cmd("Paste", UiCommand::Paste, cmd, true, "Ctrl+V");
-      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true, "Ctrl+A");
+      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true);
       menu_item_cmd("Select All", UiCommand::SelectAll, cmd, true, "Ctrl+Shift+A");
       menu_item_cmd("Duplicate Block", UiCommand::DuplicateBlock, cmd, true,
                     "Ctrl+D");
@@ -4572,7 +4572,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           result.arg = state.context_comment_web;
         }
       }
-      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true, "Ctrl+A");
+      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true);
       ImGui::Separator();
     } else {
       menu_item_cmd("Cut", UiCommand::Cut, cmd, state.selection, "Ctrl+X");
@@ -4597,7 +4597,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::EndMenu();
       }
       ImGui::Separator();
-      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true, "Ctrl+A");
+      menu_item_cmd("Select Block", UiCommand::SelectBlock, cmd, true);
       menu_item_cmd("Duplicate Block", UiCommand::DuplicateBlock, cmd, true,
                     "Ctrl+D");
       menu_item_cmd("Move Block Up", UiCommand::MoveBlockUp, cmd, true, "Alt+Up");

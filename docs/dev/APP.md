@@ -244,6 +244,11 @@ source in a new gallery tab. Linked images also keep their link actions.
 Copy image uses SDL3's bitmap clipboard. The address and tab actions
 are available in SDL2 builds as well.
 
+Ctrl+A expands the selection in document views and laid-out Context pages.
+It starts with the current text block, then uses the smallest enclosing
+subtree that adds to the range. Ctrl+Shift+A selects the whole document in
+one step.
+
 Primary selection (X11 / Wayland, `sdl::kMiddleClickPastesPrimary`: Linux
 desktop, SDL3 or SDL2 >= 2.26):
 - Document views: `publish_primary_selection` (in `run_frame` after the

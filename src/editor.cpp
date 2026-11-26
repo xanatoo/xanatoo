@@ -2206,20 +2206,53 @@ void select_node(Document& doc, Selection& sel, NodeId node) {
   sel.focus.char_index = utf8_char_count(n.spans.back().text);
 }
 
-void select_all(Document& doc, Selection& sel) {
+static Selection subtree_selection(const Document& doc, NodeId root) {
   std::vector<NodeId> nodes;
-  if (doc.root != INVALID_NODE) collect_text_nodes(doc, doc.root, nodes);
-  if (nodes.empty()) {
-    sel = {};
-    return;
-  }
-  sel.anchor = {nodes.front(), 0, 0};
-  const Node& last = doc.get(nodes.back());
-  sel.focus = {nodes.back(), 0, 0};
+  collect_text_nodes(doc, root, nodes);
+  if (nodes.empty()) return {};
+  Selection range{{nodes.front(), 0, 0}, {nodes.back(), 0, 0}};
+  const Node& last = doc.get(range.focus.node);
   if (!last.spans.empty()) {
-    sel.focus.span_index = last.spans.size() - 1;
-    sel.focus.char_index = utf8_char_count(last.spans.back().text);
+    range.focus.span_index = last.spans.size() - 1;
+    range.focus.char_index = utf8_char_count(last.spans.back().text);
   }
+  return range;
+}
+
+void expand_selection(Document& doc, Selection& sel) {
+  const auto grows = [&](const Selection& range) {
+    return !range.empty() &&
+           !(range.anchor == sel.anchor && range.focus == sel.focus) &&
+           !(range.anchor == sel.focus && range.focus == sel.anchor);
+  };
+  if (sel.anchor.node == sel.focus.node) {
+    Selection block;
+    select_node(doc, block, sel.focus.node);
+    if (grows(block)) {
+      sel = block;
+      return;
+    }
+  }
+
+  std::unordered_set<NodeId> ancestors;
+  for (NodeId id = sel.anchor.node; id != INVALID_NODE; id = doc.get(id).parent)
+    ancestors.insert(id);
+
+  // The first shared ancestor contains both endpoints, regardless of direction.
+  for (NodeId id = sel.focus.node; id != INVALID_NODE; id = doc.get(id).parent) {
+    if (!ancestors.contains(id)) continue;
+    Selection range = subtree_selection(doc, id);
+    if (grows(range)) {
+      sel = range;
+      return;
+    }
+    if (id == doc.root) return;
+  }
+  select_all(doc, sel);
+}
+
+void select_all(Document& doc, Selection& sel) {
+  sel = subtree_selection(doc, doc.root);
 }
 
 // The character right after / before a caret inside its node, stepping

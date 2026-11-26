@@ -199,6 +199,7 @@ enum class UiCommand {
   Paste,
   SelectAll,
   SelectBlock,
+  ExpandSelection,
   DuplicateBlock,
   MoveBlockUp,
   MoveBlockDown,

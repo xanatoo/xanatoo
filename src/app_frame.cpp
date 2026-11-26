@@ -2346,6 +2346,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::SelectAll:
       xanatoo::select_all(d, p.sel);
       break;
+    case C::ExpandSelection:
+      xanatoo::expand_selection(d, p.sel);
+      break;
     case C::SelectBlock:
       if (p.sel.focus.node != xanatoo::INVALID_NODE)
         xanatoo::select_node(d, p.sel, p.sel.focus.node);

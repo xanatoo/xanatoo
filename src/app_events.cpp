@@ -1776,7 +1776,7 @@ static bool handle_page_key(App& app, const SDL_Event& ev, bool ctrl,
 // Escape closes the panel; on a laid-out page Ctrl+C copies and Ctrl+A
 // selects its text (the ImGui fallback body owns its own keys).
 static bool handle_context_key(App& app, const SDL_Event& ev, bool ctrl,
-                               bool alt) {
+                               bool alt, bool shift) {
   if (!panel_has_keys(app, KeyFocus::Context)) return false;
   const SDL_Keycode k = xanatoo::sdl::keycode(ev);
   if (ctrl && !alt && app.context_has_doc && app.context_image_src.empty()) {
@@ -1787,7 +1787,11 @@ static bool handle_context_key(App& app, const SDL_Event& ev, bool ctrl,
       return true;
     }
     if (k == SDLK_a) {
-      xanatoo::select_all(app.context_doc, app.context_sel);
+      if (shift) {
+        xanatoo::select_all(app.context_doc, app.context_sel);
+      } else if (!ev.key.repeat) {
+        xanatoo::expand_selection(app.context_doc, app.context_sel);
+      }
       return true;
     }
   }
@@ -2270,7 +2274,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
   if (!status_prompt && handle_page_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;
-  if (!status_prompt && handle_context_key(app, ev, ctrl, alt)) return;
+  if (!status_prompt && handle_context_key(app, ev, ctrl, alt, shift)) return;
   if (!status_prompt && media_panel_key(app, ev)) return;
   // A panel whose keys ImGui did not take: the key goes to the document.
   if (!status_prompt && app.key_focus == KeyFocus::Panel)
@@ -3083,9 +3087,9 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
     case SDLK_a:
       if (ctrl && shift) {
-        xanatoo::select_all(d, p.sel);
-      } else if (ctrl) {
-        xanatoo::select_node(d, p.sel, p.sel.focus.node);
+        execute_command(app, UiCommand::SelectAll);
+      } else if (ctrl && !ev.key.repeat) {
+        execute_command(app, UiCommand::ExpandSelection);
       }
       break;
 
