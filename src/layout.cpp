@@ -1945,8 +1945,8 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
         text_w = max_width;
       }
       layout_role_text(doc, node, BlockRole::CodeBlock, text_x, y, text_w, out);
-      y += after(BlockRole::CodeBlock);
       out.code_blocks.push_back({id, x, start_y, max_width, y - start_y});
+      y += after(BlockRole::CodeBlock);
       out.boxes.push_back({id, x, start_y, max_width, y - start_y});
       break;
     }
