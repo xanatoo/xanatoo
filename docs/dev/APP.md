@@ -305,6 +305,8 @@ window title onto the strip (`over_tab_strip`) runs `pop_in_soft`; tab
 reorder is ImGui's own (ids = buffer ids, `ReorderTabs` copies the order
 into `tab_order`). Never add a per-panel
 "docked" flag; set `FloatWindow::dock` through the helpers above.
+New Document sits at the left of the horizontal strip. The New Tab plus
+is a trailing tab-shaped button that stays visible when the tabs overflow.
 Document tabs use dark label ink and share a bottom edge. The active tab
 extends one scaled pixel above the baseline, and inactive tabs start one
 scaled pixel below it. The active tab has a rounded top and left highlight

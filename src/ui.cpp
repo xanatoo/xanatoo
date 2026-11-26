@@ -3240,11 +3240,32 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       std::vector<std::pair<ImGuiID, uint32_t>> tab_item_ids;
       const float strip_top = vp->Pos.y + result.top_reserved;
       const float button_w = 26.f * scale_;
-      const float available = ImGui::GetContentRegionAvail().x;
-      // "+" (new tab) and the new-document button after the tabs.
-      const float tabs_w =
-          std::max(1.f, available - 2.f * button_w - 6.f * scale_);
-      ImGui::BeginChild("##tab-scroll-area", ImVec2(tabs_w, tab_h - 6.f * scale_), false,
+      const float tab_button_h = tab_h - 6.f * scale_;
+      const int button_colors = push_toolbar_button_style();
+      // New document: a blank local (database) document in a new tab, ready
+      // to type into; it is listed under Local documents at once.
+      bool new_doc = false;
+      if (const Icon* ic = icon("new")) {
+        const float pad = 2.f * scale_;
+        const float side = std::max(1.f, tab_button_h - 2.f * pad);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                            ImVec2((button_w - side) * 0.5f, pad));
+        new_doc = ImGui::ImageButton(
+            "##new-doc", reinterpret_cast<ImTextureID>(ic->texture),
+            ImVec2(side, side));
+        ImGui::PopStyleVar();
+      } else {
+        new_doc = ImGui::Button("New##new-doc", ImVec2(button_w, tab_button_h));
+      }
+      if (new_doc) cmd = UiCommand::NewDocument;
+      draw_toolbar_hover_face();
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("New document (Ctrl+N)");
+      bool open_new_menu = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+      ImGui::PopStyleVar(2);
+      ImGui::PopStyleColor(button_colors);
+      ImGui::SameLine();
+      ImGui::BeginChild("##tab-scroll-area", ImVec2(0.f, tab_button_h), false,
                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
       const float tab_offset = std::max(1.f, std::round(scale_));
       ImDrawList* strip_draw = ImGui::GetWindowDrawList();
@@ -3465,23 +3486,29 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           ImGui::PopStyleVar(3);
           ImGui::PopID();
         }
-        if (ImGuiTabBar* tb = ImGui::GetCurrentTabBar();
-            tb && tabs_registered && cmd == UiCommand::None && !result.tab_drag_out &&
+        if (ImGui::TabItemButton("+##new-tab", ImGuiTabItemFlags_Trailing) &&
+            cmd == UiCommand::None)
+          cmd = UiCommand::NewTab;
+        if (ImGui::IsItemHovered())
+          ImGui::SetTooltip("New tab (Ctrl+T) · right-click for more");
+        open_new_menu |= ImGui::IsItemClicked(ImGuiMouseButton_Right);
+
+        // The trailing button is registered with ImGui, but has no buffer.
+        if (tabs_registered && cmd == UiCommand::None && !result.tab_drag_out &&
             tab_tear_id_ == 0 &&
-            static_cast<int>(tab_item_ids.size()) == tb->Tabs.Size) {
+            static_cast<int>(tab_item_ids.size()) + 1 == bar->Tabs.Size) {
           std::string order;
           bool known = true, changed = false;
-          for (int k = 0; k < tb->Tabs.Size; ++k) {
+          for (size_t k = 0; k < tab_item_ids.size(); ++k) {
             uint32_t bid = 0;
             known = false;
             for (const auto& [iid, b] : tab_item_ids)
-              if (iid == tb->Tabs[k].ID) {
+              if (iid == bar->Tabs[static_cast<int>(k)].ID) {
                 bid = b;
                 known = true;
               }
             if (!known) break;
-            if (k < static_cast<int>(state.tab_ids.size()) &&
-                state.tab_ids[static_cast<size_t>(k)] != bid)
+            if (k < state.tab_ids.size() && state.tab_ids[k] != bid)
               changed = true;
             order += (k ? "," : "") + std::to_string(bid);
           }
@@ -3511,39 +3538,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       } else if (tab_tear_id_ != 0 && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         tab_tear_id_ = 0;
       }
-      ImGui::SameLine();
-      const int button_colors = push_toolbar_button_style();
-      const float tab_button_h = tab_h - 6.f * scale_;
-      if (ImGui::Button("+##new-tab", ImVec2(button_w, tab_button_h)))
-        cmd = UiCommand::NewTab;
-      draw_toolbar_hover_face();
-      if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("New tab (Ctrl+T) · right-click for more");
-      if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("##new-tab-menu");
-      ImGui::SameLine(0.f, 2.f * scale_);
-      // New document: a blank local (database) document in a new tab, ready
-      // to type into; it is listed under Local documents at once.
-      bool new_doc = false;
-      if (const Icon* ic = icon("new")) {
-        const float pad = 2.f * scale_;
-        const float side = std::max(1.f, tab_button_h - 2.f * pad);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                            ImVec2((button_w - side) * 0.5f, pad));
-        new_doc = ImGui::ImageButton(
-            "##new-doc", reinterpret_cast<ImTextureID>(ic->texture),
-            ImVec2(side, side));
-        ImGui::PopStyleVar();
-      } else {
-        new_doc = ImGui::Button("New##new-doc", ImVec2(button_w, tab_button_h));
-      }
-      if (new_doc) cmd = UiCommand::NewDocument;
-      draw_toolbar_hover_face();
-      if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("New document (Ctrl+N)");
-      if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("##new-tab-menu");
-      ImGui::PopStyleVar(2);
+      if (open_new_menu) ImGui::OpenPopup("##new-tab-menu");
       if (ImGui::BeginPopup("##new-tab-menu")) {
         menu_item_cmd("New Tab", UiCommand::NewTab, cmd, true, "Ctrl+T");
         menu_item_cmd("New Document", UiCommand::NewDocument, cmd, true,
@@ -3554,7 +3549,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         menu_item_cmd("Local Documents", UiCommand::OpenStoredDocuments, cmd);
         ImGui::EndPopup();
       }
-      ImGui::PopStyleColor(button_colors);
     }
     ImGui::End();
     ImGui::PopStyleVar(6);
