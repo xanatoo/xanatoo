@@ -126,19 +126,27 @@ void draw_line(App& app, int cx, int cy, int cw,
                          ink.r, ink.g, ink.b);
 }
 
-}  // namespace
-
-void refresh_revision_panel(App& app) {
-  if (!app.revision_panel_open || app.revision_document_key.empty()) return;
-  const auto head = find_stored_document(app.revision_document_key);
-  if (!head) {
+std::optional<StoredDocument> refresh_revision_panel(App& app) {
+  const DocBuffer* b = find_buf(app, focused_pane(app).buf);
+  const std::string key = b ? b->doc_key : std::string{};
+  if (key != app.revision_document_key) {
+    app.revision_document_key = key;
+    app.revision_selected.clear();
     app.revision_history.clear();
-    app.revision_preview_lines = {"Document is no longer available"};
-    return;
+    app.revision_win.scroll = 0.f;
+  }
+  const auto head = key.empty() ? std::nullopt : find_stored_document(key);
+  if (!head) {
+    app.revision_working.clear();
+    app.revision_published.clear();
+    app.revision_selected.clear();
+    app.revision_history.clear();
+    app.revision_preview_lines.clear();
+    return std::nullopt;
   }
   if (head->working == app.revision_working &&
       head->published == app.revision_published &&
-      !app.revision_history.empty()) return;
+      !app.revision_history.empty()) return head;
   app.revision_working = head->working;
   app.revision_published = head->published;
   app.revision_history = stored_document_history(head->key, 64);
@@ -146,9 +154,13 @@ void refresh_revision_panel(App& app) {
                    [&](const auto& r) { return r.id == app.revision_selected; }))
     app.revision_selected = head->working;
   rebuild_preview(app);
+  return head;
 }
 
+}  // namespace
+
 float revision_panel_max_scroll(App& app, int client_h) {
+  if (app.revision_working.empty()) return 0.f;
   const int rows = 6 + static_cast<int>(app.revision_history.size()) +
                    static_cast<int>(app.revision_preview_lines.size());
   return std::max(0.f, static_cast<float>(rows * row_height(app) + 8 - client_h));
@@ -156,7 +168,7 @@ float revision_panel_max_scroll(App& app, int client_h) {
 
 void draw_revision_panel(App& app) {
   if (!app.revision_panel_open) return;
-  refresh_revision_panel(app);
+  const auto head = refresh_revision_panel(app);
   FloatWindow& w = app.revision_win;
   auto [cx, cy, cw, ch] = float_client_rect(app, w);
   w.scroll = std::clamp(w.scroll, 0.f, revision_panel_max_scroll(app, ch));
@@ -169,9 +181,13 @@ void draw_revision_panel(App& app) {
   auto y_of = [&](int row) {
     return cy + row * step - static_cast<int>(w.scroll);
   };
-  const auto head = find_stored_document(app.revision_document_key);
-  draw_line(app, cx, y_of(0), cw, head ? head->title : "Unknown document",
-            pal.text);
+  if (!head) {
+    draw_line(app, cx, y_of(0), cw, "No revisions for this document",
+              pal.text_dim);
+    xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
+    return;
+  }
+  draw_line(app, cx, y_of(0), cw, head->title, pal.text);
   draw_line(app, cx, y_of(1), cw,
             "Working " + short_id(app.revision_working) +
               "   Published " + (app.revision_published.empty() ? "none" :
@@ -229,7 +245,7 @@ void draw_revision_panel(App& app) {
 }
 
 void click_revision_panel(App& app, int mx, int my) {
-  refresh_revision_panel(app);
+  if (!refresh_revision_panel(app)) return;
   auto [cx, cy, cw, ch] = float_client_rect(app, app.revision_win);
   if (mx < cx || mx >= cx + cw - 12 || my < cy || my >= cy + ch) return;
   const int row = static_cast<int>((my - cy + app.revision_win.scroll) /

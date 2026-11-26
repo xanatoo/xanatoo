@@ -449,13 +449,8 @@ void restore_session(App& app) {
       app.downloads_panel_open = true;
     if (get("annotations.open") && *get("annotations.open") == "1")
       app.annotation_panel_open = true;
-    if (get("revisions.open") && *get("revisions.open") == "1") {
-      const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-      if (b && find_stored_document(b->doc_key)) {
-        app.revision_document_key = b->doc_key;
-        app.revision_panel_open = true;
-      }
-    }
+    if (get("revisions.open") && *get("revisions.open") == "1")
+      app.revision_panel_open = true;
     if (get("nostr-explorer.open") && *get("nostr-explorer.open") == "1") {
       app.nostr_explorer_open = true;
       refresh_nostr_catalogue(app);

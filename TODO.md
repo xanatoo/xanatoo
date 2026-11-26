@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Document Revisions panel
+
+- Follow the focused document when switching tabs or panes. Clear the previous
+  history, selection, and scroll position when the document changes.
+- Nix suite passed 15,035 checks. An Xvfb smoke test verified switches between
+  two stored documents and a Markdown file without revisions.
+
 ## Status (2026-11-26) — Image context menu
 
 - Added Copy image, Copy image address, and Open image in new tab for

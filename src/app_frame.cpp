@@ -1641,14 +1641,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
           flash_status(app, "Open a local database document to view its revisions");
           break;
         }
-        app.revision_document_key = b->doc_key;
         app.revision_selected.clear();
         app.revision_working.clear();
         app.revision_published.clear();
         app.revision_win.scroll = 0.f;
         app.revision_panel_open = true;
         focus_panel(app, WindowRole::Revisions);
-        refresh_revision_panel(app);
       }
       break;
     case C::ToggleNostrExplorer:

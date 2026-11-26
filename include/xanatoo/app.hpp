@@ -2926,7 +2926,6 @@ bool draw_floating_frame(App& app, const FloatWindow& win,
 void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll);
 
 // ---- database-native document history (app_revisions.cpp) ----
-void refresh_revision_panel(App& app);
 void draw_revision_panel(App& app);
 void click_revision_panel(App& app, int mx, int my);
 float revision_panel_max_scroll(App& app, int client_h);
