@@ -250,7 +250,8 @@ size_t url_end(std::string_view s, size_t i) {
 }
 
 bool is_bech32_char(char c) {
-  return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9');
 }
 
 struct NoteLinker {
@@ -327,15 +328,20 @@ struct NoteLinker {
 
   // NIP-19 entity (no "nostr:" prefix) → mention / note link, or false.
   bool entity(std::string_view ref) {
-    if (auto pk = nostr_decode_pubkey(ref)) return mention(*pk);
+    if (auto pk = nostr_decode_pubkey(ref)) {
+      if (starts_with_ci(ref, "nprofile1"))
+        return mention(*pk, "nostr:" + std::string(ref));
+      return mention(*pk);
+    }
     if (auto id = nostr_decode_event_id(ref)) return note(*id);
     return false;
   }
 
-  bool mention(const std::string& pk) {
+  bool mention(const std::string& pk, std::string href = {}) {
+    if (href.empty()) href = "nostr:" + nostr_bech32("npub", pk);
     auto it = names.find(pk);
     link("@" + (it != names.end() ? it->second : short_npub(pk)),
-         "nostr:" + nostr_bech32("npub", pk), kRelMention);
+         std::move(href), kRelMention);
     return true;
   }
 
@@ -440,6 +446,7 @@ void nostr_append_content(Document& doc, NodeId parent, std::string_view content
       size_t end = i + 6;
       while (end < content.size() && is_bech32_char(content[end])) ++end;
       emit_run();
+      run = i;
       if (nl.entity(content.substr(i + 6, end - i - 6))) {
         i = run = end;
         continue;

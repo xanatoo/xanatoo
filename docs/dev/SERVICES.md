@@ -330,7 +330,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   headers link the author (`nostr:npub1…`) and date (`nostr:note1…`) via
   Link spans on the Message node (`[0]` author, `[1]` date; see `types.hpp`).
 - Note text goes through `nostr_append_content`: URLs / `nostr:` refs /
-  NIP-08 `#[n]` → links (mentions as `@name`), media labelled `[image]` /
+  NIP-08 `#[n]` → links (mentions as `@name`). Profile mentions retain the
+  original `nprofile1` target and its relay hints. Media is labelled `[image]` /
   `[video]` / `[audio]` (NIP-92 `imeta` type, else extension), images also
   as remote Image nodes.
 

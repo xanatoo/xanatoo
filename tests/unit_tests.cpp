@@ -1204,6 +1204,28 @@ void test_nostr_refs() {
   if (note) EXPECT_EQ(*note, pk);
   EXPECT(nostr_bech32("npub", "xyz").empty());
 
+  const auto check_profile_link = [](const std::string& profile,
+                                     const std::string& pubkey) {
+    Document doc;
+    const NodeId root = doc.create(NodeKind::Document);
+    const std::string invalid = profile.substr(0, profile.size() - 1);
+    nostr_append_content(doc, root, "See " + invalid + ", then (" + profile + ").",
+                         {}, {{pubkey, "Alice"}});
+    const auto& children = doc.get(root).children;
+    EXPECT_EQ(children.size(), size_t(1));
+    if (children.size() != 1) return;
+    const auto& spans = doc.get(children.front()).spans;
+    EXPECT_EQ(spans.size(), size_t(3));
+    if (spans.size() != 3) return;
+    EXPECT_EQ(spans[0].kind, InlineKind::Text);
+    EXPECT_EQ(spans[0].text, "See " + invalid + ", then (");
+    EXPECT_EQ(spans[1].kind, InlineKind::Link);
+    EXPECT_EQ(spans[1].text, "@Alice");
+    EXPECT_EQ(spans[1].href, profile);
+    EXPECT_EQ(spans[1].rel, "mention");
+    EXPECT_EQ(spans[2].text, ").");
+  };
+
   {
     const std::string profile =
         "nostr:nprofile1qywhwumn8ghj7mr4de3kscn00qh8xctwv3mkjcmg9enxzund9uq35"
@@ -1214,8 +1236,10 @@ void test_nostr_refs() {
     std::vector<std::string> relays;
     auto pubkey = nostr_decode_pubkey(profile, &relays);
     EXPECT(pubkey.has_value());
-    if (pubkey)
+    if (pubkey) {
       EXPECT_EQ(*pubkey, "e771af0b05c8e95fcdf6feb3500544d2fb1ccd384788e9f490bb3ee28e8ed66f");
+      check_profile_link(profile, *pubkey);
+    }
     const std::vector<std::string> expected_relays = {
         "wss://lunchbox.sandwich.farm/",
         "wss://pyramid.fiatjaf.com/",
@@ -1234,8 +1258,10 @@ void test_nostr_refs() {
     std::vector<std::string> relays;
     auto pubkey = nostr_decode_pubkey(profile, &relays);
     EXPECT(pubkey.has_value());
-    if (pubkey)
+    if (pubkey) {
       EXPECT_EQ(*pubkey, "266815e0c9210dfa324c6cba3573b14bee49da4209a9456f9484e5106cd408a5");
+      check_profile_link(profile, *pubkey);
+    }
     const std::vector<std::string> expected_relays = {
         "wss://relay.damus.io/",
         "wss://nostr.wine/",

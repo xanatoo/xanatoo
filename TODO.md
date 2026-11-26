@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Clickable Nostr profile mentions
+
+- Keep full `nprofile1` destinations and their relay hints when rendering
+  profile mentions as links. Preserve surrounding text and punctuation.
+- Both reported profiles have offline link-rendering coverage. The Nix suite
+  passed 15,063 checks.
+
 ## Status (2026-11-26) — Nostr profile links with relay hints
 
 - Raised the NIP-19 decoding limit to 5,000 characters. Both reported
