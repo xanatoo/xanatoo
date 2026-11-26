@@ -188,7 +188,7 @@
               xanatoo-r36s-sdl2 = r36s.r36sSDL2;
               xanatoo-r36s-sdl2-portmaster = r36s.portmasterSDL2;
               xanatoo-r36s-sdl2-portmaster-zip = r36s.portmasterSDL2Zip;
-            }
+            } // android.abiPackages
           else { }
         ) // (
           # Portable packages are built by the flake on a Linux build host.
@@ -304,9 +304,8 @@
         in {
           default = run;
           xanatoo = run;
-        } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
-          xanatoo-android-install = (androidFor system).installApp;
-        } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+        } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system)
+          (androidFor system).installApps // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           xanatoo-wasm = (import ./nix/wasm.nix {
             pkgs = import nixpkgs { inherit system; };
             inherit version;

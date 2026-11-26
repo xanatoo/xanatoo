@@ -9,6 +9,7 @@
   superseded assets using the release metadata.
 - Verified signing, ZIP alignment, and native library ABIs for all four APKs
   using cached Android build outputs.
+- Added ABI-suffixed Nix package and adb install targets for all three APKs.
 
 ## Status (2026-11-26) — Service page navigation
 

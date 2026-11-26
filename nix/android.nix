@@ -118,6 +118,7 @@ let
   };
 
   apkName = "xanatoo-${version}.apk";
+  abiApkName = abi: "xanatoo-${version}-${abi}.apk";
 
   buildTools = [
     androidSdk pkgs.jdk17 pkgs.zip pkgs.gnumake pkgs.xz pkgs.rsync
@@ -173,6 +174,18 @@ let
     dontStrip = true;
   };
 
+  abiPackages = pkgs.lib.listToAttrs (map (abi:
+    let
+      name = "xanatoo-android-${abi}";
+      file = abiApkName abi;
+    in {
+      inherit name;
+      value = pkgs.runCommand "${name}-${version}" { } ''
+        mkdir -p "$out"
+        cp ${apk}/${file} "$out/${file}"
+      '';
+    }) targetAbis);
+
   devCommand = name: action: pkgs.writeShellScriptBin name ''
     set -euo pipefail
     source_dir="''${XANATOO_SOURCE:?Enter the Android shell with nix develop .#android}"
@@ -193,13 +206,23 @@ let
     } 9>.xanatoo-build.lock
   '';
 
-  installApp = {
+  makeInstallApp = name: file: description: {
     type = "app";
-    program = toString (pkgs.writeShellScript "install-xanatoo-apk" ''
-      exec ${pkgs.android-tools}/bin/adb install -r ${apk}/${apkName}
+    program = toString (pkgs.writeShellScript name ''
+      exec ${pkgs.android-tools}/bin/adb install -r ${file}
     '');
-    meta.description = "Install the xanatoo APK on a connected Android device with adb";
+    meta.description = description;
   };
+
+  installApps = {
+    xanatoo-android-install = makeInstallApp "install-xanatoo-apk"
+      "${apk}/${apkName}" "Install the universal xanatoo APK with adb";
+  } // pkgs.lib.listToAttrs (map (abi: {
+    name = "xanatoo-android-install-${abi}";
+    value = makeInstallApp "install-xanatoo-apk-${abi}"
+      "${abiPackages."xanatoo-android-${abi}"}/${abiApkName abi}"
+      "Install the xanatoo APK for ${abi} with adb";
+  }) targetAbis);
 
   devShell = pkgs.mkShell (buildEnv // {
     packages = buildTools ++ [
@@ -233,5 +256,5 @@ XANATOO_ANDROID_BANNER
   });
 
 in {
-  inherit sdlAndroidLibs sqliteAmalgamation imageLibs apk installApp devShell;
+  inherit sdlAndroidLibs sqliteAmalgamation imageLibs apk abiPackages installApps devShell;
 }

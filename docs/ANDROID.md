@@ -25,6 +25,17 @@ nix build .#xanatoo-android
 nix run .#xanatoo-android-install
 ```
 
+For a single architecture, append `-arm64-v8a`, `-armeabi-v7a`, or
+`-x86_64` to either target. For example:
+
+```sh
+nix build .#xanatoo-android-arm64-v8a
+nix run .#xanatoo-android-install-arm64-v8a
+```
+
+The per-ABI targets share the Android build and select one APK from it.
+The build target places just that APK in `result/`.
+
 Same pipeline as Kurvenrausch / Pingus (`nix/android.nix`, `mk/android/`):
 
 1. `sdl3-android`: SDL3 from nixpkgs built with `ndk-build` for every ABI,
