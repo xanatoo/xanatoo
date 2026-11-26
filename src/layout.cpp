@@ -532,7 +532,6 @@ void LayoutEngine::layout_remote_image(const Document& doc, const Node& node,
       h = img.height * sc;
     }
   }
-  const float start_y = y;
   // Centred in its column (in a figure: flush with the caption); the alt
   // text is not laid out below the image (the loading placeholder shows
   // it instead).
@@ -541,8 +540,8 @@ void LayoutEngine::layout_remote_image(const Document& doc, const Node& node,
   PositionedImage pi{node.id, ix, y, w, h, node.src, image_base_};
   pi.thumb = kRemoteThumbEdge;
   out.images.push_back(std::move(pi));
+  out.boxes.push_back({node.id, ix, y, w, h});
   y += h + 14.f * dp;
-  out.boxes.push_back({node.id, x, start_y, max_width, y - start_y});
 }
 
 bool LayoutEngine::figure_image_size(const Document& doc, const Node& fig,

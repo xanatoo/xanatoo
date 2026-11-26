@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-26) — Standalone image boxes
+
+- Matched standalone remote image boxes to the drawn image or placeholder
+  while preserving the centered width limit and trailing spacing.
+- Added an offline layout regression for the remote image placeholder.
+  The Nix suite passed 15,035 checks.
+
 ## Status (2026-11-26) — Image-heavy page stalls
 
 - Traced UI-thread stalls to thumtoo's inline cache-hit callbacks, unbounded

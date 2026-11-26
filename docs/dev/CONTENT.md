@@ -372,7 +372,9 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
 
 - A block Image outside a figure sits centred in a column of ~60% of the
   page (at least 16 em). Images are never scaled up: a small one keeps its
-  own size (and its interactive `display_scale`). The alt text is not laid
+  own size (and its interactive `display_scale`). The image box matches the
+  drawn image or loading placeholder. Trailing spacing sits below the box.
+  The alt text is not laid
   out under the image; the loading placeholder shows it, and hovering a
   block image shows it as the tooltip (`image_alt_tooltip`, app_frame.cpp).
 - A non-floating Figure with an image child is a column as wide as its

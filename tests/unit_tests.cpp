@@ -3846,6 +3846,35 @@ void test_text_image_urls() {
   }
 }
 
+void test_layout_remote_image_box() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_layout_remote_image_box (no font)\n");
+    return;
+  }
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  const NodeId image = doc.create(NodeKind::Image, root);
+  doc.get(image).src = "https://example.com/portrait.jpg";
+  LayoutEngine engine(fonts, nullptr);
+  const LayoutResult layout = engine.layout(doc, 900.f);
+  EXPECT_EQ(layout.images.size(), 1u);
+  if (layout.images.size() != 1) return;
+  const PositionedImage& im = layout.images.front();
+  EXPECT_EQ(im.x + im.width * 0.5f, 450.f);
+  const auto box = std::find_if(layout.boxes.begin(), layout.boxes.end(),
+                                [image](const LayoutBox& b) { return b.node == image; });
+  EXPECT(box != layout.boxes.end());
+  if (box == layout.boxes.end()) return;
+  EXPECT_EQ(box->x, im.x);
+  EXPECT_EQ(box->y, im.y);
+  EXPECT_EQ(box->width, im.width);
+  EXPECT_EQ(box->height, im.height);
+}
+
 void test_layout_auto_images() {
   using namespace xanatoo;
   FontSet fonts;
@@ -9919,6 +9948,7 @@ int main() {
   test_layout_line_table_matches_fresh();
   test_layout_column_auto_links();
   test_text_image_urls();
+  test_layout_remote_image_box();
   test_layout_auto_images();
   test_glyphs_in_band();
   test_layout_wrap_respects_max_width();
