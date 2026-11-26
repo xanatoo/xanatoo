@@ -274,6 +274,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   profiles and public relay groups alongside web links to ecosystem projects.
 
 - WSS over `TlsStream` (`tls.hpp`).
+- NIP-19 `naddr` references route to Nostr and display an unsupported-address
+  error. Fetching addressable events is not implemented.
 - Note/thread fetch gated by `XANATOO_NOSTR` (default ON; needs TLS).
 - secp256k1 backend (`nostr_verify.hpp`, `XANATOO_NOSTR_CRYPTO`):
   `XANATOO_NOSTR_VERIFY_OPENSSL` (OpenSSL libcrypto; with

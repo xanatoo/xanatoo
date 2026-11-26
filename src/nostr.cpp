@@ -109,7 +109,8 @@ bool is_nostr_ref(std::string_view s) {
   if (low == "groups" || low.rfind("groups@", 0) == 0 ||
       low.rfind("group@", 0) == 0) return true;
   return low.rfind("note1", 0) == 0 || low.rfind("nevent1", 0) == 0 ||
-         low.rfind("npub1", 0) == 0 || low.rfind("nprofile1", 0) == 0;
+         low.rfind("npub1", 0) == 0 || low.rfind("nprofile1", 0) == 0 ||
+         low.rfind("naddr1", 0) == 0;
 }
 
 std::string nostr_group_ref(std::string_view relay, std::string_view group_id) {
@@ -1500,6 +1501,10 @@ std::optional<Document> nostr_fetch_thread(std::string_view ref,
                                            std::string* err) {
   std::string stripped = strip_nostr_prefix(ref);
   std::string low = ascii_lower(stripped);
+  if (starts_with(low, "naddr1")) {
+    if (err) *err = "Nostr addressable events (naddr) are unsupported";
+    return std::nullopt;
+  }
   const bool groups_mode = low == "groups" || low.rfind("groups@", 0) == 0;
   const bool group_mode = low.rfind("group@", 0) == 0;
   if (groups_mode || group_mode) {

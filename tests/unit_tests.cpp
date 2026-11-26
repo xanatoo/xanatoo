@@ -1164,6 +1164,13 @@ void test_gemini_urls() {
 void test_nostr_refs() {
   using namespace xanatoo;
   EXPECT(is_nostr_ref("nostr:recent"));
+  const std::string naddr =
+      "naddr1qvzqqqr4gupzqa6e2nmnzsgjfzdy520vdy4hywr06c9ue6crpr2zxyq749uu275"
+      "qqyt8wumn8ghj7un9d3shjtnswf5k6ctv9ehx2aqprpmhxue69uhhyetvv9ujuumwdae8"
+      "gtnnda3kjctvqy2hwumn8ghj7un9d3shjtnwdaehgu3wdejhgqg4waehxw309aex2mrp0"
+      "yhxg6t5w3hjuur4vgqq6mn9waekcet5w3jhytf4xq7gxgdh";
+  EXPECT(is_nostr_ref(naddr));
+  EXPECT(is_nostr_ref("nostr:" + naddr));
   EXPECT(is_nostr_ref(
       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
   EXPECT(is_nostr_ref(

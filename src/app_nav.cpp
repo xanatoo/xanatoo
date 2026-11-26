@@ -1418,23 +1418,29 @@ static bool open_page(App& app, int pi, std::string target,
     // No TLS client in this build — still offer the local gemtext sample.
     std::string sample = find_data_file(app, "gemini-sample.gmi");
     if (sample.empty()) sample = find_data_file(app, "examples/gemini-sample.gmi");
-    if (sample.empty() || !fs::exists(sample)) return false;
+    if (sample.empty()) return false;
     target = sample;
   }
 
   // Local path (or offline fallback for gemini:// when TLS is disabled)
   std::string path = target;
-  if (!fs::exists(path)) {
+  std::error_code ec;
+  bool exists = fs::exists(path, ec);
+  if (!exists && !ec) {
     std::string found = find_data_file(app, path.c_str());
-    if (!found.empty()) path = found;
+    if (!found.empty()) {
+      path = std::move(found);
+      exists = fs::exists(path, ec);
+    }
   }
-  if (!fs::exists(path)) {
-    flash_status(app, "Not found: " + target);
+  if (!exists) {
+    const std::string reason = ec ? ec.message() : "No such file or directory";
+    flash_status(app, reason + ": " + target);
     if (!stash_or_confirm(app, p.buf)) return false;
     show_doc_in_pane(app, pi,
                      xanatoo::parse_document(
                          "# Could not open page\n\n`" + target +
-                             "`\n\nNo such file or directory.\n",
+                             "`\n\n" + reason + ".\n",
                          "error.md"),
                      target);
     if (record_history) push_nav_history(app, pi, target);
