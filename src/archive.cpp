@@ -613,8 +613,11 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
         }
       }
       // A derived track repeats its original's title: `parent_title` drops it.
-      auto line = [&](const F& f, size_t depth, bool show_from, const std::string& parent_title) {
-        std::string l = std::string(depth * 2, ' ') + "- " + link(f.name, base + percent_encode(f.name));
+      auto line = [&](const F& f, size_t depth, bool folded, bool show_from,
+                      const std::string& parent_title) {
+        std::string l(depth * 2, ' ');
+        l += folded ? "- [+] " : "- ";
+        l += link(f.name, base + percent_encode(f.name));
         std::string info = f.format;
         auto more = [&](const std::string& v) {
           if (!v.empty()) info += (info.empty() ? "" : ", ") + v;
@@ -632,10 +635,14 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
       std::function<void(std::string&, size_t, size_t, bool, const std::string&)> emit =
           [&](std::string& out, size_t i, size_t depth, bool from, const std::string& parent_title) {
             placed[i] = true;
-            out += line(list[i], depth, from, parent_title);
+            const size_t child_depth = std::min<size_t>(depth + 1, 4);
+            const bool folded = child_depth > depth &&
+                std::any_of(derived[i].begin(), derived[i].end(),
+                            [&](size_t c) { return !placed[c]; });
+            out += line(list[i], depth, folded, from, parent_title);
             const std::string& title = list[i].title.empty() ? parent_title : list[i].title;
             for (size_t c : derived[i])
-              if (!placed[c]) emit(out, c, std::min<size_t>(depth + 1, 4), false, title);
+              if (!placed[c]) emit(out, c, child_depth, false, title);
           };
       size_t originals = 0, derivatives = 0;
       for (const F& f : list) {
@@ -646,7 +653,7 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
         md += "## Original files\n\n";
         if (derivatives > 0)
           md += "As uploaded; the files archive.org derived from each (other formats, "
-                "OCR text, thumbnails, …) are listed below it.\n\n";
+                "OCR text, thumbnails, …) are folded under it. Expand a file to show them.\n\n";
         for (size_t i = 0; i < list.size(); ++i)
           if (list[i].source == "original" && !placed[i]) emit(md, i, 0, false, {});
         md += "\n";

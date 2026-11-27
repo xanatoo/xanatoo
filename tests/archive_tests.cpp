@@ -138,6 +138,7 @@ int main() {
   const std::string am = ia_markdown(album, "", {"al", 1}, +mp3_only);
   assert(has(am, "Play](https://archive.org/download/al/t%201.mp3)"));
   assert(has(am, "external:mpv:https://archive.org/download/al/a.ogv"));
+  assert(has(am, "\n- [a.ogv]"));
 
   // A collection lists its members and pages.
   const char* coll = R"({"metadata":{"identifier":"c","title":"Coll","mediatype":"collection"}})";
@@ -172,8 +173,8 @@ int main() {
      "addeddate":"2015-06-07 08:09:10","uploader":"scan-x@archive.org"}})";
   const std::string sm = ia_markdown(scan, "", {"b", 1});
   assert(has(sm, "## Original files"));
-  assert(has(sm, "\n- [b.pdf](https://archive.org/download/b/b.pdf) — Text PDF, 4.0 KB\n"
-                 "  - [b_jp2.zip]"));
+  assert(has(sm, "\n- [+] [b.pdf](https://archive.org/download/b/b.pdf) — Text PDF, 4.0 KB\n"
+                 "  - [+] [b_jp2.zip]"));
   assert(has(sm, "\n    - [b_djvu.txt]"));  // derived from the derivative
   assert(has(sm, "VBR MP3, 4:05 · 3. “Song”"));
   assert(has(sm, "x.ogg) — Ogg Vorbis\n"));  // the original's title is not repeated

@@ -9345,6 +9345,24 @@ static void test_list_folding() {
   Document d5 = parse_document("- [+] long\n  text\n  - y\n", "t.md");
   EXPECT(!d5.get(find(d5, "long text")).expanded);
 
+  const char* archive = R"({"metadata":{"title":"Scan"},"files":[
+    {"name":"scan.pdf","source":"original"},
+    {"name":"pages.zip","source":"derivative","original":"scan.pdf"},
+    {"name":"ocr.txt","source":"derivative","original":"pages.zip"},
+    {"name":"cover.jpg","source":"original"}]})";
+  const Document files = parse_markup(ia_markdown(archive, "", {"scan", 1, {}}));
+  const NodeId pdf = find(files, "scan.pdf"), pages = find(files, "pages.zip"),
+               ocr = find(files, "ocr.txt"), cover = find(files, "cover.jpg");
+  EXPECT(pdf != INVALID_NODE && pages != INVALID_NODE &&
+         ocr != INVALID_NODE && cover != INVALID_NODE);
+  EXPECT(list_item_folded(files, pdf, nullptr));
+  EXPECT(list_item_folded(files, pages, nullptr));
+  EXPECT(!list_item_foldable(files, cover));
+  EXPECT_EQ(fold_hiding(files, pages, nullptr), pdf);
+  const Folds opened{{pdf, false}};
+  EXPECT_EQ(fold_hiding(files, pages, &opened), INVALID_NODE);
+  EXPECT_EQ(fold_hiding(files, ocr, &opened), pages);
+
   FontSet fonts;
   std::string path = fontconfig_find("DejaVu Sans", 0, 0);
   if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {

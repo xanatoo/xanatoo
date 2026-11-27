@@ -41,9 +41,9 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
   metadata reply already carries them). Each file's `source` sorts them:
   "Original files" lists the uploads, each with the derivatives whose
   `original` names it nested below (recursively: raw scans → JP2 → OCR →
-  PDF / EPUB); derivatives without a listed original go to "Other derived
-  files" with "(from NAME)", `metadata` files to "Other files"; a reply without
-  `source` gives one "Files" list. Lines show format, size, duration (`length`),
+  PDF / EPUB). These branches start folded. Derivatives without a listed
+  original go to "Other derived files" with "(from NAME)". Metadata files
+  go to "Other files". A reply without `source` gives one "Files" list. Lines show format, size, duration (`length`),
   width × height and track number + title (not repeated on a derivative with
   its original's title). PDFs / EPUBs / images route through the usual
   download / viewer handling.

@@ -556,7 +556,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   Read-only `ia:ID` items and collections over the public `/metadata` and
   `advancedsearch` JSON APIs; `ia_markdown` (pure, tested) writes Markdown that
   the ordinary parser turns into the page, including the infobox with the
-  cover and linked property list. archive.org itself needs
+  cover, linked property list and initially folded derivative branches
+  (the Markdown `[+]` marker). archive.org itself needs
   JavaScript. The HTML description is put into the parsed page afterwards
   (`ia_insert_description`). The `ia` search engine links to `ia:`. See
   `docs/ARCHIVE.md`.
