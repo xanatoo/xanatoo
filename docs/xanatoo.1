@@ -85,6 +85,13 @@ The URL specifies the exact HTTPS host and port and the cookie path
 .Pa / ) .
 Use the Cookies panel to inspect and manage the import.
 Requires a native HTTP build with SQLite and writable state.
+.It Fl \-import-cookies Ar https-origin
+Import Netscape cookies from redirected standard input and exit.
+Select matching host and parent-domain entries and store them for the
+specified HTTPS origin and their original cookie paths.
+Expired entries are skipped.
+Entries with no expiration persist until removed or replaced.
+Requires a native HTTP build with SQLite and writable state.
 .It Fl \-show-paths
 Print every directory and where it came from, then exit.
 .It Fl \-

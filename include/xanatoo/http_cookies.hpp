@@ -4,6 +4,7 @@
 
 #include "xanatoo/http_url.hpp"
 
+#include <iosfwd>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -45,6 +46,7 @@ bool http_cookies_sent();
 bool http_cookie_site_enabled(const HttpUrl& url);
 std::string cookie_origin(const HttpUrl& url);
 bool import_http_cookie(std::string_view scope, std::string_view pair);
+size_t import_netscape_cookies(std::string_view scope, std::istream& input);
 bool set_cookie_site(std::string_view origin, bool enabled);
 bool edit_http_cookie(const HttpCookie& key, bool remove, bool enabled);
 CookieSnapshot http_cookie_snapshot();

@@ -62,6 +62,8 @@ void print_usage(std::ostream& out, const char* argv0) {
       << "      --import-cookie HTTPS-URL\n"
       << "                        Import one NAME=VALUE line from stdin for the\n"
       << "                        exact HTTPS host, port and cookie path\n"
+      << "      --import-cookies HTTPS-ORIGIN\n"
+      << "                        Import matching Netscape cookies from stdin\n"
       << "\n"
       << "Directories:\n"
       << "      --data-dir DIR    Installed data: examples, help, style sheets,\n"
@@ -168,12 +170,14 @@ CliResult parse_cli(int argc, char** argv, CliOptions& opt) {
     }
     bool err = false;
     std::string v;
-    if (value_opt(argc, argv, i, nullptr, "--import-cookie", &v, err)) {
+    const bool netscape = value_opt(argc, argv, i, nullptr, "--import-cookies", &v, err);
+    if (netscape || value_opt(argc, argv, i, nullptr, "--import-cookie", &v, err)) {
       if (err || v.empty() || !opt.cookie_import.empty()) {
-        std::cerr << "xanatoo: specify one HTTPS URL for --import-cookie\n";
+        std::cerr << "xanatoo: specify one HTTPS scope for cookie import\n";
         return CliResult::Error;
       }
       opt.cookie_import = std::move(v);
+      opt.cookie_import_netscape = netscape;
       continue;
     }
     if (value_opt(argc, argv, i, "-g", "--geometry", &v, err)) {
@@ -233,11 +237,19 @@ CliResult apply_path_options(const CliOptions& opt) {
 int run_cookie_import(const CliOptions& opt) {
 #if XANATOO_HTTP_COOKIES
   if (opt.no_save || !opt.file_path.empty() || !opt.file_path2.empty()) {
-    std::cerr << "xanatoo: --import-cookie requires writable state and no document arguments\n";
+    std::cerr << "xanatoo: cookie import requires writable state and no document arguments\n";
     return 1;
   }
   if (::isatty(STDIN_FILENO)) {
-    std::cerr << "xanatoo: pipe or redirect one NAME=VALUE line to --import-cookie\n";
+    std::cerr << "xanatoo: pipe or redirect cookie input on stdin\n";
+    return 1;
+  }
+  if (opt.cookie_import_netscape) {
+    if (const auto count = import_netscape_cookies(opt.cookie_import, std::cin)) {
+      std::cout << "Imported " << count << " cookie entries.\n";
+      return 0;
+    }
+    std::cerr << "xanatoo: no cookies imported (check the HTTPS origin, input and state directory)\n";
     return 1;
   }
   // Bound the read and reject additional lines before writing anything.

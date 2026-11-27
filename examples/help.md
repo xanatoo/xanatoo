@@ -290,9 +290,21 @@ bash tools/export-cookie.sh | xanatoo --import-cookie https://old.reddit.com/
 The helper reads the fields you paste, hides the value at the terminal, and
 writes one `NAME=VALUE` line to the pipe.
 
-Use the exact destination host and port. The URL path scopes the cookie
-(default `/`). Importing also enables cookies for that site. Reload the page
-after importing or changing a cookie. Imported cookies persist until you remove
-them or the site replaces them. Xanatoo keeps persistent values in an owner-only
+Import a Netscape-format export such as a `yt-dlp` cookie file with:
+
+```sh
+xanatoo --import-cookies https://old.reddit.com < cookies.txt
+```
+
+The file import selects cookies for that host, including matching
+parent-domain cookies, and preserves their paths and expiration times.
+Entries with no expiration persist until removed or replaced.
+
+For a single-cookie import, use the exact destination host and port. The URL
+path scopes the cookie (default `/`). Single-cookie imports persist until you
+remove them or the site replaces them.
+
+Both imports enable cookies for the specified origin. Reload the page after
+importing or changing a cookie. Xanatoo keeps persistent values in an owner-only
 database and sends them on foreground requests over verified HTTPS. This
 feature requires a native HTTP build with SQLite.

@@ -11,6 +11,7 @@ namespace xanatoo {
 struct CliOptions {
   std::string font_path;
   std::string cookie_import;
+  bool cookie_import_netscape = false;
   std::string file_path;   // primary document
   std::string file_path2;  // optional second → dual-pane
   bool fullscreen = false;

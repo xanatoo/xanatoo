@@ -43,6 +43,9 @@
 
 ## Status (2026-11-27) — Website cookies
 
+- Import Netscape cookie exports from stdin for a selected HTTPS origin.
+  Passed 15,178 Nix unit checks and a CLI smoke test with a synthetic export.
+
 - Add an opt-in HTTPS cookie jar, a single-cookie stdin import, and a Cookies
   panel for the focused site and other stored origins.
 - Add a single-cookie transfer helper for fields selected in Chrome or

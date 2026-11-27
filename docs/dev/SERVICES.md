@@ -25,6 +25,11 @@ read-only service clients. Every client is read-only: never post or log in.
   Explicit downloads and byte-range requests keep identity encoding by
   default. Browser builds use Fetch's own content negotiation.
 - `http_cookies.cpp` owns the opt-in native HTTP cookie jar for foreground fetches. It uses `state_dir()/cookies.sqlite` (owner-only permissions), with session cookies in memory. Both buffered and streaming requests select on each hop by exact verified HTTPS origin and cookie path. A response's valid parent Domain attribute can be accepted without increasing the scope. Background requests, methods other than GET/HEAD, explicit Authorization/Cookie headers, `--no-save` and browser Fetch builds skip the jar. The fetch worker reports cookie use so signed-in pages skip automatic page snapshots and the reusable in-memory page cache. Signed-in text is excluded from the disk URL cache. Foreground images and paged files still use their existing local display files. The Cookies panel's audit holds the most recent cookie-bearing path and names per origin for this process, with no query or values.
+- `--import-cookies HTTPS-ORIGIN` reads Netscape exports from stdin and
+  imports matching host and parent-domain entries in one transaction. The
+  jar keeps the row paths and expiration times, with zero or blank expiry
+  treated as a persistent manual import. The selected HTTPS origin is the
+  only origin enabled by the import.
 - `include/xanatoo/transfer_meter.hpp` — thread-local byte meter for the loading indicator: fetch workers install one (`TransferMeterScope`), network readers call `meter_bytes` / `meter_expect`; a new raw reader loop should feed it too. The meter also carries the job's cancel flag (`TransferMeter::cancel` → `FetchShared::abandoned`, set by Stop / Esc / navigating away): every reader loop (HTTP(S) in `https.cpp`, Gemini, Gopher, Spartan, Nex, Finger) checks `transfer_cancelled()` per block and fails with `transfer_cancelled_error()`, so a new reader loop must check it too.
 - `include/xanatoo/json_min.hpp` — tiny JSON field/object helpers for read-only API clients (header-only). The `*_field` lookups are flat (first match anywhere): use `json_top_level(obj)` when nested objects repeat a key.
 

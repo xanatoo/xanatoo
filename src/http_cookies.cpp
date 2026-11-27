@@ -7,6 +7,7 @@
 #include "xanatoo/util.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <filesystem>
@@ -120,6 +121,20 @@ bool save_cookie(sqlite3* db, const HttpCookie& cookie) {
                      " value=excluded.value,enabled=excluded.enabled,expires=excluded.expires");
   return q.bind(1, cookie.origin).bind(2, cookie.path).bind(3, cookie.name)
       .bind(4, cookie.value).bind(5, int(cookie.enabled)).bind(6, cookie.expires).run();
+}
+
+bool save_imported_cookies(std::string_view origin,
+                           const std::vector<HttpCookie>& cookies) {
+  const std::lock_guard lock(jar_mutex);
+  auto db = open_jar(true, true);
+  if (!db) return false;
+  sqlite::Tx tx(db);
+  if (!tx.ok() || !write_site(db, origin, true)) return false;
+  for (const auto& cookie : cookies)
+    if (!save_cookie(db, cookie)) return false;
+  if (!tx.commit()) return false;
+  for (const auto& cookie : cookies) session.erase(key_of(cookie));
+  return true;
 }
 
 bool erase_cookie(sqlite3* db, const HttpCookie& cookie) {
@@ -276,14 +291,58 @@ bool import_http_cookie(std::string_view scope, std::string_view pair) {
   cookie.path = url->target;
   if (!read_pair(pair, cookie) || (has_host_prefix(cookie) && cookie.path != "/"))
     return false;
-  const std::lock_guard lock(jar_mutex);
-  auto db = open_jar(true, true);
-  if (!db) return false;
-  sqlite::Tx tx(db);
-  if (!tx.ok() || !write_site(db, cookie.origin, true) ||
-      !save_cookie(db, cookie) || !tx.commit()) return false;
-  session.erase(key_of(cookie));
-  return true;
+  return save_imported_cookies(cookie.origin, {cookie});
+}
+
+size_t import_netscape_cookies(std::string_view scope, std::istream& input) {
+  const auto url = parse_http_url(scope);
+  if (!url || !url->secure || url->target != "/" ||
+      scope.find_first_of("?#") != scope.npos) return 0;
+
+  const auto origin = cookie_origin(*url);
+  const auto host = ascii_lower(url->host);
+  const auto now = now_seconds();
+  std::vector<HttpCookie> cookies;
+  char buffer[2 * kMaxPair + 1024];
+  while (input.getline(buffer, sizeof(buffer))) {
+    std::string_view line(buffer, static_cast<size_t>(input.gcount()) - !input.eof());
+    if (line.ends_with('\r')) line.remove_suffix(1);
+    if (line.starts_with("#HttpOnly_")) line.remove_prefix(10);
+    else if (line.empty() || line.starts_with('#')) continue;
+
+    std::array<std::string_view, 7> fields;
+    for (auto& field : fields) {
+      const auto tab = line.find('\t');
+      const bool last = &field == &fields.back();
+      if (last != (tab == line.npos)) return 0;
+      field = line.substr(0, tab);
+      if (!last) line.remove_prefix(tab + 1);
+    }
+    const auto& [domain, subdomains, path, secure, expiry, name, value] = fields;
+    auto cookie_host = ascii_lower(domain);
+    if (cookie_host.starts_with('.')) cookie_host.erase(0, 1);
+    if (cookie_host != host &&
+        !(subdomains == "TRUE" && host.ends_with("." + cookie_host))) continue;
+    if ((subdomains != "TRUE" && subdomains != "FALSE") ||
+        (secure != "TRUE" && secure != "FALSE") ||
+        !valid_path(path) || name.find('=') != name.npos ||
+        name.size() + value.size() + 1 > kMaxPair) return 0;
+
+    HttpCookie cookie{origin, std::string(path), {}, {}};
+    if (!expiry.empty()) {
+      const auto [end, error] = std::from_chars(expiry.data(),
+          expiry.data() + expiry.size(), cookie.expires);
+      if (error != std::errc{} || end != expiry.data() + expiry.size()) return 0;
+    }
+    if (cookie.expires != 0 && cookie.expires <= now) continue;
+    if (!read_pair(std::string(name) + "=" + std::string(value), cookie) ||
+        (has_host_prefix(cookie) &&
+         (path != "/" || subdomains != "FALSE" || secure != "TRUE"))) return 0;
+    if (cookies.size() == 4096) return 0;
+    cookies.push_back(std::move(cookie));
+  }
+  if (!input.eof() || input.bad() || cookies.empty()) return 0;
+  return save_imported_cookies(origin, cookies) ? cookies.size() : 0;
 }
 
 bool set_cookie_site(std::string_view origin, bool enabled) {

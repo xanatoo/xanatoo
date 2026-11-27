@@ -2,12 +2,14 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/http_cookies.hpp"
+
 #include "xanatoo/paths.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <sstream>
 #include <string_view>
 #include <sys/stat.h>
 
@@ -112,6 +114,27 @@ void test_http_cookies(int& passed, int& failed) {
          "decline cookies received while site is disabled");
 
   const bool previous_no_save = no_save();
+  std::istringstream export_file(
+      "# Netscape HTTP Cookie File\r\n"
+      "#HttpOnly_.example.test\tTRUE\t/account\tTRUE\t4102444800\tparent\ta=b\r\n"
+      "import.example.test\tFALSE\t/\tFALSE\t0\tlocal\t\n"
+      "import.example.test\tFALSE\t/\tTRUE\t1\texpired\told\n"
+      "example.test\tFALSE\t/\tTRUE\t0\thostonly\tother\n"
+      "other.test\tTRUE\t/\tTRUE\t0\tunrelated\tother");
+  expect(import_netscape_cookies("https://import.example.test:8443", export_file) == 2,
+         "import matching Netscape cookies with CRLF and HttpOnly");
+  expect(header("https://import.example.test:8443/account") == "parent=a=b; local=" &&
+         header("https://import.example.test:8443/") == "local=" &&
+         header("https://import.example.test/account").empty() &&
+         header("https://sibling.example.test:8443/account").empty(),
+         "Netscape import preserves path and exact HTTPS origin");
+  std::istringstream malformed(
+      "import.example.test\tFALSE\t/\tTRUE\t0\tlocal\tchanged\n"
+      "import.example.test\tFALSE\t/\tTRUE\tinvalid\tbad\tvalue");
+  expect(!import_netscape_cookies("https://import.example.test:8443", malformed) &&
+         header("https://import.example.test:8443/") == "local=",
+         "malformed Netscape imports leave the jar unchanged");
+
   set_no_save(true);
   expect(http_cookie_header(url).empty() &&
          !import_http_cookie("https://old.example.test/", "sid=blocked"),
