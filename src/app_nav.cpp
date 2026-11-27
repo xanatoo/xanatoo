@@ -1023,7 +1023,7 @@ void open_image_in_tab(App& app, int pi, const std::string& address) {
 }
 
 BufferId open_link_in_tab(App& app, int pi, const std::string& href,
-                          bool inherit_history) {
+                          bool inherit_history, bool defer_fetch) {
   const LinkTarget t = resolve_link(app, pi, href);
   BufferId bi = kNoBuffer;
   switch (t.kind) {
@@ -1143,7 +1143,8 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
           app, xanatoo::parse_document("# Loading…\n\n`" + t.url + "`\n", {}),
           t.url);
       buf(app, bi).placeholder = true;
-      start_fetch(app, FetchPurpose::Tab, -1, t.url, false, bi);
+      if (defer_fetch) app.deferred_tab_loads.push_back(bi);
+      else start_fetch(app, FetchPurpose::Tab, -1, t.url, false, bi);
       break;
     }
   }

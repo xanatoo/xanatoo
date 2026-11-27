@@ -183,7 +183,8 @@ bool https_get_follow_stream(std::string_view url, std::string_view agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
                              std::string* err, std::string* final_url,
-                             std::string_view extra_headers) {
+                             std::string_view extra_headers,
+                             bool /*accept_gzip*/) {
   auto r = https_request("GET", url, agent, extra_headers, {}, err);
   if (!r) return false;
   if (final_url) *final_url = std::string(url);

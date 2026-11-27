@@ -114,6 +114,10 @@ between adjacent tabs with different roots. Dragging and title sorting change
 the strip order while preserving parent links. Removing a buffer reparents its
 children to its parent. Tear-off keeps the buffer and its parent links.
 Ctrl+Shift+T restores the most recently closed tab at its former position.
+Startup restores visible panes first. Remote tabs outside those panes
+keep their saved positions and history as placeholders, then load one at
+a time when page fetches are idle. Bringing a queued tab into view starts
+its request immediately.
 A ten-entry in-memory stack keeps closed buffers and their Back / Forward
 trails for the current session.
 The session stores parent links by saved tab position so they survive new buffer

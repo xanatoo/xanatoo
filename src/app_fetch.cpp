@@ -1299,6 +1299,7 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
   job.record_history = record_history;
   job.buf = purpose == FetchPurpose::Navigate && pane >= 0
                 ? app.panes[pane].buf : tab_buf;
+  if (job.buf != kNoBuffer) std::erase(app.deferred_tab_loads, job.buf);
   job.started = xanatoo::sdl::ticks();
   job.shared = std::make_shared<FetchShared>();
   job.shared->force_download = purpose == FetchPurpose::Download;
@@ -1495,6 +1496,30 @@ void poll_fetches(App& app) {
       it = app.downloads.erase(it);
     else
       ++it;
+  }
+  if (app.deferred_tab_loads.empty()) return;
+  // A restored tab brought into view starts even while another page loads.
+  for (int pi : live_views(app)) {
+    const BufferId id = app.panes[pi].buf;
+    if (std::find(app.deferred_tab_loads.begin(), app.deferred_tab_loads.end(), id) ==
+        app.deferred_tab_loads.end())
+      continue;
+    const DocBuffer& b = buf(app, id);
+    if (b.placeholder) start_fetch(app, FetchPurpose::Tab, -1, b.path, false, id);
+    else std::erase(app.deferred_tab_loads, id);
+  }
+  // Once the visible pages finish, load the remaining tabs one at a time.
+  if (std::any_of(app.fetches.begin(), app.fetches.end(), [](const FetchJob& job) {
+        return job.purpose == FetchPurpose::Navigate || job.purpose == FetchPurpose::Tab;
+      }))
+    return;
+  while (!app.deferred_tab_loads.empty()) {
+    const BufferId id = app.deferred_tab_loads.front();
+    if (const DocBuffer* b = find_buf(app, id); b && b->placeholder) {
+      start_fetch(app, FetchPurpose::Tab, -1, b->path, false, id);
+      break;
+    }
+    std::erase(app.deferred_tab_loads, id);
   }
 }
 

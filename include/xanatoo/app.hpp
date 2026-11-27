@@ -1662,6 +1662,7 @@ struct App {
     int x = 0, y = 0;
   } quote_click;
   std::vector<FetchJob> fetches;
+  std::vector<BufferId> deferred_tab_loads;  // background session restores
   std::vector<std::shared_ptr<xanatoo::DownloadProgress>> downloads;
   // Confirmation before an explicit download starts (Cancel | Download [to…]).
   struct DownloadConfirm {
@@ -2369,7 +2370,7 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href);
 // Middle click: open `href` (in pane `pi`) in a new tab right after the
 // current one; the view stays. Anchors into the page itself just jump.
 BufferId open_link_in_tab(App& app, int pi, const std::string& href,
-                          bool inherit_history = true);
+                          bool inherit_history = true, bool defer_fetch = false);
 void open_image_in_tab(App& app, int pi, const std::string& address);
 NavHistory& view_nav(App& app, int pi);
 void select_view_tab(App& app, int pi, BufferId id);

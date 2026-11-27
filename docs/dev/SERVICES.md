@@ -21,6 +21,9 @@ read-only service clients. Every client is read-only: never post or log in.
   fails or the connection yields zero response bytes. The Odysee read-only
   JSON POSTs opt in to the same retry. The original connection setup error
   is reported directly. TLS read errors retain their backend details.
+- Ordinary web navigation advertises gzip on the native streaming client.
+  Explicit downloads and byte-range requests keep identity encoding by
+  default. Browser builds use Fetch's own content negotiation.
 - `http_cookies.cpp` owns the opt-in native HTTP cookie jar for foreground fetches. It uses `state_dir()/cookies.sqlite` (owner-only permissions), with session cookies in memory. Both buffered and streaming requests select on each hop by exact verified HTTPS origin and cookie path. A response's valid parent Domain attribute can be accepted without increasing the scope. Background requests, methods other than GET/HEAD, explicit Authorization/Cookie headers, `--no-save` and browser Fetch builds skip the jar. The fetch worker reports cookie use so signed-in pages skip automatic page snapshots and the reusable in-memory page cache. Signed-in text is excluded from the disk URL cache. Foreground images and paged files still use their existing local display files. The Cookies panel's audit holds the most recent cookie-bearing path and names per origin for this process, with no query or values.
 - `include/xanatoo/transfer_meter.hpp` — thread-local byte meter for the loading indicator: fetch workers install one (`TransferMeterScope`), network readers call `meter_bytes` / `meter_expect`; a new raw reader loop should feed it too. The meter also carries the job's cancel flag (`TransferMeter::cancel` → `FetchShared::abandoned`, set by Stop / Esc / navigating away): every reader loop (HTTP(S) in `https.cpp`, Gemini, Gopher, Spartan, Nex, Finger) checks `transfer_cancelled()` per block and fails with `transfer_cancelled_error()`, so a new reader loop must check it too.
 - `include/xanatoo/json_min.hpp` — tiny JSON field/object helpers for read-only API clients (header-only). The `*_field` lookups are flat (first match anywhere): use `json_top_level(obj)` when nested objects repeat a key.
@@ -444,6 +447,11 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   `dailymotion:xID`, `mediaccc:c/38c3` / `mediaccc:v/SLUG`, plus
   channel and search refs and comments. Parsers are pure and tested; never
   post or log in. See `docs/VIDEO_SITES.md`.
+- Odysee builds a video page after resolving the claim, probing the HLS
+  playlist (or looking up the MP4 fallback), and fetching comments in
+  sequence. A slow comments request can delay the title and Play link even
+  though both are ready. After resolution, stream discovery and comments
+  can proceed independently.
 
 ## Usenet / NNTP (`nntp.hpp`)
 

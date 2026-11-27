@@ -573,7 +573,8 @@ struct ChunkDecoder {
 bool stream_raw(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err, std::string_view extra_headers, bool& no_response) {
+                 std::string* err, std::string_view extra_headers, bool& no_response,
+                 bool accept_gzip) {
   const auto parsed = parse_http_url(url);
   if (!parsed) {
     if (err) *err = "invalid http(s) URL";
@@ -585,11 +586,16 @@ bool stream_raw(const std::string& url, std::string_view agent,
       std::string::npos;
   const bool use_jar = allows_cookie_jar(extra_headers);
   const std::string cookies = jar_header(*parsed, use_jar);
+  const std::string header_names = "\n" + ascii_lower(extra_headers);
+  const bool ranged = header_names.find("\nrange:") != std::string::npos;
+  const std::string_view encoding = header_names.find("\naccept-encoding:") != std::string::npos
+      ? "" : accept_gzip && !ranged ? "Accept-Encoding: gzip\r\n"
+                                    : "Accept-Encoding: identity\r\n";
   const std::string req = "GET " + parsed->target + " HTTP/1.1\r\nHost: " + parsed->authority +
       "\r\nUser-Agent: " + std::string(agent) +
       (custom_accept ? "\r\n" : "\r\nAccept: */*\r\n") +
       "Accept-Language: " + accept_language() +
-      "\r\nAccept-Encoding: identity\r\n" + std::string(extra_headers) +
+      "\r\n" + std::string(encoding) + std::string(extra_headers) +
       (cookies.empty() ? "" : "Cookie: " + cookies + "\r\n") +
       "Connection: close\r\n\r\n";
   if (!conn.write_request(req, *parsed, cookies)) {
@@ -721,7 +727,8 @@ bool stream_raw(const std::string& url, std::string_view agent,
 bool stream_once(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err, std::string_view extra_headers, bool& no_response) {
+                 std::string* err, std::string_view extra_headers, bool& no_response,
+                 bool accept_gzip) {
   constexpr size_t kMaxDecoded = 256u << 20;
   bool encoded = false;
   std::string packed;
@@ -743,12 +750,16 @@ bool stream_once(const std::string& url, std::string_view agent,
         }
         packed.append(bytes);
         return true;
-      }, result, err, extra_headers, no_response);
+      }, result, err, extra_headers, no_response, accept_gzip);
   if (!ok || !encoded) return ok;
   result.content_length = -1;
   if (auto decoded = decode_content_encoding(result.content_encoding, packed,
-                                             kMaxDecoded))
+                                             kMaxDecoded)) {
     packed = std::move(*decoded);
+  } else if (is_gzip(packed)) {
+    if (err) *err = "invalid or oversized gzip response";
+    return false;
+  }
   return packed.empty() || on_body(packed);
 }
 
@@ -758,7 +769,8 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpHeaderCallback& on_headers,
                              const HttpBodyCallback& on_body,
                              std::string* err, std::string* final_url,
-                             std::string_view extra_headers) {
+                             std::string_view extra_headers,
+                             bool accept_gzip) {
   std::string current(url);
   bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
@@ -781,7 +793,7 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
           if (headers.status >= 300 && headers.status < 400 &&
               !headers.location.empty()) return true;
           return on_body(bytes);
-        }, headers, err, extra_headers, no_response);
+        }, headers, err, extra_headers, no_response, accept_gzip);
     };
     const bool ok = request() || (no_response && request());
     if (!ok) {

@@ -682,7 +682,7 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
           body_bytes.append(bytes);
         }
         return true;
-      }, err, &fin, request_headers);
+      }, err, &fin, request_headers, /*accept_gzip=*/!force_download);
   if (!ok) {
     if (download && downloading) {
       download->error = err ? *err : "download failed";

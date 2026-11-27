@@ -331,7 +331,8 @@ void restore_session(App& app) {
         BufferId id = restored[i];
         const auto* identity = get("tabidentity" + index);
         if (id == kNoBuffer && !identity) id = find_buffer(app, tabs[i]);
-        if (id == kNoBuffer) id = open_link_in_tab(app, 0, tabs[i], /*inherit_history=*/false);
+        if (id == kNoBuffer)
+          id = open_link_in_tab(app, 0, tabs[i], /*inherit_history=*/false, /*defer_fetch=*/true);
         restored[i] = id;
         if (id == kNoBuffer ||
             std::find(order.begin(), order.end(), id) != order.end()) continue;

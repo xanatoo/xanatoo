@@ -69,7 +69,8 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
                              const HttpBodyCallback& on_body,
                              std::string* err = nullptr,
                              std::string* final_url = nullptr,
-                             std::string_view extra_headers = {});
+                             std::string_view extra_headers = {},
+                             bool accept_gzip = false);
 
 // HTTP/1.1 request over TCP or TLS. `extra_headers` are full header lines ending
 // with "\r\n" (e.g. "Authorization: Bearer …\r\n"). `body` is optional
