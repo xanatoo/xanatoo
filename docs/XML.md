@@ -52,6 +52,7 @@ error view in the app instead of an editable replacement for the source.
 | --- | --- |
 | Document and grouping | `doc`, `article`, `section`, `h`, `h1`…`h6`, `chrome`, `aside` |
 | Publication and activity details | `metadata` |
+| Named facts | `infobox`, `properties`, `property`, `name`, `value` |
 | Paragraphs and lists | `p`, `ul`, `ol`, `li`, `quote`, `hr`, `codeblock`, `note` |
 | Media and layout | `image`, `figure`, `caption`, `stretch`, `summary` (in `stretch`: shown while collapsed, instead of the rest), `columns`, `column`, `include`, `collection` |
 | Definitions and references | `deflist`, `term`, `def`, `biblio`, `ref`, `footnote` |
@@ -84,6 +85,24 @@ by any excerpt or body. For example:
 The equivalent forms are `(metadata ...)` in S-expressions and
 `:::metadata` in Markdown. Use `<caption>` to describe or identify media
 or a table.
+
+Use `<properties>` for a list of named facts. Each `<property>` has a
+`<name>` and a `<value>` in that order, both with inline content.
+An optional `<infobox>` groups the list with blocks such as a cover image
+or heading. For example:
+
+```xml
+<infobox>
+  <properties>
+    <property><name>Creator</name><value><a href="ia:ocean">Ocean</a></value></property>
+  </properties>
+</infobox>
+```
+
+Markdown uses nested `:::infobox`, `:::properties`, and `:::property`
+fences, each closed with `:::`. Write `:::name Creator` and
+`:::value [Ocean](ia:ocean)` on separate lines inside the property fence.
+S-expressions use the same names as XML.
 
 Every block may carry `nid` (the source document's numeric node identity),
 `label`, `style`, `tags`, `level`, `src`, `alt`, `summary`, `expanded` (`true`

@@ -16,6 +16,8 @@ JSON → Markdown mapping (`ia_markdown`) are pure and tested offline in
 
 - Data: `https://archive.org/metadata/ID` (item) and `advancedsearch.php?q=collection:ID`
   (members of a collection; only fetched when `mediatype` is `collection`).
+- The infobox groups the cover and the item’s property list. It floats beside
+  the description when there is room and appears above it in narrow panes.
 - Details: creator, date, publisher, language, collections, subjects, rights,
   license, source; for books volume, page count, ISBN / LCCN, OCLC (WorldCat
   link), Open Library edition / work, call number, contributor, sponsor, scan

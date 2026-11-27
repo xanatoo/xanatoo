@@ -3,6 +3,7 @@
 //
 // Lightweight unit tests (no Catch/GTest). Run: ./xanatoo_tests
 
+#include "xanatoo/archive.hpp"
 #include "xanatoo/doc_codec.hpp"
 #include "xanatoo/about.hpp"
 #include "xanatoo/ebooks.hpp"
@@ -5561,6 +5562,70 @@ void test_html_min() {
   }
 }
 
+void test_property_lists_and_infoboxes() {
+  using namespace xanatoo;
+  // Native infoboxes retain their linked facts across formats and reflow.
+  const std::string_view facts_xml = R"xml(<doc><infobox><properties>
+    <property><name>Creator</name><value><a href="ia:ocean">Ocean</a></value></property>
+    <property><name>Date</name><value>1994</value></property>
+    </properties></infobox><p>The description follows the facts.</p></doc>)xml";
+  const Document facts = parse_xml(facts_xml);
+  const std::string canonical = serialize_xml(facts);
+  EXPECT_EQ(serialize_xml(parse_markup(serialize_markup(facts))), canonical);
+  const auto decoded = decode_document(encode_document(facts));
+  EXPECT(decoded && serialize_xml(*decoded) == canonical);
+  EXPECT_EQ(serialize_xml(parse_sexpr(
+      R"((doc (properties (property (name "Type") (value "software")))))")),
+      serialize_xml(parse_xml(
+          "<doc><properties><property><name>Type</name><value>software</value>"
+          "</property></properties></doc>")));
+
+  const std::string archive_json = R"({"metadata":{"title":"Example",
+      "creator":"Ocean","description":"<p>About the item.</p>"}})";
+  const IaRef archive_ref{"example", 1, {}};
+  Document item = parse_markup(ia_markdown(archive_json, "", archive_ref));
+  ia_insert_description(item, archive_json, archive_ref);
+  const std::string item_xml = serialize_xml(item);
+  EXPECT(item_xml.find("<infobox ") != std::string::npos);
+  EXPECT(item_xml.find("https://archive.org/services/img/example") != std::string::npos);
+  EXPECT(item_xml.find("search:archive:creator%3A%22Ocean%22") != std::string::npos);
+  EXPECT(item_xml.find("</infobox>") < item_xml.find("About the item."));
+  EXPECT(item_xml.find("ia-description-slot") == std::string::npos);
+
+  FontSet fonts;
+  const std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_property_lists_and_infoboxes layout (no font)\n");
+    return;
+  }
+  LayoutEngine engine(fonts, nullptr);
+  LayoutOptions options;
+  options.margin_x = 0.f;
+  options.margin_y = 0.f;
+  engine.set_options(options);
+
+  auto box_of = [](const Document& doc, const LayoutResult& layout, NodeKind kind) {
+    for (const auto& b : layout.boxes)
+      if (doc.get(b.node).kind == kind) return b;
+    return LayoutBox{};
+  };
+  const LayoutResult facts_wide = engine.layout(facts, 900.f);
+  const auto wide_box = box_of(facts, facts_wide, NodeKind::Infobox);
+  const auto wide_text = box_of(facts, facts_wide, NodeKind::Paragraph);
+  const auto name = box_of(facts, facts_wide, NodeKind::PropertyName);
+  const auto value = box_of(facts, facts_wide, NodeKind::PropertyValue);
+  EXPECT(wide_box.x > wide_text.x && wide_text.y < wide_box.y + wide_box.height);
+  EXPECT(name.width > 0 && value.x >= name.x + name.width && name.y == value.y);
+
+  const LayoutResult facts_narrow = engine.layout(facts, 190.f);
+  const auto narrow_box = box_of(facts, facts_narrow, NodeKind::Infobox);
+  const auto narrow_text = box_of(facts, facts_narrow, NodeKind::Paragraph);
+  const auto narrow_name = box_of(facts, facts_narrow, NodeKind::PropertyName);
+  const auto narrow_value = box_of(facts, facts_narrow, NodeKind::PropertyValue);
+  EXPECT(narrow_box.width > 0 && narrow_text.y >= narrow_box.y + narrow_box.height);
+  EXPECT(narrow_name.width > 0 && narrow_value.y >= narrow_name.y + narrow_name.height);
+}
+
 // Inline images (InlineKind::Image) and asides (NodeKind::Aside) through
 // Markdown, sexp and HTML; layout of floats and image atoms.
 void test_inline_images_and_asides() {
@@ -10101,6 +10166,7 @@ int main() {
   test_layout_margins_and_measure();
   test_layout_reader_mode();
   test_inline_images_and_asides();
+  test_property_lists_and_infoboxes();
   test_table_alignment();
   test_search();
   test_search_results();

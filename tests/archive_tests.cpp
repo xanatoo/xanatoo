@@ -58,21 +58,24 @@ int main() {
   assert(ia_mediatype(item) == "texts");
   const std::string md = ia_markdown(item, "", {"book", 1});
   assert(has(md, "# A \\*Book\\* \\[1\\]"));
+  assert(has(md, ":::infobox\n![](https://archive.org/services/img/book)\n\n"
+                 ":::properties\n:::property\n"));
+  assert(has(md, ":::\n:::\n:::\n\nia-description-slot\n"));
   // Creator, date, language and contributor link to searches for the value.
-  assert(has(md, "Creator: [Doe, Jane](search:archive:creator%3A%22Doe%2C+Jane%22); "
+  assert(has(md, ":::name Creator\n:::value [Doe, Jane](search:archive:creator%3A%22Doe%2C+Jane%22); "
                  "[Roe, R.](search:archive:creator%3A%22Roe%2C+R.%22)\n"));
-  assert(has(md, "Date: [1901-02-03](search:archive:date%3A1901-02-03)\n"));
-  assert(has(md, "Language: [eng](search:archive:language%3A%22eng%22), "
+  assert(has(md, ":::name Date\n:::value [1901-02-03](search:archive:date%3A1901-02-03)\n"));
+  assert(has(md, ":::name Language\n:::value [eng](search:archive:language%3A%22eng%22), "
                  "[ger](search:archive:language%3A%22ger%22)\n"));
   assert(has(md, "[The \"Big\" (Lib)](search:archive:contributor%3A%22The+Big+%5BLib%5D%22)\n"));
   auto dated = [](const char* d) {
     return ia_markdown(std::string(R"({"metadata":{"identifier":"d","mediatype":"texts","date":")") +
                        d + "\"}}", "", {"d", 1});
   };
-  assert(has(dated("1997"), "Date: [1997](search:archive:date%3A1997)\n"));
+  assert(has(dated("1997"), ":::name Date\n:::value [1997](search:archive:date%3A1997)\n"));
   assert(has(dated("1997-03-04T00:00:00Z"), "](search:archive:date%3A1997-03-04)\n"));
-  assert(has(dated("[19--?]"), "Date: \\[19--?\\]\n"));
-  assert(has(dated("1997/98"), "Date: 1997/98\n"));
+  assert(has(dated("[19--?]"), ":::name Date\n:::value \\[19--?\\]\n"));
+  assert(has(dated("1997/98"), ":::name Date\n:::value 1997/98\n"));
   assert(has(md, "[gutenberg](ia:gutenberg)"));
   // The description is HTML: it replaces a placeholder of the parsed page.
   assert(has(md, "\n\nia-description-slot\n\n"));
@@ -178,16 +181,16 @@ int main() {
   assert(has(sm, "(from gone.avi)"));
   assert(has(sm, "[loop.a]") && has(sm, "[loop.b]"));  // a cycle still lists both
   assert(has(sm, "## Other files\n\n- [cover.jpg]"));
-  assert(has(sm, "Pages: 312"));
-  assert(has(sm, "Uploader: [scan-x@archive.org](ia:uploader:scan-x@archive.org)"));
-  assert(has(sm, "ISBN: 0123456789"));
+  assert(has(sm, ":::name Pages\n:::value 312"));
+  assert(has(sm, ":::name Uploader\n:::value [scan-x@archive.org](ia:uploader:scan-x@archive.org)"));
+  assert(has(sm, ":::name ISBN\n:::value 0123456789"));
   assert(has(sm, "[12345](https://search.worldcat.org/title/12345)"));
   assert(has(sm, "[OL1M](https://openlibrary.org/books/OL1M)"));
-  assert(has(sm, "Scanned: Hong Kong, 400 ppi"));
-  assert(has(sm, "Access: lending library"));
-  assert(has(sm, "Added: 2015-06-07\n"));
-  assert(has(sm, "Updated: 2023-11-14"));
-  assert(has(sm, "Size: 3.0 MB in 9 files"));
+  assert(has(sm, ":::name Scanned\n:::value Hong Kong, 400 ppi"));
+  assert(has(sm, ":::name Access\n:::value lending library"));
+  assert(has(sm, ":::name Added\n:::value 2015-06-07\n"));
+  assert(has(sm, ":::name Updated\n:::value 2023-11-14"));
+  assert(has(sm, ":::name Size\n:::value 3.0 MB in 9 files"));
   assert(has(sm, "## Reviews\n\n★★★★☆ **Great** — ann, 2020-01-02\n\n"
                  "Worth \\*reading\\*.  \nTwice.\n\n1\\. Get it  \n\\| no table\n\n"));
   // Replies without `source` keep one plain list.

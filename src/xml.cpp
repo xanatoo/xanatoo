@@ -222,6 +222,11 @@ const char* block_tag(const Node& n) {
     case NodeKind::Collection: return "collection";
     case NodeKind::Chrome: return "chrome";
     case NodeKind::Aside: return "aside";
+    case NodeKind::Infobox: return "infobox";
+    case NodeKind::Properties: return "properties";
+    case NodeKind::Property: return "property";
+    case NodeKind::PropertyName: return "name";
+    case NodeKind::PropertyValue: return "value";
     case NodeKind::Page: return "page";
     case NodeKind::Summary: return "summary";
   }
@@ -255,6 +260,9 @@ bool block_kind(std::string_view s, NodeKind& kind, int& level) {
       {"message", NodeKind::Message}, {"footnote", NodeKind::Footnote},
       {"collection", NodeKind::Collection}, {"chrome", NodeKind::Chrome},
       {"aside", NodeKind::Aside}, {"page", NodeKind::Page},
+      {"infobox", NodeKind::Infobox}, {"properties", NodeKind::Properties},
+      {"property", NodeKind::Property}, {"name", NodeKind::PropertyName},
+      {"value", NodeKind::PropertyValue},
       {"summary", NodeKind::Summary}};
   for (auto [name, value] : names) {
     if (name != s) continue;
@@ -316,6 +324,8 @@ bool accepts_inline(NodeKind kind) {
     case NodeKind::Definition:
     case NodeKind::Caption:
     case NodeKind::Metadata:
+    case NodeKind::PropertyName:
+    case NodeKind::PropertyValue:
     case NodeKind::BiblioEntry:
     case NodeKind::TableCell:
     case NodeKind::Message: return true;

@@ -467,10 +467,11 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
   std::string md = "# " + esc(titles.empty() ? ref.id : one_line(titles[0])) + "\n\n";
 
   if (ref.page <= 1 || type != "collection") {
-    md += "![](https://archive.org/services/img/" + ref.id + ")\n\n";
+    md += ":::infobox\n![](https://archive.org/services/img/" + ref.id + ")\n\n";
     std::string facts;
     auto add = [&](const char* label, const std::string& v) {
-      if (!v.empty()) facts += "- " + std::string(label) + ": " + v + "\n";
+      if (!v.empty())
+        facts += ":::property\n:::name " + std::string(label) + "\n:::value " + one_line(v) + "\n:::\n";
     };
     add("Creator", search_links("creator", field("creator"), "; "));
     if (const auto date = field("date"); !date.empty()) add("Date", date_link(date[0]));
@@ -549,7 +550,8 @@ std::string ia_markdown(std::string_view metadata_json, std::string_view members
               (valid_uploader(u) ? link(u, "ia:uploader:" + u) : esc(one_line(u)));
       add("Uploader", up);
     }
-    if (!facts.empty()) md += facts + "\n";
+    if (!facts.empty()) md += ":::properties\n" + facts + ":::\n";
+    md += ":::\n\n";
 
     const auto desc = field("description");
     if (!desc.empty()) md += std::string(kDescriptionSlot) + "\n\n";
@@ -701,7 +703,7 @@ void ia_insert_description(Document& doc, std::string_view metadata_json, const 
   if (parts.empty()) return;
 
   // Nothing before the slot can be a paragraph of exactly this text: there
-  // is only the title, the thumbnail and the "Label: value" list.
+  // is only the title and the infobox with the cover and property list.
   NodeId slot = INVALID_NODE;
   for (const Node& n : doc.nodes)
     if (n.kind == NodeKind::Paragraph && n.spans.size() == 1 &&

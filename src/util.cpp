@@ -29,7 +29,8 @@ bool is_text_node_kind(NodeKind k) {
          k == NodeKind::Note || k == NodeKind::CodeBlock ||
          k == NodeKind::Term || k == NodeKind::Definition ||
          k == NodeKind::Caption || k == NodeKind::Metadata || k == NodeKind::BiblioEntry ||
-         k == NodeKind::TableCell;
+         k == NodeKind::TableCell || k == NodeKind::PropertyName ||
+         k == NodeKind::PropertyValue;
 }
 
 void collect_text_nodes(const Document& doc, NodeId id,

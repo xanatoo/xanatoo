@@ -51,6 +51,11 @@ enum class NodeKind : uint8_t {
   Summary,  // first child of a Stretch: the blocks shown instead of the rest
             // while it is folded
   Metadata,  // inline byline, provenance, or activity details for a composition
+  Infobox,    // supporting facts and media grouped in a box
+  Properties, // named facts
+  Property,   // one name and value pair
+  PropertyName,
+  PropertyValue,
 };
 
 enum class InlineKind : uint8_t {

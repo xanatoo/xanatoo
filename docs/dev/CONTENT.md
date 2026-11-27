@@ -332,6 +332,16 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
   first (`css_decl`, last declaration wins), then attributes; row groups
   pass theirs on to their rows; `<col>` fills `cols`.
 
+## Property lists and infoboxes
+
+- `Properties` contains `Property` rows with inline `PropertyName` and
+  `PropertyValue` children. Layout aligns the columns and wraps each value
+  in its own column. In tight space the name sits above the value.
+- `Infobox` reuses side-box layout with its own stylesheet role
+  (`infobox`). It floats right by default and falls back to the flow in
+  narrow panes. The fonts and row spacing come from `property-name` and
+  `property-value`. See `docs/XML.md` for the markup.
+
 ## Inline images and asides
 
 - `InlineKind::Image` spans (`inline_image()`): `text` is U+FFFC so the

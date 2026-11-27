@@ -503,6 +503,8 @@ std::vector<NodeId> cut_blocks(const Document& doc, NodeId node) {
       case NodeKind::Column:
       case NodeKind::TableRow:
       case NodeKind::TableCell:
+      case NodeKind::PropertyName:
+      case NodeKind::PropertyValue:
       case NodeKind::Caption:
       case NodeKind::Metadata:
         continue;
@@ -528,6 +530,9 @@ std::string_view block_kind_name(NodeKind kind) {
     case NodeKind::Image: return "Image";
     case NodeKind::Stretch: return "Stretchtext";
     case NodeKind::Summary: return "Summary";
+    case NodeKind::Infobox: return "Infobox";
+    case NodeKind::Properties: return "Property List";
+    case NodeKind::Property: return "Property";
     case NodeKind::BlockQuote: return "Quote";
     case NodeKind::HorizontalRule: return "Rule";
     case NodeKind::Transclude: return "Embed";

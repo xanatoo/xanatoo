@@ -197,11 +197,16 @@ recolours every parent rule that uses `accent` (see `night-amber.xss`).
 `block-quote`, `note`, `code-block`, `term`, `definition`, `figure`,
 `caption`, `metadata-block`, `bibliography-entry`, `footnote`, `thread`, `message`,
 `message-alt`, `message-author`, `message-op`, `message-meta`, `table`,
-`rule`, `transclusion`, `aside`, `article`, `page` (sheet of a PDF / DjVu /
+`rule`, `transclusion`, `aside`, `infobox`, `property-name`, `property-value`,
+`article`, `page` (sheet of a PDF / DjVu /
 comic page: `background` = paper before tiles arrive, `border`, `space-after`;
 `docs/FIXED_LAYOUT.md`), `gallery` (the `//gallery` views: `background`
 replaces the paper and margin behind the grid and the single image, `color`
 the ink of its count line and captions; `gallery_view_style`).
+
+`infobox` uses the side-box properties `width`, `side`, `placement` and
+`indent` (padding). `property-name` and `property-value` control each
+column's text and spacing. The name's `indent` sets the column gap.
 
 `metadata-block` styles the full byline or activity row. When it immediately
 follows a heading, its `space-before` sets the gap between the two blocks.

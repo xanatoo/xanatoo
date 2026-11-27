@@ -30,6 +30,7 @@
   (role message-meta (color muted))
   (role metadata (font small) (color muted))
   (role caption (color muted))
+  (role infobox (background "#263545") (border line))
   (role aside (background "#263545") (color "#c5d4df") (border line))
   (role table (background "#293748") (border line))
   (role rule (border line))

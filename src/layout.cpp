@@ -297,6 +297,8 @@ static void append_result(LayoutResult& out, const LayoutResult& in) {
 static bool clears_floats(NodeKind k) {
   switch (k) {
     case NodeKind::Table:
+    case NodeKind::Properties:
+    case NodeKind::Property:
     case NodeKind::CodeBlock:
     case NodeKind::Image:
     case NodeKind::Figure:
@@ -374,7 +376,8 @@ void LayoutEngine::layout_children_sequential(
           auto row = figure_row(doc, child, max_width);
           return !row.empty() && row.front().node != child;
         }();
-    if (kind != NodeKind::Aside && !floating && !row_follower &&
+    if (kind != NodeKind::Aside && kind != NodeKind::Infobox &&
+        !floating && !row_follower &&
         try_skip_block(child, x, y, max_width, out))
       continue;
     layout_node(doc, child, x, y, max_width, out,
@@ -1410,8 +1413,47 @@ void LayoutEngine::layout_node(const Document& doc, NodeId id,
     }
 
     case NodeKind::Aside:
+    case NodeKind::Infobox:
       layout_aside(doc, node, x, y, max_width, out);
       break;
+
+    case NodeKind::Properties: {
+      const float top = y;
+      layout_children_sequential(doc, node.children, x, y, max_width, out);
+      out.boxes.push_back({id, x, top, max_width, y - top});
+      break;
+    }
+
+    case NodeKind::Property: {
+      const float top = y;
+      const float gap = indent(BlockRole::PropertyName);
+      if (max_width < 10.f * em + gap || node.children.size() != 2 ||
+          doc.get(node.children[0]).kind != NodeKind::PropertyName ||
+          doc.get(node.children[1]).kind != NodeKind::PropertyValue) {
+        layout_children_sequential(doc, node.children, x, y, max_width, out);
+      } else {
+        const float label_width = (max_width - gap) * 0.36f;
+        float label_bottom = top;
+        layout_node(doc, node.children[0], x, label_bottom, label_width, out);
+        layout_node(doc, node.children[1], x + label_width + gap, y,
+                    max_width - label_width - gap, out);
+        y = std::max(y, label_bottom);
+      }
+      out.boxes.push_back({id, x, top, max_width, y - top});
+      break;
+    }
+
+    case NodeKind::PropertyName:
+    case NodeKind::PropertyValue: {
+      const BlockRole role = node.kind == NodeKind::PropertyName
+          ? BlockRole::PropertyName : BlockRole::PropertyValue;
+      y += before(role);
+      const float top = y;
+      layout_role_text(doc, node, role, x, y, max_width, out);
+      y += after(role);
+      out.boxes.push_back({id, x, top, max_width, y - top});
+      break;
+    }
 
     case NodeKind::List:
       y += before(BlockRole::List);
@@ -2786,7 +2828,8 @@ static void decode_utf8(const std::string& text,
 void LayoutEngine::layout_aside(const Document& doc, const Node& node,
                                 float x, float& y, float max_width,
                                 LayoutResult& out) {
-  const BlockStyle& bs = (*style_)[BlockRole::Aside];
+  const BlockRole role = node.kind == NodeKind::Infobox ? BlockRole::Infobox : BlockRole::Aside;
+  const BlockStyle& bs = (*style_)[role];
   const float em = static_cast<float>(fonts_.regular.pixel_size());
   const float dp = options_.px_scale;
   const float pad = bs.indent.px(em, dp);
@@ -2795,14 +2838,14 @@ void LayoutEngine::layout_aside(const Document& doc, const Node& node,
   if (node.src == "left") side = FloatSide::Left;
   else if (node.src == "right") side = FloatSide::Right;
   if (bs.placement == Placement::Margin && side != FloatSide::None &&
-      !in_margin_ && layout_margin_box(doc, node, BlockRole::Aside, side, {},
+      !in_margin_ && layout_margin_box(doc, node, role, side, {},
                                        y, out))
     return;
   // In the column: small text and the aside colour all the same.
   const bool was_small = small_;
   const BlockRole was_ctx = ctx_role_;
   small_ = is_small_role(bs.font);
-  ctx_role_ = BlockRole::Aside;
+  ctx_role_ = role;
   struct Restore {
     bool& s; BlockRole& c; bool sv; BlockRole cv;
     ~Restore() { s = sv; c = cv; }
@@ -2820,8 +2863,8 @@ void LayoutEngine::layout_aside(const Document& doc, const Node& node,
 
   auto frame = [&](float bx, float top, float w, float bottom) {
     const LayoutBox box{node.id, bx, top, w, bottom - top};
-    if (bs.background.visible()) out.role_fills.push_back({box, BlockRole::Aside});
-    if (bs.border.visible()) out.role_frames.push_back({box, BlockRole::Aside});
+    if (bs.background.visible()) out.role_fills.push_back({box, role});
+    if (bs.border.visible()) out.role_frames.push_back({box, role});
   };
 
   if (!floating) {
@@ -2897,7 +2940,7 @@ void LayoutEngine::setup_margins(const Document& doc, float mx,
   };
   for (const Node& n : doc.nodes) {
     if (n.parent == INVALID_NODE) continue;  // unhooked arena entries
-    if (n.kind == NodeKind::Aside) {
+    if (n.kind == NodeKind::Aside || n.kind == NodeKind::Infobox) {
       DocStyle scoped = st;
       // The margin prepass must agree with the actual, possibly nested,
       // variant scope used when laying out this aside.
@@ -2908,7 +2951,8 @@ void LayoutEngine::setup_margins(const Document& doc, float mx,
         const std::string& name = doc.get(*it).style;
         if (!name.empty()) apply_style_variant(scoped, name);
       }
-      const BlockStyle& bs = scoped[BlockRole::Aside];
+      const BlockRole role = n.kind == NodeKind::Infobox ? BlockRole::Infobox : BlockRole::Aside;
+      const BlockStyle& bs = scoped[role];
       FloatSide side = bs.side;
       if (n.src == "left") side = FloatSide::Left;
       else if (n.src == "right") side = FloatSide::Right;

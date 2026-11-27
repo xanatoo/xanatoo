@@ -832,6 +832,29 @@ Document parse_markup(std::string_view source) {
       ++i;
       continue;
     }
+    if (trimmed == ":::infobox" || starts_with(trimmed, ":::infobox ") ||
+        trimmed == ":::properties" || starts_with(trimmed, ":::properties ") ||
+        trimmed == ":::property" || starts_with(trimmed, ":::property ")) {
+      const NodeKind kind = starts_with(trimmed, ":::infobox") ? NodeKind::Infobox :
+          starts_with(trimmed, ":::properties") ? NodeKind::Properties : NodeKind::Property;
+      const NodeId n = doc.create(kind, current_parent());
+      read_fence_style(doc, n, trimmed);
+      push_fence(n);
+      ++i;
+      continue;
+    }
+    if (doc.get(current_parent()).kind == NodeKind::Property &&
+        (trimmed == ":::name" || starts_with(trimmed, ":::name ") ||
+         trimmed == ":::value" || starts_with(trimmed, ":::value "))) {
+      const bool name = starts_with(trimmed, ":::name");
+      const NodeId n = doc.create(name ? NodeKind::PropertyName : NodeKind::PropertyValue,
+                                  current_parent());
+      std::string_view body = trimmed.substr(name ? 7 : 8);
+      trim_ascii(body);
+      parse_inlines(doc.get(n), body);
+      ++i;
+      continue;
+    }
     // :::aside [side=left|right] — a text box beside the flow
     if (starts_with(trimmed, ":::aside")) {
       NodeId n = doc.create(NodeKind::Aside, current_parent());
@@ -2009,6 +2032,30 @@ void serialize_node(const Document& doc, NodeId id, std::string& out,
       break;
     }
 
+    case NodeKind::Infobox:
+    case NodeKind::Properties:
+    case NodeKind::Property:
+      out += pad;
+      out += node.kind == NodeKind::Infobox ? ":::infobox" :
+             node.kind == NodeKind::Properties ? ":::properties" : ":::property";
+      out += style_attr + "\n";
+      for (NodeId c : node.children) serialize_node(doc, c, out, indent);
+      out += pad + ":::\n\n";
+      break;
+
+    case NodeKind::PropertyName:
+    case NodeKind::PropertyValue: {
+      out += pad;
+      out += node.kind == NodeKind::PropertyName ? ":::name " : ":::value ";
+      const size_t body = out.size();
+      serialize_inlines(node, out);
+      // Markdown fields occupy one line.
+      for (size_t i = body; i < out.size(); ++i)
+        if (out[i] == '\n' || out[i] == '\r') out[i] = ' ';
+      out += '\n';
+      break;
+    }
+
     case NodeKind::Aside: {
       out += pad;
       out += ":::aside";
@@ -2921,6 +2968,19 @@ void parse_sexpr_node(Document& doc, NodeId parent, const SExpr& e) {
       parse_sexpr_children(doc, n, e.kids, i);
       return;
     }
+  }
+
+  if (tag == "infobox" || tag == "properties" || tag == "property") {
+    const NodeKind kind = tag == "infobox" ? NodeKind::Infobox :
+        tag == "properties" ? NodeKind::Properties : NodeKind::Property;
+    parse_sexpr_children(doc, doc.create(kind, parent), e.kids, 1);
+    return;
+  }
+  if (doc.get(parent).kind == NodeKind::Property && (tag == "name" || tag == "value")) {
+    const NodeId n = doc.create(tag == "name" ? NodeKind::PropertyName : NodeKind::PropertyValue,
+                                parent);
+    fill_inlines(doc.get(n), e.kids, 1);
+    return;
   }
 
   if (tag == "note" || tag == "aside" || tag == "callout") {

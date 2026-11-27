@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Internet Archive infoboxes
+
+- Group the cover and linked item facts in a responsive infobox. Property
+  lists also work on their own and round-trip through native XML and Markdown.
+- Passed all 33 CTest targets and checked both pane layouts under Xvfb.
+
 ## Status (2026-11-27) — Left dock scrollbars
 
 - Put native and embedded panel scrollbars on the left in the left dock.

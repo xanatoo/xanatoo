@@ -555,7 +555,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
 - `src/archive.cpp`, no feature switch of its own (needs `XANATOO_HTTPS`).
   Read-only `ia:ID` items and collections over the public `/metadata` and
   `advancedsearch` JSON APIs; `ia_markdown` (pure, tested) writes Markdown that
-  the ordinary parser turns into the page. archive.org itself needs
+  the ordinary parser turns into the page, including the infobox with the
+  cover and linked property list. archive.org itself needs
   JavaScript. The HTML description is put into the parsed page afterwards
   (`ia_insert_description`). The `ia` search engine links to `ia:`. See
   `docs/ARCHIVE.md`.

@@ -55,6 +55,9 @@ constexpr RoleName kBlockRoles[] = {
     {"rule", BlockRole::Rule},
     {"transclusion", BlockRole::Transclusion},
     {"aside", BlockRole::Aside},
+    {"infobox", BlockRole::Infobox},
+    {"property-name", BlockRole::PropertyName},
+    {"property-value", BlockRole::PropertyValue},
     {"article", BlockRole::Article},
     {"page", BlockRole::Page},
     {"gallery", BlockRole::Gallery},
@@ -637,6 +640,27 @@ DocStyle builtin_style() {
     b.color = {74, 66, 50, 255};
     b.background = {238, 232, 216, 200};
     b.border = {200, 190, 165, 255};
+  }
+  {
+    BlockStyle& b = blk(BlockRole::Infobox);
+    b.indent = px(8);
+    b.space_after = px(10);
+    b.width = Length{19.f, true};
+    b.side = FloatSide::Right;
+    b.placement = Placement::Float;
+    b.background = {235, 234, 229, 255};
+    b.border = {190, 188, 179, 255};
+  }
+  {
+    BlockStyle& b = blk(BlockRole::PropertyName);
+    b.font = FontRole::SmallBold;
+    b.indent = Length{0.6f, true};
+    b.space_after = px(3);
+  }
+  {
+    BlockStyle& b = blk(BlockRole::PropertyValue);
+    b.font = FontRole::Small;
+    b.space_after = px(3);
   }
   {
     BlockStyle& b = blk(BlockRole::Page);
