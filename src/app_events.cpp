@@ -824,6 +824,13 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
       app.context_link_web = false;
       app.context_link_rel.clear();
       app.context_link_text.clear();
+      const DocBuffer& b = buf(app, p.buf);
+      app.context_pdf_path.clear();
+      app.context_pdf_name.clear();
+      if (xanatoo::ends_with(xanatoo::ascii_lower(b.content_path), ".pdf")) {
+        app.context_pdf_path = b.content_path;
+        app.context_pdf_name = b.doc.meta.title;
+      }
       // A link in the footnote strip, else on the page.
       const bool in_strip = in_footnote_overlay(app, app.focus, lx, my);
       app.context_image_address.clear();

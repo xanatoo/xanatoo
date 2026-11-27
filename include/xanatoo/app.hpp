@@ -142,9 +142,9 @@ struct DocBuffer {
   // The page's address (Location): what the user opened — a local file, a
   // URL — never a derived file under cache_dir(). Reload goes through it.
   std::string path;
-  // The local file the document was read from when that is not `path`: the
-  // Markdown an import made (book.epub → cache …/content.md). Relative
-  // images and links resolve against it (`content_file`). Empty = `path`.
+  // The local file the document was read from when that is not `path`:
+  // generated Markdown or a cached fixed-layout download. Relative images
+  // and links resolve against it (`content_file`). Empty = `path`.
   std::string content_path;
   std::optional<std::string> raw_source;  // HTTP/Gemini body before parsing
   // What the fetch returned (visits.hpp); empty for local / generated
@@ -1092,6 +1092,7 @@ enum class PromptKind : uint8_t {
   Search,
   Replace,  // search + replacement fields
   SaveAs,
+  SavePdf,
   OpenFile,
   OpenInWindow,
   UrlBar,
@@ -1108,6 +1109,7 @@ struct Prompt {
   PromptKind kind = PromptKind::None;
   std::string text;           // find text / path / URL / href / summary …
   std::string text2;          // replacement text (Replace only)
+  std::string source_path;    // cached original (SavePdf)
   // Search / Replace (app_find.cpp): the bar's field shall get the keys and
   // does not have them yet — typing goes to `text` meanwhile. `fresh`: the
   // next typing replaces the text (it is selected).
@@ -1630,6 +1632,8 @@ struct App {
   // Right-clicked link: its target as the address bar would show it, and
   // whether it is a web URL ("Download Link").
   std::string context_image_address;  // source of the right-clicked image
+  std::string context_pdf_path;
+  std::string context_pdf_name;
   std::string context_link;
   std::string context_link_href;  // as written in the page (new tab)
   bool context_link_web = false;

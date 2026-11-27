@@ -291,6 +291,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.context_comment_native = app.context_comment_native;
   ui_state.context_comment_web = app.context_comment_web;
   ui_state.context_image_address = app.context_image_address;
+  ui_state.context_save_pdf = !app.context_pdf_path.empty();
   ui_state.context_link = app.context_link;
   ui_state.context_link_href = app.context_link_href;
   ui_state.context_link_web = app.context_link_web;
@@ -2331,6 +2332,16 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::DownloadUrl:
       if (!arg.empty()) start_download(app, arg);
       break;
+    case C::SavePdf: {
+      if (app.context_pdf_path.empty()) break;
+      fs::path name = fs::path(app.context_pdf_name).filename();
+      if (!xanatoo::ends_with(xanatoo::ascii_lower(name.string()), ".pdf"))
+        name = "document.pdf";
+      open_prompt(app, PromptKind::SavePdf,
+                  (fs::path(xanatoo::downloads_dir()) / name).string());
+      app.prompt.source_path = app.context_pdf_path;
+      break;
+    }
     case C::ConfirmDownload:
       if (!app.download_confirm.url.empty()) {
         const std::string url = app.download_confirm.url;

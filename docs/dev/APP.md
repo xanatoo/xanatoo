@@ -249,6 +249,10 @@ source in a new gallery tab. Linked images also keep their link actions.
 Copy image uses SDL3's bitmap clipboard. The address and tab actions
 are available in SDL2 builds as well.
 
+The context menu of a downloaded PDF offers **Save PDF…**. The save
+prompt captures the cached file from the clicked view and suggests the
+server's filename in Downloads.
+
 Ctrl+A expands the selection in document views and laid-out Context pages.
 It starts with the current text block, then uses the smallest enclosing
 subtree that adds to the range. Ctrl+Shift+A selects the whole document in

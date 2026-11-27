@@ -34,6 +34,7 @@ namespace xanatoo::app {
 bool prompt_uses_minibuf(PromptKind k) {
   switch (k) {
     case PromptKind::SaveAs:
+    case PromptKind::SavePdf:
     case PromptKind::OpenFile:
     case PromptKind::OpenInWindow:
     case PromptKind::UrlBar:
@@ -58,6 +59,8 @@ const char* prompt_label(PromptKind k) {
       return "URL: ";
     case PromptKind::SaveAs:
       return "Export as: ";
+    case PromptKind::SavePdf:
+      return "Save PDF as: ";
     case PromptKind::InsertImage:
       return "Image path: ";
     case PromptKind::InsertFigure:
@@ -305,6 +308,27 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       flash_status(app, "Opened " + path);
       std::cout << "Opened: " << path << "\n";
       minibuf_commit_path_hist(app);
+      close_prompt(app);
+      return true;
+    }
+
+    case PromptKind::SavePdf: {
+      minibuf_sync_out(app);
+      if (!pr.text.empty()) {
+        const fs::path target = xanatoo::expand_user_path(pr.text);
+        const std::string downloads = xanatoo::downloads_dir();
+        if (!downloads.empty() && target.parent_path() == fs::path(downloads))
+          xanatoo::ensure_dir(downloads);
+        std::error_code ec;
+        if (fs::copy_file(pr.source_path, target, fs::copy_options::none, ec)) {
+          minibuf_commit_path_hist(app);
+          flash_status(app, "Saved PDF to " + target.string());
+        } else if (ec == std::errc::file_exists) {
+          flash_status(app, "PDF destination already exists. Choose another filename.");
+        } else {
+          flash_status(app, "Could not save PDF: " + ec.message());
+        }
+      }
       close_prompt(app);
       return true;
     }

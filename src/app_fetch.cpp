@@ -686,6 +686,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
       if (auto src = xanatoo::read_fixed_layout(pages.path, &out->error)) {
         src->title = pages.name;
         out->doc = xanatoo::fixed_layout_document(*src);
+        out->content_path = std::move(pages.path);
       }
     }
 #endif

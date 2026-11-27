@@ -147,6 +147,7 @@ enum class UiCommand {
   OpenBlockInWindow, // … in a new document window (tabs keep no cut)
   CopyBlockAddress, // … copy its address (page//id:…)
   DownloadUrl,     // arg = http(s) URL: open the download confirmation dialog
+  SavePdf,
   ConfirmDownload, // user accepted the download dialog (default folder)
   DownloadToFolder,// user chose "Download to…" (native folder picker)
   CancelDownload,  // user dismissed the download dialog
@@ -635,6 +636,7 @@ struct UiState {
   bool context_can_reply = false;
   std::vector<std::string> context_quote_items;  // "Go to Quoted Message (…)"
   std::string context_image_address;
+  bool context_save_pdf = false;
   std::string context_link;       // right-clicked link target, if any
   std::string context_link_href;  // … as written in the page
   bool context_link_web = false;  // … and it is http(s): can be downloaded

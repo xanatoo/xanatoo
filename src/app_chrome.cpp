@@ -343,6 +343,7 @@ StatusLine compute_status(App& app) {
       case PromptKind::OpenInWindow:
       case PromptKind::OpenFile:
       case PromptKind::SaveAs:
+      case PromptKind::SavePdf:
       case PromptKind::InsertImage:
       case PromptKind::InsertFigure:
         label = prompt_label(pr.kind);

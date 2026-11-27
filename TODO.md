@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Save displayed PDFs
+
+- The document context menu saves a copy of the cached web PDF. The
+  path prompt suggests the server's filename in Downloads.
+- Passed all 33 CTest targets. Under Xvfb the saved PDF matched the
+  original after stopping the server, and an existing file was preserved.
+
 ## Status (2026-11-27) — Archive derivative folds
 
 - Start each branch of derived files collapsed using the list item's

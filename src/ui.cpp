@@ -4475,6 +4475,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     context_open_ = false;
   }
   if (ImGui::BeginPopup("##doc_context")) {
+    if (state.context_save_pdf) {
+      if (ImGui::MenuItem("Save PDF…")) cmd = UiCommand::SavePdf;
+      ImGui::Separator();
+    }
     if (!state.context_image_address.empty()) {
       auto item = [&](const char* label, UiCommand action, bool enabled = true) {
         if (ImGui::MenuItem(label, nullptr, false, enabled)) {
