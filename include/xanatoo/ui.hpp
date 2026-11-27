@@ -662,6 +662,7 @@ struct UiState {
   // Embedded panels whose native window is rolled up (`ui_panel_bit`): their
   // ImGui body is not built while the frame shows only its title.
   unsigned shaded_panels = 0;
+  unsigned left_docked_panels = 0;
   uint64_t reply_generation = 0;
   std::string reply_author, reply_page, reply_label, reply_text;
   std::string reply_excerpt;     // start of the message being answered

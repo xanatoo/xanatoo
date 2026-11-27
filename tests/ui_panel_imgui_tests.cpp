@@ -121,5 +121,29 @@ int main() {
   xanatoo::sync_embedded_imgui_order({xanatoo::UiPanelLayer::Bookmarks,
                                       xanatoo::UiPanelLayer::Reply});
   assert(hovered_layer() == xanatoo::UiPanelLayer::Reply);
+  // Exercise the first screen pixel, where the scrollbar trough extends
+  // past the inset thumb. Moving the scrollbar must also move the content.
+  for (int frame = 0; frame < 3; ++frame) {
+    if (frame == 1) io.AddMousePosEvent(0.f, 470.f);
+    if (frame == 2) io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos(ImVec2(0.f, 380.f));
+    ImGui::SetNextWindowSize(ImVec2(200.f, 110.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::Begin("Left dock", nullptr, ImGuiWindowFlags_LeftScrollbar |
+                 ImGuiWindowFlags_AlwaysVerticalScrollbar |
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoResize);
+    ImGui::PopStyleVar();
+    ImGuiWindow* panel = ImGui::GetCurrentWindow();
+    const ImRect trough = ImGui::GetWindowScrollbarRect(panel, ImGuiAxis_Y);
+    assert(trough.Min.x == 0.f);
+    assert(trough.Max.x == panel->InnerRect.Min.x);
+    ImGui::Dummy(ImVec2(100.f, 700.f));
+    if (frame == 2) assert(ImGui::GetScrollY() > 0.f);
+    ImGui::End();
+    ImGui::Render();
+  }
+
   ImGui::DestroyContext();
 }

@@ -564,10 +564,18 @@ inline int float_control_w(const FloatWindow& w) {
 // Client rect of a floating window: the sunken well under the title minus
 // its bevel. Left inset only; the right edge is flush so the scrollbar sits
 // on the frame; the bottom strip is the grip row.
-inline std::tuple<int, int, int, int> window_client_rect(const FloatWindow& w) {
+inline constexpr int client_scrollbar_width = 12;
+
+inline std::tuple<int, int, int, int> window_client_rect(
+    const FloatWindow& w, bool reserve_left_scrollbar = true) {
   const int lp = help_pad - 4;
   const int th = float_title_h(w);
-  return {w.x + 4 + lp, w.y + th + 5, w.w - 8 - lp - 1,
+  const int left_scroll = reserve_left_scrollbar && w.dock == Dock::Left &&
+                                  w.role != WindowRole::Document &&
+                                  w.role != WindowRole::Media
+                              ? client_scrollbar_width : 0;
+  return {w.x + 4 + lp + left_scroll, w.y + th + 5,
+          w.w - 8 - lp - 1 - left_scroll,
           w.h - th - 4 - help_grip_h - 2};
 }
 

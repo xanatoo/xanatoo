@@ -683,6 +683,42 @@ bool menu_item_with_icon(const char* label, const char* icon_name,
   return clicked;
 }
 
+bool begin_panel(const UiState& state, UiPanelLayer layer, const char* name,
+                 ImGuiWindowFlags flags, int x, int y, int w, int h,
+                 int inset = 3, int min_size = 1) {
+  const bool left = (state.left_docked_panels & ui_panel_bit(layer)) != 0;
+  const int right = x + std::max(min_size, w - 2 * inset) + inset;
+  const int body_x = left ? 0 : x + inset;
+  ImGui::SetNextWindowPos(ImVec2(float(body_x), float(y + inset)));
+  ImGui::SetNextWindowSize(ImVec2(float(right - body_x),
+                                 float(std::max(min_size, h - 2 * inset))));
+  if (left) {
+    flags |= ImGuiWindowFlags_LeftScrollbar;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+  }
+  const bool visible = ImGui::Begin(name, nullptr, flags);
+  if (left) ImGui::PopStyleVar();
+  return visible;
+}
+
+// Full-width lists can share the panel edge if its own scrollbar is absent.
+bool begin_panel_list(const char* name, ImVec2 size,
+                      ImGuiChildFlags child_flags = ImGuiChildFlags_None,
+                      ImGuiWindowFlags flags = ImGuiWindowFlags_None) {
+  const ImGuiWindow* panel = ImGui::GetCurrentWindowRead();
+  if (!(panel->Flags & ImGuiWindowFlags_LeftScrollbar))
+    return ImGui::BeginChild(name, size, child_flags, flags);
+  flags |= ImGuiWindowFlags_LeftScrollbar;
+  if (!panel->ScrollbarY) {
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const float left = panel->InnerClipRect.Min.x;
+    ImGui::SetNextWindowPos(ImVec2(left, cursor.y));
+    const float width = size.x > 0.f ? size.x : ImGui::GetContentRegionAvail().x;
+    size.x = std::max(1.f, width + cursor.x - left);
+  }
+  return ImGui::BeginChild(name, size, child_flags, flags);
+}
+
 }  // namespace
 
 
@@ -2220,7 +2256,7 @@ void Ui::bookmarks_panel(const UiState& state, UiCommand& cmd, std::string& arg)
   ImGui::Separator();
 
   const float footer = ImGui::GetFrameHeightWithSpacing();
-  if (ImGui::BeginChild("##bookmarks_list", ImVec2(0.f, -footer), false)) {
+  if (begin_panel_list("##bookmarks_list", ImVec2(0.f, -footer), false)) {
     std::unordered_map<std::string, int> counts;
     for (const Bookmark& b : state.bookmarks)
       for (std::string f = b.folder; !f.empty(); f = bookmark_folder_parent(f))
@@ -4674,18 +4710,15 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       reply_input_[0] = '\0';
       reply_selection_ = {};
     }
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(state.reply_x + 4),
-                                   static_cast<float>(state.reply_y + 4)));
-    ImGui::SetNextWindowSize(ImVec2(
-        static_cast<float>(std::max(40, state.reply_w - 8)),
-        static_cast<float>(std::max(40, state.reply_h - 8))));
     constexpr ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
                         ImVec2(7.f * scale_, 6.f * scale_));
-    if (ImGui::Begin("##reply_editor", nullptr, flags)) {
+    if (begin_panel(state, UiPanelLayer::Reply, "##reply_editor",
+                    flags, state.reply_x, state.reply_y,
+                    state.reply_w, state.reply_h, 4, 40)) {
       auto muted_wrapped = [](const char* label) {
         ImGui::PushStyleColor(ImGuiCol_Text,
                               ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
@@ -5216,15 +5249,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Style sheet picker (simple list) ----
   if (state.styles_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Styles))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.styles_x + 3),
-                                  float(state.styles_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.styles_w - 6)),
-                                   float(std::max(1, state.styles_h - 6))));
     constexpr ImGuiWindowFlags style_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##styles_panel_body", nullptr, style_flags)) {
+    if (begin_panel(state, UiPanelLayer::Styles, "##styles_panel_body",
+                    style_flags, state.styles_x, state.styles_y,
+                    state.styles_w, state.styles_h)) {
       static const char* const kTabs[] = {"Sheet", "Colours", "Fonts"};
       if (ImGui::BeginTabBar("##style_layers")) {
         for (int t = 0; t < 3; ++t)
@@ -5335,16 +5366,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       style_editor_dirty_ = false;
       style_editor_loaded_.clear();
     }
-    ImGui::SetNextWindowPos(ImVec2(float(state.styles_manager_x + 3),
-                                  float(state.styles_manager_y + 3)));
-    ImGui::SetNextWindowSize(
-        ImVec2(float(std::max(1, state.styles_manager_w - 6)),
-               float(std::max(1, state.styles_manager_h - 6))));
     constexpr ImGuiWindowFlags mgr_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##style_manager_body", nullptr, mgr_flags)) {
+    if (begin_panel(state, UiPanelLayer::StyleManager, "##style_manager_body",
+                    mgr_flags, state.styles_manager_x, state.styles_manager_y,
+                    state.styles_manager_w, state.styles_manager_h)) {
       ImGui::TextWrapped(
           "Create personal themes, edit source, fonts, and automatic assignments");
       ImGui::Separator();
@@ -5353,8 +5381,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       const float list_width = narrow_panel
           ? available_width
           : std::clamp(available_width * 0.28f, 130.f, 220.f);
-      ImGui::BeginChild("##style_manager_list",
-                        ImVec2(list_width, narrow_panel ? 120.f : 0), true);
+      begin_panel_list("##style_manager_list",
+                       ImVec2(list_width, narrow_panel ? 120.f : 0),
+                       ImGuiChildFlags_Borders);
       ImGui::TextDisabled("Edit theme");
       ImGui::Separator();
       if (style_editor_sheet_.empty()) style_editor_sheet_ = state.style;
@@ -5602,15 +5631,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Bookmarks))) {
     // Like Reply / Annotations, this is an editor *inside* the native
     // FloatWindow. It must never have an independent ImGui title or geometry.
-    ImGui::SetNextWindowPos(ImVec2(float(state.bookmarks_x + 3),
-                                  float(state.bookmarks_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.bookmarks_w - 6)),
-                                   float(std::max(1, state.bookmarks_h - 6))));
     constexpr ImGuiWindowFlags bookmarks_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##bookmarks_panel_body", nullptr, bookmarks_flags))
+    if (begin_panel(state, UiPanelLayer::Bookmarks, "##bookmarks_panel_body",
+                    bookmarks_flags, state.bookmarks_x, state.bookmarks_y,
+                    state.bookmarks_w, state.bookmarks_h))
       bookmarks_panel(state, cmd, result.arg);
     ImGui::End();
   }
@@ -5620,15 +5647,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // When a real Document is loaded, draw_context_window renders it natively.
   if (state.context_open && !state.context_has_doc &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Context))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.context_x + 3),
-                                  float(state.context_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.context_w - 6)),
-                                   float(std::max(1, state.context_h - 6))));
     constexpr ImGuiWindowFlags ctx_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##context_panel_body", nullptr, ctx_flags)) {
+    if (begin_panel(state, UiPanelLayer::Context, "##context_panel_body",
+                    ctx_flags, state.context_x, state.context_y,
+                    state.context_w, state.context_h)) {
       if (!state.context_kind.empty())
         ImGui::TextUnformatted(state.context_kind.c_str());
       else
@@ -5638,7 +5663,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::TextWrapped("%s", state.context_title.c_str());
       }
       ImGui::Separator();
-      ImGui::BeginChild("##context_body", ImVec2(0, -28), false,
+      begin_panel_list("##context_body", ImVec2(0, -28), false,
                         ImGuiWindowFlags_HorizontalScrollbar);
       if (!state.context_body.empty())
         ImGui::TextWrapped("%s", state.context_body.c_str());
@@ -5660,15 +5685,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Subscriptions: changing remote feeds (distinct from static bookmarks) ----
   if (state.subscriptions_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Subscriptions))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.subscriptions_x + 3),
-                                  float(state.subscriptions_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.subscriptions_w - 6)),
-                                   float(std::max(1, state.subscriptions_h - 6))));
     constexpr ImGuiWindowFlags subscriptions_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##subscriptions_panel_body", nullptr, subscriptions_flags)) {
+    if (begin_panel(state, UiPanelLayer::Subscriptions, "##subscriptions_panel_body",
+                    subscriptions_flags, state.subscriptions_x, state.subscriptions_y,
+                    state.subscriptions_w, state.subscriptions_h)) {
       int unread_total = 0;
       for (const auto& s : state.subscriptions)
         unread_total += std::min<uint32_t>(s.unread, 9999);
@@ -5792,16 +5815,13 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     // The title, close/maximize buttons, docking, resize and stacking belong
     // to FloatWindow::Annotations. ImGui provides only the form controls in
     // that native panel's client area (as in the Reply composer).
-    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(state.annotation_x + 3),
-                                   static_cast<float>(state.annotation_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(
-        static_cast<float>(std::max(1, state.annotation_w - 6)),
-        static_cast<float>(std::max(1, state.annotation_h - 6))));
     constexpr ImGuiWindowFlags annotation_flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("##annotation_panel_body", nullptr, annotation_flags)) {
+    if (begin_panel(state, UiPanelLayer::Annotations, "##annotation_panel_body",
+                    annotation_flags, state.annotation_x, state.annotation_y,
+                    state.annotation_w, state.annotation_h)) {
       if (classic_button("New personal layer"))
         cmd = UiCommand::NewAnnotationLayer;
       ImGui::SameLine();
@@ -5965,11 +5985,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse;
   if (state.nostr_explorer_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::NostrExplorer))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.nostr_explorer_x + 3),
-                                  float(state.nostr_explorer_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.nostr_explorer_w - 6)),
-                                   float(std::max(1, state.nostr_explorer_h - 6))));
-    if (ImGui::Begin("##nostr_explorer_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::NostrExplorer, "##nostr_explorer_body",
+                    embedded_panel_flags, state.nostr_explorer_x, state.nostr_explorer_y,
+                    state.nostr_explorer_w, state.nostr_explorer_h)) {
       ImGui::Text("Observed: %lld events, %lld notes, %lld people",
                   static_cast<long long>(state.nostr_stats.events),
                   static_cast<long long>(state.nostr_stats.notes),
@@ -6035,7 +6053,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       ImGui::Separator();
       // A child scroll area avoids producing thousands of text widgets when
       // an explorer panel is shrunk or docked beneath another panel.
-      if (ImGui::BeginChild("##nostr_results", ImVec2(0.f, 0.f), false)) {
+      if (begin_panel_list("##nostr_results", ImVec2(0.f, 0.f), false)) {
         if (state.nostr_tab == 0) {
           if (state.nostr_people.empty())
             ImGui::TextWrapped("No matching public keys cached yet. Fetch recent notes, or open an npub1 / note1 address.");
@@ -6147,12 +6165,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Lemmy discovery catalogue, inside its native dockable panel ----
   if (state.lemmy_explorer_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::LemmyExplorer))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.lemmy_explorer_x + 3),
-                                  float(state.lemmy_explorer_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(
-        float(std::max(1, state.lemmy_explorer_w - 6)),
-        float(std::max(1, state.lemmy_explorer_h - 6))));
-    if (ImGui::Begin("##lemmy_explorer_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::LemmyExplorer, "##lemmy_explorer_body",
+                    embedded_panel_flags, state.lemmy_explorer_x, state.lemmy_explorer_y,
+                    state.lemmy_explorer_w, state.lemmy_explorer_h)) {
       int counts[4] = {};
       for (const auto& entry : state.lemmy_entries)
         ++counts[static_cast<int>(entry.kind)];
@@ -6257,7 +6272,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         ImGui::SetTooltip("Official Lemmy server directory on join-lemmy.org");
       ImGui::Separator();
 
-      if (ImGui::BeginChild("##lemmy_results", ImVec2(0.f, 0.f), false)) {
+      if (begin_panel_list("##lemmy_results", ImVec2(0.f, 0.f), false)) {
         const LemmyEntryKind current = static_cast<LemmyEntryKind>(state.lemmy_tab);
         const std::string query = ascii_lower(state.lemmy_search);
         int matching = 0;
@@ -6323,12 +6338,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Matrix catalogue, inside its native dockable panel ----
   if (state.matrix_explorer_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::MatrixExplorer))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.matrix_explorer_x + 3),
-                                  float(state.matrix_explorer_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(
-        float(std::max(1, state.matrix_explorer_w - 6)),
-        float(std::max(1, state.matrix_explorer_h - 6))));
-    if (ImGui::Begin("##matrix_explorer_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::MatrixExplorer, "##matrix_explorer_body",
+                    embedded_panel_flags, state.matrix_explorer_x, state.matrix_explorer_y,
+                    state.matrix_explorer_w, state.matrix_explorer_h)) {
       int counts[4] = {};
       for (const auto& entry : state.matrix_entries)
         ++counts[static_cast<int>(entry.kind)];
@@ -6422,7 +6434,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       ImGui::Separator();
 
-      if (ImGui::BeginChild("##matrix_results", ImVec2(0.f, 0.f), false)) {
+      if (begin_panel_list("##matrix_results", ImVec2(0.f, 0.f), false)) {
         const MatrixEntryKind current = static_cast<MatrixEntryKind>(state.matrix_tab);
         const std::string query = ascii_lower(state.matrix_search);
         int matching = 0;
@@ -6485,10 +6497,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
 #if XANATOO_HTTP_COOKIES
   if (state.cookies_open && state.cookie_snapshot &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Cookies))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.cookies_x + 3), float(state.cookies_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.cookies_w - 6)),
-                                   float(std::max(1, state.cookies_h - 6))));
-    if (ImGui::Begin("##cookies_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::Cookies, "##cookies_body",
+                    embedded_panel_flags, state.cookies_x, state.cookies_y,
+                    state.cookies_w, state.cookies_h)) {
       const auto& sites = state.cookie_snapshot->sites;
       const auto& cookies = state.cookie_snapshot->cookies;
       const auto& selected = state.cookie_selected;
@@ -6566,11 +6577,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Certificates: Gemini TOFU pins in a native dockable panel ----
   if (state.certs_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Certificates))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.certs_x + 3),
-                                  float(state.certs_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.certs_w - 6)),
-                                   float(std::max(1, state.certs_h - 6))));
-    if (ImGui::Begin("##certificates_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::Certificates, "##certificates_body",
+                    embedded_panel_flags, state.certs_x, state.certs_y,
+                    state.certs_w, state.certs_h)) {
       auto grouped = [](const std::string& hash) {
         std::string out;
         for (size_t i = 0; i < hash.size(); i += 8) {
@@ -6595,7 +6604,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       } else {
         const float list_h = sel ? std::max(80.f, ImGui::GetContentRegionAvail().y * 0.35f)
                                  : 0.f;
-        if (ImGui::BeginChild("##cert_list", ImVec2(0.f, list_h),
+        if (begin_panel_list("##cert_list", ImVec2(0.f, list_h),
                               ImGuiChildFlags_Borders)) {
           for (const auto& row : state.cert_rows) {
             ImGui::PushID(row.key.c_str());
@@ -6690,11 +6699,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Identities: Gemini client certificates, Nostr accounts ----
   if (state.identities_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Identities))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.identities_x + 3),
-                                  float(state.identities_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.identities_w - 6)),
-                                   float(std::max(1, state.identities_h - 6))));
-    if (ImGui::Begin("##identities_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::Identities, "##identities_body",
+                    embedded_panel_flags, state.identities_x, state.identities_y,
+                    state.identities_w, state.identities_h)) {
       const ImVec4 warn(0.70f, 0.16f, 0.10f, 1.f);
       const bool on_page = !state.identity_page.empty();
       auto pick = [&](UiCommand c, std::string arg) {
@@ -6804,7 +6811,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         } else {
           const float list_h = sel ?
               std::max(80.f, ImGui::GetContentRegionAvail().y * 0.35f) : 0.f;
-          if (ImGui::BeginChild("##identity_list", ImVec2(0.f, list_h),
+          if (begin_panel_list("##identity_list", ImVec2(0.f, list_h),
                                 ImGuiChildFlags_Borders)) {
             for (const auto& row : state.identity_rows) {
               ImGui::PushID(row.sha256.c_str());
@@ -7117,7 +7124,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
               row * rows + ImGui::GetStyle().WindowPadding.y * 2.f,
               std::max(80.f, ImGui::GetContentRegionAvail().y *
                                  (nsel ? 0.35f : 0.6f)));
-          if (ImGui::BeginChild("##nostr_identity_list", ImVec2(0.f, list_h),
+          if (begin_panel_list("##nostr_identity_list", ImVec2(0.f, list_h),
                                 ImGuiChildFlags_Borders)) {
             for (const auto& acc : state.nostr_identities) {
               ImGui::PushID(acc.pubkey.c_str());
@@ -7320,11 +7327,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
   // ---- Related Sites: similar websites of the focused page's site ----
   if (state.related_open &&
       !(state.shaded_panels & ui_panel_bit(UiPanelLayer::RelatedSites))) {
-    ImGui::SetNextWindowPos(ImVec2(float(state.related_x + 3),
-                                  float(state.related_y + 3)));
-    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.related_w - 6)),
-                                   float(std::max(1, state.related_h - 6))));
-    if (ImGui::Begin("##related_sites_body", nullptr, embedded_panel_flags)) {
+    if (begin_panel(state, UiPanelLayer::RelatedSites, "##related_sites_body",
+                    embedded_panel_flags, state.related_x, state.related_y,
+                    state.related_w, state.related_h)) {
       if (state.related_host.empty()) {
         ImGui::TextWrapped("Open a web page to see sites similar to it.");
       } else {
@@ -7365,7 +7370,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
           ImGui::TextDisabled("No similar sites known for %s.", shown.c_str());
         const float foot = ImGui::GetFrameHeightWithSpacing();
         const bool list = !state.related_rows.empty();
-        if (list && ImGui::BeginChild("##related_list", ImVec2(0.f, -foot),
+        if (list && begin_panel_list("##related_list", ImVec2(0.f, -foot),
                                       ImGuiChildFlags_Borders)) {
           for (size_t i = 0; i < state.related_rows.size(); ++i) {
             const auto& row = state.related_rows[i];

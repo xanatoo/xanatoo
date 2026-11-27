@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Left dock scrollbars
+
+- Put native and embedded panel scrollbars on the left in the left dock.
+  The outer window pixel can grab or seek the panel scrollbar.
+- Passed all 33 CTest targets, including an ImGui edge-click regression.
+  Dragging at x=0 scrolled the native Outline under Xvfb.
+
 ## Status (2026-11-27) — Marginalia search wait page
 
 - For `search:marginalia:`, the fetch worker honors the countdown and

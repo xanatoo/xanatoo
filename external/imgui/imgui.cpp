@@ -7424,7 +7424,10 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
             window->ScrollbarSizes = ImVec2(window->ScrollbarY ? style.ScrollbarSize : 0.0f, window->ScrollbarX ? style.ScrollbarSize : 0.0f);
 
             // Amend the partially filled window->DecorationXXX values.
-            window->DecoOuterSizeX2 += window->ScrollbarSizes.x;
+            if (flags & ImGuiWindowFlags_LeftScrollbar)
+                window->DecoOuterSizeX1 += window->ScrollbarSizes.x;
+            else
+                window->DecoOuterSizeX2 += window->ScrollbarSizes.x;
             window->DecoOuterSizeY2 += window->ScrollbarSizes.y;
         }
 

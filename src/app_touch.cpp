@@ -205,8 +205,9 @@ void begin_gesture(App& app, float x, float y) {
     // Client area scrolls/taps; title, frame and scrollbar strip drag.
     auto [cx, cy, cw, ch] = float_client_rect(app, *w);
     const SDL_Rect sb = client_scrollbar_rect(app, *w);
-    if (xi >= cx && xi < std::min(cx + cw, sb.x + 2) && yi >= cy &&
-        yi < cy + ch) {
+    const SDL_Rect client{cx, cy, cw, ch};
+    const SDL_Point point{xi, yi};
+    if (SDL_PointInRect(&point, &client) && !SDL_PointInRect(&point, &sb)) {
       t.on_float = true;
       t.mode = TouchMode::Pending;
     } else {

@@ -293,11 +293,12 @@ tile divider likewise keeps each pane at least that strip, not a fixed
 painted by `draw_dock_gutters` with `theme::draw_grip_dots`; docked panels draw no drop shadow) separates neighbouring docked panels and a
 dock from the panes; `dock_column_w` / `dock_band_h` include it, and the
 separator / dock-edge grab zones lie in it (plus two pixels of frame), so
-they never overlap a panel's or a pane's scrollbar. A panel docked against the
-window's right edge (`float_flush_right`) runs its scrollbar out to that edge
-(Fitts' law): native ones via `client_scrollbar_rect` (shared by
-`draw_client_scrollbar`, `press_client` and touch), ImGui bodies via
-`imgui_panel_rect`. Native panel thumbs come from `theme::vscroll_thumb`
+they never overlap a panel's or a pane's scrollbar. Side docks put panel
+scrollbars at the outer window edge for Fitts' law. Native panels share
+`client_scrollbar_rect` between paint, mouse and touch. Embedded ImGui
+bodies use `begin_panel` and the vendored `ImGuiWindowFlags_LeftScrollbar`
+flag. Full-width child lists also reach the left edge when the body has no
+vertical scrollbar. Native panel thumbs come from `theme::vscroll_thumb`
 for both paint and drag: a press grabs the thumb where it was hit
 (`FloatWindow::scroll_grab`); off the thumb it first centres it there. Max overlays the client area; every
 frame has the close box at the title's left edge and the maximize /

@@ -402,7 +402,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.reply_text = app.reply.text;
   reply_ui_state(app, ui_state);
   if (app.reply.open) {
-    auto [x, y, w, h] = float_client_rect(app, app.reply_win);
+    auto [x, y, w, h] = window_client_rect(app.reply_win, false);
     ui_state.reply_x = x;
     ui_state.reply_y = y;
     ui_state.reply_w = w;
@@ -672,9 +672,11 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     }
   }
   ui_state.shaded_panels = 0;
-  for (const FloatWindow* w : float_stack(app))
-    if (float_shaded(*w))
-      ui_state.shaded_panels |= xanatoo::ui_panel_bit(embedded_panel_layer(w->role));
+  for (const FloatWindow* w : float_stack(app)) {
+    const unsigned bit = xanatoo::ui_panel_bit(embedded_panel_layer(w->role));
+    if (float_shaded(*w)) ui_state.shaded_panels |= bit;
+    if (w->dock == Dock::Left) ui_state.left_docked_panels |= bit;
+  }
   ui_state.styles_open = app.styles_panel_open;
   ui_state.styles_manager_open = app.styles_manager_panel_open;
   if (app.styles_panel_open) {
