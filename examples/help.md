@@ -273,16 +273,22 @@ previews the Cookie header for the current page. You can suspend cookies for
 the whole site, enable or disable individual cookies, or delete them. When
 cookies are enabled for a site, it can set a deleted cookie again.
 
-To import an existing session, copy a single cookie's name and value from your
-browser's site storage. In Bash, run the following and paste one
-`NAME=VALUE` pair when prompted. Repeat the command for each cookie.
+To transfer a cookie from your own browser session, open the signed-in site
+and find its cookie table in Developer Tools.
+
+- Chrome or Chromium: **Application → Storage → Cookies → site**.
+- Firefox: **Storage → Cookies → site**.
+
+Use the Name and Value fields from one row. From the Xanatoo source checkout,
+pipe the helper directly to the importer. Paste the name and value separately
+when prompted. Repeat for each cookie.
 
 ```sh
-read -rsp 'Cookie (NAME=VALUE): ' cookie
-printf '\n'
-printf '%s\n' "$cookie" | xanatoo --import-cookie https://old.reddit.com/
-unset cookie
+bash tools/export-cookie.sh | xanatoo --import-cookie https://old.reddit.com/
 ```
+
+The helper reads the fields you paste, hides the value at the terminal, and
+writes one `NAME=VALUE` line to the pipe.
 
 Use the exact destination host and port. The URL path scopes the cookie
 (default `/`). Importing also enables cookies for that site. Reload the page

@@ -6,6 +6,9 @@
 
 - Add an opt-in HTTPS cookie jar, a single-cookie stdin import, and a Cookies
   panel for the focused site and other stored origins.
+- Add a single-cookie transfer helper for fields selected in Chrome or
+  Firefox Developer Tools. A pseudoterminal smoke test verified the pipe
+  into the real importer and checked that the value stayed hidden.
 - Use cookies in foreground page and download fetches, including native
   Reddit's Old Reddit JSON fallback.
 - Passed 15,125 Nix unit checks and all 33 CTest targets. A local HTTPS
