@@ -199,6 +199,8 @@ struct MediaPlayback {
   std::deque<float> audio;        // interleaved samples, not yet played
   std::deque<VideoFrame> frames;  // in pts order
   bool source_end = false;        // the source has given everything
+  bool hls = false;
+  bool refilling_audio = false;   // HLS startup, seek or underrun
   bool failed = false;
   bool seek_pending = false;
   double seek_to = 0;    // target of the pending / last seek

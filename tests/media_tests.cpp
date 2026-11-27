@@ -376,6 +376,39 @@ void test_media(int& passed, int& failed) {
     worker.join();
   }
 
+  // Hold small bursts after an HLS underrun and drain the short tail at EOF.
+  {
+    MediaPlayback pb;
+    pb.hls = true;
+    pb.info.has_audio = true;
+    pb.info.channels = 2;
+    pb.info.rate = 1000;
+    media_seek(pb, 2, 0);
+    pb.seek_pending = false;
+    float out[200];
+    pb.audio.resize(200);
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 0u);
+    EXPECT(media_buffering(pb));
+    EXPECT_NEAR(media_clock(pb, 0), 2.0, 1e-9);
+    pb.audio.resize(1000);
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 100u);
+    EXPECT(!media_buffering(pb));
+    EXPECT_NEAR(media_clock(pb, 0), 2.1, 1e-9);
+
+    pb.audio.resize(50);
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 0u);
+    pb.audio.resize(200);
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 0u);
+    EXPECT_NEAR(media_clock(pb, 0), 2.1, 1e-9);
+    pb.frames.resize(kMediaFramesMax);
+    pb.audio.resize(500);  // full picture queue caps sound at 250 frames
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 100u);
+    pb.audio.resize(50);
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 0u);
+    pb.source_end = true;
+    EXPECT_EQ(media_pull_audio(pb, out, 100), 25u);
+  }
+
   // Pictures decoded behind their sound still show on time (they once were
   // dropped from a full queue just before they were due).
   {

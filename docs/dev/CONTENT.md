@@ -748,7 +748,8 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   `media_backend_available()`) is what links, `navigate_pane` and startup
   arguments test. Without a backend video links go to the system as before.
 - HLS playlists (`.m3u8` or an HLS response Content-Type) play through
-  FFmpeg on desktop and Android. DASH (`.mpd` /
+  FFmpeg on desktop and Android. Known HLS addresses go straight to FFmpeg
+  without starting a media cache download. DASH (`.mpd` /
   `application/dash+xml`) uses the desktop FFmpeg build.
 - Service pages link streams directly so they open in the Media panel:
   PeerTube / Odysee "▶ Play" (docs/VIDEO_SITES.md), Internet Archive
@@ -792,7 +793,10 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   (`media_take_frame`) signal. A full picture queue stops decoding — files
   decode pictures up to ~0.5 s behind their sound, and dropping old
   pictures to read sound further ahead dropped exactly the due ones; only
-  when the sound runs dry (< 0.25 s) are the oldest dropped. Seeks are
+  when the sound runs dry (< 0.25 s) are the oldest dropped. HLS with sound
+  collects half a second of audio at startup, after a seek, or after an
+  underrun. A full picture queue lowers that threshold to a quarter second.
+  The clock holds during refill and short audio tails play at EOF. Seeks are
   requests (`media_seek` clears the queues; the worker seeks the source and
   trims sound / drops pictures before the target).
 - Clock: sound frames handed to the device since the last seek + its

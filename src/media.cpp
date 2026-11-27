@@ -202,6 +202,9 @@ std::string media_describe(std::string_view video_codec, int w, int h,
 
 namespace {
 
+constexpr double kHlsAudioRefill = 0.5;
+constexpr size_t kLowAudioDivisor = 4;  // a quarter second when the picture queue is full
+
 // Decode on while the sound or the pictures run low. A full picture queue
 // stops it (files decode pictures behind their sound: dropping pictures to
 // read sound further ahead would drop the ones about to be due), unless
@@ -213,7 +216,7 @@ bool need_more(const MediaPlayback& pb) {
   const size_t per_s = size_t(std::max(1, i.rate)) * size_t(std::max(1, i.channels));
   const size_t queued = pb.audio.size();
   if (i.has_video && pb.frames.size() >= kMediaFramesMax)
-    return i.has_audio && queued < per_s / 4;
+    return i.has_audio && queued < per_s / kLowAudioDivisor;
   const double ahead = i.has_video ? kMediaAudioAhead : kMediaAudioAheadSoundOnly;
   if (i.has_audio && queued < size_t(ahead * per_s)) return true;
   if (i.has_video && pb.frames.size() < kMediaFramesAhead)
@@ -244,6 +247,8 @@ void media_worker(std::shared_ptr<MediaPlayback> pb, std::string url, MediaOptio
   {
     std::lock_guard lock(pb->m);
     pb->info = src->info();
+    pb->hls = options.hls || is_hls_url(url);
+    pb->refilling_audio = pb->hls && pb->info.has_audio;
   }
   pb->opened.store(true, std::memory_order_release);
   const int ch = std::max(1, src->info().channels);
@@ -321,7 +326,20 @@ void media_stop(MediaPlayback& pb) {
 size_t media_pull_audio(MediaPlayback& pb, float* out, size_t frames) {
   std::lock_guard lock(pb.m);
   const size_t ch = size_t(std::max(1, pb.info.channels));
-  const size_t n = std::min(frames, pb.audio.size() / ch);
+  const size_t available = pb.audio.size() / ch;
+  if (pb.hls && !pb.source_end) {
+    if (available < frames) pb.refilling_audio = true;
+    if (pb.refilling_audio) {
+      const size_t per_s = size_t(std::max(1, pb.info.rate));
+      // A full picture queue stops the decoder at the lower threshold.
+      const size_t target = pb.frames.size() >= kMediaFramesMax
+                                ? per_s / kLowAudioDivisor
+                                : size_t(kHlsAudioRefill * per_s);
+      if (available < std::max(size_t(1), target)) return 0;
+    }
+  }
+  pb.refilling_audio = false;
+  const size_t n = std::min(frames, available);
   std::copy_n(pb.audio.begin(), n * ch, out);
   pb.audio.erase(pb.audio.begin(), pb.audio.begin() + std::ptrdiff_t(n * ch));
   pb.played += n;
@@ -390,6 +408,7 @@ void media_seek(MediaPlayback& pb, double seconds, double now) {
   pb.frames.clear();
   pb.played = 0;
   pb.source_end = false;
+  pb.refilling_audio = pb.hls && pb.info.has_audio;
   pb.sound_done = false;
   pb.want_first = true;
   pb.wall_base = pb.seek_to;
@@ -406,7 +425,8 @@ bool media_buffering(MediaPlayback& pb) {
   std::lock_guard lock(pb.m);
   if (pb.failed || pb.source_end) return false;
   if (pb.seek_pending) return true;
-  return pb.info.has_audio && !pb.sound_done ? pb.audio.empty() : pb.frames.empty();
+  return pb.info.has_audio && !pb.sound_done ? pb.refilling_audio || pb.audio.empty()
+                                            : pb.frames.empty();
 }
 
 }  // namespace xanatoo

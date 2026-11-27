@@ -859,7 +859,8 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
     options.user_agent = xanatoo::user_agent("video");
 #if !defined(__EMSCRIPTEN__)
     // Through the media cache, so what arrived stays (seeks back, replays).
-    if (remote(url) && xanatoo::media_backend_reads_feeds())
+    if (remote(url) && !options.hls && !xanatoo::is_hls_url(url) &&
+        xanatoo::media_backend_reads_feeds())
       a.feed = options.feed = start_feed(url, false);
 #endif
     a.media = xanatoo::media_start(url, std::move(options));

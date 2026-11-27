@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — HLS playback stalls
+
+- Buffer HLS audio at startup, after seeks, and after underruns so small
+  bursts do not repeatedly restart playback. Skip the media cache download
+  when the address is already known as HLS.
+- Passed 15,137 Nix unit checks. The desktop Media panel opened the HLS
+  fixture over loopback HTTP with one request per playlist and segment.
+
 ## Status (2026-11-27) — Website cookies
 
 - Add an opt-in HTTPS cookie jar, a single-cookie stdin import, and a Cookies
