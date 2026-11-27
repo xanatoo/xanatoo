@@ -2,6 +2,19 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Network latency audit
+
+- Ordinary web pages request identity encoding and buffer the body before
+  parsing. A desktop Wikipedia spot check transferred 1,329,951 bytes
+  with identity and 223,696 bytes with gzip.
+- The Odysee video page waits for resolve, HLS detection and comments in
+  series. The three requests took about 710 ms combined in a desktop spot
+  check. Playlist detection and comments can run in parallel after resolve.
+- Page and API requests generally open fresh TLS connections. Startup
+  restores background tabs with independent jobs, and TCP address attempts
+  are serial. Prioritize measuring foreground loads on the Fire tablet
+  before changing restore scheduling or connection handling.
+
 ## Status (2026-11-27) — Restored websites
 
 - Android installs its CA bundle before restoring websites. Recover from an
