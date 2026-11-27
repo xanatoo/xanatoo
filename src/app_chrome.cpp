@@ -112,7 +112,7 @@ void apply_ui_scale(App& app) {
 void toggle_chrome(App& app) {
   app.chrome_hidden = !app.chrome_hidden;
   flash_status(app, app.chrome_hidden
-                        ? "Content only — F11 / gamepad X shows the menus"
+                        ? "Fullscreen — use the document menu to exit"
                         : "Menus and toolbars shown");
 }
 

@@ -71,6 +71,10 @@ behaviour is free functions ("systems") taking `App&`:
 
 ## Views, navigation, buffers, prompts, windows
 
+View → Fullscreen (F11) hides the app chrome. The document context menu
+offers Exit Fullscreen while this mode is active. Open it with a right
+click or a touch long press.
+
 Middle-clicking a source in the Subscriptions menu uses the same tab-opening
 path as History and Bookmarks, and marks the subscription read.
 New subscriptions check every six hours by default. Existing subscriptions use

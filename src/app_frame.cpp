@@ -286,6 +286,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.browse = browsing(app);
   ui_state.can_edit = !focused_read_only(app);
   ui_state.chrome_hidden = app.chrome_hidden || media_fullscreen(app);
+  ui_state.document_fullscreen = app.chrome_hidden;
   ui_state.virtual_keyboard = app.virtual_keyboard;
   ui_state.help = app.help_mode;
   ui_state.hover_help = app.hover_help.open;

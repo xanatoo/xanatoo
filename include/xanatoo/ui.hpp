@@ -622,6 +622,7 @@ struct UiState {
   bool browse = true;  // read-only navigation (default, or foreign content)
   bool can_edit = false;  // false for foreign/read-only content
   bool chrome_hidden = false;  // content only: no menu bar / toolbars / tabs
+  bool document_fullscreen = false;
   bool virtual_keyboard = false;
   // Gamepad right-stick software pointer (extra; real mouse stays separate)
   bool stick_cursor = false;

@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Document fullscreen
+
+- View → Fullscreen hides app chrome. The document context menu offers
+  Exit Fullscreen, including when opened by touch long press.
+- Passed 15,182 unit checks in Nix.
+
 ## Status (2026-11-27) — Style menu previews
 
 - Preview the sheet, colours or fonts under the pointer in Layout and

@@ -89,7 +89,7 @@ const std::vector<UiHelpTopic> kTopics = {
      "document features."},
     {"mainmenubar", "Menu bar",
      "All commands, grouped by topic. Hold the pointer over an entry to read "
-     "about it here. **F11** hides the menus and toolbars (content only)."},
+     "about it here. **F11** toggles Fullscreen."},
 
     // ---- File ----
     {"new", "New document",
@@ -322,9 +322,10 @@ const std::vector<UiHelpTopic> kTopics = {
      "Switches the focused view between browsing (links follow on click) "
      "and editing (caret, typing). Foreign pages are read-only; use *Edit "
      "local copy*. **F2**."},
-    {"content only|content only (hide menus, toolbars)", "Content only",
-     "Hides menus, toolbars and the status line for reading. **F11** "
-     "brings them back."},
+    {"fullscreen|exit fullscreen", "Fullscreen",
+     "Hides menus, toolbars and the status line for reading. Press **F11** "
+     "or choose **Exit Fullscreen** from the document context menu to return. "
+     "On touchscreens, touch and hold to open the menu."},
     {"zoom in", "Zoom in", "Larger text. **Ctrl++**, or Ctrl+wheel."},
     {"zoom out", "Zoom out", "Smaller text. **Ctrl+-**, or Ctrl+wheel."},
     {"footnote overlay", "Footnote overlay",

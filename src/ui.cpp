@@ -3924,8 +3924,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       if (ImGui::MenuItem("Lock Document", "F2",
                           state.can_edit && state.browse, state.can_edit))
         cmd = UiCommand::ToggleLock;
-      menu_item_cmd("Content Only (hide menus, toolbars)",
-                    UiCommand::ToggleChrome, cmd, true, "F11");
+      menu_item_cmd("Fullscreen", UiCommand::ToggleChrome, cmd, true, "F11");
       ImGui::Separator();
       menu_item_cmd("Zoom In", UiCommand::ZoomIn, cmd, true, "Ctrl++");
       menu_item_cmd("Zoom Out", UiCommand::ZoomOut, cmd, true, "Ctrl+-");
@@ -4472,6 +4471,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     context_open_ = false;
   }
   if (ImGui::BeginPopup("##doc_context")) {
+    if (state.document_fullscreen) {
+      menu_item_cmd("Exit Fullscreen", UiCommand::ToggleChrome, cmd, true, "F11");
+      ImGui::Separator();
+    }
     if (state.context_save_pdf) {
       if (ImGui::MenuItem("Save PDF…")) cmd = UiCommand::SavePdf;
       ImGui::Separator();
