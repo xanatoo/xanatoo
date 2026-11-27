@@ -75,6 +75,8 @@ struct WebPagesFile {
 // `response` (may be null) receives the final answer's headers.
 // `html_change_key` requests chrome-free HTML conversion and receives a
 // fingerprint of the resulting XML for successful HTML responses only.
+// `follow_marginalia_wait` lets a Marginalia search follow one continuation
+// after the page's advertised countdown.
 std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   std::string* final_url = nullptr,
                                   int* http_status = nullptr,
@@ -85,7 +87,8 @@ std::optional<Document> web_fetch(std::string_view url, std::string* err,
                                   HttpStreamHeaders* response = nullptr,
                                   std::string_view download_name = {},
                                   std::string_view request_headers = {},
-                                  std::string* html_change_key = nullptr);
+                                  std::string* html_change_key = nullptr,
+                                  bool follow_marginalia_wait = false);
 #endif
 
 }  // namespace xanatoo

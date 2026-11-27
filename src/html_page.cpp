@@ -19,18 +19,22 @@
 #include "xanatoo/https.hpp"
 #include "xanatoo/http_cookies.hpp"
 #include "xanatoo/version.hpp"
+#include "xanatoo/transfer_meter.hpp"
 #include "xanatoo/paths.hpp"
 #endif
 
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <unordered_map>
+#include <thread>
 
 namespace xanatoo {
 
@@ -584,6 +588,48 @@ struct PagesCopy {
 
 }  // namespace
 
+namespace {
+
+constexpr std::string_view kMarginaliaOrigin = "https://marginalia-search.com";
+
+struct MarginaliaWait {
+  std::chrono::seconds duration;
+  std::string url;
+};
+
+std::optional<MarginaliaWait> marginalia_wait(std::string_view html) {
+  if (html.find("The search engine is currently seeing a lot of fairly aggressive bot activity.") ==
+      std::string_view::npos)
+    return std::nullopt;
+  const auto countdown = scan_tags(html, [](const TagRef& tag) {
+    return tag.name == "span" && html_attr(tag.attrs, "id") == "countdown";
+  });
+  if (!countdown) return std::nullopt;
+
+  const auto duration = html_attr(countdown->attrs, "data-tr");
+  int seconds = 0;
+  const auto end = duration.data() + duration.size();
+  const auto parsed = std::from_chars(duration.data(), end, seconds);
+  if (parsed.ec != std::errc{} || parsed.ptr != end || seconds < 1 || seconds > 30)
+    return std::nullopt;
+
+  const auto manual = scan_tags(html.substr(countdown->gt + 1),
+                                [](const TagRef& tag) { return tag.name == "noscript"; });
+  if (!manual) return std::nullopt;
+  const auto inner = element_inner(html.substr(countdown->gt + 1), *manual);
+  const auto link = scan_tags(inner, [](const TagRef& tag) { return tag.name == "a"; });
+  if (!link) return std::nullopt;
+
+  const auto href = html_attr(link->attrs, "href");
+  if (!href.starts_with("/search?") ||
+      href.find_first_of(" \r\n\t\\#") != std::string::npos)
+    return std::nullopt;
+  return MarginaliaWait{std::chrono::seconds(seconds),
+                        std::string(kMarginaliaOrigin) + href};
+}
+
+}  // namespace
+
 std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   std::string* final_url, int* http_status,
                                   std::string* raw_source,
@@ -593,13 +639,17 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
                                   HttpStreamHeaders* response,
                                   std::string_view download_name,
                                   std::string_view request_headers,
-                                  std::string* html_change_key) {
+                                  std::string* html_change_key,
+                                  bool follow_marginalia_wait) {
   if (html_change_key) html_change_key->clear();
   static const std::string kUserAgent =
       std::string("Mozilla/5.0 (compatible; xanatoo/") + version_string() +
       "; +https://github.com/xanatoo/xanatoo)";
   std::string url(url_in.substr(0, url_in.find('#')));
-  std::cerr << "Web: GET " << url << "\n";
+  const bool marginalia = url.starts_with("https://marginalia-search.com/search?");
+  // The search continuation may carry an upstream token in its query.
+  std::cerr << "Web: GET " << (marginalia ? url.substr(0, url.find('?')) : url)
+            << "\n";
   std::string fin;
   HttpStreamHeaders headers;
   std::string body_bytes;
@@ -692,6 +742,28 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
           std::memory_order_release);
     }
     return std::nullopt;
+  }
+  if (follow_marginalia_wait && marginalia && headers.status == 200 &&
+      fin.starts_with("https://marginalia-search.com/search?")) {
+    if (const auto wait = marginalia_wait(body_bytes); wait && wait->url != fin) {
+      using namespace std::chrono_literals;
+      const auto deadline = std::chrono::steady_clock::now() + wait->duration;
+      for (auto now = std::chrono::steady_clock::now(); now < deadline;
+           now = std::chrono::steady_clock::now()) {
+        if (transfer_cancelled()) {
+          if (err) *err = transfer_cancelled_error();
+          return std::nullopt;
+        }
+        std::this_thread::sleep_until(std::min(deadline, now + 50ms));
+      }
+      if (transfer_cancelled()) {
+        if (err) *err = transfer_cancelled_error();
+        return std::nullopt;
+      }
+      return web_fetch(wait->url, err, final_url, http_status, raw_source,
+                       download, pages, force_download, response, download_name,
+                       request_headers, html_change_key);
+    }
   }
   if (final_url) *final_url = fin;
   if (response) *response = headers;

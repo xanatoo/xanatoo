@@ -45,6 +45,11 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
 
 ## Service refs (`native.hpp`)
 
+- `search:marginalia:` recognizes the search site's wait page before HTML
+  conversion. The fetch worker waits for the displayed countdown and
+  follows the site's manual continuation link once, on the same HTTPS
+  origin and search path. Stop cancels the wait. The address stays the
+  original search ref.
 - `hn:` / `reddit:` / `lemmy:` / `digg:` refs select the native Thread + Message
   clients; the part after the prefix mirrors the web path (`hn:item?id=1`,
   `reddit:r/linux/`, `lemmy:lemmy.world/c/technology`). `web_url_for`

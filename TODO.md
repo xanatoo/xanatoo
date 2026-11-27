@@ -4,9 +4,10 @@
 
 ## Status (2026-11-27) — Marginalia search wait page
 
-- Marginalia's wait page navigates to a continuation URL after a
-  JavaScript timer. The page offers the same link for manual use after
-  the wait, but Xanatoo's HTML reader drops `noscript` blocks.
+- For `search:marginalia:`, the fetch worker honors the countdown and
+  follows the manual continuation link once. Stop cancels the wait.
+- Passed 15,178 offline checks in Nix. The live wait page did not appear
+  during the search probe.
 - A live web search returned results without the wait page. The documented
   API's shared `public` key returned HTTP 429. For native integration,
   consider a dedicated key under Marginalia's API terms.

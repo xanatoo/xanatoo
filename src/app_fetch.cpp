@@ -445,7 +445,8 @@ bool load_snapshot(const std::string& id, const std::string& url,
 }
 
 void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
-                bool allow_download) {
+                bool allow_download, std::string search_address = {},
+                bool follow_marginalia_wait = false) {
   // Page snapshots: an immutable snap: address, or Back / Forward /
   // History asking for the page as it was seen. Gone: the live page.
   if (auto ref = xanatoo::parse_snapshot_ref(url)) {
@@ -465,7 +466,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
     }
     out->snapshot_missing = true;
   }
-  out->final_url = url;
+  out->final_url = search_address.empty() ? url : search_address;
   // Local PDF / DjVu / comic: thumtoo sizes every page on this worker.
   if (xanatoo::is_fixed_layout_path(url)) {
     out->service = "Pages";
@@ -492,9 +493,9 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
       finish_fetch(*out);
       return;
     }
+    const auto ref = xanatoo::parse_search_ref(url);
     fetch_page(xanatoo::search_target(url, xanatoo::load_engines()), out,
-               allow_download);
-    out->final_url = shown;
+               allow_download, shown, ref && ref->engine == "marginalia");
     return;
   }
   if (xanatoo::is_media_ref(url)) {
@@ -672,7 +673,8 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
                                   out->allow_pages ? &pages : nullptr,
                                   out->force_download, &response, {}, {},
                                   out->subscription_check ? &out->html_change_key
-                                                          : nullptr);
+                                                          : nullptr,
+                                  follow_marginalia_wait);
     if (out->doc) {
       if (!out->subscription_check) out->raw_source = std::move(body);
       note_response(*out, response);
@@ -695,6 +697,7 @@ void fetch_page(std::string url, std::shared_ptr<FetchShared> out,
   if (out->download && out->download->phase.load() ==
                             xanatoo::DownloadPhase::Pending)
     out->download->phase.store(xanatoo::DownloadPhase::Skipped);
+  if (!search_address.empty()) out->final_url = std::move(search_address);
   finish_fetch(*out);
 }
 
