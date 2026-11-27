@@ -273,10 +273,12 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.ui_scale = app.view_settings.ui_scale;
   ui_state.styles.clear();
   for (const auto& e : app.styles) ui_state.styles.emplace_back(e.name, e.title);
-  ui_state.style = app.style.name;
+  const auto& style = app.style_before_preview ? *app.style_before_preview
+                                               : app.style;
+  ui_state.style = style.name;
   ui_state.default_style = app.view_settings.style;
-  ui_state.style_colors = app.style.colors_from;
-  ui_state.style_fonts = app.style.fonts_from;
+  ui_state.style_colors = style.colors_from;
+  ui_state.style_fonts = style.fonts_from;
   ui_state.style_entries = app.styles;
   ui_state.style_pins = app.style_pins;
   ui_state.style_save_generation = app.style_save_generation;
@@ -1131,6 +1133,7 @@ std::string message_excerpt(const xanatoo::Document& d, xanatoo::NodeId msg) {
 
 void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
   using C = xanatoo::UiCommand;
+  if (cmd != C::None) preview_style(app, std::nullopt);
   auto& p = focused_pane(app);
   auto& d = doc_of(app, p);
 
@@ -3491,6 +3494,8 @@ void run_chrome(App& app) {
     app.key_focus = KeyFocus::Document;
   }
   execute_command(app, ui_frame.cmd, ui_frame.arg);
+  if (ui_frame.cmd == xanatoo::UiCommand::None)
+    preview_style(app, ui_frame.style_hover);
   // The find bar keeps the keys in its field.
   using C = xanatoo::UiCommand;
   const bool find_cmd =

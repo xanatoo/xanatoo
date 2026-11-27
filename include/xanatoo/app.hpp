@@ -1284,6 +1284,8 @@ struct App {
   // Active document style sheet (layout_engine / renderer point at it) and
   // the sheets found in style_dirs() for the toolbar / View menu.
   xanatoo::DocStyle style;
+  std::optional<xanatoo::DocStyle> style_before_preview;
+  std::optional<std::pair<xanatoo::UiCommand, std::string>> style_hover;
   std::vector<xanatoo::StyleEntry> styles;
   // White radial glows (alpha only) from the top / left / right edge,
   // stretched under gallery edge-zone icons.
@@ -2014,6 +2016,9 @@ void apply_font_sizes(App& app);
 std::string body_font_path(const App& app);
 // Load style sheet `name` (re-reading the file), reload fonts if its
 // families changed, relayout everything and remember it in view.conf.
+void preview_style(App& app,
+                   const std::optional<std::pair<xanatoo::UiCommand,
+                                                 std::string>>& hover);
 void apply_style(App& app, const std::string& name);
 // Take the colours (group kStyleColors) or fonts (kStyleFonts) from sheet
 // `name` on top of the sheet in use; "" = the sheet's own. Saved in

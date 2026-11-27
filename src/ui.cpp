@@ -434,57 +434,53 @@ void fill_measure_items(const UiState& state, UiCommand& cmd,
   }
 }
 
-void fill_style_items(const UiState& state, UiCommand& cmd, std::string& arg);
+void style_menu_item(const char* label, bool selected, UiCommand choice,
+                     const std::string& name, UiCommand& cmd,
+                     UiFrameResult& result) {
+  if (ImGui::MenuItem(label, nullptr, selected)) {
+    cmd = choice;
+    result.arg = name;
+  }
+  if (!selected && ImGui::IsItemHovered())
+    result.style_hover.emplace(choice, name);
+}
 
 // Colours / fonts lent by another sheet: "From style sheet" + all sheets.
 void fill_style_layer_items(const UiState& state, bool colors, UiCommand& cmd,
-                            std::string& arg) {
+                            UiFrameResult& result) {
   const std::string& current = colors ? state.style_colors : state.style_fonts;
-  const UiCommand c =
+  const UiCommand choice =
       colors ? UiCommand::SelectStyleColors : UiCommand::SelectStyleFonts;
-  if (ImGui::MenuItem("From style sheet", nullptr, current.empty())) {
-    cmd = c;
-    arg.clear();
-  }
+  style_menu_item("From style sheet", current.empty(), choice, {}, cmd, result);
   ImGui::Separator();
   for (const auto& [name, title] : state.styles) {
     if (name == state.style) continue;  // same as "From style sheet"
-    if (ImGui::MenuItem(title.c_str(), nullptr, name == current)) {
-      cmd = c;
-      arg = name;
-    }
+    style_menu_item(title.c_str(), name == current, choice, name, cmd, result);
   }
 }
 
 // Layout → Style sheet / Colours / Fonts as three submenus.
-void fill_style_menus(const UiState& state, UiCommand& cmd, std::string& arg) {
+void fill_style_menus(const UiState& state, UiCommand& cmd,
+                      UiFrameResult& result) {
   if (ImGui::BeginMenu("Style sheet")) {
-    fill_style_items(state, cmd, arg);
+    for (const auto& [name, title] : state.styles)
+      style_menu_item(title.c_str(), name == state.style, UiCommand::SelectStyle,
+                      name, cmd, result);
+    ImGui::Separator();
+    if (ImGui::MenuItem("Manage / edit style sheets..."))
+      cmd = UiCommand::ToggleStyleManagerPanel;
+    if (ImGui::MenuItem("Reload style sheets"))
+      cmd = UiCommand::ReloadStyles;
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu("Colours")) {
-    fill_style_layer_items(state, true, cmd, arg);
+    fill_style_layer_items(state, true, cmd, result);
     ImGui::EndMenu();
   }
   if (ImGui::BeginMenu("Fonts")) {
-    fill_style_layer_items(state, false, cmd, arg);
+    fill_style_layer_items(state, false, cmd, result);
     ImGui::EndMenu();
   }
-}
-
-// Document style sheets (styles/*.xss) — radio list + reload.
-void fill_style_items(const UiState& state, UiCommand& cmd, std::string& arg) {
-  for (const auto& [name, title] : state.styles) {
-    if (ImGui::MenuItem(title.c_str(), nullptr, name == state.style)) {
-      cmd = UiCommand::SelectStyle;
-      arg = name;
-    }
-  }
-  ImGui::Separator();
-  if (ImGui::MenuItem("Manage / edit style sheets..."))
-    cmd = UiCommand::ToggleStyleManagerPanel;
-  if (ImGui::MenuItem("Reload style sheets"))
-    cmd = UiCommand::ReloadStyles;
 }
 
 const char* menu_icon_for(UiCommand command) {
@@ -2094,7 +2090,8 @@ static void menu_structure_items(const UiState& state, UiCommand& cmd) {
 // Toolbar "View tools" menu: also the display menus (line spacing, text
 // width, style sheet).
 static void view_tools_items(const UiState& state, UiCommand& cmd,
-                             std::string& arg) {
+                             UiFrameResult& result) {
+  auto& arg = result.arg;
   {
     if (ImGui::BeginMenu("Line spacing")) {
       fill_line_spacing_items(state, cmd);
@@ -2107,7 +2104,7 @@ static void view_tools_items(const UiState& state, UiCommand& cmd,
       fill_margins_items(state, cmd, arg);
       ImGui::EndMenu();
     }
-    fill_style_menus(state, cmd, arg);
+    fill_style_menus(state, cmd, result);
   }
   if (!state.browse)
     menu_item_cmd("Replace…", UiCommand::Replace, cmd, true, "Ctrl+H");
@@ -3234,7 +3231,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                   "Heading outline (Ctrl+Shift+O; Ctrl+Alt+O docks it)",
                   UiCommand::ToggleOutline, state.outline);
     if (tool_menu_begin("tb_viewmenu", "view", "View tools")) {
-      view_tools_items(state, cmd, result.arg);
+      view_tools_items(state, cmd, result);
       tool_menu_end();
     }
     toggle_button("tb_history", "history", "Session history (Ctrl+Shift+H)",
@@ -3995,7 +3992,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       }
       if (ImGui::MenuItem("Justify lines", nullptr, state.justify))
         cmd = UiCommand::ToggleJustify;
-      fill_style_menus(state, cmd, result.arg);
+      fill_style_menus(state, cmd, result);
       ImGui::EndMenu();
     }
     force_menu("Panels");

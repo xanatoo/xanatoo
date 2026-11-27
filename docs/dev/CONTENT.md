@@ -5,6 +5,13 @@ HTML mapping, tables, images, collections, imports and style sheet details.
 
 ## Style sheets (details)
 
+- Layout and the toolbar's View tools preview sheet, colour and font
+  choices on hover. The app keeps the applied sheet for menu checkmarks
+  and restores it when the pointer leaves the choice or the menu closes.
+  Clicking uses the normal style command and saves the choice. Hover
+  changes relayout the visible document and keep the glyph cache when
+  font families and sizes match.
+
 - Paint order: `draw_backdrop` (paper), then `Renderer::draw` with the
   pane's `SelectionWash`: role fills (cards, asides, tables, code), bars and
   rules, inline-code runs, *then the selection*, then glyphs. Sheets may use

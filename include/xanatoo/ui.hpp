@@ -861,6 +861,7 @@ struct UiFrameResult {
   // View whose edit strip `cmd` came from (-1 = elsewhere): it is focused
   // before the command runs.
   int edit_bar_view = -1;
+  std::optional<std::pair<UiCommand, std::string>> style_hover;
 };
 
 class Ui {

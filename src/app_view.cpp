@@ -924,7 +924,50 @@ static xanatoo::StyleChoice effective_style_choice(App& app) {
 }
 
 static xanatoo::StyleChoice current_style_choice(const App& app) {
-  return {app.style.name, app.style.colors_from, app.style.fonts_from};
+  const auto& style = app.style_before_preview ? *app.style_before_preview
+                                               : app.style;
+  return {style.name, style.colors_from, style.fonts_from};
+}
+
+static void install_style(App& app, xanatoo::DocStyle next) {
+  const bool fonts_changed = !(next.fonts == app.style.fonts);
+  const bool sizes_changed = next.body_scale != app.style.body_scale ||
+                             next.heading_scale != app.style.heading_scale;
+  app.style = std::move(next);
+  if (fonts_changed &&
+      !app.fonts.load(app.sdl, body_font_path(app), app.body_px,
+                      app.heading_px, app.style.fonts)) {
+    std::cerr << "Style fonts failed to load; using defaults\n";
+    app.style.fonts = {};
+    app.fonts.load(app.sdl, body_font_path(app), app.body_px, app.heading_px);
+  }
+  if (fonts_changed || sizes_changed) apply_font_sizes(app);
+  apply_view_settings(app, false);
+}
+
+void preview_style(App& app,
+                   const std::optional<std::pair<xanatoo::UiCommand,
+                                                 std::string>>& hover) {
+  if (hover == app.style_hover) return;
+  app.style_hover = hover;
+  if (hover) {
+    auto choice = current_style_choice(app);
+    const auto& [command, name] = *hover;
+    using C = xanatoo::UiCommand;
+    if (command == C::SelectStyle) choice.sheet = name;
+    if (command == C::SelectStyleColors) choice.colors = name;
+    if (command == C::SelectStyleFonts) choice.fonts = name;
+    xanatoo::DocStyle next;
+    if (xanatoo::load_style(choice, next)) {
+      if (!app.style_before_preview) app.style_before_preview = app.style;
+      install_style(app, std::move(next));
+      return;
+    }
+  }
+  if (app.style_before_preview) {
+    install_style(app, std::move(*app.style_before_preview));
+    app.style_before_preview.reset();
+  }
 }
 
 // Explicit choices (set_default) save view.conf and report the result.
@@ -938,19 +981,10 @@ static bool set_style(App& app, const xanatoo::StyleChoice& choice,
   }
   for (const std::string& w : next.warnings)
     std::cerr << "style warning: " << w << "\n";
-  const bool fonts_changed = !(next.fonts == app.style.fonts);
-  app.style = std::move(next);
-  if (fonts_changed &&
-      !app.fonts.load(app.sdl, body_font_path(app), app.body_px,
-                      app.heading_px, app.style.fonts)) {
-    std::cerr << "Style fonts failed to load; using defaults\n";
-    app.style.fonts = {};
-    app.fonts.load(app.sdl, body_font_path(app), app.body_px, app.heading_px);
-  }
-  apply_font_sizes(app);
-  app.help_needs_layout = true;
-  app.hover_help.needs_layout = true;
-  apply_view_settings(app, set_default);  // relayout; only explicit choices save view.conf
+  install_style(app, std::move(next));
+  if (set_default && !xanatoo::save_view_settings(app.view_settings))
+    std::cerr << "Could not persist view settings to "
+              << xanatoo::view_settings_path() << "\n";
   std::string msg = "Style: " + app.style.title;
   auto title_of = [&](const std::string& name) {
     for (const xanatoo::StyleEntry& e : app.styles)
@@ -1001,12 +1035,15 @@ void sync_pinned_style(App& app) {
   auto layer = [&](const std::string& s) {
     return s == wanted.sheet ? std::string{} : s;
   };
-  if (wanted.sheet != app.style.name ||
-      layer(wanted.colors) != app.style.colors_from ||
-      layer(wanted.fonts) != app.style.fonts_from) {
+  const auto current = current_style_choice(app);
+  if (wanted.sheet != current.sheet ||
+      layer(wanted.colors) != current.colors ||
+      layer(wanted.fonts) != current.fonts) {
     xanatoo::DocStyle check;
-    if (xanatoo::load_style(wanted.sheet, check))
+    if (xanatoo::load_style(wanted.sheet, check)) {
+      preview_style(app, std::nullopt);
       set_style(app, wanted, false);
+    }
   }
 }
 

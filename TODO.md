@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Style menu previews
+
+- Preview the sheet, colours or fonts under the pointer in Layout and
+  View tools. Leaving the choice restores the applied style. Click to save.
+- Passed 15,182 unit checks in Nix. Xvfb verified preview and restoration
+  for all three Layout submenus and saved a colour choice on click.
+
 ## Status (2026-11-27) — Subscription refresh cadence
 
 - Default new subscriptions to a six-hour refresh interval to reduce
