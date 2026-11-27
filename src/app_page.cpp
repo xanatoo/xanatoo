@@ -222,11 +222,12 @@ void toggle_page_panel(App& app) {
 void update_page_panel(App& app) {
   // The panes leave the panel's regions out while it is open. Relayout when
   // that changes: the toggle's own relayout ran before the flag was set.
-  if (app.layout_engine.hide_panel_chrome() != app.page.shown) {
-    app.layout_engine.set_hide_panel_chrome(app.page.shown);
+  const bool visible = app.page.shown && !dock_hidden(app, app.pg.dock);
+  if (app.layout_engine.hide_panel_chrome() != visible) {
+    app.layout_engine.set_hide_panel_chrome(visible);
     relayout_all(app);
   }
-  if (!app.page.shown) return;
+  if (!visible) return;
   rebuild(app);
 }
 

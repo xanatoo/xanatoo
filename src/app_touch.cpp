@@ -177,6 +177,20 @@ std::pair<int, int> gutter_point(const Touch& t) {
           static_cast<int>(std::floor(my + t.gutter_dy))};
 }
 
+bool dock_swipe_allowed(App& app, float y) {
+  return !app.chrome_hidden && !media_fullscreen(app) &&
+         !prompt_active(app) && !app.ui.popup_open() &&
+         y >= app.ui_top && y < app.win_h - status_bar_h;
+}
+
+Dock hidden_dock_at_edge(const App& app, float x) {
+  const float edge = 24.f * app.ui_scale;
+  if (x < edge && dock_hidden(app, Dock::Left)) return Dock::Left;
+  if (x >= app.win_w - edge && dock_hidden(app, Dock::Right))
+    return Dock::Right;
+  return Dock::None;
+}
+
 // Decide what a first finger at (x, y) is for.
 void begin_gesture(App& app, float x, float y) {
   Touch& t = app.touch;
@@ -190,18 +204,24 @@ void begin_gesture(App& app, float x, float y) {
   t.on_image = false;
   t.menu_open = false;
   t.ui_moved = false;
+  t.swipe_dock = Dock::None;
   const int xi = static_cast<int>(x), yi = static_cast<int>(y);
+  const FloatWindow* w = float_at(app, xi, yi);
+  const bool swipe_allowed = dock_swipe_allowed(app, y);
+  const Dock side = swipe_allowed && w &&
+                    (w->dock == Dock::Left || w->dock == Dock::Right)
+                        ? w->dock : Dock::None;
   if (app.ui.captures_point(x, y, float_layer_at(app, xi, yi)) ||
       y < app.ui_top) {
     t.mode = TouchMode::UiHold;
+    t.swipe_dock = side;
     return;
   }
   if (yi >= app.win_h - status_bar_h) {
     t.mode = TouchMode::Ignored;
     return;
   }
-  if (FloatWindow* w = float_at(app, xi, yi);
-      w && over_float_chrome(app, xi, yi)) {
+  if (w && over_float_chrome(app, xi, yi)) {
     // Client area scrolls/taps; title, frame and scrollbar strip drag.
     auto [cx, cy, cw, ch] = float_client_rect(app, *w);
     const SDL_Rect sb = client_scrollbar_rect(app, *w);
@@ -209,6 +229,7 @@ void begin_gesture(App& app, float x, float y) {
     const SDL_Point point{xi, yi};
     if (SDL_PointInRect(&point, &client) && !SDL_PointInRect(&point, &sb)) {
       t.on_float = true;
+      t.swipe_dock = side;
       t.mode = TouchMode::Pending;
     } else {
       t.mode = TouchMode::Direct;
@@ -216,6 +237,7 @@ void begin_gesture(App& app, float x, float y) {
     }
     return;
   }
+  if (swipe_allowed && !w) t.swipe_dock = hidden_dock_at_edge(app, x);
   t.pane = pane_at(app, x, y);
   const Pane& p = app.panes[t.pane];
   if (pane_image_view(p)) {  // a single gallery image: pan, swipe, pinch
@@ -236,11 +258,22 @@ void begin_gesture(App& app, float x, float y) {
                          gutter_at(app, xi, yi) != Gutter::None;
   if (on_scrollbar || on_gutter) {
     t.mode = TouchMode::Direct;
+    // Edge swipes can begin on the document scrollbar. Wait for the
+    // direction before the press can page the document.
+    if (!on_gutter && t.swipe_dock != Dock::None) return;
+    t.swipe_dock = Dock::None;
     pointer_left_down(app, xi, yi, false);
     t.menu_open = on_badge && !float_resize_at(app, xi, yi);
     return;
   }
   t.mode = TouchMode::Pending;
+}
+
+float dock_swipe_distance(const App& app, float x) {
+  const Touch& t = app.touch;
+  const bool toward_right = (t.swipe_dock == Dock::Left) ==
+                            dock_hidden(app, t.swipe_dock);
+  return toward_right ? x - t.start_x : t.start_x - x;
 }
 
 // The context menu at the pressed spot, while the finger still rests.
@@ -342,8 +375,15 @@ void touch_finger_down(App& app, const SDL_TouchFingerEvent& tf) {
     begin_gesture(app, x, y);
     return;
   }
+  const bool deferred_press = t.mode == TouchMode::Direct &&
+                              t.swipe_dock != Dock::None;
+  t.swipe_dock = Dock::None;
+  if (t.mode == TouchMode::DockSwipe) t.mode = TouchMode::Ignored;
   if (t.mode == TouchMode::Ignored) return;
   if (begin_gutter_drag(app)) return;
+  if (deferred_press)
+    pointer_left_down(app, static_cast<int>(t.start_x),
+                      static_cast<int>(t.start_y), false);
   if (t.mode == TouchMode::UiHold) {
     t.mode = TouchMode::Ignored;  // two fingers on chrome: no right click
   } else if (t.mode == TouchMode::Direct && float_span_begin(app)) {
@@ -366,7 +406,24 @@ void touch_finger_motion(App& app, const SDL_TouchFingerEvent& tf) {
   f->x = x;
   f->y = y;
   const bool primary = f == &t.fingers[0];
+  if (primary && t.swipe_dock != Dock::None &&
+      t.mode != TouchMode::DockSwipe &&
+      std::hypot(x - t.start_x, y - t.start_y) >= kSlopPx) {
+    if (dock_swipe_distance(app, x) >= 1.5f * std::abs(y - t.start_y) &&
+        (t.mode == TouchMode::Pending || t.mode == TouchMode::UiHold ||
+         t.mode == TouchMode::Image || t.mode == TouchMode::Direct)) {
+      app.ui.touch_long_press(false);
+      t.mode = TouchMode::DockSwipe;
+    } else {
+      if (t.mode == TouchMode::Direct)
+        pointer_left_down(app, static_cast<int>(t.start_x),
+                          static_cast<int>(t.start_y), false);
+      t.swipe_dock = Dock::None;
+    }
+  }
   switch (t.mode) {
+    case TouchMode::DockSwipe:
+      break;
     case TouchMode::UiHold:  // ImGui drags it (a slider, a tab, a scroll)
       if (std::hypot(x - t.start_x, y - t.start_y) >= kSlopPx)
         t.ui_moved = true;
@@ -451,6 +508,17 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
   const bool primary = f == &t.fingers[0];
   const int xi = static_cast<int>(f->x), yi = static_cast<int>(f->y);
   switch (t.mode) {
+    case TouchMode::DockSwipe: {
+      const float x = tf.x * app.win_w;
+      const float y = tf.y * app.win_h;
+      const float distance = dock_swipe_distance(app, x);
+      if (primary && distance >= 48.f * app.ui_scale &&
+          distance >= 1.5f * std::abs(y - t.start_y)) {
+        const Dock side = t.swipe_dock;
+        set_dock_hidden(app, side, !dock_hidden(app, side));
+      }
+      break;
+    }
     case TouchMode::Pending:
       if (primary) {  // tap
         pointer_left_down(app, static_cast<int>(t.start_x),
@@ -489,7 +557,12 @@ void touch_finger_up(App& app, const SDL_TouchFingerEvent& tf) {
     case TouchMode::UiHold:  // a tap: ImGui clicked it
       break;
     case TouchMode::Direct:
-      if (primary) pointer_left_up(app, xi, yi);
+      if (primary) {
+        if (t.swipe_dock != Dock::None)
+          pointer_left_down(app, static_cast<int>(t.start_x),
+                            static_cast<int>(t.start_y), false);
+        pointer_left_up(app, xi, yi);
+      }
       break;
     case TouchMode::GutterDrag: {  // either finger lets go of the gutter
       const auto [gx, gy] = gutter_point(t);
@@ -579,8 +652,10 @@ void draw_touch_hold(const App& app) {
 void update_touch(App& app) {
   Touch& t = app.touch;
   const Uint32 now = xanatoo::sdl::ticks();
-  if (t.mode == TouchMode::Pending && now - t.start_ticks >= kLongPressMs)
+  if (t.mode == TouchMode::Pending && now - t.start_ticks >= kLongPressMs) {
+    t.swipe_dock = Dock::None;
     begin_select(app);
+  }
   if (t.mode == TouchMode::UiHold && !t.ui_moved &&
       now - t.start_ticks >= kLongPressMs) {
     app.ui.touch_long_press(true);

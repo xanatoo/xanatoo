@@ -247,6 +247,30 @@ std::tuple<int, int, int, int> dock_rect(App& app, Dock d) {
   return {0, top, 0, 0};
 }
 
+bool dock_hidden(const App& app, Dock side) {
+  return (side == Dock::Left && app.left_dock_hidden) ||
+         (side == Dock::Right && app.right_dock_hidden);
+}
+
+void set_dock_hidden(App& app, Dock side, bool hidden) {
+  if (side != Dock::Left && side != Dock::Right) return;
+  bool& current = side == Dock::Left ? app.left_dock_hidden
+                                     : app.right_dock_hidden;
+  if (current == hidden) return;
+  keep_views(app);
+  if (hidden) {
+    for (const FloatWindow* w : float_stack(app)) {
+      if (w->dock != side) continue;
+      if (float_active(app, *w)) app.key_focus = KeyFocus::Document;
+      if (w->role == WindowRole::Document && w->view == app.focus)
+        focus_view(app, app.centre_focus);
+    }
+  }
+  current = hidden;
+  app.needs_layout = true;
+  place_windows(app);
+}
+
 int dock_column_w(App& app, Dock side) {
   return has_column(app, side) ? column_w(app, side) + dock_gap : 0;
 }
@@ -268,6 +292,7 @@ void dock_window(App& app, FloatWindow& w, Dock d, int mx, int my) {
     if (w.dock != Dock::Max) w.restore_dock = w.dock;
   } else {
     // Slot: below every docked window whose middle is above the drop point.
+    set_dock_hidden(app, d, false);
     auto col = dock_column(app, d);
     col.erase(std::remove(col.begin(), col.end(), &w), col.end());
     size_t at = 0;

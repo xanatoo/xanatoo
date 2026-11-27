@@ -680,6 +680,7 @@ enum class TouchMode : uint8_t {
   Pinch,    // two fingers: zoom
   Image,    // one finger on a single-image gallery view: pan / swipe / tap
   ImagePinch,  // two fingers there: zoom the image
+  DockSwipe,  // a horizontal swipe across a side dock or window edge
   GutterDrag,  // two fingers either side of a gutter: they drag it along
   FloatSpan,   // a finger on a window title + a second one: each window
                // edge follows the finger on its side (resize / move)
@@ -701,6 +702,7 @@ struct Touch {
   bool on_float = false;
   bool on_image = false;  // `pane` shows a single gallery image
   bool menu_open = false;  // the first finger opened a menu
+  Dock swipe_dock = Dock::None;
   bool ui_moved = false;   // motion on ImGui chrome cancels the long press
   int pane = 0;
   // Pan velocity (scroll px/s) and the fling that continues it.
@@ -1375,6 +1377,8 @@ struct App {
   } dock_split_drag;
   bool tab_drag_preview = false;   // dock_preview comes from a dragged tab
   bool tab_drop_preview = false;   // a dragged window would become a tab
+  bool left_dock_hidden = false;
+  bool right_dock_hidden = false;
   int dock_w[4] = {280, 360, 200, 200};  // Left / Right width, Top / Bottom height
   Prompt prompt;
   // Last find / replace text, kept when another prompt displaces a search
@@ -2872,7 +2876,9 @@ void sitemap_step(App& app, int dir);
 // ---- floating windows (app_windows.cpp) ----
 // z-order, back→front: docked columns, floating (outline, backlinks, help,
 // document windows), maximized.
-std::vector<FloatWindow*> float_stack(App& app);
+bool dock_hidden(const App& app, Dock side);
+void set_dock_hidden(App& app, Dock side, bool hidden);
+std::vector<FloatWindow*> float_stack(App& app, bool include_hidden = false);
 // Bring `w` to the front of its layer (title click) / send it to the back
 // (title middle-click). Document windows also move within soft_wins.
 void raise_float(App& app, FloatWindow& w);

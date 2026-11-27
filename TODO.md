@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Touch swipes for side docks
+
+- Swipe outward from a side dock panel to hide the column, and inward from
+  the window edge to restore it. Preserve panel placement and sizes.
+- Passed all 33 CTest targets in Nix.
+
 ## Status (2026-11-27) — Tab bar overflow
 
 - Shrink longer document tabs before showing scroll arrows. Keep the New

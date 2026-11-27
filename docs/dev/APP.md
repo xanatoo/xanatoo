@@ -292,6 +292,12 @@ selection with ImGui's normal clipping and horizontal scroll. Escape resumes
 the active field with its existing caret and anchor. Clipboard edits and Select
 All activate the field and apply their change through its input callback.
 
+On a touchscreen, swipe outward from a left or right dock's panel body to
+hide its column. Swipe inward from the corresponding window edge to show it
+again. Each column keeps its panels, order and size while hidden. Vertical
+drags and two-finger gestures still use the ordinary touch handling. The
+visibility change lasts for the current session.
+
 Windows place one way regardless of role: Left / Right docks are side
 columns that take width from the panes (stacked by `dock_seq`), Top /
 Bottom docks are bands between the columns that take height (side by side

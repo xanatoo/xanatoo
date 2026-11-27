@@ -700,7 +700,7 @@ bool float_active(const App& app, const FloatWindow& w) {
   return panel_has_keys(app, kf);
 }
 
-std::vector<FloatWindow*> float_stack(App& app) {
+std::vector<FloatWindow*> float_stack(App& app, bool include_hidden) {
   std::vector<FloatWindow*> st;
   if (app.outline_mode) st.push_back(&app.ol);
   if (app.backlinks_mode) st.push_back(&app.bl);
@@ -730,6 +730,10 @@ std::vector<FloatWindow*> float_stack(App& app) {
   if (app.downloads_panel_open) st.push_back(&app.downloads_win);
   if (app.media_panel_open) st.push_back(&app.media_win);
   if (app.reply.open) st.push_back(&app.reply_win);
+  if (!include_hidden)
+    std::erase_if(st, [&](const FloatWindow* w) {
+      return dock_hidden(app, w->dock);
+    });
   // Docked columns under floating windows, maximized ones on top.
   auto layer = [](const FloatWindow* w) {
     return w->dock == Dock::None ? 1 : w->dock == Dock::Max ? 2 : 0;

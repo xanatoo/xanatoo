@@ -676,9 +676,10 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     }
   }
   ui_state.shaded_panels = 0;
-  for (const FloatWindow* w : float_stack(app)) {
+  for (const FloatWindow* w : float_stack(app, true)) {
     const unsigned bit = xanatoo::ui_panel_bit(embedded_panel_layer(w->role));
-    if (float_shaded(*w)) ui_state.shaded_panels |= bit;
+    if (float_shaded(*w) || dock_hidden(app, w->dock))
+      ui_state.shaded_panels |= bit;
     if (w->dock == Dock::Left) ui_state.left_docked_panels |= bit;
   }
   ui_state.styles_open = app.styles_panel_open;
