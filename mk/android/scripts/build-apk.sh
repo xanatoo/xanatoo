@@ -44,7 +44,7 @@ sync_sources() {
   fi
 }
 
-mkdir -p src/jni/{src/src,SDL/include,freetype,mbedtls,secp256k1,sqlite,thumtoo}
+mkdir -p src/jni/{src/src,SDL/include,freetype,mbedtls,secp256k1,sqlite,thumtoo,ffmpeg/deps}
 sync_inputs "$APPLICATION_MK" src/jni/Application.mk
 sync_inputs "$TOP_ANDROID_MK" src/jni/Android.mk
 sync_inputs "$APP_DIR/jni/Android.mk" src/jni/src/Android.mk
@@ -87,7 +87,9 @@ sync_sources "$T/Android.mk" --delete "$APP_SRC_DIR/external/thumtoo/src/" "$T/s
 for dir in include external; do
   sync_inputs --delete "$APP_SRC_DIR/external/thumtoo/$dir/" "$T/$dir/"
 done
+sync_inputs "$ANDROID_PROJECT_DIR/ffmpeg.Android.mk" src/jni/ffmpeg/Android.mk
 for abi in $TARGET_ABIS; do
+  sync_inputs --delete "$FFMPEG_LIBS/$abi/" "src/jni/ffmpeg/deps/$abi/"
   sync_inputs --delete "$IMAGELIBS/$abi/" "$T/deps/$abi/"
 done
 tv="$(tr -d ' \n' < "$APP_SRC_DIR"/external/thumtoo/VERSION)"

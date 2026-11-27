@@ -64,7 +64,10 @@ ports, the SDL3 transition and Android.
   ("video decoder output: …") for devices that show garbled colours.
   `AMediaExtractor_setDataSource(url)` goes through Java: the worker
   thread attaches via `SDL_AndroidGetJNIEnv()` first (Android 5 crashes
-  on a NULL JNIEnv instead of failing).
+  on a NULL JNIEnv instead of failing). HLS (`.m3u8`) uses the shared
+  FFmpeg backend in the Media panel. `nix/android-ffmpeg.nix` builds the
+  static HLS libraries per ABI with the same NDK as the app. The APK's
+  existing Mbed TLS module and bundled CA roots handle HTTPS.
 - Soft keyboard: `platform_request_keyboard` (SDL_StartTextInput) when an
   ImGui text field gains focus (`Ui::prepare_render`) **or** a focused one
   is tapped again — the user may have hidden the keyboard while the field

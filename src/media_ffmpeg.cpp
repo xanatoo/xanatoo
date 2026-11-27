@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
-// The FFmpeg media backend (media.hpp; XANATOO_FFMPEG desktop builds):
+// The FFmpeg media backend (media.hpp; desktop and Android HLS):
 // libavformat opens a local file or streams an http(s) address (its own
 // TLS), libavcodec decodes, libswscale makes I420 pictures, libswresample
 // interleaved float sound (more than two channels mixed down to stereo).
@@ -29,6 +29,10 @@
 #include "xanatoo/media.hpp"
 #include "xanatoo/util.hpp"
 
+#if defined(__ANDROID__)
+#include "xanatoo/paths.hpp"
+#endif
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -41,6 +45,7 @@ extern "C" {
 
 namespace xanatoo {
 
+#if !defined(__ANDROID__)
 std::string media_backend_name() {
   std::string v = av_version_info();
   if (!v.empty() && v[0] == 'n') v.erase(0, 1);
@@ -48,7 +53,9 @@ std::string media_backend_name() {
 }
 
 bool media_backend_reads_feeds() { return true; }
-bool media_backend_plays_playlists() { return true; }
+bool media_backend_plays_hls() { return true; }
+bool media_backend_plays_dash() { return true; }
+#endif
 
 namespace {
 
@@ -127,15 +134,34 @@ public:
       return static_cast<FfmpegSource*>(self)->interrupted() ? 1 : 0;
     };
     fmt_->interrupt_callback.opaque = this;
+#if defined(__ANDROID__)
+    // HLS opens child playlists, segments and keys separately. FFmpeg
+    // does not copy TLS options from the initial HTTP connection.
+    roots_ = data_file("certs/ca-bundle.crt");
+    default_io_open_ = fmt_->io_open;
+    fmt_->opaque = this;
+    fmt_->io_open = [](AVFormatContext* ctx, AVIOContext** io, const char* url, int flags,
+                       AVDictionary** opts) {
+      auto* self = static_cast<FfmpegSource*>(ctx->opaque);
+      int result = av_dict_set(opts, "tls_verify", "1", 0);
+      if (result >= 0) result = av_dict_set(opts, "ca_file", self->roots_.c_str(), 0);
+      if (result < 0) return result;
+      return self->default_io_open_(ctx, io, url, flags, opts);
+    };
+#endif
     AVDictionary* opts = nullptr;
     if (remote(url)) {
       set_agent(&opts, options);
       av_dict_set(&opts, "rw_timeout", "20000000", 0);  // µs
       av_dict_set(&opts, "reconnect", "1", 0);
+#if defined(__ANDROID__)
+      av_dict_set(&opts, "protocol_whitelist", "http,https,tcp,tls,crypto", 0);
+#endif
     }
     // A local path with a ':' must not read as a protocol.
     const std::string name = remote(url) ? url : "file:" + url;
-    int r = avformat_open_input(&fmt_, name.c_str(), nullptr, &opts);
+    const AVInputFormat* format = options.hls ? av_find_input_format("hls") : nullptr;
+    int r = avformat_open_input(&fmt_, name.c_str(), format, &opts);
     av_dict_free(&opts);
     if (r < 0) return fail(av_error(r));
     if ((r = avformat_find_stream_info(fmt_, nullptr)) < 0) return fail(av_error(r));
@@ -442,6 +468,10 @@ private:
   }
 
   void set_agent(AVDictionary** opts, const MediaOptions& options);
+#if defined(__ANDROID__)
+  std::string roots_;
+  decltype(AVFormatContext::io_open) default_io_open_ = nullptr;
+#endif
 
   bool open_decoder(int index, AVCodecContext*& ctx, std::string& why) {
     AVStream* st = fmt_->streams[index];
@@ -582,8 +612,12 @@ void FfmpegSource::set_agent(AVDictionary** opts, const MediaOptions& options) {
 
 }  // namespace
 
-std::unique_ptr<MediaSource> open_media(const std::string& url, const MediaOptions& options,
-                                        std::string* error) {
+#if defined(__ANDROID__)
+std::unique_ptr<MediaSource> open_ffmpeg_media(
+#else
+std::unique_ptr<MediaSource> open_media(
+#endif
+    const std::string& url, const MediaOptions& options, std::string* error) {
   auto src = std::make_unique<FfmpegSource>();
   if (!src->open(url, options)) {
     if (error) *error = src->error();

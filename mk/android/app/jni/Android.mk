@@ -25,7 +25,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../SDL/include
 LOCAL_CPPFLAGS += -std=c++20 -Wno-psabi -Wall -Wextra -Wno-unused-parameter \
 	-O2 \
-	-DXANATOO_SDL3=1 \
+	-DXANATOO_SDL3=1 -DXANATOO_FFMPEG=1 \
 	-DXANATOO_GEMINI=1 -DXANATOO_GOPHER=1 -DXANATOO_SPARTAN=1 \
 	-DXANATOO_NEX=1 -DXANATOO_FINGER=1 -DXANATOO_NNTP=1 \
 	-DXANATOO_NOSTR=1 -DXANATOO_NOSTR_SECP256K1=1 -DXANATOO_REDDIT=1 \
@@ -34,7 +34,9 @@ LOCAL_CPPFLAGS += -std=c++20 -Wno-psabi -Wall -Wextra -Wno-unused-parameter \
 	-DXANATOO_VERSION=\"$(XANATOO_VERSION)\"
 LOCAL_CPP_FEATURES := exceptions rtti
 LOCAL_SHARED_LIBRARIES := SDL3
-LOCAL_STATIC_LIBRARIES := freetype sqlite3 mbedtls secp256k1 thumtoo
+LOCAL_STATIC_LIBRARIES := freetype sqlite3 mbedtls secp256k1 thumtoo ffmpeg-hls
+# FFmpeg's assembly uses direct references to its own internal tables.
+LOCAL_LDFLAGS := -Wl,--exclude-libs,libhls.a
 LOCAL_LDLIBS := -llog -landroid -lmediandk
 
 include $(BUILD_SHARED_LIBRARY)

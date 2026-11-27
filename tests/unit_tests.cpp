@@ -661,7 +661,7 @@ void test_reddit_urls() {
       "fallback_url":"https://v.redd.it/abc/CMAF_720.mp4?source=fallback","has_audio":true,
       "hls_url":"https://v.redd.it/abc/HLSPlaylist.m3u8?a=1&amp;v=1"}}})";
     const xanatoo::RedditVideo v = xanatoo::reddit_video(post);
-    if (xanatoo::media_backend_plays_playlists()) {
+    if (xanatoo::media_backend_plays_hls()) {
       EXPECT_EQ(v.url, "https://v.redd.it/abc/HLSPlaylist.m3u8?a=1&v=1");
       EXPECT(!v.silent);
     } else if (xanatoo::media_backend_available()) {

@@ -183,7 +183,9 @@ void test_media(int& passed, int& failed) {
   EXPECT(is_stream_playlist_url("https://h.org/a.mpd?sig=1"));
   EXPECT(!is_stream_playlist_url("https://h.org/a.m3u8.html"));
   EXPECT(needs_media_backend("https://h.org/x.m3u8"));
-  EXPECT_EQ(is_playable_url("https://h.org/x.m3u8"), media_backend_plays_playlists());
+  EXPECT_EQ(is_playable_url("https://h.org/x.m3u8"), media_backend_plays_hls());
+  EXPECT_EQ(is_playable_url("https://h.org/live.M3U8?sig=1#t=20"), media_backend_plays_hls());
+  EXPECT_EQ(is_playable_url("https://h.org/live.mpd"), media_backend_plays_dash());
   EXPECT_EQ(media_describe("H.264", 640, 360, "AAC", 44100, 2),
             "H.264 640\xC3\x97" "360 \xC2\xB7 AAC 44100 Hz stereo");
   EXPECT_EQ(media_describe("", 0, 0, "Opus", 48000, 1), "Opus 48000 Hz mono");
@@ -247,7 +249,9 @@ void test_media(int& passed, int& failed) {
   EXPECT(is_stream_playlist_type("application/vnd.apple.mpegurl; charset=utf-8"));
   EXPECT(!is_stream_playlist_type("audio/x-mpegurl"));  // a plain .m3u list
   EXPECT(type_needs_media_backend("application/dash+xml"));
-  EXPECT_EQ(is_playable_type("application/x-mpegurl"), media_backend_plays_playlists());
+  EXPECT_EQ(is_playable_type("application/vnd.apple.mpegurl; charset=utf-8"),
+            media_backend_plays_hls());
+  EXPECT_EQ(is_playable_type("application/dash+xml"), media_backend_plays_dash());
 
   // A built-in format streams through the pipe while its feed arrives: it
   // opens on the first bytes, plays all of it, and the end comes after.
@@ -429,6 +433,34 @@ void test_media(int& passed, int& failed) {
 
 #if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
   EXPECT(media_backend_name().rfind("FFmpeg ", 0) == 0);
+  {
+    // HLS master -> media playlist -> MPEG-TS, remuxed from red.mp4.
+    MediaOptions options;
+    options.hls = true;  // the same demuxer selection as MIME-based navigation
+    options.read_ahead = 1;
+    const std::string url = std::string(XANATOO_TEST_DATA) + "/video/hls-master.m3u8";
+    std::string err;
+    auto src = open_media(url, options, &err);
+    EXPECT(src != nullptr);
+    if (src) {
+      EXPECT(src->info().has_audio && src->info().has_video);
+      std::vector<float> audio;
+      VideoFrame frame;
+      double pts = 0;
+      int pictures = 0;
+      MediaSource::Got got;
+      do {
+        got = src->next(audio, pts, frame);
+        if (got == MediaSource::Got::Video) ++pictures;
+      } while (got == MediaSource::Got::Audio || got == MediaSource::Got::Video);
+      EXPECT(got == MediaSource::Got::End);
+      EXPECT_EQ(pictures, 5);
+      EXPECT(!audio.empty());
+    } else {
+      std::fprintf(stderr, "  HLS: %s\n", err.c_str());
+    }
+  }
+
   struct Fixture {
     const char* name;
     int rate, y;  // sample rate, luma of the colour

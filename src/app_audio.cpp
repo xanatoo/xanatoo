@@ -844,15 +844,18 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
   a.volume = volume;
   a.loop = loop;
   a.url = url;
+  a.mime = mime;
   if (split.start) a.start_at = *split.start;
   // `#t=a,b`: a section, played from A to B (Media Fragments).
   if (split.end) set_section(a, *split.start, *split.end);
   a.title = name.empty() ? xanatoo::audio_name_of(url) : std::string(name);
   a.state = AudioState::Loading;
   const bool backend = xanatoo::media_backend_available();
-  if (backend && (mime.empty() ? xanatoo::needs_media_backend(url)
-                               : xanatoo::type_needs_media_backend(mime))) {
+  if (backend && (xanatoo::is_hls_url(url) ||
+                  (mime.empty() ? xanatoo::needs_media_backend(url)
+                                : xanatoo::type_needs_media_backend(mime)))) {
     xanatoo::MediaOptions options;
+    options.hls = xanatoo::is_hls_type(mime);
     options.user_agent = xanatoo::user_agent("video");
 #if !defined(__EMSCRIPTEN__)
     // Through the media cache, so what arrived stays (seeks back, replays).
@@ -917,7 +920,8 @@ void audio_toggle(App& app) {
   AudioPlayer& a = app.audio;
   if (a.state == AudioState::Failed && !a.url.empty()) {
     const int64_t visit = std::exchange(a.visit, 0);  // the same visit
-    play_audio(app, a.url);  // try again
+    const std::string mime = a.mime;
+    play_audio(app, a.url, mime);  // try again
     app.audio.visit = visit;
     return;
   }

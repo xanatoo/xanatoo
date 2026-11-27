@@ -98,6 +98,11 @@ let
     path = import ./android-imagelibs.nix { inherit nixpkgs abi; system = pkgs.stdenv.buildPlatform.system; };
   }) abis);
 
+  ffmpegLibsFor = abis: pkgs.linkFarm "xanatoo-android-ffmpeg" (map (abi: {
+    name = abi;
+    path = import ./android-ffmpeg.nix { inherit pkgs androidSdk packagePlatform abi; };
+  }) abis);
+
   sdlPrebuiltMk = sdlLibs: pkgs.writeText "SDL3-prebuilt-Android.mk" ''
     LOCAL_PATH := $(call my-dir)
     include $(CLEAR_VARS)
@@ -145,6 +150,7 @@ let
       MBEDTLS_SRC = "${pkgs.mbedtls.src}";
       SECP256K1_SRC = "${pkgs.secp256k1.src}";
       IMAGELIBS = imageLibsFor abis;
+      FFMPEG_LIBS = ffmpegLibsFor abis;
       APPLICATION_MK = applicationMkFor abis;
       TOP_ANDROID_MK = topAndroidMk;
       SDL_PREBUILT_MK = sdlPrebuiltMk sdlLibs;

@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 // Video and the audio formats the built-in decoders (audio.hpp) lack, through
-// a platform backend: FFmpeg on desktop builds (media_ffmpeg.cpp,
-// XANATOO_FFMPEG), the NDK's AMediaExtractor + AMediaCodec on Android
-// (media_android.cpp). No SDL here: a MediaSource demuxes and decodes;
+// a platform backend: FFmpeg on desktop and for Android HLS
+// (media_ffmpeg.cpp), and AMediaExtractor + AMediaCodec for other Android
+// media (media_android.cpp). No SDL here: a MediaSource demuxes and decodes;
 // MediaPlayback runs one on a worker thread and hands audio to the sound
 // callback and video frames to the main thread, with the audio as the
 // clock. The player and its panel are app_audio.cpp; see
@@ -38,9 +38,10 @@ bool needs_media_backend(std::string_view url);
 // An HLS / DASH playlist by name (.m3u8, .mpd): its pieces are other
 // addresses, which the backend fetches itself.
 bool is_stream_playlist_url(std::string_view url);
+bool is_hls_url(std::string_view url);
 // A link the player takes in this build: built-in audio, or with a backend
 // video and the other audio formats (playlists where the backend streams
-// them, media_backend_plays_playlists).
+// them, media_backend_plays_hls).
 bool is_playable_url(std::string_view url);
 
 // The same by a response's Content-Type ("video/mp4; codecs=…"): sound or
@@ -50,8 +51,9 @@ bool is_playable_type(std::string_view content_type);
 // A type only a backend decodes (video/*, audio/mp4, audio/aac, …, and the
 // HLS / DASH playlist types).
 bool type_needs_media_backend(std::string_view content_type);
-// application/vnd.apple.mpegurl, application/x-mpegurl, application/dash+xml.
+// HLS MPEGURL types and application/dash+xml.
 bool is_stream_playlist_type(std::string_view content_type);
+bool is_hls_type(std::string_view content_type);
 
 // Media Fragments URI, temporal dimension (W3C): `#t=10`, `#t=1:02.5`,
 // `#t=npt:10,20`, also as one `&` part of the fragment and percent-encoded
@@ -84,8 +86,9 @@ std::string media_backend_name();
 inline bool media_backend_available() { return !media_backend_name().empty(); }
 // The backend reads an http(s) file through MediaOptions::feed (FFmpeg).
 bool media_backend_reads_feeds();
-// The backend plays HLS / DASH playlists from their address (FFmpeg).
-bool media_backend_plays_playlists();
+// The backend plays HLS playlists from their address.
+bool media_backend_plays_hls();
+bool media_backend_plays_dash();
 
 // One decoded picture, I420 (planar Y, U, V; chroma at half size, rounded
 // up), rows packed: Y is w×h bytes, U and V each ((w+1)/2)×((h+1)/2).
@@ -122,6 +125,7 @@ struct MediaInfo {
 class MediaSource;
 
 struct MediaOptions {
+  bool hls = false;  // Content-Type identified HLS, even without an extension
   std::string user_agent;  // for http(s) sources (version.hpp user_agent())
   // Set by the owner to abandon a slow open / read (checked by the backend
   // where it can interrupt; Android's extractor cannot).

@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Android HLS playback
+
+- Play `.m3u8` files and HLS links in the Media panel through the shared
+  FFmpeg backend. Keep Content-Type on retries for extensionless streams.
+- Cross-build the static HLS libraries per Android ABI and use the existing
+  APK CA bundle for HTTPS. Offline coverage decodes audio and video through
+  a master playlist and checks independent HLS and DASH routing. The Nix
+  suite passed all 15,096 checks.
+- Verified the universal and three standalone APKs for signing, alignment,
+  and ABI contents. Device playback remains untested.
+
 ## Status (2026-11-26) — Android APKs by architecture
 
 - Package the universal APK and standalone arm64-v8a, armeabi-v7a, and

@@ -30,8 +30,15 @@ namespace xanatoo {
 
 std::string media_backend_name() { return "Android MediaCodec"; }
 bool media_backend_reads_feeds() { return false; }
-// AMediaExtractor reads files and progressive http(s), no HLS / DASH.
-bool media_backend_plays_playlists() { return false; }
+bool media_backend_plays_dash() { return false; }
+
+#if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
+bool media_backend_plays_hls() { return true; }
+std::unique_ptr<MediaSource> open_ffmpeg_media(
+    const std::string& url, const MediaOptions& options, std::string* error);
+#else
+bool media_backend_plays_hls() { return false; }
+#endif
 
 namespace {
 
@@ -392,8 +399,13 @@ private:
 
 }  // namespace
 
-std::unique_ptr<MediaSource> open_media(const std::string& url, const MediaOptions&,
+std::unique_ptr<MediaSource> open_media(const std::string& url, const MediaOptions& options,
                                         std::string* error) {
+#if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
+  if (options.hls || is_hls_url(url)) return open_ffmpeg_media(url, options, error);
+#else
+  (void)options;
+#endif
   auto src = std::make_unique<AndroidSource>();
   if (!src->open(url)) {
     if (error) *error = src->error();

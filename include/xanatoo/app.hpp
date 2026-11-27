@@ -857,6 +857,7 @@ enum class AudioState : uint8_t { Idle, Loading, Playing, Paused, Ended, Failed 
 struct AudioPlayer {
   AudioState state = AudioState::Idle;
   std::string url;    // address being played (base, as opened)
+  std::string mime;   // response Content-Type, kept for retries
   std::string title;  // from the file's tags, else its name
   std::string error;  // Failed: why
   double duration = 0;  // seconds; 0 = unknown

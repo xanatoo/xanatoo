@@ -747,9 +747,9 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
   `is_playable_url` (built-in audio, or backend formats when
   `media_backend_available()`) is what links, `navigate_pane` and startup
   arguments test. Without a backend video links go to the system as before.
-- HLS / DASH playlists (`.m3u8` / `.mpd`, `is_stream_playlist_url` /
-  `is_stream_playlist_type`) count as playable when
-  `media_backend_plays_playlists()` (FFmpeg yes, Android no).
+- HLS playlists (`.m3u8` or an HLS response Content-Type) play through
+  FFmpeg on desktop and Android. DASH (`.mpd` /
+  `application/dash+xml`) uses the desktop FFmpeg build.
 - Service pages link streams directly so they open in the Media panel:
   PeerTube / Odysee "▶ Play" (docs/VIDEO_SITES.md), Internet Archive
   "▶ Play", feed enclosures the build plays ("▶ Play: type (size)"),
@@ -782,7 +782,8 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
     the decoder's layout (I420 = colour format 19, else read as NV12; stride,
     slice height, crop from the output format, logged to logcat). Opening
     pre-rolls until the sound decoder's own output format (HE-AAC doubles
-    the rate) is known.
+    the rate) is known. Android routes HLS to the shared FFmpeg source
+    with the bundled CA roots for HTTPS playlists, segments, and keys.
   - Neither (Windows, WASM): `open_media` fails, nothing routes there.
 - Pipe (`MediaPlayback`, unit-tested with fake sources): a detached worker
   opens the source (`open_media`, or `MediaOptions::open`) and decodes ahead into `audio` (deque of floats) and

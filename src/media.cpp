@@ -27,13 +27,18 @@ bool is_stream_playlist_url(std::string_view url) {
   return url_has_extension(url, {".m3u8", ".mpd"});
 }
 
+bool is_hls_url(std::string_view url) {
+  return url_has_extension(url, {".m3u8"});
+}
+
 bool needs_media_backend(std::string_view url) {
   return is_video_url(url) || is_stream_playlist_url(url) ||
          url_has_extension(url, {".opus", ".m4a", ".aac", ".mka", ".weba"});
 }
 
 bool is_playable_url(std::string_view url) {
-  if (is_stream_playlist_url(url)) return media_backend_plays_playlists();
+  if (is_stream_playlist_url(url))
+    return is_hls_url(url) ? media_backend_plays_hls() : media_backend_plays_dash();
   return is_audio_url(url) || (needs_media_backend(url) && media_backend_available());
 }
 
@@ -54,10 +59,13 @@ bool builtin_audio_type(const std::string& t) {
 }
 }  // namespace
 
-bool is_stream_playlist_type(std::string_view content_type) {
+bool is_hls_type(std::string_view content_type) {
   const std::string t = mime_base(content_type);
-  return t == "application/vnd.apple.mpegurl" || t == "application/x-mpegurl" ||
-         t == "application/dash+xml";
+  return t == "application/vnd.apple.mpegurl" || t == "application/x-mpegurl";
+}
+
+bool is_stream_playlist_type(std::string_view content_type) {
+  return is_hls_type(content_type) || mime_base(content_type) == "application/dash+xml";
 }
 
 bool type_needs_media_backend(std::string_view content_type) {
@@ -67,7 +75,8 @@ bool type_needs_media_backend(std::string_view content_type) {
 }
 
 bool is_playable_type(std::string_view content_type) {
-  if (is_stream_playlist_type(content_type)) return media_backend_plays_playlists();
+  if (is_hls_type(content_type)) return media_backend_plays_hls();
+  if (mime_base(content_type) == "application/dash+xml") return media_backend_plays_dash();
   const std::string t = mime_base(content_type);
   return builtin_audio_type(t) ||
          (type_needs_media_backend(content_type) && media_backend_available());
@@ -166,7 +175,8 @@ std::string media_range_address(std::string_view base, double start, double end)
 #if !(defined(XANATOO_FFMPEG) && XANATOO_FFMPEG) && !defined(__ANDROID__)
 std::string media_backend_name() { return {}; }
 bool media_backend_reads_feeds() { return false; }
-bool media_backend_plays_playlists() { return false; }
+bool media_backend_plays_hls() { return false; }
+bool media_backend_plays_dash() { return false; }
 
 std::unique_ptr<MediaSource> open_media(const std::string&, const MediaOptions&,
                                         std::string* error) {
