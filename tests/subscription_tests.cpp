@@ -41,8 +41,8 @@ int main() {
   assert(subscription_update(s, {"id:101", "id:100"}, 100) == 0);
   assert(s.initialized && s.unread == 0);
   assert(!subscription_due(s, 100));
-  assert(!subscription_due(s, 999));
-  assert(subscription_due(s, 1000));
+  assert(!subscription_due(s, 100 + 6 * 60 * 60 - 1));
+  assert(subscription_due(s, 100 + 6 * 60 * 60));
   assert(subscription_update(s, {"id:102", "id:101"}, 200) == 1);
   assert(s.unread == 1);
   assert(subscription_update(s, {"id:102", "id:101"}, 300) == 0);
@@ -102,6 +102,7 @@ int main() {
   assert(fs::create_directory(test_dir));
   Subscription page;
   page.address = "https://example.org/news";
+  page.interval_minutes = 15;
   assert(subscription_update(page, {"html-xml:first"}, 100) == 0);
   assert(subscription_update(page, {"html-xml:first"}, 200) == 0);
   assert(subscription_update(page, {"html-xml:second"}, 300) == 1);
@@ -120,6 +121,7 @@ int main() {
   assert(restored[0].recent_ids == s.recent_ids);
   assert(restored[0].unread == s.unread);
   assert(restored[0].initialized);
+  assert(restored[1].interval_minutes == 15);
   assert(restored[1].unread == 2);
   assert(subscription_update(restored[1], {"html-xml:first"}, 500) == 0);
   saving_disabled = true;

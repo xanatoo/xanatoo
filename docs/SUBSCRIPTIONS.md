@@ -18,7 +18,8 @@ follow API, notification server or posting rights are required.
 - **Refresh** schedules an immediate check of that source; **Refresh all**
   queues all sources. Refresh requests do not replace the foreground page.
 - **Mark read** clears the count without navigating. **Remove…** asks for
-  confirmation. Choose a check interval of 5 minutes to 24 hours per source.
+  confirmation. New subscriptions check every six hours by default. Choose an
+  interval of 5 minutes to 24 hours per source.
 
 Supported sources, when the corresponding build feature is available:
 

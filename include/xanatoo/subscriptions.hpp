@@ -14,6 +14,10 @@
 
 namespace xanatoo {
 
+inline constexpr int kDefaultSubscriptionIntervalMinutes = 360;
+inline constexpr int kSubscriptionIntervals[] = {
+    5, 15, 30, 60, 180, kDefaultSubscriptionIntervalMinutes, 720, 1440};
+
 // Read-only watch on a changing collection or web page. The rolling baseline
 // holds stable item IDs for a collection or one XML fingerprint for HTML.
 // The first successful check establishes the baseline without adding unread
@@ -21,7 +25,7 @@ namespace xanatoo {
 struct Subscription {
   std::string address;
   std::string title;
-  int interval_minutes = 15;
+  int interval_minutes = kDefaultSubscriptionIntervalMinutes;
   int64_t checked_at = 0;
   uint32_t unread = 0;
   bool initialized = false;
@@ -35,9 +39,8 @@ struct Subscription {
 inline constexpr size_t kSubscriptionSnapshotLimit = 256;
 
 inline bool subscription_interval_valid(int minutes) {
-  return minutes == 5 || minutes == 15 || minutes == 30 ||
-         minutes == 60 || minutes == 180 || minutes == 720 ||
-         minutes == 1440;
+  return std::ranges::find(kSubscriptionIntervals, minutes) !=
+         std::ranges::end(kSubscriptionIntervals);
 }
 
 inline bool subscription_due(const Subscription& s, int64_t now) {

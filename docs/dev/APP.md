@@ -73,6 +73,8 @@ behaviour is free functions ("systems") taking `App&`:
 
 Middle-clicking a source in the Subscriptions menu uses the same tab-opening
 path as History and Bookmarks, and marks the subscription read.
+New subscriptions check every six hours by default. Existing subscriptions use
+their saved intervals.
 
 Document views: `App::panes[kMaxViews]` — slots 0 / 1 are the centre
 (split), document windows own a slot from `kCentreViews` up

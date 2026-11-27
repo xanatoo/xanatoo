@@ -2,6 +2,12 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Subscription refresh cadence
+
+- Default new subscriptions to a six-hour refresh interval to reduce
+  automatic requests. Keep saved intervals and expose six hours in the panel.
+- Passed all 33 CTest targets and 15,182 unit checks in Nix.
+
 ## Status (2026-11-27) — Website browser link
 
 - Removed the generated hostname and browser link from the top of HTML

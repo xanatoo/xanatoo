@@ -5789,12 +5789,16 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         } else if (classic_button("Remove…")) {
           subscription_remove_confirm_ = s.address;
         }
-        static constexpr int intervals[] = {5, 15, 30, 60, 180, 720, 1440};
+        auto frequency_label = [](int minutes) {
+          if (minutes >= 60)
+            return "Every " + std::to_string(minutes / 60) + " h";
+          return "Every " + std::to_string(minutes) + " min";
+        };
         ImGui::SetNextItemWidth(-1.f);
-        std::string frequency = "Every " + std::to_string(s.interval_minutes) + " min";
+        std::string frequency = frequency_label(s.interval_minutes);
         if (ImGui::BeginCombo("##subscription_frequency", frequency.c_str())) {
-          for (int mins : intervals) {
-            std::string option = "Every " + std::to_string(mins) + " min";
+          for (int mins : kSubscriptionIntervals) {
+            std::string option = frequency_label(mins);
             if (ImGui::Selectable(option.c_str(), mins == s.interval_minutes)) {
               cmd = UiCommand::SubscriptionInterval;
               result.arg = s.address + "\n" + std::to_string(mins);
