@@ -9303,6 +9303,7 @@ bool    ImGui::BeginTabBarEx(ImGuiTabBar* tab_bar, const ImRect& tab_bar_bb, ImG
     tab_bar->CurrTabsContentsHeight = 0.0f;
     tab_bar->ItemSpacingY = g.Style.ItemSpacing.y;
     tab_bar->GroupSpacing = 0.0f;
+    tab_bar->ScrollMinTabWidth = 0.0f;
     tab_bar->FramePadding = g.Style.FramePadding;
     tab_bar->TabsActiveCount = 0;
     tab_bar->LastTabItemIdx = -1;
@@ -9499,9 +9500,33 @@ static void ImGui::TabBarLayout(ImGuiTabBar* tab_bar)
     for (int section_n = 0; section_n < 3; section_n++)
         tab_bar->WidthAllTabsIdeal += sections[section_n].Width + sections[section_n].Spacing;
 
+    float fitted_width = tab_bar->WidthAllTabsIdeal;
+    if ((tab_bar->Flags & ImGuiTabBarFlags_FittingPolicyScroll) && tab_bar->ScrollMinTabWidth > 0.0f &&
+        fitted_width > tab_bar->BarRect.GetWidth() && sections[1].TabCount > 0)
+    {
+        // ShrinkWidths stops at one pixel. Shift widths so that this floor
+        // corresponds to the bar's minimum, and leave naturally short tabs alone.
+        const float width_shift = tab_bar->ScrollMinTabWidth - 1.0f;
+        const int count = sections[1].TabCount;
+        ImGuiShrinkWidthItem* items = g.ShrinkWidthBuffer.Data + sections[0].TabCount + sections[2].TabCount;
+        for (int n = 0; n < count; n++)
+            items[n].Width = items[n].InitialWidth = items[n].Width > tab_bar->ScrollMinTabWidth ? items[n].Width - width_shift : -1.0f;
+        ShrinkWidths(items, count, ImCeil(fitted_width - tab_bar->BarRect.GetWidth()));
+        for (int n = 0; n < count; n++)
+            if (items[n].Width >= 0.0f)
+            {
+                ImGuiTabItem* tab = &tab_bar->Tabs[items[n].Index];
+                const float width = items[n].Width + width_shift;
+                const float reduction = tab->Width - width;
+                tab->Width = width;
+                sections[1].Width -= reduction;
+                fitted_width -= reduction;
+            }
+    }
+
     // Horizontal scrolling buttons
     // (note that TabBarScrollButtons() will alter BarRect.Max.x)
-    if ((tab_bar->WidthAllTabsIdeal > tab_bar->BarRect.GetWidth() && tab_bar->Tabs.Size > 1) && !(tab_bar->Flags & ImGuiTabBarFlags_NoTabListScrollingButtons) && (tab_bar->Flags & ImGuiTabBarFlags_FittingPolicyScroll))
+    if ((fitted_width > tab_bar->BarRect.GetWidth() && tab_bar->Tabs.Size > 1) && !(tab_bar->Flags & ImGuiTabBarFlags_NoTabListScrollingButtons) && (tab_bar->Flags & ImGuiTabBarFlags_FittingPolicyScroll))
         if (ImGuiTabItem* scroll_and_select_tab = TabBarScrollingButtons(tab_bar))
         {
             scroll_to_tab_id = scroll_and_select_tab->ID;

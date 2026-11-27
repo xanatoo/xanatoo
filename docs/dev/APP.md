@@ -339,6 +339,8 @@ into `tab_order`). Never add a per-panel
 "docked" flag; set `FloatWindow::dock` through the helpers above.
 New Document sits at the left of the horizontal strip. The New Tab plus
 is a trailing tab-shaped button that stays visible when the tabs overflow.
+As space runs out, longer tabs shrink first, down to a scaled 72-pixel
+minimum. Scroll arrows appear only if the resulting row still overflows.
 Document tabs use dark label ink and share a bottom edge. The active tab
 extends one scaled pixel above the baseline, and inactive tabs start one
 scaled pixel below it. The active tab has a rounded top and left highlight

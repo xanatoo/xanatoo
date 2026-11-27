@@ -3338,6 +3338,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                  ImGuiTabBarFlags_DrawSelectedOverline)) {
         ImGuiTabBar* bar = ImGui::GetCurrentTabBar();
         bar->GroupSpacing = 8.f * scale_;
+        bar->ScrollMinTabWidth = std::round(72.f * scale_);
         std::unordered_map<ImGuiID, size_t> tab_indices;
         for (size_t i = 0; i < state.tab_ids.size(); ++i) {
           const ImGuiID id =

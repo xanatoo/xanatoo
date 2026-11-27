@@ -2672,6 +2672,7 @@ struct IMGUI_API ImGuiTabBar
     ImS16               LastTabItemIdx;         // Index of last BeginTabItem() tab for use by EndTabItem()
     float               ItemSpacingY;
     float               GroupSpacing;           // Extra horizontal spacing between different GroupIds
+    float               ScrollMinTabWidth;       // If positive, shrink central tabs to this width before scrolling
     ImVec2              FramePadding;           // style.FramePadding locked at the time of BeginTabBar()
     ImVec2              BackupCursorPos;
     ImGuiTextBuffer     TabsNames;              // For non-docking tab bar we re-append names in a contiguous buffer.
