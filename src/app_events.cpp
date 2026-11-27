@@ -3118,12 +3118,19 @@ void handle_event(App& app, SDL_Event& ev) {
     default:
       break;
   }
-  // Android Back (trapped, see platform_pre_init) acts like Escape
-  // everywhere: gallery images, ImGui popups, prompts, panels. The scancode stays
-  // AC_BACK, so where Escape has nothing to close Back steps history back.
+  // Android Back (trapped in platform_pre_init) walks history in the
+  // gallery. Escape there invokes Up, which adds a history entry.
+  // Elsewhere Back acts like Escape first, then falls back to history.
   if ((xanatoo::sdl::event_kind(ev) == xanatoo::sdl::EventKind::KeyDown ||
        xanatoo::sdl::event_kind(ev) == xanatoo::sdl::EventKind::KeyUp) &&
       xanatoo::sdl::keycode(ev) == SDLK_AC_BACK) {
+    if (pane_gallery(focused_pane(app)) && !app.ui.popup_open() &&
+        !media_fullscreen(app)) {
+      if (xanatoo::sdl::event_kind(ev) == xanatoo::sdl::EventKind::KeyDown &&
+          !ev.key.repeat)
+        execute_command(app, UiCommand::NavBack);
+      return;
+    }
     xanatoo::sdl::set_keycode(ev, SDLK_ESCAPE);
   }
   // Fullscreen video: its controls take the pointer and keys; an open menu

@@ -40,6 +40,8 @@ ports, the SDL3 transition and Android.
 
 ## Android
 
+- In the gallery grid and single-image view, Android Back walks the view's
+  navigation history. The gallery's Up control goes to the containing page.
 - On Linux, `nix develop .#android` provides incremental configure, build
   and install commands over the live checkout. Staging and the NDK object
   tree persist in `XANATOO_ANDROID_BUILD_DIR` (default

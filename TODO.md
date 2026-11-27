@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Android Back in Gallery View
+
+- Route Android Back through navigation history in the gallery grid and
+  single-image view. Up still goes to the containing page.
+- Passed 15,182 unit checks in Nix. SDL browser-back under Xvfb stepped
+  from the image to the grid and then to the source page.
+
 ## Status (2026-11-27) — Touch swipes for side docks
 
 - Swipe outward from a side dock panel to hide the column, and inward from
