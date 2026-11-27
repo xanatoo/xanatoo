@@ -75,7 +75,8 @@ std::optional<HttpResult> https_request(std::string_view method,
                                         std::string_view extra_headers,
                                         std::string_view body_in,
                                         std::string* err,
-                                        HttpRequestSecurity security) {
+                                        HttpRequestSecurity security,
+                                        bool /*replay_safe*/) {
   const auto parsed = parse_http_url(url);
   if (!parsed) {
     if (err) *err = "invalid http(s) URL";

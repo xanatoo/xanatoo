@@ -73,14 +73,17 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
 
 // HTTP/1.1 request over TCP or TLS. `extra_headers` are full header lines ending
 // with "\r\n" (e.g. "Authorization: Bearer …\r\n"). `body` is optional
-// request body (sets Content-Length when non-empty).
+// request body (sets Content-Length when non-empty). The native client can
+// retry a GET or HEAD once before any response bytes arrive. Set
+// replay_safe only for other requests that can safely be sent again.
 std::optional<HttpResult> https_request(std::string_view method,
                                         std::string_view url,
                                         std::string_view user_agent,
                                         std::string_view extra_headers,
                                         std::string_view body,
                                         std::string* err = nullptr,
-                                        HttpRequestSecurity security = {});
+                                        HttpRequestSecurity security = {},
+                                        bool replay_safe = false);
 
 std::optional<HttpResult> https_get(std::string_view url,
                                     std::string_view user_agent,

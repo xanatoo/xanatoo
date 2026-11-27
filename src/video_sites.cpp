@@ -1383,7 +1383,9 @@ std::optional<Json> get_json(const std::string& url, std::string* err) {
 
 std::optional<Json> post_json(const std::string& url, const std::string& body, std::string* err) {
   static const std::string ua = user_agent("read-only video client");
-  auto resp = https_request("POST", url, ua, "Content-Type: application/json\r\n", body, err);
+  // These POSTs query public Odysee listing, video and comment data.
+  auto resp = https_request("POST", url, ua, "Content-Type: application/json\r\n", body, err,
+                            {}, /*replay_safe=*/true);
   if (!resp) return std::nullopt;
   if (resp->status != 200) {
     if (err) *err = url_host(url) + " answered " + http_status_error(resp->status);

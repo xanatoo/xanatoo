@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Restored websites
+
+- Android installs its CA bundle before restoring websites. Recover from an
+  empty HTTP exchange with one fresh connection for GET, HEAD and read-only
+  Odysee requests. Preserve TLS read errors for failures that persist.
+- Passed all 33 CTest targets and an ARMv7 Android syntax check. A loopback
+  HTTPS test verified first-request recovery, the retry limit, and that
+  partial streaming replies and ordinary POSTs are sent only once.
+
 ## Status (2026-11-27) — HLS playback stalls
 
 - Buffer HLS audio at startup, after seeks, and after underruns so small

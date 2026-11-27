@@ -265,6 +265,14 @@ struct Exchange {
   bool reusable = false;  // complete, and the server keeps the connection
 };
 
+std::string no_response_error(HttpConnection& conn, int read_result) {
+  if (read_result < 0) {
+    const std::string detail = conn.last_error();
+    if (!detail.empty()) return "Network error while waiting for HTTP response: " + detail;
+  }
+  return "connection closed without a response";
+}
+
 // Send `req` over `conn` and read the response, up to its end (framing) or
 // the connection closing.
 Exchange exchange(HttpConnection& conn, const std::string& req_s,
@@ -284,10 +292,17 @@ Exchange exchange(HttpConnection& conn, const std::string& req_s,
   bool metered_headers = false;
   for (;;) {
     int n = conn.read(buf, sizeof(buf));
-    if (n <= 0) break;
     if (transfer_cancelled()) {
       if (err) *err = transfer_cancelled_error();
       return ex;
+    }
+    if (n <= 0) {
+      if (data.empty()) {
+        if (err) *err = no_response_error(conn, n);
+        ex.nothing = true;
+        return ex;
+      }
+      break;
     }
     data.append(buf, static_cast<size_t>(n));
     meter_bytes(static_cast<size_t>(n));
@@ -315,11 +330,6 @@ Exchange exchange(HttpConnection& conn, const std::string& req_s,
       return ex;
     }
     if (framing.update(data)) break;
-  }
-  if (data.empty()) {
-    if (err) *err = "connection closed without a response";
-    ex.nothing = true;
-    return ex;
   }
   if (framing.complete()) {
     // Bytes past the end would belong to no request: do not reuse.
@@ -388,7 +398,7 @@ std::optional<HttpResult> request_impl(std::string_view method,
                                        std::string_view body_in,
                                        std::string* err,
                                        const HttpRequestSecurity& security,
-                                       bool pooled) {
+                                       bool pooled, bool replay_safe = false) {
   const auto parsed = parse_http_url(url);
   if (!parsed) {
     if (err) *err = "invalid http(s) URL";
@@ -416,10 +426,15 @@ std::optional<HttpResult> request_impl(std::string_view method,
   req << "\r\n";
   if (!body_in.empty()) req << body_in;
   const std::string req_s = req.str();
+  replay_safe = replay_safe || method == "GET" || method == "HEAD";
 
   if (pooled) block_sigpipe_in_this_thread();
   const std::string key = pooled ? pool_key(*parsed, security) : std::string();
   for (int attempt = 0; attempt < 2; ++attempt) {
+    if (transfer_cancelled()) {
+      if (err) *err = transfer_cancelled_error();
+      return std::nullopt;
+    }
     std::unique_ptr<HttpConnection> conn;
     if (pooled && attempt == 0) conn = take_idle(key);
     const bool reused = conn != nullptr;
@@ -429,8 +444,8 @@ std::optional<HttpResult> request_impl(std::string_view method,
       if (!conn->open(*parsed, err, security)) return std::nullopt;
     }
     Exchange ex = exchange(*conn, req_s, *parsed, cookies, use_jar, security, err);
-    // The server closed the idle connection meanwhile: once more, fresh.
-    if (reused && ex.nothing) continue;
+    // The connection failed before any response bytes: once more, fresh.
+    if (attempt == 0 && (reused || replay_safe) && ex.nothing) continue;
     if (pooled && ex.reusable) put_idle(key, std::move(conn));
     return std::move(ex.result);
   }
@@ -475,9 +490,10 @@ std::optional<HttpResult> https_request(std::string_view method,
                                         std::string_view extra_headers,
                                         std::string_view body_in,
                                         std::string* err,
-                                        HttpRequestSecurity security) {
+                                        HttpRequestSecurity security,
+                                        bool replay_safe) {
   return request_impl(method, url, user_agent, extra_headers, body_in, err,
-                      security, false);
+                      security, false, replay_safe);
 }
 
 std::optional<HttpResult> https_get(std::string_view url,
@@ -557,7 +573,7 @@ struct ChunkDecoder {
 bool stream_raw(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err, std::string_view extra_headers) {
+                 std::string* err, std::string_view extra_headers, bool& no_response) {
   const auto parsed = parse_http_url(url);
   if (!parsed) {
     if (err) *err = "invalid http(s) URL";
@@ -578,6 +594,7 @@ bool stream_raw(const std::string& url, std::string_view agent,
       "Connection: close\r\n\r\n";
   if (!conn.write_request(req, *parsed, cookies)) {
     if (err) *err = "HTTP write failed";
+    no_response = true;
     return false;
   }
   std::string pending;
@@ -590,6 +607,15 @@ bool stream_raw(const std::string& url, std::string_view agent,
   meter_expect(-1);
   for (;;) {
     const int n = conn.read(buf, sizeof(buf));
+    if (transfer_cancelled()) {
+      if (err) *err = transfer_cancelled_error();
+      return false;
+    }
+    if (n <= 0 && total_read == 0) {
+      if (err) *err = no_response_error(conn, n);
+      no_response = true;
+      return false;
+    }
     if (n > 0) meter_bytes(static_cast<size_t>(n));
     if (n < 0) {
       if (err) {
@@ -605,10 +631,6 @@ bool stream_raw(const std::string& url, std::string_view agent,
       return false;
     }
     if (n == 0) break;
-    if (transfer_cancelled()) {
-      if (err) *err = transfer_cancelled_error();
-      return false;
-    }
     total_read += static_cast<uint64_t>(n);
     std::string_view data(buf, static_cast<size_t>(n));
     if (!have_headers) {
@@ -699,7 +721,7 @@ bool stream_raw(const std::string& url, std::string_view agent,
 bool stream_once(const std::string& url, std::string_view agent,
                  const HttpHeaderCallback& on_headers,
                  const HttpBodyCallback& on_body, HttpStreamHeaders& result,
-                 std::string* err, std::string_view extra_headers) {
+                 std::string* err, std::string_view extra_headers, bool& no_response) {
   constexpr size_t kMaxDecoded = 256u << 20;
   bool encoded = false;
   std::string packed;
@@ -721,7 +743,7 @@ bool stream_once(const std::string& url, std::string_view agent,
         }
         packed.append(bytes);
         return true;
-      }, result, err, extra_headers);
+      }, result, err, extra_headers, no_response);
   if (!ok || !encoded) return ok;
   result.content_length = -1;
   if (auto decoded = decode_content_encoding(result.content_encoding, packed,
@@ -741,7 +763,15 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
   bool upgraded = false;  // the last hop was an http:// → https:// upgrade
   for (int hop = 0; hop < 5; ++hop) {
     HttpStreamHeaders headers;
-    const bool ok = stream_once(current, user_agent,
+    bool no_response = false;
+    const auto request = [&] {
+      no_response = false;
+      if (transfer_cancelled()) {
+        if (err) *err = transfer_cancelled_error();
+        return false;
+      }
+      if (err) err->clear();
+      return stream_once(current, user_agent,
         [&](const HttpStreamHeaders& h) {
           if (h.status >= 300 && h.status < 400 && !h.location.empty())
             return true;
@@ -751,7 +781,9 @@ bool https_get_follow_stream(std::string_view url, std::string_view user_agent,
           if (headers.status >= 300 && headers.status < 400 &&
               !headers.location.empty()) return true;
           return on_body(bytes);
-        }, headers, err, extra_headers);
+        }, headers, err, extra_headers, no_response);
+    };
+    const bool ok = request() || (no_response && request());
     if (!ok) {
       if (upgraded && err)
         *err = "HTTPS redirect to plaintext HTTP; HTTPS upgrade failed: " + *err;
