@@ -169,9 +169,8 @@ rel values are dropped), Reddit `reddit_mark_users`. Context menu:
   map it with `parse_html_page`; `wikipedia_rewrite_links` turns article
   links into `wikipedia:` refs (non-article namespaces stay web links).
   Citations become footnotes in `parse_html_page` (`html_footnotes.hpp`,
-  docs/dev/CONTENT.md "Web pages"). It passes `host_line = false`: no
-  "host · Open in browser · Open as native view" line on top; the URL bar
-  has the Native toggle, and "Open in Browser" (`UiCommand::OpenInBrowser`,
+  docs/dev/CONTENT.md "Web pages"). The URL bar has the Native toggle.
+  "Open in Browser" (`UiCommand::OpenInBrowser`,
   `pane_browser_url`) is in the URL-bar and page context menus.
 - `service_navigation` (`service_bar.hpp`) supplies groups of links for Page
   Navigation from the native address. Wikipedia supplies the edition's main

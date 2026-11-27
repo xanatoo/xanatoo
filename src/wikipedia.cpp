@@ -251,12 +251,10 @@ std::optional<Document> wikipedia_fetch(std::string_view ref_in,
   }
   if (final_ref) *final_ref = wikipedia_ref_string(*ref);
 
-  // No "host · Open in browser · Open as native view" line: this is the
-  // native view, and Open in Browser is in the URL bar / page menus.
   const std::string page_url = wikipedia_page_url(*ref);
   const auto hints = site_hints_for_host(ref->lang + ".wikipedia.org");
   Document doc = parse_html_page(body, page_url, /*keep_chrome=*/true,
-                                 hints.get(), /*host_line=*/false);
+                                 hints.get());
   wikipedia_rewrite_links(doc, *ref);
   return doc;
 }

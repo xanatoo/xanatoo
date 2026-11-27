@@ -33,23 +33,18 @@ inline constexpr std::string_view kExternalPrefix = "external:";
 std::string html_page_title(std::string_view html);
 
 // Page → Document: a title Section (unless the content has its own <h1>)
-// holding the main content. Remote pages (`page_url` http/https) start
-// with a "host · Open in browser" line, and when `native_url_for` maps the
-// URL (YouTube, Wikipedia, HN, …) an "Open as native view" link to that
-// ref as well; relative links resolve against <base href> or `page_url`.
+// holding the main content. Relative links resolve against <base href> or
+// `page_url`.
 // Page chrome (navigation, sidebars, footers, what lies around <main>) is
 // kept as Chrome nodes, for reader mode to hide; `keep_chrome = false`
 // drops it instead (EPUB chapters).
 // Remote pages use the site hints for their host (site_hints.hpp).
 Document parse_html_page(std::string_view html, std::string_view page_url = {},
                          bool keep_chrome = true);
-// … with these hints (null = none), whatever the host; `host_line = false`
-// leaves out the "host · Open in browser" line (native views such as
-// wikipedia:, whose URL bar already offers both).
+// … with these hints (null = none), whatever the host.
 struct SiteHints;
 Document parse_html_page(std::string_view html, std::string_view page_url,
-                         bool keep_chrome, const SiteHints* hints,
-                         bool host_line = true);
+                         bool keep_chrome, const SiteHints* hints);
 
 // text/plain body: blank-line separated chunks as code blocks.
 Document plain_text_document(std::string_view text);

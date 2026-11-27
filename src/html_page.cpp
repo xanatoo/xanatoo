@@ -331,8 +331,7 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
 }
 
 Document parse_html_page(std::string_view html, std::string_view page_url,
-                         bool keep_chrome, const SiteHints* hints,
-                         bool host_line) {
+                         bool keep_chrome, const SiteHints* hints) {
   Document doc;
   NodeId root = doc.create(NodeKind::Document);
 
@@ -354,18 +353,6 @@ Document parse_html_page(std::string_view html, std::string_view page_url,
 
   const std::string native_ref =
       is_remote(page_url) ? native_url_for(page_url) : std::string();
-  if (host_line && is_remote(page_url)) {
-    NodeId p = doc.create(NodeKind::Paragraph, root);
-    auto& spans = doc.get(p).spans;
-    spans.push_back(span(InlineKind::Emphasis, url_host(page_url) + " · "));
-    spans.push_back(span(InlineKind::Link, "Open in browser",
-                         std::string(kExternalPrefix) + std::string(page_url)));
-    // Same mapping as the URL-bar Native view toggle (native.hpp).
-    if (!native_ref.empty()) {
-      spans.push_back(span(InlineKind::Text, " · "));
-      spans.push_back(span(InlineKind::Link, "Open as native view", native_ref));
-    }
-  }
 
   // Site hints (site_hints.hpp): per-element rules, and the main content
   // as one or more elements (whole, start tag included, so rules on them

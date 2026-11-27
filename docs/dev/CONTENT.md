@@ -214,7 +214,8 @@ link hit testing and editing. See [XML tags](../XML.md#semantic-tag-vocabulary).
   `chrome_nodes`); also used for local `.html` files (`parse_document`
   dispatch). HTML is read-only: Save asks for a `.md` name.
   HTML subscription checks use the same conversion with `keep_chrome = false`
-  and fingerprint the canonical XML.
+  and fingerprint the canonical XML. The document context menu offers Open
+  in Browser for remote pages.
 - Article / section boxes (page mode, `sections`): `<article>` is always an
   Article node and `<section>` a Section when it has an id or starts with a
   heading; other sections are transparent. The box's first heading becomes

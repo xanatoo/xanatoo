@@ -7458,7 +7458,7 @@ void test_html_link_footnotes() {
   Document back = parse_markup(md);
   EXPECT(find_footnote(back, "a") != INVALID_NODE);
 
-  // Grokipedia: nested <sup><a> marks, "1↑" self link, host after title.
+  // Grokipedia: nested <sup><a> marks and a "1↑" self link.
   const char* grok =
       "<html><body><article><h1>T</h1><p>Text<sup><a href=\"#ref-1\"><sup>"
       "<a href=\"#ref-1\">[1]</a></sup></a></sup>.</p>"
@@ -7951,16 +7951,14 @@ void test_html_page() {
   EXPECT_EQ(html_page_title(page), "OG title");
   Document doc = parse_html_page(page, "https://ex.org/p");
   auto top = kids_of(doc, doc.root);
-  // "host · Open in browser" line, the <nav> before <main>, the title
-  // section, the <footer> after it.
-  EXPECT_EQ(top.size(), 4u);
-  EXPECT_EQ(doc.get(top[0]).spans.back().href, "external:https://ex.org/p");
-  EXPECT(doc.get(top[1]).kind == NodeKind::Chrome);
-  EXPECT_EQ(doc.get(top[1]).summary, "navigation");
-  EXPECT_EQ(plain_text(doc, kids_of(doc, top[1])[0]), "Home");
-  EXPECT(doc.get(top[3]).kind == NodeKind::Chrome);
-  EXPECT_EQ(doc.get(top[3]).summary, "footer");
-  NodeId title = top[2];
+  // The <nav> before <main>, the title section, and the <footer>.
+  EXPECT_EQ(top.size(), 3u);
+  EXPECT(doc.get(top[0]).kind == NodeKind::Chrome);
+  EXPECT_EQ(doc.get(top[0]).summary, "navigation");
+  EXPECT_EQ(plain_text(doc, kids_of(doc, top[0])[0]), "Home");
+  EXPECT(doc.get(top[2]).kind == NodeKind::Chrome);
+  EXPECT_EQ(doc.get(top[2]).summary, "footer");
+  NodeId title = top[1];
   EXPECT(doc.get(title).kind == NodeKind::Section);
   auto tk = kids_of(doc, title);
   EXPECT_EQ(tk.size(), 3u);  // Header, Intro, Two
@@ -8035,10 +8033,10 @@ void test_html_page() {
       "<table><tr><td><table><tr><td>one<br><br>two "
       "<img src=s.gif width=1 height=1></table></table></main>",
       "https://e.org/");
-  // Host line, "nav" before <main> (page header), the <h1> section.
-  EXPECT(d3.get(kids_of(d3, d3.root)[1]).kind == NodeKind::Chrome);
-  EXPECT_EQ(d3.get(kids_of(d3, d3.root)[1]).summary, "page header");
-  auto k3 = kids_of(d3, kids_of(d3, d3.root)[2]);  // the <h1> section
+  // "nav" before <main> (page header), then the <h1> section.
+  EXPECT(d3.get(kids_of(d3, d3.root)[0]).kind == NodeKind::Chrome);
+  EXPECT_EQ(d3.get(kids_of(d3, d3.root)[0]).summary, "page header");
+  auto k3 = kids_of(d3, kids_of(d3, d3.root)[1]);  // the <h1> section
   EXPECT_EQ(k3.size(), 4u);  // Header, link, one, two
   EXPECT_EQ(doc_span_href(d3, k3[1]), "https://e.org/x/");
   EXPECT_EQ(plain_text(d3, k3[2]), "one");
@@ -8053,41 +8051,22 @@ void test_html_page() {
   EXPECT_EQ(d4.get(p4).spans[0].href, "https://w.org/wiki/X");
   EXPECT_EQ(d4.get(p4).spans[1].href, "#n1");
 
-  // JS-only YouTube page: host line has Open as native view → youtube: ref,
-  // and the empty-content note links the same way.
+  // The empty-content note on a JS-only YouTube page links to native view.
   {
     Document yt = parse_html_page(
         "<html><head><title>Watch</title></head><body>"
         "<div id=\"player\"></div></body></html>",
         "https://www.youtube.com/watch?v=v_DgEwNJwkQ");
     auto yt_top = kids_of(yt, yt.root);
-    EXPECT(!yt_top.empty());
-    const auto& host_spans = yt.get(yt_top[0]).spans;
-    EXPECT_EQ(host_spans.size(), 4u);  // host · Open in browser · Open as native view
-    EXPECT_EQ(host_spans[1].href, "external:https://www.youtube.com/watch?v=v_DgEwNJwkQ");
-    EXPECT_EQ(host_spans[3].text, "Open as native view");
-    EXPECT_EQ(host_spans[3].href, "youtube:watch?v=v_DgEwNJwkQ");
-    // Empty body → the "No readable content" paragraph also links native.
+    EXPECT_EQ(yt_top.size(), 1u);
     bool found_native_in_empty = false;
-    for (NodeId id : yt_top) {
-      for (const auto& s : yt.get(id).spans)
+    for (const Node& n : yt.nodes) {
+      for (const auto& s : n.spans)
         if (s.href == "youtube:watch?v=v_DgEwNJwkQ" &&
             s.text == "Open as native view")
           found_native_in_empty = true;
     }
     EXPECT(found_native_in_empty);
-  }
-
-  // Native views (wikipedia:) leave the host line out: the URL bar has the
-  // Native toggle and Open in Browser.
-  {
-    Document w = parse_html_page("<html><body><p>Text</p></body></html>",
-                                 "https://en.wikipedia.org/wiki/X",
-                                 /*keep_chrome=*/true, nullptr,
-                                 /*host_line=*/false);
-    for (NodeId id : kids_of(w, w.root))
-      for (const auto& s : w.get(id).spans)
-        EXPECT(s.href.rfind("external:", 0) != 0);
   }
 
   EXPECT_EQ(http_status_line(404), "HTTP 404 Not Found");
@@ -8295,15 +8274,11 @@ void test_wikipedia() {
   for (const Node& n : doc.nodes)
     for (const InlineSpan& s : n.spans)
       if (s.kind == InlineKind::Link) hrefs.push_back(s.href);
-  EXPECT_EQ(hrefs.size(), size_t(6));
-  if (hrefs.size() == 6) {
-    EXPECT_EQ(hrefs[0], "external:https://en.wikipedia.org/wiki/Hypertext");
-    EXPECT_EQ(hrefs[1], "wikipedia:Hypertext");
-    EXPECT_EQ(hrefs[2], "wikipedia:Ted_Nelson");
-    EXPECT_EQ(hrefs[3], "#History");
-    EXPECT_EQ(hrefs[4], "https://en.wikipedia.org/wiki/Category:Web");
-    EXPECT_EQ(hrefs[5], "wikipedia:de:Hypertext");
-  }
+  EXPECT_EQ(hrefs, (std::vector<std::string>{
+                       "wikipedia:Ted_Nelson",
+                       "#History",
+                       "https://en.wikipedia.org/wiki/Category:Web",
+                       "wikipedia:de:Hypertext"}));
   Document figure = parse_html_page(
       "<base href=\"//en.wikipedia.org/wiki/\"><main>"
       "<figure class=\"mw-halign-left\"><a href=\"./File:Example.jpg\">"
