@@ -263,3 +263,30 @@ TODO keywords use the heading node's `src`; `:CUSTOM_ID:` becomes the stable lab
 - **D-pad** move · **Left stick** scroll · **Back** history/browse · **Y** forward · **X** content only · **Start** help
 
 - **F3** — toggle on-screen virtual keyboard
+
+## Website cookies
+
+Open **Panels → Cookies** to see cookies for the current HTTPS site or select
+another site. The panel shows the names sent on the most recent cookie-bearing
+request to that site during this run. **Reveal values** shows stored values and
+previews the Cookie header for the current page. You can suspend cookies for
+the whole site, enable or disable individual cookies, or delete them. When
+cookies are enabled for a site, it can set a deleted cookie again.
+
+To import an existing session, copy a single cookie's name and value from your
+browser's site storage. In Bash, run the following and paste one
+`NAME=VALUE` pair when prompted. Repeat the command for each cookie.
+
+```sh
+read -rsp 'Cookie (NAME=VALUE): ' cookie
+printf '\n'
+printf '%s\n' "$cookie" | xanatoo --import-cookie https://old.reddit.com/
+unset cookie
+```
+
+Use the exact destination host and port. The URL path scopes the cookie
+(default `/`). Importing also enables cookies for that site. Reload the page
+after importing or changing a cookie. Imported cookies persist until you remove
+them or the site replaces them. Xanatoo keeps persistent values in an owner-only
+database and sends them on foreground requests over verified HTTPS. This
+feature requires a native HTTP build with SQLite.

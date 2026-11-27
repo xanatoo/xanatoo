@@ -413,7 +413,7 @@ void finish_fetch(FetchShared& out) {
     // pages that answered with content, not error bodies, not one shown
     // from a local file (pages of a PDF), not one that is a snapshot.
     const bool http_ok = out.http_status == 0 || out.http_status == 200;
-    if (out.keep_snapshot && out.snapshot_time == 0 && http_ok &&
+    if (out.keep_snapshot && !out.sent_http_cookies && out.snapshot_time == 0 && http_ok &&
         out.error.empty() && out.content_path.empty() &&
         is_in_app_remote_url(out.final_url) &&
         !xanatoo::is_snapshot_ref(out.final_url))
@@ -749,6 +749,7 @@ void cache_page(App& app, const FetchJob& job) {
   c.erase(std::remove_if(c.begin(), c.end(),
                          [&](const CachedPage& e) { return e.url == job.url; }),
           c.end());
+  if (job.shared->sent_http_cookies) return;
   c.push_back({job.url, job.shared->final_url, job.shared->content_path,
                *job.shared->doc,
                job.shared->raw_source,
@@ -1336,6 +1337,13 @@ uint64_t start_fetch(App& app, FetchPurpose purpose, int pane,
        allow = purpose != FetchPurpose::Preview &&
                purpose != FetchPurpose::Subscription] {
         xanatoo::TransferMeterScope meter(&shared->meter);
+#if XANATOO_HTTP_COOKIES
+        if (allow) {
+          xanatoo::HttpCookieScope cookies(shared->sent_http_cookies);
+          fetch_page_guarded(url, shared, allow);
+          return;
+        }
+#endif
         fetch_page_guarded(url, shared, allow);
       })
       .detach();
@@ -1558,10 +1566,23 @@ const CachedPage* find_cached_page(App& app, const std::string& url) {
   // Asked for a snapshot: only that one will do (a live answer from a
   // moment ago may already differ).
   const std::string& want = app.open_snapshot;
-  for (auto it = app.page_cache.rbegin(); it != app.page_cache.rend(); ++it)
-    if (it->url == url && now - it->ticks < kPageCacheTtl &&
-        (want.empty() || it->observed.snapshot == want))
-      return &*it;
+  for (auto it = app.page_cache.rbegin(); it != app.page_cache.rend(); ++it) {
+    if (it->url != url || now - it->ticks >= kPageCacheTtl ||
+        (!want.empty() && it->observed.snapshot != want)) continue;
+#if XANATOO_HTTP_COOKIES
+    if (want.empty()) {
+      const auto uses_cookies = [](const std::string& address) {
+        const auto web = xanatoo::parse_http_url(address);
+        return web && xanatoo::http_cookie_site_enabled(*web);
+      };
+      if (uses_cookies(url) || uses_cookies(it->final_url) ||
+          uses_cookies(xanatoo::page_web_url(url)) ||
+          (xanatoo::is_reddit_ref(url) && uses_cookies("https://old.reddit.com/")))
+        return nullptr;
+    }
+#endif
+    return &*it;
+  }
   return nullptr;
 }
 

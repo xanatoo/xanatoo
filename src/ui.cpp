@@ -547,6 +547,7 @@ const char* menu_icon_for(UiCommand command) {
     case UiCommand::RemoveBookmark: return "bookmark";
     case UiCommand::ToggleHistory: return "history";
     case UiCommand::ToggleDownloads: return "downloads";
+    case UiCommand::ToggleCookies: return "cookies";
     case UiCommand::ToggleCertificates: return "certificates";
     case UiCommand::ToggleOutline: return "outline";
     case UiCommand::ToggleStructure: return "structure";
@@ -3988,6 +3989,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         cmd = UiCommand::ToggleMedia;
       if (menu_item_with_icon("Subscriptions", "subscriptions", nullptr, state.subscriptions_open))
         cmd = UiCommand::ToggleSubscriptions;
+#if XANATOO_HTTP_COOKIES
+      if (ImGui::MenuItem("Cookies", nullptr, state.cookies_open))
+        cmd = UiCommand::ToggleCookies;
+#endif
       if (menu_item_with_icon("Certificates", "certificates", nullptr, state.certs_open))
         cmd = UiCommand::ToggleCertificates;
       if (menu_item_with_icon("Identities", "identities", nullptr, state.identities_open))
@@ -6476,6 +6481,87 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
     }
     ImGui::End();
   }
+
+#if XANATOO_HTTP_COOKIES
+  if (state.cookies_open && state.cookie_snapshot &&
+      !(state.shaded_panels & ui_panel_bit(UiPanelLayer::Cookies))) {
+    ImGui::SetNextWindowPos(ImVec2(float(state.cookies_x + 3), float(state.cookies_y + 3)));
+    ImGui::SetNextWindowSize(ImVec2(float(std::max(1, state.cookies_w - 6)),
+                                   float(std::max(1, state.cookies_h - 6))));
+    if (ImGui::Begin("##cookies_body", nullptr, embedded_panel_flags)) {
+      const auto& sites = state.cookie_snapshot->sites;
+      const auto& cookies = state.cookie_snapshot->cookies;
+      const auto& selected = state.cookie_selected;
+      const auto site = std::ranges::find(sites, selected, &CookieSite::origin);
+      const char* label = selected.empty() ? "No HTTPS page" : selected.c_str();
+      if (ImGui::BeginCombo("Site", label)) {
+        const std::string current = state.cookie_current.empty() ?
+            "Current page (no HTTPS site)" : "Current page (" + state.cookie_current + ")";
+        if (ImGui::Selectable(current.c_str())) {
+          cmd = UiCommand::CookieSelect;
+          result.arg.clear();
+        }
+        for (const auto& row : sites) {
+          if (ImGui::Selectable(row.origin.c_str(), row.origin == selected)) {
+            cmd = UiCommand::CookieSelect;
+            result.arg = row.origin;
+          }
+        }
+        ImGui::EndCombo();
+      }
+      if (state.cookies_read_only)
+        ImGui::TextDisabled("Cookies are unavailable with --no-save.");
+      if (!state.cookie_error.empty())
+        ImGui::TextWrapped("%s", state.cookie_error.c_str());
+      if (!selected.empty()) {
+        const bool enabled = site != sites.end() && site->enabled;
+        ImGui::BeginDisabled(state.cookies_read_only);
+        if (ImGui::Button(enabled ? "Disable site cookies" : "Enable site cookies")) {
+          cmd = UiCommand::CookieSiteToggle;
+          result.arg = selected;
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button(state.cookie_reveal ? "Hide values" : "Reveal values"))
+          cmd = UiCommand::CookieReveal;
+        if (site != sites.end() && !site->last_names.empty())
+          ImGui::TextWrapped("Last cookie-bearing request (%s): %s", site->last_path.c_str(),
+                             site->last_names.c_str());
+        else
+          ImGui::TextDisabled("No cookies sent to this site this session.");
+        if (state.cookie_reveal && selected == state.cookie_current)
+          ImGui::TextWrapped("Cookie header for this page: %s",
+              state.cookie_preview.empty() ? "(empty)" : state.cookie_preview.c_str());
+
+        size_t count = 0;
+        for (size_t i = 0; i < cookies.size(); ++i) {
+          const auto& cookie = cookies[i];
+          if (cookie.origin != selected) continue;
+          ++count;
+          ImGui::PushID(static_cast<int>(i));
+          ImGui::Separator();
+          ImGui::TextWrapped("%s  (%s)", cookie.name.c_str(), cookie.path.c_str());
+          if (cookie.expires && cookie.expires <= std::time(nullptr))
+            ImGui::TextDisabled("Expired");
+          if (state.cookie_reveal)
+            ImGui::TextWrapped("%s", cookie.value.empty() ? "(empty value)" : cookie.value.c_str());
+          if (ImGui::Button(cookie.enabled ? "Disable" : "Enable")) {
+            cmd = UiCommand::CookieToggle;
+            result.arg = std::to_string(i);
+          }
+          ImGui::SameLine();
+          if (ImGui::Button("Delete")) {
+            cmd = UiCommand::CookieDelete;
+            result.arg = std::to_string(i);
+          }
+          ImGui::PopID();
+        }
+        if (count == 0) ImGui::TextDisabled("No stored cookies.");
+      }
+    }
+    ImGui::End();
+  }
+#endif
 
   // ---- Certificates: Gemini TOFU pins in a native dockable panel ----
   if (state.certs_open &&

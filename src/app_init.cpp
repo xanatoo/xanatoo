@@ -77,7 +77,7 @@ bool app_init(App& app) {
                          &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win,
-                         &app.certs_win, &app.identities_win, &app.related_win,
+                         &app.certs_win, &app.cookies_win, &app.identities_win, &app.related_win,
                          &app.hover_help_win}) {
     w->x = static_cast<int>(std::lround(w->x * app.ui_scale));
     w->y = static_cast<int>(std::lround(w->y * app.ui_scale));
@@ -92,7 +92,7 @@ bool app_init(App& app) {
                          &app.nostr_explorer_win,
                          &app.bookmarks_win, &app.subscriptions_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win,
-                         &app.certs_win, &app.identities_win, &app.related_win,
+                         &app.certs_win, &app.cookies_win, &app.identities_win, &app.related_win,
                          &app.hover_help_win}) {
     w->restore_x = w->x;
     w->restore_y = w->y;

@@ -462,6 +462,10 @@ if(XANATOO_NEED_OPENSSL AND XANATOO_WASM_FETCH)
   message(STATUS "HTTP transport: browser fetch (CORS applies)")
 elseif(XANATOO_NEED_OPENSSL)
   target_sources(xanatoo PRIVATE src/https.cpp)
+  if(UNIX AND XANATOO_SQLITE)
+    target_sources(xanatoo PRIVATE src/http_cookies.cpp)
+    target_compile_definitions(xanatoo PRIVATE XANATOO_HTTP_COOKIES=1)
+  endif()
   # https.hpp is available: remote images download (app_images.cpp).
   target_compile_definitions(xanatoo PRIVATE XANATOO_HTTPS=1)
   if(XANATOO_TLS STREQUAL "mbedtls")
@@ -919,6 +923,10 @@ target_compile_definitions(xanatoo_tests PRIVATE
   "XANATOO_TEST_DATA=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\""
   "XANATOO_VERSION=\"${PROJECT_VERSION_FULL}\""
 )
+if(UNIX AND XANATOO_SQLITE AND XANATOO_NEED_OPENSSL AND NOT XANATOO_WASM_FETCH)
+  target_sources(xanatoo_tests PRIVATE tests/http_cookie_tests.cpp src/http_cookies.cpp)
+  target_compile_definitions(xanatoo_tests PRIVATE XANATOO_HTTP_COOKIES=1)
+endif()
 add_test(NAME unit_tests COMMAND xanatoo_tests)
 
 # Group-discovery URL/hint parsing is dependency-free and also runnable with

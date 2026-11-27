@@ -476,7 +476,7 @@ enum class Dock : uint8_t { None = 0, Left, Right, Top, Bottom, Max };
 enum class WindowRole : uint8_t {
   Help, Outline, Backlinks, Sitemap, Page, History, VerticalTabs, Styles, StyleManager, Bookmarks, Downloads, Reply,
   Annotations, Context, Revisions, NostrExplorer, LemmyExplorer,
-  Subscriptions, Certificates, Identities, RelatedSites, MatrixExplorer, HoverHelp, Media,
+  Subscriptions, Certificates, Cookies, Identities, RelatedSites, MatrixExplorer, HoverHelp, Media,
   Document
 };
 
@@ -491,6 +491,7 @@ inline UiPanelLayer embedded_panel_layer(WindowRole role) {
     case WindowRole::Context: return UiPanelLayer::Context;
     case WindowRole::NostrExplorer: return UiPanelLayer::NostrExplorer;
     case WindowRole::LemmyExplorer: return UiPanelLayer::LemmyExplorer;
+    case WindowRole::Cookies: return UiPanelLayer::Cookies;
     case WindowRole::Certificates: return UiPanelLayer::Certificates;
     case WindowRole::Identities: return UiPanelLayer::Identities;
     case WindowRole::RelatedSites: return UiPanelLayer::RelatedSites;
@@ -738,6 +739,7 @@ struct FetchShared {
   // live page when it is gone); `keep_snapshot` keeps what was loaded.
   std::string open_snapshot;
   bool keep_snapshot = true;
+  bool sent_http_cookies = false;
   // Set by the worker when `doc` is a snapshot (its time; 0: live).
   int64_t snapshot_time = 0;
   bool snapshot_missing = false;  // asked for one that was evicted: live
@@ -1589,6 +1591,11 @@ struct App {
   FloatWindow nostr_explorer_win = make_float_panel(WindowRole::NostrExplorer, 180, 120, 560, 520);
   FloatWindow lemmy_explorer_win = make_float_panel(WindowRole::LemmyExplorer, 190, 130, 560, 520);
   FloatWindow matrix_explorer_win = make_float_panel(WindowRole::MatrixExplorer, 200, 140, 560, 520);
+  bool cookies_open = false, cookie_reveal = false;
+  uint64_t cookie_refresh_at = 0;
+  std::string cookie_site, cookie_page_url, cookie_preview, cookie_error;
+  CookieSnapshot cookie_snapshot;
+  FloatWindow cookies_win = make_float_panel(WindowRole::Cookies, 160, 120, 540, 460);
   FloatWindow certs_win = make_float_panel(WindowRole::Certificates, 160, 120, 520, 460);
   FloatWindow identities_win = make_float_panel(WindowRole::Identities, 180, 140, 520, 480);
   FloatWindow related_win = make_float_panel(WindowRole::RelatedSites, 150, 120, 380, 480);

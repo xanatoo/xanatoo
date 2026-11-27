@@ -2,6 +2,11 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/cli.hpp"
+#include "xanatoo/http_cookies.hpp"
+
+#if XANATOO_HTTP_COOKIES
+#include <unistd.h>
+#endif
 #include "xanatoo/paths.hpp"
 #include "xanatoo/version.hpp"
 
@@ -54,6 +59,9 @@ void print_usage(std::ostream& out, const char* argv0) {
       << "                        then FontConfig)\n"
       << "      --ui-scale N      Base chrome and default text scale (default 1;\n"
       << "                        Android: dpi/160; UI preference multiplies it)\n"
+      << "      --import-cookie HTTPS-URL\n"
+      << "                        Import one NAME=VALUE line from stdin for the\n"
+      << "                        exact HTTPS host, port and cookie path\n"
       << "\n"
       << "Directories:\n"
       << "      --data-dir DIR    Installed data: examples, help, style sheets,\n"
@@ -160,6 +168,14 @@ CliResult parse_cli(int argc, char** argv, CliOptions& opt) {
     }
     bool err = false;
     std::string v;
+    if (value_opt(argc, argv, i, nullptr, "--import-cookie", &v, err)) {
+      if (err || v.empty() || !opt.cookie_import.empty()) {
+        std::cerr << "xanatoo: specify one HTTPS URL for --import-cookie\n";
+        return CliResult::Error;
+      }
+      opt.cookie_import = std::move(v);
+      continue;
+    }
     if (value_opt(argc, argv, i, "-g", "--geometry", &v, err)) {
       if (!err && !parse_geometry(v, opt.width, opt.height)) {
         std::cerr << "xanatoo: --geometry: expected WxH, got '" << v << "'\n";
@@ -212,6 +228,36 @@ CliResult apply_path_options(const CliOptions& opt) {
     return CliResult::Exit;
   }
   return CliResult::Run;
+}
+
+int run_cookie_import(const CliOptions& opt) {
+#if XANATOO_HTTP_COOKIES
+  if (opt.no_save || !opt.file_path.empty() || !opt.file_path2.empty()) {
+    std::cerr << "xanatoo: --import-cookie requires writable state and no document arguments\n";
+    return 1;
+  }
+  if (::isatty(STDIN_FILENO)) {
+    std::cerr << "xanatoo: pipe or redirect one NAME=VALUE line to --import-cookie\n";
+    return 1;
+  }
+  // Bound the read and reject additional lines before writing anything.
+  char line[4098];
+  if (std::cin.getline(line, sizeof(line))) {
+    const auto size = static_cast<size_t>(std::cin.gcount()) - !std::cin.eof();
+    std::string_view pair(line, size);
+    if (pair.ends_with('\r')) pair.remove_suffix(1);
+    if (std::cin.peek() == EOF && !std::cin.bad() &&
+        import_http_cookie(opt.cookie_import, pair)) {
+      std::cout << "Cookie imported.\n";
+      return 0;
+    }
+  }
+  std::cerr << "xanatoo: cookie import failed (check the HTTPS scope, input and state directory)\n";
+#else
+  (void)opt;
+  std::cerr << "xanatoo: cookie import is unavailable in this build\n";
+#endif
+  return 1;
 }
 
 void open_external_url(const std::string& url_in) {

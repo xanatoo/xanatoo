@@ -408,6 +408,9 @@ const std::vector<UiHelpTopic> kTopics = {
     {"downloads|tb_downloads", "Downloads",
      "Files being downloaded and the ones finished, with progress and "
      "cancel."},
+    {"cookies", "Cookies",
+     "Inspect cookie values and the last cookie-bearing request, or turn "
+     "cookies on or off for a site."},
     {"certificates", "Certificates",
      "Gemini server certificates seen in this session: view, accept a "
      "changed one, or forget a pin."},

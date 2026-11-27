@@ -15,7 +15,7 @@ namespace xanatoo {
 // edit strips of the centre tiles (under every floating window).
 enum class UiPanelLayer { Chrome, FindBar, EditBar, Reply, Bookmarks, Subscriptions, Styles, StyleManager,
                           Annotations, Context,
-                          NostrExplorer, LemmyExplorer, Certificates,
+                          NostrExplorer, LemmyExplorer, Certificates, Cookies,
                           Identities, RelatedSites, MatrixExplorer };
 
 // Bit of `layer` in a set of embedded panels (UiState::shaded_panels).
@@ -36,6 +36,7 @@ inline const char* ui_panel_root(UiPanelLayer layer) {
     case UiPanelLayer::Context: return "##context_panel_body";
     case UiPanelLayer::NostrExplorer: return "##nostr_explorer_body";
     case UiPanelLayer::LemmyExplorer: return "##lemmy_explorer_body";
+    case UiPanelLayer::Cookies: return "##cookies_body";
     case UiPanelLayer::Certificates: return "##certificates_body";
     case UiPanelLayer::Identities: return "##identities_body";
     case UiPanelLayer::RelatedSites: return "##related_sites_body";
@@ -60,7 +61,7 @@ inline UiPanelLayer ui_panel_layer(std::string_view owner) {
     UiPanelLayer::Reply, UiPanelLayer::Bookmarks, UiPanelLayer::Subscriptions, UiPanelLayer::Styles,
     UiPanelLayer::StyleManager, UiPanelLayer::Annotations, UiPanelLayer::Context,
     UiPanelLayer::NostrExplorer,
-    UiPanelLayer::LemmyExplorer, UiPanelLayer::Certificates,
+    UiPanelLayer::LemmyExplorer, UiPanelLayer::Certificates, UiPanelLayer::Cookies,
     UiPanelLayer::Identities, UiPanelLayer::RelatedSites, UiPanelLayer::MatrixExplorer,
   };
   for (const auto layer : panels) {

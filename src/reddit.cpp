@@ -5,6 +5,7 @@
 // Maps listings / posts into Thread + Message document nodes.
 
 #include "xanatoo/reddit.hpp"
+#include "xanatoo/http_cookies.hpp"
 #include "xanatoo/http_status.hpp"
 #include "xanatoo/reddit_credentials.hpp"
 
@@ -563,6 +564,8 @@ std::optional<Document> reddit_fetch(std::string_view url_in, std::string* err) 
     if (p != std::string::npos) {
       alt.replace(p, 6, ".json");
       add_cand(alt);
+      rep("://www.reddit.com", "://old.reddit.com");
+      add_cand(alt);
     }
   }
 
@@ -572,6 +575,15 @@ std::optional<Document> reddit_fetch(std::string_view url_in, std::string* err) 
     std::cerr << "Reddit: using OAuth client credentials\n";
   else if (!oauth_err.empty())
     std::cerr << "Reddit: OAuth skipped/failed: " << oauth_err << "\n";
+
+#if XANATOO_HTTP_COOKIES
+  if (token.empty() && http_cookies_allowed()) {
+    std::stable_partition(candidates.begin(), candidates.end(), [](const auto& candidate) {
+      const auto url = parse_http_url(candidate);
+      return url && !http_cookie_header(*url).empty();
+    });
+  }
+#endif
 
   std::optional<HttpResult> resp;
   std::string last_err;

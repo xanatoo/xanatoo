@@ -4,6 +4,7 @@
 #include "xanatoo/https.hpp"
 #include "xanatoo/tcp.hpp"
 #include "xanatoo/http_framing.hpp"
+#include "xanatoo/http_cookies.hpp"
 #include "xanatoo/http_url.hpp"
 #include "xanatoo/inflate.hpp"
 #include "xanatoo/net_address.hpp"
@@ -61,6 +62,18 @@ public:
     return true;
   }
 
+  bool write_request(const std::string& request, const HttpUrl& url,
+                     std::string_view cookies) {
+    if (!write_all(request.data(), request.size())) return false;
+#if XANATOO_HTTP_COOKIES
+    record_http_cookies(url, cookies);
+#else
+    (void)url;
+    (void)cookies;
+#endif
+    return true;
+  }
+
   bool write_all(const void* data, size_t size) {
     if (secure_) return tls_.write_all(data, size);
     const char* ptr = static_cast<const char*>(data);
@@ -110,6 +123,28 @@ private:
   bool secure_ = false;
   TlsStream tls_;
 };
+
+bool allows_cookie_jar(std::string_view extra_headers) {
+#if XANATOO_HTTP_COOKIES
+  if (!http_cookies_allowed()) return false;
+  const auto headers = "\n" + ascii_lower(extra_headers);
+  return headers.find("\ncookie:") == std::string::npos &&
+         headers.find("\nauthorization:") == std::string::npos;
+#else
+  (void)extra_headers;
+  return false;
+#endif
+}
+
+std::string jar_header(const HttpUrl& url, bool use_jar) {
+#if XANATOO_HTTP_COOKIES
+  if (use_jar) return http_cookie_header(url);
+#else
+  (void)url;
+  (void)use_jar;
+#endif
+  return {};
+}
 
 std::string header_value(const std::string& headers, const char* key) {
   const std::string lower = ascii_lower(headers);
@@ -233,9 +268,10 @@ struct Exchange {
 // Send `req` over `conn` and read the response, up to its end (framing) or
 // the connection closing.
 Exchange exchange(HttpConnection& conn, const std::string& req_s,
+                  const HttpUrl& url, std::string_view cookies, bool use_jar,
                   const HttpRequestSecurity& security, std::string* err) {
   Exchange ex;
-  if (!conn.write_all(req_s.data(), req_s.size())) {
+  if (!conn.write_request(req_s, url, cookies)) {
     if (err) *err = "HTTP write failed";
     ex.nothing = true;
     return ex;
@@ -327,6 +363,12 @@ Exchange exchange(HttpConnection& conn, const std::string& req_s,
       val.erase(val.begin());
     return val;
   };
+#if XANATOO_HTTP_COOKIES
+  if (use_jar && out.status >= 200)
+    receive_http_cookies(url, headers);
+#else
+  (void)use_jar;
+#endif
   out.location = header_val("location");
   out.content_type = header_val("content-type");
   if (ascii_lower(header_val("transfer-encoding")).find("chunked") !=
@@ -353,6 +395,10 @@ std::optional<HttpResult> request_impl(std::string_view method,
     return std::nullopt;
   }
 
+  const bool use_jar = (method == "GET" || method == "HEAD") &&
+                       security.verify_tls && !security.public_only &&
+                       allows_cookie_jar(extra_headers);
+  const std::string cookies = jar_header(*parsed, use_jar);
   std::ostringstream req;
   const bool custom_accept = ascii_lower(extra_headers).find("accept:") !=
       std::string::npos;
@@ -363,6 +409,7 @@ std::optional<HttpResult> request_impl(std::string_view method,
   if (ascii_lower(extra_headers).find("accept-language:") == std::string::npos)
     req << "Accept-Language: " << accept_language() << "\r\n";
   if (!pooled) req << "Connection: close\r\n";
+  if (!cookies.empty()) req << "Cookie: " << cookies << "\r\n";
   if (!extra_headers.empty()) req << extra_headers;
   if (!body_in.empty())
     req << "Content-Length: " << body_in.size() << "\r\n";
@@ -381,7 +428,7 @@ std::optional<HttpResult> request_impl(std::string_view method,
       conn = std::make_unique<HttpConnection>();
       if (!conn->open(*parsed, err, security)) return std::nullopt;
     }
-    Exchange ex = exchange(*conn, req_s, security, err);
+    Exchange ex = exchange(*conn, req_s, *parsed, cookies, use_jar, security, err);
     // The server closed the idle connection meanwhile: once more, fresh.
     if (reused && ex.nothing) continue;
     if (pooled && ex.reusable) put_idle(key, std::move(conn));
@@ -520,13 +567,16 @@ bool stream_raw(const std::string& url, std::string_view agent,
   if (!conn.open(*parsed, err)) return false;
   const bool custom_accept = ascii_lower(extra_headers).find("accept:") !=
       std::string::npos;
+  const bool use_jar = allows_cookie_jar(extra_headers);
+  const std::string cookies = jar_header(*parsed, use_jar);
   const std::string req = "GET " + parsed->target + " HTTP/1.1\r\nHost: " + parsed->authority +
       "\r\nUser-Agent: " + std::string(agent) +
       (custom_accept ? "\r\n" : "\r\nAccept: */*\r\n") +
       "Accept-Language: " + accept_language() +
       "\r\nAccept-Encoding: identity\r\n" + std::string(extra_headers) +
+      (cookies.empty() ? "" : "Cookie: " + cookies + "\r\n") +
       "Connection: close\r\n\r\n";
-  if (!conn.write_all(req.data(), req.size())) {
+  if (!conn.write_request(req, *parsed, cookies)) {
     if (err) *err = "HTTP write failed";
     return false;
   }
@@ -605,6 +655,9 @@ bool stream_raw(const std::string& url, std::string_view agent,
         meter_expect(std::max<int64_t>(
             0, left - static_cast<int64_t>(pending.size() - end - 4)));
       have_headers = true;
+#if XANATOO_HTTP_COOKIES
+      if (use_jar && result.status >= 200) receive_http_cookies(*parsed, headers);
+#endif
       if (!on_headers(result)) return false;
       // Redirect bodies are irrelevant: follow Location immediately rather
       // than draining a potentially large response before the next request.

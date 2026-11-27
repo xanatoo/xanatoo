@@ -6,6 +6,7 @@
 
 #include "xanatoo/sdl.hpp"
 #include "xanatoo/history_menu.hpp"
+#include "xanatoo/http_cookies.hpp"
 #include "xanatoo/urlbar_suggestions.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/nostr_store.hpp"
@@ -80,6 +81,7 @@ enum class UiCommand {
   MatrixSetServer,      // arg = server name (selected for directory actions)
   MatrixAddServer,      // arg = server name or https://server
   ToggleNostrAccounts, // Identities panel on its Nostr tab (or close it there)
+  ToggleCookies, CookieSelect, CookieSiteToggle, CookieToggle, CookieDelete, CookieReveal,
   ToggleCertificates,  // Certificates panel; arg = host:port opens it on that row
   CertAccept,          // arg = host:port: trust the changed certificate
   CertReject,          // arg = host:port: keep the old pin
@@ -471,6 +473,10 @@ struct UiState {
   SiteIdentity site_identity = SiteIdentity::None;
   std::string site_identity_key;  // host:port, the panel row it opens
   std::string site_identity_tip;
+  bool cookies_open = false, cookies_read_only = false, cookie_reveal = false;
+  int cookies_x = 0, cookies_y = 0, cookies_w = 0, cookies_h = 0;
+  const CookieSnapshot* cookie_snapshot = nullptr;
+  std::string cookie_current, cookie_selected, cookie_preview, cookie_error;
   // Certificates panel: one row per known server (pins + seen this session).
   struct CertRow {
     std::string key, host;

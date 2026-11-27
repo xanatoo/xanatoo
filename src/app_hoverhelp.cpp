@@ -38,6 +38,7 @@ const char* role_key(WindowRole role) {
     case WindowRole::NostrExplorer: return "nostr-explorer";
     case WindowRole::LemmyExplorer: return "lemmy-explorer";
     case WindowRole::Subscriptions: return "subscriptions";
+    case WindowRole::Cookies: return "cookies";
     case WindowRole::Certificates: return "certificates";
     case WindowRole::Identities: return "identities";
     case WindowRole::RelatedSites: return "related-sites";

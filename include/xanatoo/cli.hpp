@@ -10,6 +10,7 @@ namespace xanatoo {
 // Command line (gamepkgstd OPTIONS.md); also documented in docs/xanatoo.1.
 struct CliOptions {
   std::string font_path;
+  std::string cookie_import;
   std::string file_path;   // primary document
   std::string file_path2;  // optional second → dual-pane
   bool fullscreen = false;
@@ -39,6 +40,8 @@ CliResult parse_cli(int argc, char** argv, CliOptions& opt);
 // Hand the directory options to paths.hpp (overrides, portable mode,
 // --no-save); --show-paths prints them and returns Exit.
 CliResult apply_path_options(const CliOptions& opt);
+
+int run_cookie_import(const CliOptions& opt);
 
 void print_usage(std::ostream& out, const char* argv0);
 

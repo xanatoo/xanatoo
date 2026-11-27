@@ -121,6 +121,8 @@ int main(int argc, char** argv) {
     case xanatoo::CliResult::Error: return 1;
   }
 
+  if (!opt.cookie_import.empty()) return xanatoo::run_cookie_import(opt);
+
   // App ID for window matching: Nix's wrapper renames the binary to
   // .xanatoo-wrapped, which SDL would otherwise use as WM_CLASS / app_id.
   // SDL2's headers have no macros for the WM class hints, and sdl2-compat

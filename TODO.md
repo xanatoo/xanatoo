@@ -2,6 +2,17 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Website cookies
+
+- Add an opt-in HTTPS cookie jar, a single-cookie stdin import, and a Cookies
+  panel for the focused site and other stored origins.
+- Use cookies in foreground page and download fetches, including native
+  Reddit's Old Reddit JSON fallback.
+- Passed 15,125 Nix unit checks and all 33 CTest targets. A local HTTPS
+  smoke test verified CLI import, redirect and path isolation, and
+  `--no-save`. The Cookies panel was exercised under Xvfb. The store passed
+  an arm64 Android NDK syntax check.
+
 ## Status (2026-11-27) — Android keyboard recovery
 
 - Retry explicit keyboard requests on the Android UI thread using SDL's

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdio>
 #include <cctype>
 #include <cmath>
@@ -43,6 +44,7 @@
 #include "xanatoo/time.hpp"
 #include "xanatoo/util.hpp"
 #include "xanatoo/native.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/wayback.hpp"
 #include "xanatoo/wikipedia.hpp"
 
@@ -870,6 +872,37 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   }
   ui_state.location_icon = address_icon(app, ui_state.doc_label);
   cert_ui_state(app, ui_state);
+#if XANATOO_HTTP_COOKIES
+  ui_state.cookies_open = app.cookies_open;
+  if (app.cookies_open) {
+    const auto& address = path_of(app, focused_pane(app));
+    auto url = xanatoo::parse_http_url(address);
+    if (!url) url = xanatoo::parse_http_url(xanatoo::page_web_url(address));
+    if (app.cookie_page_url != address && app.cookie_site.empty())
+      app.cookie_reveal = false;
+    const uint64_t now = xanatoo::sdl::ticks();
+    if (now >= app.cookie_refresh_at || app.cookie_page_url != address) {
+      app.cookie_snapshot = xanatoo::http_cookie_snapshot();
+      app.cookie_preview = url ? xanatoo::http_cookie_header(*url) : std::string();
+      app.cookie_refresh_at = now + 500;
+      app.cookie_page_url = address;
+    }
+    auto [x, y, w, h] = imgui_panel_rect(app, app.cookies_win);
+    ui_state.cookies_x = x;
+    ui_state.cookies_y = y;
+    ui_state.cookies_w = w;
+    ui_state.cookies_h = h;
+    ui_state.cookie_snapshot = &app.cookie_snapshot;
+    if (url) ui_state.cookie_current = xanatoo::cookie_origin(*url);
+    ui_state.cookie_selected = app.cookie_site.empty() ?
+        ui_state.cookie_current : app.cookie_site;
+    ui_state.cookie_reveal = app.cookie_reveal;
+    if (app.cookie_reveal && ui_state.cookie_selected == ui_state.cookie_current)
+      ui_state.cookie_preview = app.cookie_preview;
+    ui_state.cookie_error = app.cookie_error;
+    ui_state.cookies_read_only = xanatoo::no_save();
+  }
+#endif
   identity_ui_state(app, ui_state);
   related_ui_state(app, ui_state);
   // Imported EPUBs are stored as content.md beside their extracted media.
@@ -1729,6 +1762,45 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       }
       break;
     }
+    case C::ToggleCookies:
+    case C::CookieSelect:
+    case C::CookieSiteToggle:
+    case C::CookieToggle:
+    case C::CookieDelete:
+    case C::CookieReveal:
+#if XANATOO_HTTP_COOKIES
+      if (cmd == C::ToggleCookies) {
+        app.cookies_open = !app.cookies_open;
+        app.cookie_site.clear();
+        app.cookie_reveal = false;
+        app.cookie_refresh_at = 0;
+        if (app.cookies_open) focus_panel(app, WindowRole::Cookies);
+      } else if (cmd == C::CookieSelect) {
+        app.cookie_site = arg;
+        app.cookie_reveal = false;
+      } else if (cmd == C::CookieReveal) {
+        app.cookie_reveal = !app.cookie_reveal;
+      } else {
+        bool ok = false;
+        if (cmd == C::CookieSiteToggle) {
+          const auto site = std::ranges::find(app.cookie_snapshot.sites, arg,
+                                              &xanatoo::CookieSite::origin);
+          ok = xanatoo::set_cookie_site(arg, site == app.cookie_snapshot.sites.end() ||
+                                            !site->enabled);
+        } else {
+          size_t index = 0;
+          const auto [end, ec] = std::from_chars(arg.data(), arg.data() + arg.size(), index);
+          if (ec == std::errc{} && end == arg.data() + arg.size() &&
+              index < app.cookie_snapshot.cookies.size()) {
+            const auto& cookie = app.cookie_snapshot.cookies[index];
+            ok = xanatoo::edit_http_cookie(cookie, cmd == C::CookieDelete, !cookie.enabled);
+          }
+        }
+        app.cookie_refresh_at = 0;
+        app.cookie_error = ok ? "" : "Could not update the cookie store.";
+      }
+#endif
+      break;
     case C::ToggleCertificates:
       // From the address bar's site icon (arg = its server): show that row;
       // a second click closes the panel again, like a browser's popover.

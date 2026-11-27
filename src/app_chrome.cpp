@@ -72,7 +72,7 @@ void apply_ui_scale(App& app) {
                          &app.annotation_win, &app.revision_win,
                          &app.nostr_explorer_win,
                          &app.lemmy_explorer_win, &app.matrix_explorer_win, &app.bookmarks_win,
-                         &app.subscriptions_win, &app.certs_win, &app.identities_win, &app.related_win,
+                         &app.subscriptions_win, &app.certs_win, &app.cookies_win, &app.identities_win, &app.related_win,
                          &app.hover_help_win}) {
     w->x = static_cast<int>(std::lround(w->x * ratio));
     w->y = static_cast<int>(std::lround(w->y * ratio));
@@ -231,6 +231,7 @@ static xanatoo::theme::Tint window_tint(WindowRole role) {
     case WindowRole::StyleManager: return Tint::Violet;
     case WindowRole::Help:
     case WindowRole::HoverHelp: return Tint::Mint;
+    case WindowRole::Cookies:
     case WindowRole::Certificates:
     case WindowRole::Identities: return Tint::Steel;
   }

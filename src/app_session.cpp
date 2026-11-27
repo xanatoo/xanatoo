@@ -41,7 +41,7 @@ struct PanelRef {
   bool open;
 };
 
-std::array<PanelRef, 23> panels(App& app) {
+std::array<PanelRef, 24> panels(App& app) {
   return {{{"help", &app.help, app.help_mode},
            {"outline", &app.ol, app.outline_mode},
            {"backlinks", &app.bl, app.backlinks_mode},
@@ -63,6 +63,7 @@ std::array<PanelRef, 23> panels(App& app) {
            {"lemmy-explorer", &app.lemmy_explorer_win, app.lemmy_explorer_open},
            {"matrix-explorer", &app.matrix_explorer_win, app.matrix_explorer_open},
            {"certificates", &app.certs_win, app.certs.open},
+           {"cookies", &app.cookies_win, app.cookies_open},
            {"identities", &app.identities_win, app.identities.open},
            {"related-sites", &app.related_win, app.related.open},
            {"hover-help", &app.hover_help_win, app.hover_help.open}}};
@@ -487,6 +488,10 @@ void restore_session(App& app) {
         app.matrix_tab = (*v)[0] - '0';
     if (get("matrix-explorer.open") && *get("matrix-explorer.open") == "1")
       app.matrix_explorer_open = true;
+#if XANATOO_HTTP_COOKIES
+    if (get("cookies.open") && *get("cookies.open") == "1")
+      app.cookies_open = true;
+#endif
     if (get("certificates.open") && *get("certificates.open") == "1")
       show_certificates(app);
     if (get("identities.open") && *get("identities.open") == "1")

@@ -17,6 +17,7 @@
 
 #if defined(XANATOO_HTTPS) && XANATOO_HTTPS
 #include "xanatoo/https.hpp"
+#include "xanatoo/http_cookies.hpp"
 #include "xanatoo/version.hpp"
 #include "xanatoo/paths.hpp"
 #endif
@@ -695,7 +696,11 @@ std::optional<Document> web_fetch(std::string_view url_in, std::string* err,
   if (final_url) *final_url = fin;
   if (response) *response = headers;
   // What the address served, kept across runs (url_cache.hpp): the body
-  // too unless it went to a file of its own (pages, download).
+  // too unless it went to a file of its own (pages, download). Foreground
+  // images need that copy for the image viewer; signed-in text does not.
+#if XANATOO_HTTP_COOKIES
+  if (image || !http_cookies_sent())
+#endif
   {
     UrlCacheEntry seen{url, fin, headers.status, headers.content_type,
                        headers.etag, headers.last_modified};

@@ -93,6 +93,9 @@ void test_nntp(int& passed, int& failed);
 // ui_help_tests.cpp: likewise.
 void test_ui_help(int& passed, int& failed);
 void test_sqlite_db(int& passed, int& failed);
+#if XANATOO_HTTP_COOKIES
+void test_http_cookies(int& passed, int& failed);
+#endif
 void test_history_trail(int& passed, int& failed);
 void test_snapshots(int& passed, int& failed);
 void test_audio(int& passed, int& failed);
@@ -10137,6 +10140,9 @@ int main() {
   test_nntp(g_passed, g_failed);
   test_ui_help(g_passed, g_failed);
   test_sqlite_db(g_passed, g_failed);
+#if XANATOO_HTTP_COOKIES
+  test_http_cookies(g_passed, g_failed);
+#endif
   test_history_trail(g_passed, g_failed);
   test_snapshots(g_passed, g_failed);
   test_audio(g_passed, g_failed);

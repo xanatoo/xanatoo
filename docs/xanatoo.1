@@ -76,6 +76,15 @@ Start fresh instead of restoring the last session (pages, tabs, split,
 panels).
 The new session replaces the stored one as you work.
 Naming a document on the command line also skips the restore.
+.It Fl \-import-cookie Ar https-url
+Read exactly one cookie as
+.Ic NAME=VALUE
+from redirected standard input and exit.
+The URL specifies the exact HTTPS host and port and the cookie path
+(default
+.Pa / ) .
+Use the Cookies panel to inspect and manage the import.
+Requires a native HTTP build with SQLite and writable state.
 .It Fl \-show-paths
 Print every directory and where it came from, then exit.
 .It Fl \-
