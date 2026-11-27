@@ -908,6 +908,7 @@ enum ImGuiHoveredFlagsPrivate_
 enum ImGuiInputTextFlagsPrivate_
 {
     // [Internal]
+    ImGuiInputTextFlags_RenderInactiveSelection = 1 << 25, // Keep the selection and scroll visible while a context menu has focus.
     ImGuiInputTextFlags_Multiline           = 1 << 26,  // For internal use by InputTextMultiline()
     ImGuiInputTextFlags_MergedItem          = 1 << 27,  // For internal use by TempInputText(), will skip calling ItemAdd(). Require bounding-box to strictly match.
     ImGuiInputTextFlags_LocalizeDecimalPoint= 1 << 28,  // For internal use by InputScalar() and TempInputScalar()

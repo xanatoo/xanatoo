@@ -287,6 +287,11 @@ desktop, SDL3 or SDL2 >= 2.26):
   click. Otherwise the middle press is passed on. The URL bar drops
   `AutoSelectAll` for that activation (`middle_paste_frames_`).
 
+The URL context menu takes keyboard focus while the field draws its inactive
+selection with ImGui's normal clipping and horizontal scroll. Escape resumes
+the active field with its existing caret and anchor. Clipboard edits and Select
+All activate the field and apply their change through its input callback.
+
 Windows place one way regardless of role: Left / Right docks are side
 columns that take width from the panes (stacked by `dock_seq`), Top /
 Bottom docks are bands between the columns that take height (side by side

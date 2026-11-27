@@ -146,4 +146,47 @@ int main() {
   }
 
   ImGui::DestroyContext();
+  ImGui::CreateContext();
+  ImGuiIO& field_io = ImGui::GetIO();
+  field_io.IniFilename = nullptr;
+  field_io.DisplaySize = ImVec2(800.f, 600.f);
+  field_io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+  char location[] = "https://example.org/path";
+  for (int frame = 0; frame < 5; ++frame) {
+    ImGui::NewFrame();
+    ImGui::SetNextWindowSize(ImVec2(360.f, 160.f));
+    ImGui::Begin("Location");
+    if (frame == 0) ImGui::SetKeyboardFocusHere();
+    const bool menu_open = ImGui::IsPopupOpen("Location menu");
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const int before = draw->VtxBuffer.Size;
+    ImGui::InputText("##location", location, sizeof(location),
+                     menu_open && frame != 4
+                         ? ImGuiInputTextFlags_RenderInactiveSelection : 0);
+    if (frame == 1) {
+      assert(ImGui::IsItemActive());
+      ImGuiInputTextState* input = ImGui::GetInputTextState(ImGui::GetItemID());
+      input->WantReloadUserBuf = true;
+      input->ReloadSelectionStart = 15;
+      input->ReloadSelectionEnd = 8;
+    }
+    if (frame == 2) ImGui::OpenPopup("Location menu");
+    if (frame >= 3) {
+      assert(menu_open && !ImGui::IsItemActive());
+      const ImU32 selection = ImGui::GetColorU32(ImGuiCol_TextSelectedBg, 0.6f);
+      bool highlight = false;
+      for (int i = before; i < draw->VtxBuffer.Size; ++i)
+        highlight |= draw->VtxBuffer[i].col == selection;
+      const auto* input = ImGui::GetInputTextState(ImGui::GetItemID());
+      assert(input && input->HasSelection());
+      assert(highlight == (frame == 3));
+    }
+    if (ImGui::BeginPopup("Location menu")) {
+      ImGui::MenuItem("Copy");
+      ImGui::EndPopup();
+    }
+    ImGui::End();
+    ImGui::Render();
+  }
+  ImGui::DestroyContext();
 }

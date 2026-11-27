@@ -2,16 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
-## Investigation (2026-11-27) — URL bar context menu selection
+## Status (2026-11-27) — URL bar context menu selection
 
-- ImGui gives the popup focus and stops drawing the address selection when
-  the field loses its active ID. The current dismissal path requests focus
-  and reloads the selection on separate frames.
-- Keep the popup keyboard-focusable and opt the address field into drawing
-  its inactive selection with its existing scroll and clipping while the
-  popup is open. Resume editing on Escape or editing commands in one step.
-  Let outside clicks keep their new focus and sort the byte offsets used
-  for clipboard operations so selections made in either direction work.
+- Keep the selected address text highlighted while the context menu has
+  keyboard focus. Escape resumes editing with the same caret and anchor.
+- Cut, Copy and Paste use the selected byte range in either drag direction.
+  Cut, Paste and Select All apply through the normal text input state.
+- Passed all 33 CTest targets. Xvfb verified the visible highlight, Escape,
+  outside dismissal, reverse-range Copy and Cut, and Paste at the caret.
 
 ## Status (2026-11-27) — Document fullscreen
 

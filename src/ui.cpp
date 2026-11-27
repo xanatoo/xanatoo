@@ -2589,20 +2589,28 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       draw->AddRect(field_pos, field_end, ImGui::GetColorU32(ImGuiCol_Border),
                     ImGui::GetStyle().FrameRounding);
 
+      const ImGuiID url_id = ImGui::GetID("##urlbar");
+      const bool context_open = ImGui::IsPopupOpen("##url_context");
+      ImGuiContext& imgui = *ImGui::GetCurrentContext();
+      const bool escape_from_context = url_context_was_open_ && !context_open &&
+          url_context_was_active_ && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+      if (escape_from_context && !focus_url_bar_) {
+        // ImGui closed the popup during NewFrame. Resume this input now,
+        // before it draws, with its existing caret and selection.
+        imgui.NavActivateId = url_id;
+        imgui.NavActivateFlags = ImGuiActivateFlags_PreferInput |
+                                 ImGuiActivateFlags_TryToPreserveState;
+      }
+      const bool resume_context = (escape_from_context || url_context_resume_) &&
+          !focus_url_bar_ && imgui.NavActivateId == url_id;
+      url_context_resume_ = false;
       if (focus_url_bar_) {
         ImGui::SetKeyboardFocusHere();
         std::snprintf(url_input_, sizeof(url_input_), "%s", want.c_str());
         url_synced_from_ = want;
         focus_url_bar_ = false;
-      } else if (url_restore_selection_) {
-        // The context menu took focus: give it back, selection follows below.
-        ImGui::SetKeyboardFocusHere();
-      } else if (select_url_bar_) {
-        // AutoSelectAll on InputText selects the existing edited address.
-        ImGui::SetKeyboardFocusHere();
-        select_url_bar_ = false;
       } else if (want != url_synced_from_ && !url_bar_editing_ &&
-                 !ImGui::IsPopupOpen("##url_context")) {
+                 !context_open && !resume_context) {
         std::snprintf(url_input_, sizeof(url_input_), "%s", want.c_str());
         url_synced_from_ = want;
       }
@@ -2639,29 +2647,43 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                  std::max(0.f, (field_h - ImGui::GetFontSize()) * 0.5f)));
       // The site button below overlaps the field's left padding.
       if (site_button) ImGui::SetNextItemAllowOverlap();
+      ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue;
+      // Middle-click paste inserts at the click. Returning from the menu
+      // keeps the caret and anchor of the existing selection.
+      if (middle_paste_frames_ == 0 && !resume_context)
+        flags |= ImGuiInputTextFlags_AutoSelectAll;
+      if (context_open || resume_context)
+        flags |= ImGuiInputTextFlags_RenderInactiveSelection;
+      if (resume_context && (url_context_edit_ || url_context_select_all_))
+        flags |= ImGuiInputTextFlags_CallbackAlways;
       bool enter = ImGui::InputText(
-          "##urlbar", url_input_, sizeof(url_input_),
-          ImGuiInputTextFlags_EnterReturnsTrue |
-              // A middle-click paste inserts at the click, not over all.
-              (middle_paste_frames_ > 0 ? 0
-                                        : ImGuiInputTextFlags_AutoSelectAll));
-      const ImGuiID url_id = ImGui::GetItemID();
-      if (url_restore_selection_) {
-        url_restore_selection_ = false;
-        if (ImGuiInputTextState* st = ImGui::GetInputTextState(url_id)) {
-          const int len = static_cast<int>(std::strlen(url_input_));
-          // Applied by InputText on the next frame.
-          st->WantReloadUserBuf = true;
-          st->ReloadSelectionStart = std::min(url_context_begin_, len);
-          st->ReloadSelectionEnd = std::min(url_context_end_, len);
-        }
-      }
+          "##urlbar", url_input_, sizeof(url_input_), flags,
+          [](ImGuiInputTextCallbackData* data) {
+            auto& ui = *static_cast<Ui*>(data->UserData);
+            if (const auto& edit = ui.url_context_edit_) {
+              const int removed = edit->end - edit->begin;
+              const int inserted = static_cast<int>(edit->replacement.size());
+              if (edit->end <= data->BufTextLen &&
+                  inserted < data->BufSize - (data->BufTextLen - removed)) {
+                if (removed) data->DeleteChars(edit->begin, removed);
+                if (inserted)
+                  data->InsertChars(edit->begin, edit->replacement.c_str());
+                data->CursorPos = data->SelectionStart = data->SelectionEnd =
+                    edit->begin + inserted;
+              }
+            }
+            if (ui.url_context_select_all_) {
+              data->SelectionStart = 0;
+              data->CursorPos = data->SelectionEnd = data->BufTextLen;
+            }
+            return 0;
+          }, this);
+      url_context_edit_.reset();
+      url_context_select_all_ = false;
       const ImGuiInputTextState* input = ImGui::GetInputTextState(url_id);
       const bool has_selection = input && input->HasSelection();
       const int selection_start = has_selection ? input->GetSelectionStart() : 0;
       const int selection_end = has_selection ? input->GetSelectionEnd() : 0;
-      const int cursor = input ? input->GetCursorPos()
-                               : static_cast<int>(std::strlen(url_input_));
       const bool url_active = ImGui::IsItemActive();
       url_field_active_ = url_active;
       url_suggestion_x_ = field_pos.x;
@@ -2669,14 +2691,17 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       url_suggestion_w_ = field_w;
       if (url_active) {
         if (ImGui::IsItemActivated() || ImGui::IsItemEdited()) {
-          url_suggestions_dismissed_ = false;
+          if (!resume_context || ImGui::IsItemEdited())
+            url_suggestions_dismissed_ = false;
           if (ImGui::IsItemActivated()) url_suggestion_selected_ = -1;
         }
         if (!url_suggestions_dismissed_) url_suggestions_open_ = true;
         // Ctrl+L selects the whole location: offer recent pages rather than
         // matching only the current address. Editing replaces that query.
-        const bool all_selected = has_selection && selection_start == 0 &&
-            selection_end == static_cast<int>(std::strlen(url_input_));
+        const bool all_selected = has_selection &&
+            std::min(selection_start, selection_end) == 0 &&
+            std::max(selection_start, selection_end) ==
+                static_cast<int>(std::strlen(url_input_));
         std::string query = all_selected ? "" : url_input_;
         if (!ImGui::IsItemEdited() && url_suggestion_selected_ >= 0)
           query = url_suggestion_query_;  // arrows mustn't change the query
@@ -2704,11 +2729,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       if (url_right_clicked) {
         url_suggestions_open_ = false;
         url_suggestions_dismissed_ = true;
-        // Keep the selection while the popup takes keyboard focus.
-        url_context_selection_ = has_selection;
-        url_context_begin_ = selection_start;
-        url_context_end_ = selection_end;
-        url_context_cursor_ = cursor;
+        url_context_was_active_ = url_active;
       }
       const bool url_hovered =
           ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal);
@@ -2768,47 +2789,48 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         ImGui::SetTooltip(
             "Location — URL or path · Ctrl+L · ↑↓ suggestions · Enter opens");
       if (url_right_clicked) ImGui::OpenPopup("##url_context");
-      if (url_context_was_open_ && !ImGui::IsPopupOpen("##url_context") &&
-          !url_context_acted_ && url_context_selection_)
-        url_restore_selection_ = true;
       url_context_was_open_ = ImGui::IsPopupOpen("##url_context");
-      if (url_right_clicked) url_context_acted_ = false;
       if (ImGui::BeginPopup("##url_context")) {
         auto url_item = [&](const char* label, const char* icon_name,
                             bool enabled = true) {
-          const bool hit = menu_item_with_icon(label, icon_name, nullptr,
-                                               false, enabled);
-          if (hit) url_context_acted_ = true;
-          return hit;
+          return menu_item_with_icon(label, icon_name, nullptr, false, enabled);
         };
         const std::string value = url_input_;
-        const bool selected = url_context_selection_;
-        const int from = url_context_begin_;
-        const int to = url_context_end_;
+        const int len = static_cast<int>(value.size());
+        const bool current_input = input && input->TextLen == len &&
+            value == input->TextA.Data;
+        const int cursor = current_input ? input->GetCursorPos() : len;
+        const int from = current_input && has_selection
+            ? std::min(selection_start, selection_end) : cursor;
+        const int to = current_input && has_selection
+            ? std::max(selection_start, selection_end) : cursor;
+        const bool selected = from < to;
         const char* clip = ImGui::GetClipboardText();
         const std::string clipboard = clip ? clip : "";
-        auto edit_url = [&](const std::string& replacement) {
-          std::string updated = value;
-          const size_t begin = static_cast<size_t>(selected ? from : url_context_cursor_);
-          const size_t end = static_cast<size_t>(selected ? to : url_context_cursor_);
-          if (begin > updated.size() || end > updated.size() || end < begin ||
-              updated.size() - (end - begin) + replacement.size() >= sizeof(url_input_))
-            return;
-          updated.replace(begin, end - begin, replacement);
-          std::snprintf(url_input_, sizeof(url_input_), "%s", updated.c_str());
-          if (ImGuiInputTextState* st = ImGui::GetInputTextState(url_id))
-            st->ReloadUserBufAndMoveToEnd();
-          url_bar_editing_ = true;
+        auto resume_url = [&] {
+          url_context_resume_ = true;
+          ImGui::ActivateItemByID(url_id);
+          imgui.NavNextActivateFlags = ImGuiActivateFlags_PreferInput |
+                                       ImGuiActivateFlags_TryToPreserveState;
+        };
+        auto edit_url = [&](std::string replacement) {
+          url_context_edit_ = UrlContextEdit{from, to, std::move(replacement)};
+          resume_url();
         };
         if (url_item("Cut", "cut", selected)) {
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
           edit_url("");
         }
-        if (url_item("Copy", "copy", selected))
+        if (url_item("Copy", "copy", selected)) {
           ImGui::SetClipboardText(value.substr(from, to - from).c_str());
+          resume_url();
+        }
         if (url_item("Paste", "paste", !clipboard.empty()))
           edit_url(clipboard);
-        if (url_item("Select All", "select-all")) select_url_bar_ = true;
+        if (url_item("Select All", "select-all")) {
+          url_context_select_all_ = true;
+          resume_url();
+        }
         ImGui::Separator();
         if (url_item("Copy Address", "link", !value.empty()))
           ImGui::SetClipboardText(value.c_str());

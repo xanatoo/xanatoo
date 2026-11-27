@@ -1024,12 +1024,15 @@ private:
   std::string url_suggestion_query_;
   float url_suggestion_x_ = 0.f, url_suggestion_y_ = 0.f;
   float url_suggestion_w_ = 0.f;
-  bool select_url_bar_ = false;  // context menu: select current field contents
-  bool url_context_selection_ = false;
-  int url_context_begin_ = 0;
-  int url_context_end_ = 0;
-  int url_context_cursor_ = 0;
-  bool url_restore_selection_ = false;
+  bool url_context_was_active_ = false;
+  bool url_context_was_open_ = false;
+  bool url_context_resume_ = false;
+  bool url_context_select_all_ = false;
+  struct UrlContextEdit {
+    int begin, end;
+    std::string replacement;
+  };
+  std::optional<UrlContextEdit> url_context_edit_;
   // X11 / Wayland primary selection in ImGui text fields
   // (publish_text_field_selection, process_event).
   struct FieldSelection {
@@ -1046,8 +1049,6 @@ private:
   } middle_click_;
   bool middle_paste_release_ = false;
   int middle_paste_frames_ = 0;
-  bool url_context_was_open_ = false;
-  bool url_context_acted_ = false;
   char search_input_[512] = {};  // search bar text (kept between searches)
   // Preferred languages field (URL-bar language menu, Preferences).
   char languages_input_[256] = {};

@@ -4442,7 +4442,6 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     ImGuiIO& io = g.IO;
     const ImGuiStyle& style = g.Style;
 
-    const bool RENDER_SELECTION_WHEN_INACTIVE = false;
     const bool is_multiline = (flags & ImGuiInputTextFlags_Multiline) != 0;
 
     if (is_multiline) // Open group before calling GetID() because groups tracks id created within their scope (including the scrollbar)
@@ -4537,6 +4536,10 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
 
     float scroll_y = is_multiline ? draw_window->Scroll.y : FLT_MAX;
 
+    // A field may have been updated by its owner while inactive.
+    const bool render_inactive_selection = (flags & ImGuiInputTextFlags_RenderInactiveSelection) && state && !is_password
+        && state->TextLen == (int)strlen(buf) && (is_readonly || (state->TextA.Data && strcmp(state->TextA.Data, buf) == 0));
+
     const bool init_reload_from_user_buf = (state != NULL && state->WantReloadUserBuf);
     const bool init_changed_specs = (state != NULL && state->Stb->single_line != !is_multiline); // state != NULL means its our state.
     const bool init_make_active = (user_clicked || user_scroll_finish || input_requested_by_nav);
@@ -4586,9 +4589,12 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         }
 
         // Find initial scroll position for right alignment
-        state->Scroll = ImVec2(0.0f, 0.0f);
-        if (flags & ImGuiInputTextFlags_ElideLeft)
-            state->Scroll.x += ImMax(0.0f, CalcTextSize(buf).x - frame_size.x + style.FramePadding.x * 2.0f);
+        if (!recycle_state || !(flags & ImGuiInputTextFlags_RenderInactiveSelection))
+        {
+            state->Scroll = ImVec2(0.0f, 0.0f);
+            if (flags & ImGuiInputTextFlags_ElideLeft)
+                state->Scroll.x += ImMax(0.0f, CalcTextSize(buf).x - frame_size.x + style.FramePadding.x * 2.0f);
+        }
 
         // Recycle existing cursor/selection/undo stack but clamp position
         // Note a single mouse click will override the cursor/position immediately by calling stb_textedit_click handler.
@@ -4667,7 +4673,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
 
     // Lock the decision of whether we are going to take the path displaying the cursor or selection
     bool render_cursor = (g.ActiveId == id) || (state && user_scroll_active);
-    bool render_selection = state && (state->HasSelection() || select_all) && (RENDER_SELECTION_WHEN_INACTIVE || render_cursor);
+    bool render_selection = state && (state->HasSelection() || select_all) && (render_inactive_selection || render_cursor);
     bool value_changed = false;
     bool validated = false;
 
@@ -4955,7 +4961,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         }
 
         // Update render selection flag after events have been handled, so selection highlight can be displayed during the same frame.
-        render_selection |= state->HasSelection() && (RENDER_SELECTION_WHEN_INACTIVE || render_cursor);
+        render_selection |= state->HasSelection() && (render_inactive_selection || render_cursor);
     }
 
     // Process callbacks and apply result back to user's buffer.
@@ -5068,6 +5074,8 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                     if (callback_data.CursorPos != utf8_cursor_pos || buf_dirty)            { state->Stb->cursor = callback_data.CursorPos; state->CursorFollow = true; }
                     if (callback_data.SelectionStart != utf8_selection_start || buf_dirty)  { state->Stb->select_start = (callback_data.SelectionStart == callback_data.CursorPos) ? state->Stb->cursor : callback_data.SelectionStart; }
                     if (callback_data.SelectionEnd != utf8_selection_end || buf_dirty)      { state->Stb->select_end = (callback_data.SelectionEnd == callback_data.SelectionStart) ? state->Stb->select_start : callback_data.SelectionEnd; }
+                    if (flags & ImGuiInputTextFlags_RenderInactiveSelection)
+                        render_selection = render_cursor && state->HasSelection();
                     if (buf_dirty)
                     {
                         // Callback may update buffer and thus set buf_dirty even in read-only mode.
@@ -5161,8 +5169,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         buf_display_end = hint + strlen(hint);
     }
 
-    // Render text. We currently only render selection when the widget is active or while scrolling.
-    // FIXME: We could remove the '&& render_cursor' to keep rendering selection when inactive.
+    // Render text, including selection when requested by the caller.
     if (render_cursor || render_selection)
     {
         IM_ASSERT(state != NULL);
@@ -5204,8 +5211,11 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                 selmin_line_no = line_count;
 
             // Calculate 2d position by finding the beginning of the line and measuring distance
-            cursor_offset.x = InputTextCalcTextSize(&g, ImStrbol(cursor_ptr, text_begin), cursor_ptr).x;
-            cursor_offset.y = cursor_line_no * g.FontSize;
+            if (render_cursor)
+            {
+                cursor_offset.x = InputTextCalcTextSize(&g, ImStrbol(cursor_ptr, text_begin), cursor_ptr).x;
+                cursor_offset.y = cursor_line_no * g.FontSize;
+            }
             if (selmin_line_no >= 0)
             {
                 select_start_offset.x = InputTextCalcTextSize(&g, ImStrbol(selmin_ptr, text_begin), selmin_ptr).x;
@@ -5259,7 +5269,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             const char* text_selected_begin = text_begin + ImMin(state->Stb->select_start, state->Stb->select_end);
             const char* text_selected_end = text_begin + ImMax(state->Stb->select_start, state->Stb->select_end);
 
-            ImU32 bg_color = GetColorU32(ImGuiCol_TextSelectedBg, render_cursor ? 1.0f : 0.6f); // FIXME: current code flow mandate that render_cursor is always true here, we are leaving the transparent one for tests.
+            ImU32 bg_color = GetColorU32(ImGuiCol_TextSelectedBg, render_cursor ? 1.0f : 0.6f);
             float bg_offy_up = is_multiline ? 0.0f : -1.0f;    // FIXME: those offsets should be part of the style? they don't play so well with multi-line selection.
             float bg_offy_dn = is_multiline ? 0.0f : 2.0f;
             ImVec2 rect_pos = draw_pos + select_start_offset - draw_scroll;
