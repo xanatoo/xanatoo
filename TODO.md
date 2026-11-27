@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Marginalia search wait page
+
+- Marginalia's wait page navigates to a continuation URL after a
+  JavaScript timer. The page offers the same link for manual use after
+  the wait, but Xanatoo's HTML reader drops `noscript` blocks.
+- A live web search returned results without the wait page. The documented
+  API's shared `public` key returned HTTP 429. For native integration,
+  consider a dedicated key under Marginalia's API terms.
+
 ## Status (2026-11-27) — Network latency audit
 
 - Ordinary web pages now negotiate gzip and buffer the body before
