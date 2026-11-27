@@ -7486,7 +7486,7 @@ void Ui::prepare_render() {
   // user hid the keyboard (Back, the IME's hide key, a swipe) while the field
   // kept focus — no new focus edge comes then. A click outside an active
   // InputText clears it during the widget pass, so a click with one still
-  // active landed on it. SDL re-shows only a keyboard it knows is hidden.
+  // active landed on it.
   const bool wants_text = ImGui::GetIO().WantTextInput;
   const ImGuiContext& g = *ImGui::GetCurrentContext();
   const bool field_tapped = g.ActiveId != 0 && g.InputTextState.ID == g.ActiveId &&

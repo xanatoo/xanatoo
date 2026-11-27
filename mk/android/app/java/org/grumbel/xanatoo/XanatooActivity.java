@@ -12,6 +12,10 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.inputmethod.InputMethodManager;
 import org.libsdl.app.SDLActivity;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -27,6 +31,30 @@ public class XanatooActivity extends SDLActivity {
     private String pendingVersion;
     private volatile boolean autoUpdates;
     private volatile int updateGeneration;
+
+    // An input connection can still accept text while the keyboard is hidden.
+    // Reuse SDL's editor so composition and text events keep their normal path.
+    public void retrySoftKeyboard() {
+        runOnUiThread(() -> {
+            View editor = mTextEdit;
+            if (editor == null || !editor.hasWindowFocus()
+                    || !editor.isShown() || editor.getLayoutParams().height == 0) return;
+            if (Build.VERSION.SDK_INT >= 30) {
+                WindowInsets insets = editor.getRootWindowInsets();
+                if (insets != null && insets.isVisible(WindowInsets.Type.ime())) return;
+            }
+            if (!editor.requestFocus()) return;
+            if (Build.VERSION.SDK_INT >= 30) {
+                WindowInsetsController controller = editor.getWindowInsetsController();
+                if (controller != null) {
+                    controller.show(WindowInsets.Type.ime());
+                    return;
+                }
+            }
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            imm.showSoftInput(editor, 0);
+        });
+    }
 
     // Called by the native preference system, including once after loading
     // view.conf. No network request is made until the user enables it.

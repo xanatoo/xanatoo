@@ -221,6 +221,22 @@ void platform_auto_updates(bool enabled) {
 
 void platform_request_keyboard(SDL_Window* window) {
   sdl::start_text_input(window);
+#if defined(XANATOO_SDL3) && XANATOO_SDL3
+  // SDL can skip the Android show call on stale visibility. Follow up on
+  // the UI thread, after any editor setup SDL queued.
+  auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+  auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
+  if (!env || !activity) return;
+  jclass cls = env->GetObjectClass(activity);
+  jmethodID method = env->GetMethodID(cls, "retrySoftKeyboard", "()V");
+  if (method) env->CallVoidMethod(activity, method);
+  if (env->ExceptionCheck()) {
+    env->ExceptionClear();
+    SDL_Log("xanatoo: could not retry Android keyboard request");
+  }
+  env->DeleteLocalRef(cls);
+  env->DeleteLocalRef(activity);
+#endif
 }
 void platform_release_keyboard(SDL_Window* window) {
   sdl::stop_text_input(window);

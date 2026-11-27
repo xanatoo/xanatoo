@@ -71,9 +71,16 @@ ports, the SDL3 transition and Android.
 - Soft keyboard: `platform_request_keyboard` (SDL_StartTextInput) when an
   ImGui text field gains focus (`Ui::prepare_render`) **or** a focused one
   is tapped again — the user may have hidden the keyboard while the field
-  kept focus. SDL 3.4 tracks IME visibility from window insets (API 30+)
-  and re-shows only a keyboard it knows is hidden, so repeat requests are
-  cheap. Caret placement in an editable document requests it too.
+  kept focus. Caret placement in an editable document requests it too.
+  SDL 3.4 can cache the keyboard as shown based on the input connection
+  accepting text. After SDL's request, the activity checks actual IME
+  visibility on API 30+ and can request the keyboard again through SDL's
+  existing editor. Older Android versions retry through the input method
+  manager. To check recovery on a device, dismiss the keyboard and
+  tap the same field again, then repeat after backgrounding and resuming
+  the app. Verify that typing still reaches the focused field.
+  The SDL3 ImGui backend takes the pointer position from touch button
+  presses, including repeated taps at a position where SDL omits motion.
 - Test on the device: `adb logcat -s xanatoo` shows std::cout / std::cerr.
 
 ## Website and downloads

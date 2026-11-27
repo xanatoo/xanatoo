@@ -2,6 +2,18 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-27) — Android keyboard recovery
+
+- Retry explicit keyboard requests on the Android UI thread using SDL's
+  editor, even when SDL's cached visibility suppresses its own show call.
+- Restore ImGui's pointer position on SDL3 touch presses so a repeated tap
+  at the same coordinates reaches the field even without a motion event.
+- Built the universal and three standalone APKs. The Nix desktop suite
+  passed all 15,096 checks.
+- On Android 5.1, reproduced the missed URL field tap and verified three
+  consecutive dismissals and same-position reopenings, then typed into the
+  field using the Android keyboard.
+
 ## Status (2026-11-27) — Android HLS playback
 
 - Play `.m3u8` files and HLS links in the Media panel through the shared

@@ -196,8 +196,14 @@ void process_event(const SDL_Event& event) {
         case SDL_BUTTON_X1: button = 3; break;
         case SDL_BUTTON_X2: button = 4; break;
       }
-      if (button >= 0)
-        io.AddMouseButtonEvent(button, event.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+      if (button >= 0) {
+        const bool pressed = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+        // The last finger lift clears ImGui's pointer. SDL can omit motion
+        // for the next tap if it lands at the same coordinates.
+        if (pressed && event.button.which == SDL_TOUCH_MOUSEID)
+          io.AddMousePosEvent(event.button.x, event.button.y);
+        io.AddMouseButtonEvent(button, pressed);
+      }
       break;
     }
     case SDL_EVENT_KEY_DOWN:
