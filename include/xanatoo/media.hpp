@@ -126,6 +126,7 @@ class MediaSource;
 
 struct MediaOptions {
   bool hls = false;  // Content-Type identified HLS, even without an extension
+  int hls_max_bitrate = 0;  // preferred HLS bandwidth in bits/s; 0 uses backend default
   std::string user_agent;  // for http(s) sources (version.hpp user_agent())
   // Set by the owner to abandon a slow open / read (checked by the backend
   // where it can interrupt; Android's extractor cannot).

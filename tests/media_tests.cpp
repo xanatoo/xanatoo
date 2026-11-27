@@ -466,10 +466,11 @@ void test_media(int& passed, int& failed) {
 
 #if defined(XANATOO_FFMPEG) && XANATOO_FFMPEG
   EXPECT(media_backend_name().rfind("FFmpeg ", 0) == 0);
-  {
+  for (int bitrate : {0, 120000, 60000, 10000}) {
     // HLS master -> media playlist -> MPEG-TS, remuxed from red.mp4.
     MediaOptions options;
     options.hls = true;  // the same demuxer selection as MIME-based navigation
+    options.hls_max_bitrate = bitrate;
     options.read_ahead = 1;
     const std::string url = std::string(XANATOO_TEST_DATA) + "/video/hls-master.m3u8";
     std::string err;
@@ -477,6 +478,7 @@ void test_media(int& passed, int& failed) {
     EXPECT(src != nullptr);
     if (src) {
       EXPECT(src->info().has_audio && src->info().has_video);
+      if (bitrate > 0) EXPECT_EQ(src->info().width, bitrate >= 100000 ? 64 : 32);
       std::vector<float> audio;
       VideoFrame frame;
       double pts = 0;
@@ -484,7 +486,10 @@ void test_media(int& passed, int& failed) {
       MediaSource::Got got;
       do {
         got = src->next(audio, pts, frame);
-        if (got == MediaSource::Got::Video) ++pictures;
+        if (got == MediaSource::Got::Video) {
+          ++pictures;
+          EXPECT_EQ(frame.w, src->info().width);
+        }
       } while (got == MediaSource::Got::Audio || got == MediaSource::Got::Video);
       EXPECT(got == MediaSource::Got::End);
       EXPECT_EQ(pictures, 5);

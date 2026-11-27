@@ -9,6 +9,12 @@
   when the address is already known as HLS.
 - Passed 15,137 Nix unit checks. The desktop Media panel opened the HLS
   fixture over loopback HTTP with one request per playlist and segment.
+- On a 32-bit Fire tablet, the reported Odysee video selected 1080p and
+  advanced about 10 seconds in a 20-second interval. Prefer an Android
+  HLS rendition within a 1 Mbps budget, which selects 360p for that video.
+- Installed the updated APK on the same tablet and verified 45 seconds of
+  playback in 45 seconds of wall time across four segment boundaries.
+  Passed 15,175 offline checks and all 33 CTest targets.
 
 ## Status (2026-11-27) — Website cookies
 

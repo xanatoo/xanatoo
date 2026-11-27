@@ -785,6 +785,10 @@ Ogg Vorbis / WAV keep the built-in path above (also where a backend exists).
     pre-rolls until the sound decoder's own output format (HE-AAC doubles
     the rate) is known. Android routes HLS to the shared FFmpeg source
     with the bundled CA roots for HTTPS playlists, segments, and keys.
+    For HLS masters with advertised bandwidths, Android selects the
+    highest variant within 1 Mbps for software decoding, falling back to
+    the lowest advertised bandwidth when all variants exceed that budget.
+    FFmpeg then reads ahead from the selected variant and its audio.
   - Neither (Windows, WASM): `open_media` fails, nothing routes there.
 - Pipe (`MediaPlayback`, unit-tested with fake sources): a detached worker
   opens the source (`open_media`, or `MediaOptions::open`) and decodes ahead into `audio` (deque of floats) and

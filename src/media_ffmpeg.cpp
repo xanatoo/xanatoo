@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -100,6 +101,53 @@ constexpr int kIoBuffer = 64 * 1024;
 constexpr double kReadAhead = 30.0;
 constexpr size_t kReadAheadBytes = size_t(96) << 20;
 
+int find_program_stream(AVFormatContext* fmt, const AVProgram* program, AVMediaType type,
+                        int related) {
+  if (!program) return av_find_best_stream(fmt, type, -1, related, nullptr, 0);
+  int first = -1;
+  for (unsigned i = 0; i < program->nb_stream_indexes; ++i) {
+    const int index = program->stream_index[i];
+    const AVStream* stream = fmt->streams[index];
+    if (stream->codecpar->codec_type != type ||
+        (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) ||
+        !avcodec_find_decoder(stream->codecpar->codec_id))
+      continue;
+    if (stream->disposition & AV_DISPOSITION_DEFAULT) return index;
+    if (first < 0) first = index;
+  }
+  return first;
+}
+
+// Choose the highest advertised bandwidth within the budget, or the
+// lowest available bandwidth if every variant exceeds it. Prefer video
+// over an audio-only variant when both are available.
+AVProgram* select_hls_program(AVFormatContext* fmt, int max_bitrate) {
+  AVProgram* best = nullptr;
+  int best_bitrate = 0;
+  bool best_has_video = false;
+  for (unsigned i = 0; i < fmt->nb_programs; ++i) {
+    AVProgram* program = fmt->programs[i];
+    const auto* tag = av_dict_get(program->metadata, "variant_bitrate", nullptr, 0);
+    if (!tag) continue;
+    int bitrate = 0;
+    const char* end = tag->value + std::strlen(tag->value);
+    const auto parsed = std::from_chars(tag->value, end, bitrate);
+    if (parsed.ec != std::errc{} || parsed.ptr != end || bitrate <= 0) continue;
+    const bool has_video = find_program_stream(fmt, program, AVMEDIA_TYPE_VIDEO, -1) >= 0;
+    if (!has_video && (best_has_video ||
+                       find_program_stream(fmt, program, AVMEDIA_TYPE_AUDIO, -1) < 0))
+      continue;
+    const bool better_bitrate = best_bitrate > max_bitrate ? bitrate < best_bitrate
+                              : bitrate <= max_bitrate && bitrate > best_bitrate;
+    if (!best || (has_video && !best_has_video) || better_bitrate) {
+      best = program;
+      best_bitrate = bitrate;
+      best_has_video = has_video;
+    }
+  }
+  return best;
+}
+
 class FfmpegSource final : public MediaSource {
 public:
   ~FfmpegSource() override {
@@ -164,12 +212,29 @@ public:
     int r = avformat_open_input(&fmt_, name.c_str(), format, &opts);
     av_dict_free(&opts);
     if (r < 0) return fail(av_error(r));
+    int max_bitrate = options.hls_max_bitrate;
+#if defined(__ANDROID__)
+    // HLS uses software video decoding on Android. Budget for older
+    // devices as well as the connection.
+    if (max_bitrate == 0) max_bitrate = 1000000;
+#endif
+    AVProgram* program = nullptr;
+    if (max_bitrate > 0 && fmt_->nb_programs > 1 && std::strcmp(fmt_->iformat->name, "hls") == 0)
+      program = select_hls_program(fmt_, max_bitrate);
+    if (program) {
+      for (unsigned i = 0; i < fmt_->nb_programs; ++i)
+        if (fmt_->programs[i] != program) fmt_->programs[i]->discard = AVDISCARD_ALL;
+      for (unsigned i = 0; i < fmt_->nb_streams; ++i)
+        fmt_->streams[i]->discard = AVDISCARD_ALL;
+      for (unsigned i = 0; i < program->nb_stream_indexes; ++i)
+        fmt_->streams[program->stream_index[i]]->discard = AVDISCARD_DEFAULT;
+    }
     if ((r = avformat_find_stream_info(fmt_, nullptr)) < 0) return fail(av_error(r));
 
-    vs_ = av_find_best_stream(fmt_, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    vs_ = find_program_stream(fmt_, program, AVMEDIA_TYPE_VIDEO, -1);
     if (vs_ >= 0 && (fmt_->streams[vs_]->disposition & AV_DISPOSITION_ATTACHED_PIC))
       vs_ = -1;  // cover art, not a video
-    as_ = av_find_best_stream(fmt_, AVMEDIA_TYPE_AUDIO, -1, vs_, nullptr, 0);
+    as_ = find_program_stream(fmt_, program, AVMEDIA_TYPE_AUDIO, vs_);
     std::string why;
     if (vs_ >= 0 && !open_decoder(vs_, vdec_, why)) vs_ = -1;
     if (as_ >= 0 && !open_decoder(as_, adec_, why)) as_ = -1;
