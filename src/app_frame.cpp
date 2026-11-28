@@ -169,9 +169,9 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   const DocBuffer& focused_buffer = buf(app, focused_pane(app).buf);
   ui_state.dirty = focused_buffer.dirty;
   const auto& focused_path = path_of(app, focused_pane(app));
-  ui_state.can_publish =
-      (focused_path.empty() || is_stored_document_ref(focused_path)) &&
-      !focused_buffer.placeholder && !focused_buffer.blank_tab;
+  ui_state.autosaved_document = is_stored_document_ref(focused_path);
+  ui_state.has_original = ui_state.autosaved_document &&
+      find_document_origin(focused_buffer.doc_key).has_value();
   std::error_code source_ec;
   ui_state.can_make_local_copy =
       (is_stored_original_ref(focused_path) ||
@@ -348,6 +348,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     bar.focused = vi == app.focus;
     bar.floating = vi >= kCentreViews;
     bar.locked = pane_locked(app, ep);
+    bar.autosaved_document = is_stored_document_ref(eb->path);
     bar.dirty = eb->dirty;
     bar.selection = bar.focused && !ep.sel.empty();
     ui_state.edit_bars.push_back(bar);
@@ -1686,9 +1687,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
           flash_status(app, "Open a local database document to view its revisions");
           break;
         }
-        app.revision_selected.clear();
         app.revision_working.clear();
-        app.revision_published.clear();
         app.revision_win.scroll = 0.f;
         app.revision_panel_open = true;
         focus_panel(app, WindowRole::Revisions);
@@ -2097,7 +2096,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::Save: {
-      if (buf(app, p.buf).blank_tab) break;
+      if (buf(app, p.buf).blank_tab || is_stored_document_ref(path_of(app, p))) break;
       if (p.source_buf == p.buf && p.source_doc) {
         flash_status(app, "Source view is read-only — return to the document to save");
         break;
@@ -2174,17 +2173,6 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       navigate_pane(app, app.focus, xanatoo::format_locator(loc), true);
       break;
     }
-    case C::Publish:
-      if (path_of(app, p).empty() ||
-          is_stored_document_ref(path_of(app, p))) {
-        if (publish_stored_buffer(app, p.buf))
-          flash_status(app, "Published local snapshot (no remote destination configured)");
-        else
-          flash_status(app, "Could not publish working document to local database");
-      } else {
-        flash_status(app, "Only database-native documents can be published locally");
-      }
-      break;
     case C::SaveAs: {
       if (buf(app, p.buf).blank_tab) break;
       const std::string path = path_of(app, p);
@@ -2232,6 +2220,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         break;
       }
       if (is_stored_document_ref(rpath)) {
+        if (cmd == C::RevertToSaved) break;
         const std::string stable_ref = rpath;
         if (!open_stored_document(app, app.focus, stable_ref))
           flash_status(app, "Could not reload local document");

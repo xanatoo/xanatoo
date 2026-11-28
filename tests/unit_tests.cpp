@@ -449,18 +449,18 @@ void test_stored_documents() {
     EXPECT(imported_history.size() == 2);
     EXPECT(imported_history.size() >= 2 &&
            imported_history[0].id == imported->working &&
-           imported_history[1].kind == "original");
+           imported_history[1].original);
     if (provenance) {
-      auto restored_original = restore_stored_document_revision(
+      auto selected_original = select_stored_document_revision(
           imported->key, provenance->revision, imported->working,
-          "Restore imported original");
-      EXPECT(restored_original.has_value());
-      if (restored_original) {
+          "Imported original");
+      EXPECT(selected_original.has_value());
+      if (selected_original) {
         EXPECT_EQ(load_stored_document_revision(imported->key,
-                                                restored_original->working),
+                                                selected_original->working),
                   std::optional<std::string>("(original-tree)"));
-        EXPECT(load_object_revision(restored_original->working)->parent ==
-               imported->working);
+        EXPECT_EQ(selected_original->working, provenance->revision);
+        EXPECT_EQ(stored_document_history(imported->key).size(), 2u);
         EXPECT(find_document_origin(imported->key)->raw == provenance->raw);
       }
     }
@@ -472,8 +472,7 @@ void test_stored_documents() {
               std::optional<std::string>("(document one)"));
     EXPECT(!save_stored_document(key, "overwrite", "", "wrong head"));
     EXPECT(!load_stored_document_revision(other, first->working));
-      EXPECT(stored_document_history(other).empty());
-      EXPECT(stored_document_history(key, 0).empty());
+    EXPECT(stored_document_history(other).empty());
     EXPECT(!save_stored_document("file:/somewhere.md", "bad", "", "bad"));
 
     auto initial_pub = publish_stored_document(key, first->working, "");
@@ -504,29 +503,40 @@ void test_stored_documents() {
           auto same = publish_stored_document(key, edited->working,
                                                second_pub->published);
           EXPECT(same && same->published == second_pub->published);
-          const auto history = stored_document_history(key);
-          EXPECT(history.size() == 4);
-          EXPECT(history.size() >= 4 &&
-                 history[0].id == edited->working &&
-                 history[1].id == first->working &&
-                 history[2].id == second_pub->published &&
-                 history[3].id == initial_pub->published);
-          EXPECT(stored_document_history(key, 1).size() == 1);
-          EXPECT(!restore_stored_document_revision(
-              key, first->working, first->working, "stale restore"));
+          EXPECT_EQ(stored_document_history(key).size(), 2u);
+          EXPECT(!select_stored_document_revision(
+              key, first->working, first->working, "Stale selection"));
+          EXPECT(!select_stored_document_revision(
+              key, second_pub->published, edited->working, "Publication"));
           if (imported)
-            EXPECT(!restore_stored_document_revision(
-                key, imported->working, edited->working, "foreign"));
-          auto restored = restore_stored_document_revision(
-              key, first->working, edited->working, "Restored");
-          EXPECT(restored && restored->working != edited->working &&
-                 restored->published == second_pub->published);
-          if (restored) {
-            EXPECT(load_object_revision(restored->working)->parent ==
-                   edited->working);
-            EXPECT_EQ(load_stored_document_revision(key, restored->working),
-                      std::optional<std::string>("(document one)"));
-            EXPECT(stored_document_history(key).size() == 5);
+            EXPECT(!select_stored_document_revision(
+                key, imported->working, edited->working, "Foreign revision"));
+
+          const auto selected = select_stored_document_revision(
+              key, first->working, edited->working, "My document");
+          EXPECT(selected && selected->working == first->working &&
+                 selected->published == second_pub->published);
+          EXPECT_EQ(stored_document_history(key).size(), 2u);
+          EXPECT(!save_stored_document(key, "stale", edited->working, "Stale"));
+          const auto branch = save_stored_document(
+              key, "(document three)", first->working, "Branch");
+          EXPECT(branch.has_value());
+          if (branch) {
+            const auto history = stored_document_history(key);
+            EXPECT_EQ(history.size(), 3u);
+            if (history.size() == 3) {
+              EXPECT_EQ(history[0].id, branch->working);
+              EXPECT_EQ(history[1].id, edited->working);
+              EXPECT_EQ(history[2].id, first->working);
+              EXPECT_EQ(history[0].parent, first->working);
+              EXPECT_EQ(history[1].parent, first->working);
+            }
+            const auto forward = select_stored_document_revision(
+                key, edited->working, branch->working, "New title");
+            EXPECT(forward && forward->working == edited->working);
+            EXPECT_EQ(load_stored_document_revision(key, branch->working),
+                      std::optional<std::string>("(document three)"));
+            EXPECT_EQ(stored_document_history(key).size(), 3u);
           }
         }
       }
@@ -540,7 +550,7 @@ void test_stored_documents() {
     EXPECT(imported_after_reopen && imported &&
            imported_after_reopen->key == imported->key &&
            imported_after_reopen->working != imported->working);
-    EXPECT(reopened && reopened->title == "Restored");
+    EXPECT(reopened && reopened->title == "New title");
     EXPECT(reopened && !reopened->published.empty());
     EXPECT(!load_stored_document_revision(other, first->working));
   }

@@ -44,7 +44,6 @@ static void add_startup_document(App& app, xanatoo::Document doc,
         DocBuffer& b = buf(app, id);
         b.doc_key = stored->key;
         b.stored_working = stored->working;
-        b.stored_published = stored->published;
         b.stored_title = stored->title;
         b.base_id = xanatoo::content_id(
             xanatoo::serialize_document(b.doc, {}));

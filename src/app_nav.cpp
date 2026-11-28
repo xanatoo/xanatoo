@@ -1088,7 +1088,6 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
         DocBuffer& b = buf(app, bi);
         b.doc_key = head->key;
         b.stored_working = head->working;
-        b.stored_published = head->published;
         b.stored_title = head->title;
         b.base_id = xanatoo::content_id(
             xanatoo::serialize_document(b.doc, {}));
@@ -1122,7 +1121,6 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
         DocBuffer& b = buf(app, bi);
         b.doc_key = stored->key;
         b.stored_working = stored->working;
-        b.stored_published = stored->published;
         b.stored_title = stored->title;
         b.base_id = xanatoo::content_id(
             xanatoo::serialize_document(b.doc, {}));

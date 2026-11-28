@@ -166,7 +166,6 @@ struct DocBuffer {
   std::string base_id;
   std::string draft_id;
   std::string stored_working;   // database-native head (no file path)
-  std::string stored_published; // independent last published head
   std::string stored_title;     // friendly local tab label
   Uint32 draft_due = 0;
   // The lock (F2, the edit strip's lock button) the user set on the page at
@@ -1450,11 +1449,10 @@ struct App {
   std::unordered_map<std::string, std::string> nostr_unlocked;
   NostrPost nostr_post;
   NostrPost nostr_reply;  // a Reply panel answer to a Nostr note
-  std::string revision_document_key;
-  std::string revision_working, revision_published, revision_selected;
-  std::vector<xanatoo::ObjectRevision> revision_history;
-  std::vector<std::string> revision_preview_lines;
-  bool revision_show_diff = false;
+  std::string revision_document_key, revision_working;
+  std::vector<xanatoo::DocumentRevision> revision_history;
+  std::vector<int> revision_lanes, revision_parents;
+  int revision_lane_count = 0;
   std::string annotation_history_cached_layer;
   std::string annotation_history_cached_head;
   std::vector<xanatoo::AnnotationLayerRevision> annotation_history_cache;
@@ -1765,7 +1763,6 @@ void autosave_drafts(App& app);       // per frame: write drafts that are due
 // the one under a previous key after Save As).
 void note_saved(App& app, BufferId id, const std::string& text);
 bool save_stored_buffer(App& app, BufferId id);
-bool publish_stored_buffer(App& app, BufferId id);
 bool make_stored_copy(App& app, BufferId id);
 // Drop the draft and reload the file (File → Revert to Saved).
 void revert_buffer(App& app, BufferId id);
@@ -2973,6 +2970,7 @@ void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll);
 // ---- database-native document history (app_revisions.cpp) ----
 void draw_revision_panel(App& app);
 void click_revision_panel(App& app, int mx, int my);
+bool select_buffer_revision(App& app, BufferId id, const std::string& revision);
 float revision_panel_max_scroll(App& app, int client_h);
 
 // ---- frame stages ----

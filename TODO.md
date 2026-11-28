@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Branching document revisions
+
+- Show the full revision tree for local database documents. Select a node
+  to switch versions and edit it to add a branch automatically.
+- Keep selections across reopening and preserve pending edits on a switch.
+  Keep naming and publishing selected revisions for later.
+- Passed 15,205 unit checks and all 33 CTest targets in Nix. Xvfb verified
+  version switching, a branch from the root, pending edits and a new tree.
+
 ## Status (2026-11-28) — Code block caret movement
 
 - Map code block line endings to their own rows so arrow keys, Home, End

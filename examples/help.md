@@ -12,8 +12,8 @@ Jump to: [Files](#Files) · [Edit](#Edit) · [Navigate](#Navigate) · [View](#Vi
 
 - **Ctrl+N** — New document (unsaved edits are kept as a draft)
 - **Ctrl+O** — Open file… (type a path in the status bar)
-- **Ctrl+S** — Save
-- **Ctrl+Shift+S** — Save As…
+- **Ctrl+S** — Save a local copy of an opened source
+- **Ctrl+Shift+S** — Export a copy
 - **Ctrl+R** / **F5** — Reload; **Ctrl+Shift+R** / **Shift+F5** / Shift+click on the Reload button — Force reload (converted files are converted again, downloaded books downloaded again). Right-click the Reload button for both
 - **Shift+F1** — Help panel: explains whatever the mouse pointer is over (menus, buttons, window controls, parts of the page)
 - **Ctrl+Q** — Quit (unsaved edits are kept as drafts; File → Drafts)
@@ -26,6 +26,9 @@ Jump to: [Files](#Files) · [Edit](#Edit) · [Navigate](#Navigate) · [View](#Vi
 - **Alt+F / E / O / I / V / G / B / H** — File / Edit / Format / Insert / View / Go / Bookmarks / Help menu
 - **Middle-click** — On a link: open it in a new tab; elsewhere: paste at caret
 - **Drag .md / .xml** — Open in a software window
+
+Local documents autosave. Open **Panels → Document revisions** and click a
+revision to switch to it. Editing an older revision adds a branch.
 
 Export via *File → Export as XML…* or *Export as Markdown…*.
 

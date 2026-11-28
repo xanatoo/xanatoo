@@ -179,7 +179,6 @@ enum class UiCommand {
   PopOut,          // focused buffer → floating window
   PopIn,           // arg = optional buffer id: document window → centre tab
   Save,
-  Publish,       // snapshot current database-native working revision locally
   EditLocalCopy, // preserve source; switch to editable local database document
   ViewOriginal,  // show immutable imported source snapshot
 
@@ -395,6 +394,7 @@ struct UiEditBar {
   bool focused = false;  // the focused view: its rows reflect the caret
   bool floating = false;  // in a document window (drawn with its frame)
   bool locked = false;
+  bool autosaved_document = false;
   bool dirty = false;
   bool selection = false;
   bool on_list_item = false;
@@ -427,7 +427,8 @@ struct UiState {
   // though SDL still reports the mouse where the finger was.
   bool pointer_away = false;
   bool dirty = false;
-  bool can_publish = false;
+  bool autosaved_document = false;
+  bool has_original = false;
   bool can_make_local_copy = false;
   bool has_path = false;
   bool split = false;

@@ -1081,9 +1081,10 @@ void Ui::edit_bars(const UiState& state, UiFrameResult& result,
                   bar.locked ? "Locked — click to allow editing (F2)"
                              : "Editable — click to lock (F2)",
                   UiCommand::ToggleLock, cmd, true, nullptr, bar.locked);
-      button("eb_save", "save",
-             bar.dirty ? "Save (Ctrl+S) — unsaved changes" : "Save (Ctrl+S)",
-             UiCommand::Save, on);
+      if (!bar.autosaved_document)
+        button("eb_save", "save",
+               bar.dirty ? "Save (Ctrl+S) — unsaved changes" : "Save (Ctrl+S)",
+               UiCommand::Save, on);
       button("eb_undo", "undo", "Undo (Ctrl+Z)", UiCommand::Undo, on);
       button("eb_redo", "redo", "Redo (Ctrl+Y)", UiCommand::Redo, on);
 
@@ -3834,13 +3835,12 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Move Window to Tab", UiCommand::PopIn, cmd, state.has_floating,
                     "Ctrl+Shift+P");
       ImGui::Separator();
-      menu_item_cmd("Save", UiCommand::Save, cmd, !state.doc_label.empty(), "Ctrl+S");
-      menu_item_cmd("Publish locally", UiCommand::Publish, cmd,
-                    state.can_publish);
+      if (!state.autosaved_document)
+        menu_item_cmd("Save", UiCommand::Save, cmd, !state.doc_label.empty(), "Ctrl+S");
       menu_item_cmd("Edit local copy", UiCommand::EditLocalCopy, cmd,
                     state.can_make_local_copy);
       menu_item_cmd("View original", UiCommand::ViewOriginal, cmd,
-                    state.can_publish);
+                    state.has_original);
       menu_item_cmd("Export a copy…", UiCommand::SaveAs, cmd, !state.doc_label.empty(), "Ctrl+Shift+S");
       menu_item_cmd("Export as XML…", UiCommand::ExportXml, cmd, !state.doc_label.empty());
       menu_item_cmd("Export as Markdown…", UiCommand::ExportMarkdown, cmd, !state.doc_label.empty());
@@ -3848,8 +3848,9 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path, "Ctrl+R / F5");
       menu_item_cmd("Force Reload", UiCommand::ForceReload, cmd, state.has_path,
                     "Ctrl+Shift+R / Shift+F5");
-      menu_item_cmd("Revert to Saved", UiCommand::RevertToSaved, cmd,
-                    state.has_path && state.dirty);
+      if (!state.autosaved_document)
+        menu_item_cmd("Revert to Saved", UiCommand::RevertToSaved, cmd,
+                      state.has_path && state.dirty);
       menu_item_cmd("Drafts", UiCommand::OpenDrafts, cmd);
       menu_item_cmd("Local documents", UiCommand::OpenStoredDocuments, cmd);
       menu_item_cmd("Document revisions…", UiCommand::ToggleRevisionsPanel,

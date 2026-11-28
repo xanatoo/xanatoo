@@ -15,7 +15,6 @@
 #include <ctime>
 #include <filesystem>
 #include <random>
-#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -490,7 +489,7 @@ std::optional<StoredDocument> publish_stored_document(
   if (!head || head->working != expected_working ||
       head->published != expected_published) return std::nullopt;
   Stmt working(d, "SELECT content FROM revisions "
-                  "WHERE id = ? AND doc_key = ? AND kind = 'working';",
+                  "WHERE id = ? AND doc_key = ? AND kind IN ('working', 'original');",
                {expected_working, key});
   if (!working.row()) return std::nullopt;
   const std::string cid = working.text(0);
@@ -524,33 +523,38 @@ std::optional<std::string> load_stored_document_revision(
   return record->data;
 }
 
-std::vector<ObjectRevision> stored_document_history(std::string_view key,
-                                                    size_t limit) {
-  const auto head = find_stored_document(key);
-  if (!head || limit == 0) return {};
-  std::vector<ObjectRevision> out;
-  std::unordered_set<std::string> seen;
-  auto follow = [&](std::string id) {
-    while (!id.empty() && out.size() < limit && seen.insert(id).second) {
-      auto revision = load_object_revision(id);
-      if (!revision || revision->key != key ||
-          (revision->kind != "working" && revision->kind != "published" &&
-           revision->kind != "original")) break;
-      id = revision->parent;
-      out.push_back(std::move(*revision));
-    }
-  };
-  follow(head->working);
-  follow(head->published);
+std::vector<DocumentRevision> stored_document_history(std::string_view key) {
+  sqlite3* d = db();
+  if (!d || !native_document_key(key)) return {};
+  // Insertion order breaks timestamp ties and puts children before parents.
+  Stmt rows(d, "SELECT id, parent, kind, time FROM revisions "
+               "WHERE doc_key = ? AND kind IN ('working', 'original') "
+               "ORDER BY rowid DESC;", {key});
+  std::vector<DocumentRevision> out;
+  while (rows.row())
+    out.push_back({rows.text(0), rows.text(1), rows.text(2) == "original",
+                   rows.int64(3)});
   return out;
 }
 
-std::optional<StoredDocument> restore_stored_document_revision(
+std::optional<StoredDocument> select_stored_document_revision(
     std::string_view key, std::string_view revision,
     std::string_view expected_working, std::string_view title) {
-  const auto snapshot = load_stored_document_revision(key, revision);
-  if (!snapshot) return std::nullopt;
-  return save_stored_document(key, *snapshot, expected_working, title);
+  sqlite3* d = db();
+  if (!d || !native_document_key(key)) return std::nullopt;
+  sqlite::Tx txn(d);
+  if (!txn.ok()) return std::nullopt;
+  auto head = stored_head(d, key);
+  if (!head || head->working != expected_working) return std::nullopt;
+  Stmt target(d, "SELECT 1 FROM revisions WHERE id = ? AND doc_key = ? "
+                 "AND kind IN ('working', 'original');", {revision, key});
+  if (!target.row()) return std::nullopt;
+  Stmt update(d, "UPDATE document_heads SET working = ?, title = ? "
+                 "WHERE key = ?;", {revision, title, key});
+  if (!update.run()) return std::nullopt;
+  head->working = revision;
+  head->title = title;
+  return txn.commit() ? head : std::nullopt;
 }
 
 #else
@@ -602,10 +606,10 @@ std::optional<std::string> load_stored_document_revision(
     std::string_view, std::string_view) {
   return std::nullopt;
 }
-std::vector<ObjectRevision> stored_document_history(std::string_view, size_t) {
+std::vector<DocumentRevision> stored_document_history(std::string_view) {
   return {};
 }
-std::optional<StoredDocument> restore_stored_document_revision(
+std::optional<StoredDocument> select_stored_document_revision(
     std::string_view, std::string_view, std::string_view, std::string_view) {
   return std::nullopt;
 }

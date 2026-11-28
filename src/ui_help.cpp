@@ -117,11 +117,8 @@ const std::vector<UiHelpTopic> kTopics = {
      "Tears this tab off into a floating document window."},
     {"select tab", "Select tab", "Shows this tab in the centre view."},
     {"save", "Save",
-     "Writes the document to its file. Remote pages are saved through *Edit "
-     "local copy* first. **Ctrl+S**."},
-    {"publish locally", "Publish locally",
-     "Records the current working content as a new published revision in "
-     "the local revision store. Nothing is uploaded."},
+     "Imports the open source into the local document store. Local "
+     "documents save edits automatically. **Ctrl+S**."},
     {"edit local copy", "Edit local copy",
      "Imports this read-only page into the local document store and "
      "switches to edit mode; the original stays untouched."},
@@ -149,11 +146,10 @@ const std::vector<UiHelpTopic> kTopics = {
      "Lists unsaved edits kept in the revision store (autosaved and stashed "
      "drafts) to restore or discard them."},
     {"local documents", "Local documents",
-     "Index of the documents in the local document store, with their "
-     "working and published revisions."},
+     "Lists documents saved in the local document store."},
     {"document revisions", "Document revisions",
-     "Opens the Revisions panel: working and published history of the "
-     "focused stored document, with preview, diff and restore."},
+     "Opens the revision tree for the focused local document. Click any "
+     "node to switch to it."},
     {"quit", "Quit",
      "Closes xanatoo. Unsaved edits are kept as drafts. **Ctrl+Q**."},
 
@@ -613,8 +609,8 @@ const std::vector<UiHelpTopic> kTopics = {
     {"@panel:annotations", "Annotations panel",
      "Notes on passages of this document, kept in a separate layer."},
     {"@panel:revisions", "Revisions panel",
-     "Working and published history of the document: preview, diff and "
-     "restore (restoring adds a new revision)."},
+     "Click a revision to show it in the document. Editing adds a child "
+     "revision to the selected node."},
     {"@panel:nostr-explorer", "Nostr explorer",
      "Relays, groups and events seen; search and open them."},
     {"@panel:lemmy-explorer", "Lemmy explorer",

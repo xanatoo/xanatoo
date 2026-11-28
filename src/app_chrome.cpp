@@ -588,14 +588,15 @@ StatusLine compute_status(App& app) {
                 ? "Browse · R-stick pointer · A click · LB+A caret · "
                   "D-pad nav · L-stick scroll · Start help · F2 unlock"
                 : focused_read_only(app)
-                ? "Read-only page — arrows move · Enter open · Ctrl+S copy as "
-                  "Markdown · F1 help"
+                ? "Read-only page — arrows move · Enter open · F1 help"
                 : "Locked — arrows move · Enter open · F2 unlocks · F1 help";
     tone = StatusTone::Browse;
   } else {
-    label =
-        "F1 help · Ctrl+S save · Ctrl+A block · Ctrl+Shift+A all · "
-        "Ctrl+F find · Ctrl+B/I style · drag to select";
+    label = is_stored_document_ref(path_of(app, focused_pane(app)))
+        ? "F1 help · Autosave · Ctrl+A block · Ctrl+Shift+A all · "
+          "Ctrl+F find · Ctrl+B/I style · drag to select"
+        : "F1 help · Ctrl+S save · Ctrl+A block · Ctrl+Shift+A all · "
+          "Ctrl+F find · Ctrl+B/I style · drag to select";
     tone = StatusTone::Hint;
   }
 

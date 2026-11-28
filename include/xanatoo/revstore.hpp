@@ -91,15 +91,15 @@ std::string commit_object_revision(std::string_view key,
                                    std::string_view expected_head);
 
 // Database-native documents are independent from legacy file/draft heads.
-// `working` changes through autosaves; `published` is an explicit, immutable
-// snapshot of one working revision. Both have independent parent chains.
+// `working` changes through autosaves and selection within the revision tree.
+// `published` retains the last snapshot from legacy local publication.
 // The bytes are the canonical document representation (XML; revisions from
 // before 2026-11 are S-expressions), never a file path or an export format.
 // Read and write them with parse_stored_document / serialize_stored_document.
 struct StoredDocument {
   std::string key;
   std::string title;
-  std::string working;    // current editable revision id
+  std::string working;    // selected revision id in the working tree
   std::string published;  // last deliberately published revision id, if any
   int64_t time = 0;
 };
@@ -145,16 +145,19 @@ std::optional<StoredDocument> publish_stored_document(
 std::optional<std::string> load_stored_document_revision(
     std::string_view key, std::string_view revision);
 
-// Working ancestry (newest first), followed by published ancestry not already
-// seen. Includes the immutable import original when present. A caller may
-// select any entry without altering either document head.
-std::vector<ObjectRevision> stored_document_history(std::string_view key,
-                                                    size_t limit = 64);
+// Working revisions and the import root, newest inserts first. Metadata
+// only: snapshot bodies are loaded individually when selected.
+struct DocumentRevision {
+  std::string id;
+  std::string parent;
+  bool original = false;
+  int64_t time = 0;
+};
 
-// Restore the bytes of a historical snapshot as a *new working revision*.
-// `expected_working` protects against stale browser panes and concurrent
-// writers; the publication pointer and old history remain unchanged.
-std::optional<StoredDocument> restore_stored_document_revision(
+std::vector<DocumentRevision> stored_document_history(std::string_view key);
+
+// Move the current revision within the tree without creating a snapshot.
+std::optional<StoredDocument> select_stored_document_revision(
     std::string_view key, std::string_view revision,
     std::string_view expected_working, std::string_view title);
 

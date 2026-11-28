@@ -3,9 +3,9 @@
 
 # Publishing Xanatoo documents
 
-Status: design sketch. **File → Publish locally** currently advances an
-immutable published revision in `revisions.sqlite`; it does **not** upload
-anything. Network publication must remain a separate, observable operation.
+Status: design sketch. Named publication from the revision tree is planned.
+The local store retains snapshots from the former Publish locally command.
+Network publication must remain a separate, observable operation.
 
 ## Separate the jobs
 

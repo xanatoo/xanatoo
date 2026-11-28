@@ -35,11 +35,10 @@ revision. Neither says anything about trust or truth.
   objects; shares the immutable `objects` and `revisions` tables, never the
   file/draft head pointer. Existing databases acquire this table in place.
 - `document_heads(key, working, published, title, time)` — database-native
-  logical documents (`doc:<64 hex>`). `working` advances with autosaves;
-  `published` advances **only** on explicit local Publish. These are separate
-  immutable parent chains (`kind=working` and `kind=published`) and neither
-  overwrites the other. The document's bytes live in `objects`, encoded with
-  the canonical XML representation (older revisions: S-expressions), not a filesystem path.
+  logical documents (`doc:<64 hex>`). `working` points to the selected
+  node in the tree of immutable working revisions. The legacy `published`
+  pointer retains previously published snapshots. Document bytes use
+  canonical XML (older revisions use S-expressions).
 - `document_origins(key, source, original, raw)` — immutable provenance for an
   imported file or fetched page: a stable source alias, the original parsed
   document revision, and a content-addressed copy of the exact source bytes.
@@ -57,39 +56,26 @@ App side (`src/app_drafts.cpp`):
   lists every draft; untitled ones open as `draft:doc:<hex>`.
 - Without SQLite the old "repeat to discard" confirmation remains.
 
-## Database-native working and published documents
+## Database-native document trees
 
-File → New creates a random document identity and immediately writes its
-first working revision to the local SQLite store. Subsequent edits are
-autosaved on the draft debounce, and Ctrl+S commits the current working
-revision immediately. File → **Publish locally** records the current working
-content in a separate publication history; this does **not** upload anything
-or configure a remote destination. Optimistic revision-head checks reject
-conflicting writes rather than replacing another editor's version.
+File → **New Document** creates a fresh document identity and writes the root
+revision to the local SQLite store. The existing autosave interval groups
+edits into revisions. Switching revisions flushes any pending edits first.
 
-File → **Local documents** or `documents:` lists these persisted documents.
-Each document opens at `db:doc:<64 hex>`, retaining its stable identity on
-reload or between runs. The tab shows the stored short title. An imported
-document also has an `db-original:doc:<64 hex>` read-only view: both its
-original parsed tree and raw source bytes remain in SQLite even if the source
-later changes or disappears. File → **View original** (or the Original link
-on the documents index) shows that snapshot; Back returns to the working
-document. A stored published revision can also be loaded separately by its
-immutable revision ID through `load_stored_document_revision`.
+File → **Document revisions…** or Panels → **Document revisions** opens the
+dockable tree for the focused document. Lines connect each revision to its
+parent, and the highlighted row is the version shown in the document.
+Click any node to show that version immediately in all views of the same
+document. Selection persists across reopening. Editing an older node adds
+a child to that node, so you can still return to the previous branch.
+A stale writer or selection cannot overwrite another editor's selection.
 
-File → **Document revisions…** (also Panels → **Document revisions**) opens a
-native dockable Xanatoo panel for the current local database document. It
-lists working ancestry and the separate published ancestry, including the
-immutable imported original. Select a snapshot and choose **Preview** to see
-its rendered text or **Diff** to compare it with the current working text
-using `-`/`+` lines. The inline comparison is bounded to 160 lines per side;
-it is a quick inspection, not a complete huge-document diff.
-
-**Restore** appends the selected snapshot's content as a *new working
-revision*, retaining all old revisions and leaving the publication pointer
-and original source untouched. It refuses to restore if the working head has
-changed since the panel read it or while an open copy has unsaved edits. The
-panel uses native docking, resize, close, session restore and UI scaling.
+File → **Local documents** or `documents:` lists these documents. Each opens
+at its stable `db:doc:<64 hex>` address. The tab shows the selected revision's
+short title. For imported documents, the immutable original forms the root
+of the tree. Its parsed document and raw source bytes stay in SQLite. File →
+**View original** or the Original link on the documents index also opens it
+in a read-only view at `db-original:doc:<64 hex>`.
 
 Local file editing switches to a native document when the first edit occurs;
 Ctrl+S on a file/page also imports it rather than writing it back to disk.
@@ -107,9 +93,8 @@ into the native working revision when imported.
 
 **Limitations:** remote import requires the original response body; some
 converter-backed formats still use the converter's path as their source
-alias. The revision panel's text diff is bounded and does not yet provide a
-full side-by-side rendered-document comparison. Remote publishing,
-replication, signatures and portable annotation exchange remain future work.
+alias. Naming or publishing individual revisions, replication, signatures
+and portable annotation exchange remain future work.
 
 ## Annotation layers (storage foundation)
 
@@ -191,8 +176,7 @@ working/published heads now exist, separately from annotation histories.
 
 ## Later phases
 
-1. **Revision browser**: history of a doc key (parent chain), diff any two
-   revisions (the diff view exists), restore one as the new draft.
+1. **Named revisions**: tag or publish selected nodes under a name.
 2. **Identity in the document**: store the random doc id in the file
    (front matter / `.sexp` meta) so renames and copies keep identity;
    `file:` keys become aliases.
