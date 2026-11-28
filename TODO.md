@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Revision panel keyboard navigation
+
+- Keep focus on the revision tree during selection. Use arrows to move
+  between rows or follow parent and child edges, with Home and End for
+  the newest and oldest rows. Escape returns focus to the document.
+- Passed 15,205 unit checks and all 33 CTest targets in Nix. Xvfb verified
+  repeated keyboard selection across branches and returning to editing.
+
 ## Status (2026-11-28) — Branching document revisions
 
 - Show the full revision tree for local database documents. Select a node

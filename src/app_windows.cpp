@@ -182,6 +182,8 @@ void close_window(App& app, FloatWindow& w) {
       break;
     case WindowRole::Revisions:
       app.revision_panel_open = false;
+      if (app.key_focus == KeyFocus::Revisions)
+        app.key_focus = KeyFocus::Document;
       break;
     case WindowRole::NostrExplorer:
       app.nostr_explorer_open = false;
@@ -674,6 +676,7 @@ KeyFocus float_key_focus(const FloatWindow& w) {
     case WindowRole::Sitemap: return KeyFocus::Sitemap;
     case WindowRole::Page: return KeyFocus::Page;
     case WindowRole::History: return KeyFocus::History;
+    case WindowRole::Revisions: return KeyFocus::Revisions;
     case WindowRole::Styles: return KeyFocus::Styles;
     case WindowRole::StyleManager: return KeyFocus::StyleManager;
     case WindowRole::Context: return KeyFocus::Context;

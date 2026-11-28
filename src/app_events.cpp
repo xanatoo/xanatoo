@@ -2281,6 +2281,11 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
     if (history_panel_key(app, xanatoo::sdl::keycode(ev), ctrl, shift)) return;
     panel_key_unused(app, ev, ctrl, alt);
   }
+  if (!status_prompt && panel_has_keys(app, KeyFocus::Revisions) &&
+      !dock_hidden(app, app.revision_win.dock)) {
+    if (!ctrl && !alt && !shift && revision_panel_key(app, key)) return;
+    panel_key_unused(app, ev, ctrl, alt);
+  }
   if (!status_prompt && handle_page_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_styles_key(app, ev, ctrl, alt)) return;
   if (!status_prompt && handle_style_manager_key(app, ev, ctrl, alt)) return;

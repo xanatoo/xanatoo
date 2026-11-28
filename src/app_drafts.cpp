@@ -323,7 +323,6 @@ bool select_buffer_revision(App& app, BufferId id, const std::string& revision) 
     refresh_views_of_buf(app, copy.id, -1, true);
   }
   app.needs_layout = true;
-  app.key_focus = KeyFocus::Document;
   update_title(app);
   return true;
 }

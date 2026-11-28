@@ -1083,9 +1083,9 @@ struct StatusLine {
 // Who receives plain keys (arrows, Enter, digits). Panels only while open;
 // see panel_has_keys(). Status prompts / minibuffer take precedence anyway.
 // Panel: a panel without native keys of its own (embedded ImGui panels, Help,
-// Revisions, Downloads) is the active window; which one is App::panel_focus.
+// Downloads) is the active window; which one is App::panel_focus.
 enum class KeyFocus : uint8_t {
-  Document, Outline, Backlinks, Sitemap, Page, History, Styles, Context, StyleManager, Panel
+  Document, Outline, Backlinks, Sitemap, Page, History, Revisions, Styles, Context, StyleManager, Panel
 };
 
 // The single active status-bar prompt (at most one at a time).
@@ -2089,6 +2089,8 @@ inline bool panel_has_keys(const App& app, KeyFocus panel) {
       return app.page.shown;
     case KeyFocus::History:
       return app.history_panel_open;
+    case KeyFocus::Revisions:
+      return app.revision_panel_open && !float_shaded(app.revision_win);
     case KeyFocus::Styles:
       return app.styles_panel_open;
     case KeyFocus::StyleManager:
@@ -2970,6 +2972,7 @@ void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll);
 // ---- database-native document history (app_revisions.cpp) ----
 void draw_revision_panel(App& app);
 void click_revision_panel(App& app, int mx, int my);
+bool revision_panel_key(App& app, SDL_Keycode key);
 bool select_buffer_revision(App& app, BufferId id, const std::string& revision);
 float revision_panel_max_scroll(App& app, int client_h);
 

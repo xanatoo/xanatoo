@@ -66,7 +66,10 @@ File → **Document revisions…** or Panels → **Document revisions** opens th
 dockable tree for the focused document. Lines connect each revision to its
 parent, and the highlighted row is the version shown in the document.
 Click any node to show that version immediately in all views of the same
-document. Selection persists across reopening. Editing an older node adds
+document. With the panel focused, Up and Down step through rows. Left
+goes to the parent and Right goes to the newest direct child. Home and End
+jump to the newest and oldest rows. Escape returns focus to the document.
+Selection persists across reopening. Editing an older node adds
 a child to that node, so you can still return to the previous branch.
 A stale writer or selection cannot overwrite another editor's selection.
 

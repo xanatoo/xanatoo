@@ -173,4 +173,58 @@ void click_revision_panel(App& app, int mx, int my) {
     select_buffer_revision(app, b->id, revision);
 }
 
+bool revision_panel_key(App& app, SDL_Keycode key) {
+  switch (key) {
+    case SDLK_ESCAPE:
+      app.key_focus = KeyFocus::Document;
+      return true;
+    case SDLK_UP: case SDLK_DOWN:
+    case SDLK_LEFT: case SDLK_RIGHT:
+    case SDLK_HOME: case SDLK_END:
+      break;
+    default:
+      return false;
+  }
+
+  const DocBuffer* b = refresh_revision_panel(app);
+  const auto& history = app.revision_history;
+  if (!b || history.empty()) return true;
+  const auto current = std::find_if(history.begin(), history.end(),
+      [&](const DocumentRevision& r) { return r.id == b->stored_working; });
+  if (current == history.end()) return true;
+  const int row = static_cast<int>(current - history.begin());
+  const int last = static_cast<int>(history.size()) - 1;
+  int target = row;
+  switch (key) {
+    case SDLK_UP: target = std::max(0, row - 1); break;
+    case SDLK_DOWN: target = std::min(last, row + 1); break;
+    case SDLK_HOME: target = 0; break;
+    case SDLK_END: target = last; break;
+    case SDLK_LEFT: target = app.revision_parents[row]; break;
+    case SDLK_RIGHT: {
+      const auto& parents = app.revision_parents;
+      const auto child = std::find(parents.begin(), parents.begin() + row, row);
+      if (child != parents.begin() + row)
+        target = static_cast<int>(child - parents.begin());
+      break;
+    }
+  }
+  if (target < 0 || target == row) return true;
+
+  const std::string revision = history[target].id;
+  if (!select_buffer_revision(app, b->id, revision)) return true;
+  refresh_revision_panel(app);
+  // A pending edit can add a row above the target during the switch.
+  const auto selected = std::find_if(history.begin(), history.end(),
+      [&](const DocumentRevision& r) { return r.id == revision; });
+  if (selected == history.end()) return true;
+  FloatWindow& w = app.revision_win;
+  const int client_h = std::get<3>(float_client_rect(app, w));
+  const float top = static_cast<float>((selected - history.begin()) * row_height(app));
+  const float bottom = top + row_height(app);
+  if (top < w.scroll) w.scroll = top;
+  else if (bottom > w.scroll + client_h) w.scroll = bottom - client_h;
+  return true;
+}
+
 }  // namespace xanatoo::app

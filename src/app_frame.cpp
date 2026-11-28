@@ -1681,6 +1681,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ToggleRevisionsPanel:
       if (app.revision_panel_open) {
         app.revision_panel_open = false;
+        if (app.key_focus == KeyFocus::Revisions)
+          app.key_focus = KeyFocus::Document;
       } else {
         const DocBuffer* b = find_buf(app, p.buf);
         if (!b || !find_stored_document(b->doc_key)) {
@@ -1690,7 +1692,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         app.revision_working.clear();
         app.revision_win.scroll = 0.f;
         app.revision_panel_open = true;
-        focus_panel(app, WindowRole::Revisions);
+        focus_float(app, app.revision_win);
       }
       break;
     case C::ToggleNostrExplorer:
