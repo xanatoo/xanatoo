@@ -1799,6 +1799,7 @@ void open_about_page(App& app);
 void print_startup_report(App& app);
 bool open_draft(App& app, int pi, const std::string& ref);
 bool open_stored_document(App& app, int pi, const std::string& ref);
+void toggle_revision_snapshot(App& app);
 bool open_stored_original(App& app, int pi, const std::string& ref);
 void open_stored_documents_page(App& app);
 

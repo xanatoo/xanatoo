@@ -3256,6 +3256,12 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                            : UiCommand::AddBookmark,
                   cmd, state.has_path || !state.doc_label.empty());
     }
+    if (state.autosaved_document || state.revision_snapshot)
+      tool_button("tb_revision_snapshot",
+                  state.revision_snapshot ? "lock-open" : "revisions",
+                  state.revision_snapshot ? "Open editable document"
+                                          : "View current revision (read-only)",
+                  UiCommand::ToggleRevisionSnapshot, cmd);
     // The same tools whatever the page: editing has its strip on the page.
     tool_button("tb_find", "find", "Find (Ctrl+F)", UiCommand::Find, cmd);
     tool_button("tb_split", state.split && !state.trail && !state.diff
@@ -3845,6 +3851,10 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         menu_item_cmd("Save", UiCommand::Save, cmd, !state.doc_label.empty(), "Ctrl+S");
       menu_item_cmd("Edit local copy", UiCommand::EditLocalCopy, cmd,
                     state.can_make_local_copy);
+      if (state.autosaved_document || state.revision_snapshot)
+        menu_item_cmd(state.revision_snapshot ? "Open editable document"
+                                             : "View current revision",
+                      UiCommand::ToggleRevisionSnapshot, cmd);
       menu_item_cmd("View original", UiCommand::ViewOriginal, cmd,
                     state.has_original);
       menu_item_cmd("Export a copy…", UiCommand::SaveAs, cmd, !state.doc_label.empty(), "Ctrl+Shift+S");

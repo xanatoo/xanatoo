@@ -75,6 +75,11 @@ the new document’s bounds. Selection persists across reopening. Editing an old
 to that node, so you can still return to the previous branch. A stale
 writer or selection cannot overwrite another editor's selection.
 
+Use **View current revision** in the toolbar or File menu to open a
+read-only snapshot of the editable document. This saves any pending edits
+first. On a snapshot, **Open editable document** returns to the document’s
+current working version. The centre panes reuse the corresponding tabs.
+
 To compare two revisions, right-click the first and choose **Select for
 comparison**. Right-click the second and choose **Compare with selected
 revision**. The Diff view opens the first snapshot in the first pane and

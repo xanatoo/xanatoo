@@ -170,6 +170,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.dirty = focused_buffer.dirty;
   const auto& focused_path = path_of(app, focused_pane(app));
   ui_state.autosaved_document = is_stored_document_ref(focused_path);
+  ui_state.revision_snapshot = is_stored_revision_ref(focused_path);
   ui_state.has_original = ui_state.autosaved_document &&
       find_document_origin(focused_buffer.doc_key).has_value();
   std::error_code source_ec;
@@ -2132,6 +2133,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         flash_status(app, "Editing local database copy; original preserved");
       else
         flash_status(app, "Could not make local copy; original preserved");
+      break;
+    case C::ToggleRevisionSnapshot:
+      toggle_revision_snapshot(app);
       break;
     case C::ViewOriginal: {
       const std::string path = path_of(app, p);

@@ -181,6 +181,7 @@ enum class UiCommand {
   PopIn,           // arg = optional buffer id: document window → centre tab
   Save,
   EditLocalCopy, // preserve source; switch to editable local database document
+  ToggleRevisionSnapshot,
   ViewOriginal,  // show immutable imported source snapshot
 
   SaveAs,
@@ -429,6 +430,7 @@ struct UiState {
   bool pointer_away = false;
   bool dirty = false;
   bool autosaved_document = false;
+  bool revision_snapshot = false;
   bool has_original = false;
   bool can_make_local_copy = false;
   bool has_path = false;

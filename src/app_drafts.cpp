@@ -464,6 +464,53 @@ bool open_stored_document(App& app, int pi, const std::string& ref) {
   return true;
 }
 
+void toggle_revision_snapshot(App& app) {
+  const int pi = app.focus;
+  Pane& pane = app.panes[pi];
+  const DocBuffer* current = find_buf(app, pane.buf);
+  if (!current) return;
+  std::string ref, revision;
+  const bool snapshot = is_stored_revision_ref(current->path);
+  if (snapshot) {
+    ref = "db:" + std::string(revision_panel_key_for(*current));
+    revision = current->path.substr(81);
+  } else {
+    if (!is_stored_document_ref(current->path)) return;
+    // Undo can change a clean buffer after autosave. Capture the document
+    // on screen when it differs from the last saved base.
+    const bool unsaved = current->dirty || (!current->base_id.empty() &&
+        content_id(serialize_document(current->doc, {})) != current->base_id);
+    if (unsaved && !save_stored_buffer(app, pane.buf)) {
+      flash_status(app, "Could not save pending edits for the snapshot");
+      return;
+    }
+    revision = current->stored_working;
+    ref = "db-revision:" + current->doc_key + "@" + revision;
+  }
+
+  const float scroll = pane.scroll_y;
+  if (pi < kCentreViews) {
+    BufferId id = find_buffer(app, ref);
+    if (id == kNoBuffer) {
+      id = open_link_in_tab(app, pi, ref, /*inherit_history=*/false);
+      if (id == kNoBuffer) {
+        flash_status(app, "Could not open document version");
+        return;
+      }
+    } else if (std::find(app.tab_order.begin(), app.tab_order.end(), id) ==
+               app.tab_order.end()) {
+      app.tab_order.push_back(id);
+    }
+    select_view_tab(app, pi, id);
+  } else if (!navigate_pane(app, pi, ref)) {
+    return;
+  }
+  if (!snapshot || buf(app, pane.buf).stored_working == revision)
+    pane.scroll_y = scroll;
+  app.key_focus = KeyFocus::Document;
+  flash_status(app, snapshot ? "Editing local document" : "Viewing read-only revision");
+}
+
 std::optional<Document> load_stored_revision_ref(std::string_view path) {
   if (!is_stored_revision_ref(path)) return std::nullopt;
   const auto body = load_stored_document_revision(path.substr(12, 68), path.substr(81));
