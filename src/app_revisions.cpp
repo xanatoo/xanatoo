@@ -15,6 +15,13 @@
 #include <utility>
 
 namespace xanatoo::app {
+std::string_view revision_panel_key_for(const DocBuffer& buffer) {
+  if (is_stored_document_ref(buffer.path)) return buffer.doc_key;
+  if (is_stored_revision_ref(buffer.path))
+    return std::string_view(buffer.path).substr(12, 68);
+  return {};
+}
+
 namespace {
 
 int row_height(const App& app) {
@@ -117,8 +124,7 @@ void layout_revision_graph(App& app) {
 
 const DocBuffer* refresh_revision_panel(App& app) {
   const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-  const bool native = b && is_stored_document_ref(b->path);
-  const std::string key = native ? b->doc_key : std::string{};
+  const std::string key(b ? revision_panel_key_for(*b) : std::string_view{});
   if (key != app.revision_document_key) {
     app.revision_working.clear();
     app.revision_document_key = key;
@@ -126,7 +132,7 @@ const DocBuffer* refresh_revision_panel(App& app) {
     app.revision_menu_target.clear();
     app.revision_win.scroll = 0.f;
   }
-  const auto head = native ? find_stored_document(key) : std::nullopt;
+  const auto head = key.empty() ? std::nullopt : find_stored_document(key);
   const std::string current = head ? head->working : std::string{};
   if (current != app.revision_working || !head) {
     app.revision_working = current;
@@ -135,6 +141,45 @@ const DocBuffer* refresh_revision_panel(App& app) {
     layout_revision_graph(app);
   }
   return head ? b : nullptr;
+}
+
+std::string_view displayed_revision(const DocBuffer& b) {
+  if (is_stored_revision_ref(b.path)) return std::string_view(b.path).substr(81);
+  return b.stored_working;
+}
+
+bool select_revision_in_view(App& app, const DocBuffer& b,
+                             const std::string& revision) {
+  const bool snapshot = is_stored_revision_ref(b.path);
+  if (!snapshot && !(app.diff_mode && app.split && app.focus < kCentreViews)) {
+    if (!b.dirty && revision == displayed_revision(b)) return true;
+    return select_buffer_revision(app, b.id, revision);
+  }
+
+  const std::string ref =
+      "db-revision:" + std::string(revision_panel_key_for(b)) + "@" + revision;
+  Pane& pane = focused_pane(app);
+  const float scroll = pane.scroll_y;
+  if (snapshot) {
+    if (ref == b.path) return true;
+    if (!navigate_pane(app, app.focus, ref)) return false;
+  } else {
+    // Keep an editable tab available when its pane switches to a snapshot.
+    BufferId id = find_buffer(app, ref);
+    if (id == kNoBuffer) {
+      auto doc = load_stored_revision_ref(ref);
+      if (!doc) {
+        flash_status(app, "Revision unavailable");
+        return false;
+      }
+      id = add_buffer(app, std::move(*doc), ref);
+    }
+    if (std::find(app.tab_order.begin(), app.tab_order.end(), id) == app.tab_order.end())
+      app.tab_order.push_back(id);
+    select_view_tab(app, app.focus, id);
+  }
+  pane.scroll_y = scroll;
+  return true;
 }
 
 }  // namespace
@@ -172,6 +217,7 @@ void draw_revision_panel(App& app) {
   }
 
   const auto& history = app.revision_history;
+  const std::string_view active_revision = displayed_revision(*b);
   const int scroll = static_cast<int>(w.scroll);
   const auto& slots = app.revision_slots;
   const auto& rows = app.revision_rows;
@@ -195,7 +241,7 @@ void draw_revision_panel(App& app) {
       theme::fill(app.sdl, {cx + 1, slot_y(slot), cw - 12, step}, pal.face);
 
   for (int row = first; row < last; ++row)
-    if (history[row].id == b->stored_working)
+    if (history[row].id == active_revision)
       theme::fill(app.sdl, {cx + 1, y_of(row), cw - 12, step}, pal.face_dark);
 
   SDL_SetRenderDrawColor(app.sdl, pal.text_dim.r, pal.text_dim.g,
@@ -220,7 +266,7 @@ void draw_revision_panel(App& app) {
       draw_label(label_x, slot_y(slot), text_right, stamp, pal.text_dim);
       continue;
     }
-    const bool current = history[row].id == b->stored_working;
+    const bool current = history[row].id == active_revision;
     const int radius = current ? 4 : 3;
     theme::fill(app.sdl, {x_of(row) - radius, y_of(row) + step / 2 - radius,
                           2 * radius + 1, 2 * radius + 1},
@@ -235,7 +281,7 @@ void draw_revision_panel(App& app) {
       if (cached == app.revision_labels.end() && classify) {
         classify = false; // At most one bounded comparison per frame.
         cached = app.revision_labels.emplace(
-            revision.id, summarize_revision(b->doc_key, revision)).first;
+            revision.id, summarize_revision(app.revision_document_key, revision)).first;
       }
       if (cached != app.revision_labels.end()) label += cached->second;
     }
@@ -257,8 +303,7 @@ void draw_revision_panel(App& app) {
 
 static const DocumentRevision* revision_at(App& app, int mx, int my) {
   const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-  if (!b || !is_stored_document_ref(b->path) ||
-      b->doc_key != app.revision_document_key) return nullptr;
+  if (!b || revision_panel_key_for(*b) != app.revision_document_key) return nullptr;
   auto [cx, cy, cw, ch] = float_client_rect(app, app.revision_win);
   if (mx < cx || mx >= cx + cw - 12 || my < cy || my >= cy + ch) return nullptr;
   const int slot = (my - cy + static_cast<int>(app.revision_win.scroll)) /
@@ -273,8 +318,7 @@ void click_revision_panel(App& app, int mx, int my) {
   if (!row) return;
   const DocBuffer& b = buf(app, focused_pane(app).buf);
   const std::string revision = row->id;
-  if (b.dirty || revision != b.stored_working)
-    select_buffer_revision(app, b.id, revision);
+  select_revision_in_view(app, b, revision);
 }
 
 bool right_click_revision_panel(App& app, int mx, int my) {
@@ -287,8 +331,9 @@ bool right_click_revision_panel(App& app, int mx, int my) {
 
 void revision_compare_action(App& app, std::string_view action) {
   const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-  if (!app.revision_panel_open || !b || !is_stored_document_ref(b->path) ||
-      b->doc_key != app.revision_document_key || app.revision_menu_target.empty())
+  if (!app.revision_panel_open || !b ||
+      revision_panel_key_for(*b) != app.revision_document_key ||
+      app.revision_menu_target.empty())
     return;
   const std::string target = std::exchange(app.revision_menu_target, {});
   if (action == "select") {
@@ -303,7 +348,7 @@ void revision_compare_action(App& app, std::string_view action) {
   if (action != "compare" || app.revision_compare_base.empty() ||
       app.revision_compare_base == target) return;
 
-  const std::string prefix = "db-revision:" + b->doc_key + "@";
+  const std::string prefix = "db-revision:" + app.revision_document_key + "@";
   const std::string refs[kCentreViews] = {prefix + app.revision_compare_base,
                                          prefix + target};
   auto left = load_stored_revision_ref(refs[0]);
@@ -352,8 +397,9 @@ bool revision_panel_key(App& app, SDL_Keycode key) {
   const DocBuffer* b = refresh_revision_panel(app);
   const auto& history = app.revision_history;
   if (!b || history.empty()) return true;
+  const std::string_view active_revision = displayed_revision(*b);
   const auto current = std::find_if(history.begin(), history.end(),
-      [&](const DocumentRevision& r) { return r.id == b->stored_working; });
+      [&](const DocumentRevision& r) { return r.id == active_revision; });
   if (current == history.end()) return true;
   const int row = static_cast<int>(current - history.begin());
   const int last = static_cast<int>(history.size()) - 1;
@@ -375,7 +421,7 @@ bool revision_panel_key(App& app, SDL_Keycode key) {
   if (target < 0 || target == row) return true;
 
   const std::string revision = history[target].id;
-  if (!select_buffer_revision(app, b->id, revision)) return true;
+  if (!select_revision_in_view(app, *b, revision)) return true;
   refresh_revision_panel(app);
   // A pending edit can add a row above the target during the switch.
   const auto selected = std::find_if(history.begin(), history.end(),

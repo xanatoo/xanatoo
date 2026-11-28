@@ -79,7 +79,8 @@ To compare two revisions, right-click the first and choose **Select for
 comparison**. Right-click the second and choose **Compare with selected
 revision**. The Diff view opens the first snapshot in the first pane and
 the second snapshot in the other pane. Both tabs are read-only, and the
-working document stays open in its own tab.
+working document stays open in its own tab. In Diff view, focus either
+pane and select another revision to change that pane’s snapshot address.
 
 Day dividers use local dates and follow the graph's existing revision order.
 Each revision shows the size of its serialized document snapshot.

@@ -633,8 +633,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   ui_state.downloads_open = app.downloads_panel_open;
   ui_state.media_open = app.media_panel_open;
   ui_state.revision_menu.valid = app.revision_panel_open &&
-      focused_buffer.doc_key == app.revision_document_key &&
-      is_stored_document_ref(focused_buffer.path) && !app.revision_menu_target.empty();
+      revision_panel_key_for(focused_buffer) == app.revision_document_key &&
+      !app.revision_menu_target.empty();
   ui_state.revision_menu.selected =
       app.revision_menu_target == app.revision_compare_base;
   ui_state.revision_menu.can_compare = !app.revision_compare_base.empty() &&
@@ -817,7 +817,7 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   }
   {
     const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-    ui_state.can_show_revisions = b && !!find_stored_document(b->doc_key);
+    ui_state.can_show_revisions = b && !!find_stored_document(revision_panel_key_for(*b));
   }
   if (app.annotation_panel_open) {
     auto [x, y, w, h] = imgui_panel_rect(app, app.annotation_win);
@@ -1695,7 +1695,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
           app.key_focus = KeyFocus::Document;
       } else {
         const DocBuffer* b = find_buf(app, p.buf);
-        if (!b || !find_stored_document(b->doc_key)) {
+        if (!b || !find_stored_document(revision_panel_key_for(*b))) {
           flash_status(app, "Open a local database document to view its revisions");
           break;
         }
