@@ -977,6 +977,12 @@ bool Ui::tool_button(const char* id, const char* icon_name, const char* tip,
 
 
 
+void Ui::open_revision_menu(float x, float y) {
+  revision_menu_open_ = true;
+  context_x_ = x;
+  context_y_ = y;
+}
+
 static bool menu_item_cmd(const char* label, UiCommand c, UiCommand& out,
                           bool enabled = true, const char* shortcut = nullptr);
 
@@ -1942,7 +1948,7 @@ void Ui::close_popups() {
   // A menu requested this frame is not open yet: drop the request too.
   context_open_ = window_menu_open_ = tile_menu_open_ = false;
   bookmark_menu_open_ = download_menu_open_ = false;
-  media_menu_open_ = history_menu_open_ = false;
+  media_menu_open_ = history_menu_open_ = revision_menu_open_ = false;
 }
 
 void Ui::open_window_menu(float x, float y, uint32_t buffer_id) {
@@ -4397,6 +4403,29 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       item("Copy Address", nullptr, "copy");
       ImGui::Separator();
       item("Remove from History", "Delete", "remove");
+    }
+    ImGui::EndPopup();
+  }
+
+  if (revision_menu_open_) {
+    ImGui::SetNextWindowPos(ImVec2(context_x_, context_y_), ImGuiCond_Appearing);
+    ImGui::OpenPopup("##revision_menu");
+    revision_menu_open_ = false;
+  }
+  if (ImGui::BeginPopup("##revision_menu")) {
+    const auto& menu = state.revision_menu;
+    if (!menu.valid) {
+      ImGui::CloseCurrentPopup();
+    } else {
+      if (menu.can_compare && ImGui::MenuItem("Compare with selected revision")) {
+        cmd = UiCommand::RevisionCompareAction;
+        result.arg = "compare";
+      }
+      if (ImGui::MenuItem(menu.selected ? "Clear comparison selection" :
+                                        "Select for comparison")) {
+        cmd = UiCommand::RevisionCompareAction;
+        result.arg = "select";
+      }
     }
     ImGui::EndPopup();
   }

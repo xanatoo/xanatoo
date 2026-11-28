@@ -869,6 +869,11 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href) {
     t.url = std::move(abs);
     return t;
   }
+  if (is_stored_revision_ref(xanatoo::parse_locator(abs).base)) {
+    t.kind = LinkKind::Doc;
+    t.url = std::move(abs);
+    return t;
+  }
   if (is_inapp_doc_href(app, xanatoo::parse_locator(abs).base)) {
     std::string path = abs;
     if (size_t hash = path.find('#'); hash != std::string::npos) {
@@ -1055,6 +1060,12 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
       if (path == kDocumentsPage) {
         flash_status(app, "Use File → Local documents to open the index");
         return kNoBuffer;
+      }
+      if (is_stored_revision_ref(path)) {
+        auto doc = load_stored_revision_ref(path);
+        if (!doc) return kNoBuffer;
+        bi = add_buffer(app, std::move(*doc), path);
+        break;
       }
       if (is_stored_original_ref(path)) {
         const std::string key = path.substr(12);
@@ -1270,7 +1281,7 @@ bool navigate_pane(App& app, int pi, std::string target, bool record_history,
   }
   if (xanatoo::starts_with(target, "draft:") ||
       target == kDocumentsPage || is_stored_document_ref(target) ||
-      is_stored_original_ref(target))
+      is_stored_original_ref(target) || is_stored_revision_ref(target))
     return open_page(app, pi, std::move(target), record_history);
   xanatoo::Locator loc = xanatoo::parse_locator(target);
   // An image address on its own is that image in its one-image gallery.
@@ -1348,6 +1359,17 @@ static bool open_page(App& app, int pi, std::string target,
   }
   if (is_stored_document_ref(target)) {
     if (!open_stored_document(app, pi, target)) return false;
+    if (record_history) push_nav_history(app, pi, target);
+    return true;
+  }
+  if (is_stored_revision_ref(target)) {
+    if (!stash_or_confirm(app, p.buf)) return false;
+    auto doc = load_stored_revision_ref(target);
+    if (!doc) {
+      flash_status(app, "Revision unavailable");
+      return false;
+    }
+    show_doc_in_pane(app, pi, std::move(*doc), target);
     if (record_history) push_nav_history(app, pi, target);
     return true;
   }

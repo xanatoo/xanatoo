@@ -632,6 +632,13 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     ui_state.recent_visited.push_back(app.visited[i - 1]);
   ui_state.downloads_open = app.downloads_panel_open;
   ui_state.media_open = app.media_panel_open;
+  ui_state.revision_menu.valid = app.revision_panel_open &&
+      focused_buffer.doc_key == app.revision_document_key &&
+      is_stored_document_ref(focused_buffer.path) && !app.revision_menu_target.empty();
+  ui_state.revision_menu.selected =
+      app.revision_menu_target == app.revision_compare_base;
+  ui_state.revision_menu.can_compare = !app.revision_compare_base.empty() &&
+                                      !ui_state.revision_menu.selected;
   ui_state.history_menu = {};
   if (!app.history.menu_address.empty()) {
     ui_state.history_menu.address = app.history.menu_address;
@@ -1678,6 +1685,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       app.annotation_panel_open = !app.annotation_panel_open;
       if (app.annotation_panel_open) focus_panel(app, WindowRole::Annotations);
       break;
+    case C::RevisionCompareAction:
+      revision_compare_action(app, arg);
+      break;
     case C::ToggleRevisionsPanel:
       if (app.revision_panel_open) {
         app.revision_panel_open = false;
@@ -2228,6 +2238,11 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
           flash_status(app, "Could not reload local document");
         else
           flash_status(app, "Reloaded local working revision");
+        break;
+      }
+      if (is_stored_revision_ref(rpath)) {
+        const std::string ref = rpath;
+        navigate_pane(app, app.focus, ref, false);
         break;
       }
       if (is_stored_original_ref(rpath)) {

@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Compare two revisions
+
+- Right-click a revision to select it as the comparison base. Open
+  another revision against it in the existing Diff view.
+- Use immutable read-only snapshot tabs and preserve the working tab.
+- Passed 15,207 unit checks and all 33 CTest targets in Nix. Xvfb verified
+  the context-menu flow, diff marks and reopening the comparison.
+
 ## Status (2026-11-28) — Scroll position when switching revisions
 
 - Keep the visible text block in place across revision switches. Fall

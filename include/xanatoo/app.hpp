@@ -1455,6 +1455,7 @@ struct App {
   NostrPost nostr_post;
   NostrPost nostr_reply;  // a Reply panel answer to a Nostr note
   std::string revision_document_key, revision_working;
+  std::string revision_compare_base, revision_menu_target;
   std::vector<xanatoo::DocumentRevision> revision_history;
   // Visual rows include day dividers. Revision indices still drive edges
   // and keyboard navigation, and map back to visual rows through slots.
@@ -1784,6 +1785,11 @@ inline bool is_stored_document_ref(std::string_view path) {
 inline bool is_stored_original_ref(std::string_view path) {
   return path.size() == 80 && path.starts_with("db-original:doc:");
 }
+inline bool is_stored_revision_ref(std::string_view path) {
+  return path.size() == 152 && path.starts_with("db-revision:doc:") &&
+         path.substr(80).starts_with("@sha256:");
+}
+std::optional<xanatoo::Document> load_stored_revision_ref(std::string_view path);
 void open_drafts_page(App& app);
 // "about:" page: services, formats and libraries of this build (app_about.cpp).
 inline constexpr const char* kAboutPage = "about:";
@@ -2981,6 +2987,8 @@ void draw_client_scrollbar(App& app, const FloatWindow& w, float max_scroll);
 // ---- database-native document history (app_revisions.cpp) ----
 void draw_revision_panel(App& app);
 void click_revision_panel(App& app, int mx, int my);
+bool right_click_revision_panel(App& app, int mx, int my);
+void revision_compare_action(App& app, std::string_view action);
 bool revision_panel_key(App& app, SDL_Keycode key);
 bool select_buffer_revision(App& app, BufferId id, const std::string& revision);
 float revision_panel_max_scroll(App& app, int client_h);

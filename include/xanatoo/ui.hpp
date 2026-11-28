@@ -66,6 +66,7 @@ enum class UiCommand {
   SubscriptionRefresh, // force a fetch now (empty = all)
   SubscriptionInterval, // address + newline + integer minutes
   ToggleAnnotationsPanel, // annotation layer visibility / selection
+  RevisionCompareAction,
   ToggleRevisionsPanel,  // native database document revision browser
   ToggleNostrExplorer, // local relay event / pubkey catalogue
   ToggleLemmyExplorer, // collected Lemmy instances, communities, users, posts
@@ -751,6 +752,11 @@ struct UiState {
     bool from_db = false;  // a logged visit (else a session address)
     bool rewinds = true;   // ViewSettings::history_rewinds (Shift flips)
   } history_menu;
+  struct RevisionMenu {
+    bool valid = false;
+    bool selected = false;
+    bool can_compare = false;
+  } revision_menu;
   // The Media panel's open right-click menu (empty title: none).
   struct MediaMenu {
     std::string title, time;     // the file, and the position as m:ss
@@ -933,6 +939,7 @@ public:
   void open_download_menu(float x, float y);
   // The menu of a History panel row (UiState::history_menu).
   void open_history_menu(float x, float y);
+  void open_revision_menu(float x, float y);
   // The Media panel's seek bar menu (UiState::media_menu).
   void open_media_menu(float x, float y);
   // A touch long press fired while the finger is still down. ImGui's left
@@ -1005,6 +1012,7 @@ private:
   bool bookmark_menu_open_ = false;
   bool download_menu_open_ = false;
   bool history_menu_open_ = false;
+  bool revision_menu_open_ = false;
   bool media_menu_open_ = false;
   float context_x_ = 0.f;
   float context_y_ = 0.f;

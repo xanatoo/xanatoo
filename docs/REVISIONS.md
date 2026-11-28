@@ -75,6 +75,12 @@ the new document’s bounds. Selection persists across reopening. Editing an old
 to that node, so you can still return to the previous branch. A stale
 writer or selection cannot overwrite another editor's selection.
 
+To compare two revisions, right-click the first and choose **Select for
+comparison**. Right-click the second and choose **Compare with selected
+revision**. The Diff view opens the first snapshot in the first pane and
+the second snapshot in the other pane. Both tabs are read-only, and the
+working document stays open in its own tab.
+
 Day dividers use local dates and follow the graph's existing revision order.
 Each revision shows the size of its serialized document snapshot.
 Visible rows gain a label by comparing each snapshot with its parent.

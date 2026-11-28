@@ -116,6 +116,10 @@ xanatoo::Document load_doc(App& app, std::string path) {
   if (path.empty()) {
     return xanatoo::parse_document(xanatoo::fallback_document(), {});
   }
+  if (is_stored_revision_ref(path)) {
+    if (auto doc = load_stored_revision_ref(path)) return std::move(*doc);
+    return xanatoo::parse_document("# Revision unavailable\n", {});
+  }
   if (opens_as_image(path)) return xanatoo::image_url_document(path);
   if (xanatoo::is_pandoc_path(path)) {
     std::string md = resolve_open_path(app, path);
@@ -250,7 +254,7 @@ bool is_foreign_path(std::string_view path) {
       xanatoo::is_fixed_layout_path(path))
     return true;
   if (path == kDraftsPage || path == kDocumentsPage || path == kAboutPage ||
-      is_stored_original_ref(path))
+      is_stored_original_ref(path) || is_stored_revision_ref(path))
     return true;
   // Directory listings (navigate_pane gives them a trailing '/').
   std::error_code ec;
@@ -545,6 +549,8 @@ std::string buffer_tab_label(App& app, BufferId bi) {
     s += "untitled";
   } else if (is_stored_original_ref(path)) {
     s += "Original (read-only)";
+  } else if (is_stored_revision_ref(path)) {
+    s += "Revision " + path.substr(88, 8);
   } else if (is_stored_document_ref(path)) {
     s += b->stored_title.empty() ? "untitled" : b->stored_title;
   } else if (is_in_app_remote_url(path)) {

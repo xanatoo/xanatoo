@@ -464,6 +464,17 @@ bool open_stored_document(App& app, int pi, const std::string& ref) {
   return true;
 }
 
+std::optional<Document> load_stored_revision_ref(std::string_view path) {
+  if (!is_stored_revision_ref(path)) return std::nullopt;
+  const auto body = load_stored_document_revision(path.substr(12, 68), path.substr(81));
+  if (!body) return std::nullopt;
+  try {
+    return parse_stored_document(*body);
+  } catch (const std::invalid_argument&) {
+    return std::nullopt;
+  }
+}
+
 bool open_stored_original(App& app, int pi, const std::string& ref) {
   if (!is_stored_original_ref(ref)) return false;
   const std::string key = ref.substr(12);

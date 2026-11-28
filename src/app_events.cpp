@@ -789,6 +789,10 @@ void pointer_right_down(App& app, int rx, int ry, bool imgui_mouse) {
         w && w->role == WindowRole::History &&
         right_click_history_panel(app, rx, ry))
       return;
+    if (FloatWindow* w = float_at(app, rx, ry);
+        w && w->role == WindowRole::Revisions &&
+        right_click_revision_panel(app, rx, ry))
+      return;
     // A Downloads row has its own menu (open, folder, copy, cancel…).
     if (FloatWindow* w = float_at(app, rx, ry);
         w && w->role == WindowRole::Downloads &&

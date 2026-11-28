@@ -12,6 +12,7 @@
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 namespace xanatoo::app {
 namespace {
@@ -121,6 +122,8 @@ const DocBuffer* refresh_revision_panel(App& app) {
   if (key != app.revision_document_key) {
     app.revision_working.clear();
     app.revision_document_key = key;
+    app.revision_compare_base.clear();
+    app.revision_menu_target.clear();
     app.revision_win.scroll = 0.f;
   }
   const auto head = native ? find_stored_document(key) : std::nullopt;
@@ -224,6 +227,7 @@ void draw_revision_panel(App& app) {
                 current ? pal.accent : pal.text_dim);
     const auto& revision = history[row];
     std::string label = stamp + "  ";
+    if (revision.id == app.revision_compare_base) label += "Compare base  ";
     if (revision.original) label += "Original";
     else if (revision.parent.empty()) label += "Created";
     else {
@@ -251,19 +255,85 @@ void draw_revision_panel(App& app) {
   draw_client_scrollbar(app, w, revision_panel_max_scroll(app, ch));
 }
 
-void click_revision_panel(App& app, int mx, int my) {
+static const DocumentRevision* revision_at(App& app, int mx, int my) {
   const DocBuffer* b = find_buf(app, focused_pane(app).buf);
-  if (!b || b->doc_key != app.revision_document_key) return;
+  if (!b || !is_stored_document_ref(b->path) ||
+      b->doc_key != app.revision_document_key) return nullptr;
   auto [cx, cy, cw, ch] = float_client_rect(app, app.revision_win);
-  if (mx < cx || mx >= cx + cw - 12 || my < cy || my >= cy + ch) return;
+  if (mx < cx || mx >= cx + cw - 12 || my < cy || my >= cy + ch) return nullptr;
   const int slot = (my - cy + static_cast<int>(app.revision_win.scroll)) /
                    row_height(app);
-  if (slot >= static_cast<int>(app.revision_rows.size())) return;
+  if (slot >= static_cast<int>(app.revision_rows.size())) return nullptr;
   const int row = app.revision_rows[slot].revision;
-  if (row < 0) return;
-  const std::string revision = app.revision_history[row].id;
-  if (b->dirty || revision != b->stored_working)
-    select_buffer_revision(app, b->id, revision);
+  return row < 0 ? nullptr : &app.revision_history[row];
+}
+
+void click_revision_panel(App& app, int mx, int my) {
+  const auto* row = revision_at(app, mx, my);
+  if (!row) return;
+  const DocBuffer& b = buf(app, focused_pane(app).buf);
+  const std::string revision = row->id;
+  if (b.dirty || revision != b.stored_working)
+    select_buffer_revision(app, b.id, revision);
+}
+
+bool right_click_revision_panel(App& app, int mx, int my) {
+  const auto* row = revision_at(app, mx, my);
+  if (!row) return false;
+  app.revision_menu_target = row->id;
+  app.ui.open_revision_menu(static_cast<float>(mx), static_cast<float>(my));
+  return true;
+}
+
+void revision_compare_action(App& app, std::string_view action) {
+  const DocBuffer* b = find_buf(app, focused_pane(app).buf);
+  if (!app.revision_panel_open || !b || !is_stored_document_ref(b->path) ||
+      b->doc_key != app.revision_document_key || app.revision_menu_target.empty())
+    return;
+  const std::string target = std::exchange(app.revision_menu_target, {});
+  if (action == "select") {
+    if (app.revision_compare_base == target) {
+      app.revision_compare_base.clear();
+    } else {
+      app.revision_compare_base = target;
+      flash_status(app, "Right-click another revision to compare");
+    }
+    return;
+  }
+  if (action != "compare" || app.revision_compare_base.empty() ||
+      app.revision_compare_base == target) return;
+
+  const std::string prefix = "db-revision:" + b->doc_key + "@";
+  const std::string refs[kCentreViews] = {prefix + app.revision_compare_base,
+                                         prefix + target};
+  auto left = load_stored_revision_ref(refs[0]);
+  auto right = load_stored_revision_ref(refs[1]);
+  if (!left || !right) {
+    flash_status(app, "Could not load both revisions for comparison");
+    return;
+  }
+
+  // Keep all current documents and edits in their existing buffers. The
+  // comparison uses separate read-only tabs with immutable addresses.
+  Document snapshots[kCentreViews] = {std::move(*left), std::move(*right)};
+  revert_split_preview(app);
+  app.split = true;
+  app.tile_mode = TileMode::Independent;
+  app.diff_mode = true;
+  for (int pi = 0; pi < kCentreViews; ++pi) {
+    BufferId id = find_buffer(app, refs[pi]);
+    if (id == kNoBuffer) id = add_buffer(app, std::move(snapshots[pi]), refs[pi]);
+    if (std::find(app.tab_order.begin(), app.tab_order.end(), id) == app.tab_order.end())
+      app.tab_order.push_back(id);
+    select_view_tab(app, pi, id);
+  }
+  focus_view(app, 0);
+  app.key_focus = KeyFocus::Document;
+  app.revision_compare_base.clear();
+  refresh_diff(app);
+  app.needs_layout = true;
+  update_title(app);
+  flash_status(app, "Comparing read-only revisions");
 }
 
 bool revision_panel_key(App& app, SDL_Keycode key) {
