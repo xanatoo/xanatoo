@@ -218,6 +218,12 @@ void draw_revision_panel(App& app) {
 
   const auto& history = app.revision_history;
   const std::string_view active_revision = displayed_revision(*b);
+  std::string_view other_revision;
+  if (app.split && app.diff_mode && app.focus < kCentreViews) {
+    const DocBuffer* other = find_buf(app, app.panes[other_pane(app)].buf);
+    if (other && revision_panel_key_for(*other) == app.revision_document_key)
+      other_revision = displayed_revision(*other);
+  }
   const int scroll = static_cast<int>(w.scroll);
   const auto& slots = app.revision_slots;
   const auto& rows = app.revision_rows;
@@ -240,9 +246,12 @@ void draw_revision_panel(App& app) {
     if (rows[slot].revision < 0)
       theme::fill(app.sdl, {cx + 1, slot_y(slot), cw - 12, step}, pal.face);
 
-  for (int row = first; row < last; ++row)
-    if (history[row].id == active_revision)
-      theme::fill(app.sdl, {cx + 1, y_of(row), cw - 12, step}, pal.face_dark);
+  for (int row = first; row < last; ++row) {
+    const std::string& id = history[row].id;
+    const SDL_Rect band{cx + 1, y_of(row), cw - 12, step};
+    if (id == active_revision) theme::fill(app.sdl, band, pal.face_dark);
+    else if (id == other_revision) theme::fill(app.sdl, band, pal.accent_soft);
+  }
 
   SDL_SetRenderDrawColor(app.sdl, pal.text_dim.r, pal.text_dim.g,
                          pal.text_dim.b, 255);
@@ -266,12 +275,22 @@ void draw_revision_panel(App& app) {
       draw_label(label_x, slot_y(slot), text_right, stamp, pal.text_dim);
       continue;
     }
-    const bool current = history[row].id == active_revision;
-    const int radius = current ? 4 : 3;
-    theme::fill(app.sdl, {x_of(row) - radius, y_of(row) + step / 2 - radius,
-                          2 * radius + 1, 2 * radius + 1},
-                current ? pal.accent : pal.text_dim);
     const auto& revision = history[row];
+    const bool current = revision.id == active_revision;
+    const bool compared = revision.id == other_revision;
+    const int x = x_of(row);
+    const int y = y_of(row) + step / 2;
+    if (compared) {
+      theme::fill(app.sdl, {x - 5, y - 5, 11, 11}, pal.accent_dark);
+      theme::fill(app.sdl, {x - 4, y - 4, 9, 9},
+                  current ? pal.face_dark : pal.accent_soft);
+      if (current) theme::fill(app.sdl, {x - 2, y - 2, 5, 5}, pal.accent);
+    } else {
+      const int radius = current ? 4 : 3;
+      theme::fill(app.sdl, {x - radius, y - radius,
+                            2 * radius + 1, 2 * radius + 1},
+                  current ? pal.accent : pal.text_dim);
+    }
     std::string label = stamp + "  ";
     if (revision.id == app.revision_compare_base) label += "Compare base  ";
     if (revision.original) label += "Original";

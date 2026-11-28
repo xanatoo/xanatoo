@@ -81,6 +81,8 @@ revision**. The Diff view opens the first snapshot in the first pane and
 the second snapshot in the other pane. Both tabs are read-only, and the
 working document stays open in its own tab. In Diff view, focus either
 pane and select another revision to change that pane’s snapshot address.
+When both panes show revisions from this tree, a solid marker identifies
+the focused revision and an outline identifies the other pane’s revision.
 
 Day dividers use local dates and follow the graph's existing revision order.
 Each revision shows the size of its serialized document snapshot.
