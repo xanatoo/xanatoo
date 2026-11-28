@@ -943,6 +943,7 @@ void finish_tab(App& app, const FetchJob& job) {
   b->content_path = r.doc ? r.content_path : std::string();
   b->observation_id = 0;
   b->placeholder = false;
+  b->blank_tab = false;
   b->dirty = false;
   const std::string path = b->path;
   attach_draft(app, job.buf);

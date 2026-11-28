@@ -263,7 +263,7 @@ bool is_foreign_path(std::string_view path) {
 
 namespace {
 bool buffer_read_only(const App& app, const DocBuffer& b) {
-  return is_foreign_path(b.path) || app.invalid_xml_paths.contains(b.path) ||
+  return b.blank_tab || is_foreign_path(b.path) || app.invalid_xml_paths.contains(b.path) ||
          app.binary_paths.contains(b.path);
 }
 bool buffer_locked(const DocBuffer& b) {
@@ -537,6 +537,7 @@ bool restore_closed_tab(App& app) {
 std::string buffer_tab_label(App& app, BufferId bi) {
   const DocBuffer* b = find_buf(app, bi);
   if (!b) return "?";
+  if (b->blank_tab) return "New Tab";
   std::string s;
   if (b->dirty) s += "*";
   const std::string& path = b->path;

@@ -74,6 +74,8 @@ binary files are not (`pane_read_only`).
 - **Restore closed tab** (Ctrl+Shift+T) reopens the most recently closed
   tab. Repeat to reopen earlier tabs from this session. Ctrl+Alt+T cycles
   the current task item while editing.
+- **New Tab** (Ctrl+T or "+" on the tab strip) opens a blank page and
+  focuses the empty URL bar.
 - **New document** (Ctrl+N, File → New Document, the page button beside
   "+" on the tab strip) opens a blank document in a **new tab**, already
   stored in the local database (`db:`, listed under Local documents) with

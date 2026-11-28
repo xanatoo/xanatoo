@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Blank New Tab
+
+- Give New Tab a blank canvas and focus the empty URL bar. Keep document
+  creation under New Document.
+- Passed 15,182 unit checks in Nix. Xvfb verified the New Tab icon,
+  Ctrl+T from an active URL field, local HTTP navigation, and New Document.
+
 ## Status (2026-11-27) — Android Back in Gallery View
 
 - Route Android Back through navigation history in the gallery grid and

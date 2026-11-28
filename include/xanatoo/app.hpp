@@ -158,6 +158,7 @@ struct DocBuffer {
   xanatoo::History history;
   // Shows a "Loading …" stand-in until a background fetch replaces it.
   bool placeholder = false;
+  bool blank_tab = false;  // An empty, addressless tab awaiting navigation.
   // Local revisions (revstore.hpp, app_drafts.cpp): doc key, content id of
   // the buffer's serialized text when clean, of the last draft written, and
   // when unsaved edits are next written (SDL ticks, 0 = nothing pending).

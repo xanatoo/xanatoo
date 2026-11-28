@@ -59,7 +59,8 @@ std::string draft_title(const DocBuffer& b, const std::string& text) {
 // committed on the same debounce as legacy file drafts, but never written to
 // a file. Publishing advances a different head (see revstore.cpp).
 bool write_stored_working(App& app, DocBuffer& b) {
-  if ((!b.path.empty() && !is_stored_document_ref(b.path)) || b.placeholder)
+  if (b.blank_tab || b.placeholder ||
+      (!b.path.empty() && !is_stored_document_ref(b.path)))
     return false;
   if (b.doc_key.empty()) b.doc_key = new_doc_key();
   const std::string text = serialize_stored_document(b.doc);

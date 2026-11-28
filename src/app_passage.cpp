@@ -28,6 +28,7 @@ namespace {
 
 // The page a view shows, without its selectors (the base of pane_address).
 std::string pane_page(App& app, Pane& p) {
+  if (const DocBuffer* b = find_buf(app, p.buf); b && b->blank_tab) return {};
   std::string page = path_of(app, p);
   return page.empty() ? app.gemini_current_url : page;
 }

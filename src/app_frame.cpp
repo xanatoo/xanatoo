@@ -166,18 +166,18 @@ static void build_history_menu(App& app, xanatoo::UiState& state) {
 // software gamepad pointer, which synthesises mouse events).
 static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
   sync_pinned_style(app);
-  ui_state.dirty =
-      buf(app, focused_pane(app).buf).dirty;
+  const DocBuffer& focused_buffer = buf(app, focused_pane(app).buf);
+  ui_state.dirty = focused_buffer.dirty;
   const auto& focused_path = path_of(app, focused_pane(app));
   ui_state.can_publish =
       (focused_path.empty() || is_stored_document_ref(focused_path)) &&
-      !buf(app, focused_pane(app).buf).placeholder;
+      !focused_buffer.placeholder && !focused_buffer.blank_tab;
   std::error_code source_ec;
   ui_state.can_make_local_copy =
       (is_stored_original_ref(focused_path) ||
        is_in_app_remote_url(focused_path) ||
        fs::is_regular_file(focused_path, source_ec)) &&
-      !buf(app, focused_pane(app).buf).placeholder;
+      !focused_buffer.placeholder;
   ui_state.has_path = !path_of(app, focused_pane(app)).empty();
   {
     const Pane& p = focused_pane(app);
@@ -443,7 +443,8 @@ static void build_ui_state(App& app, xanatoo::UiState& ui_state) {
     bar.on_list_item = ui_state.on_list_item;
     bar.in_stretch = ui_state.in_stretch;
   }
-  ui_state.doc_label = path_of(app, focused_pane(app)).empty()
+  ui_state.doc_label = path_of(app, focused_pane(app)).empty() &&
+                               !focused_buffer.blank_tab
                            ? std::string("untitled")
                            : pane_address(app, focused_pane(app));
   ui_state.can_nav_back = can_nav_step(app, -1);
@@ -1234,39 +1235,33 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::Quit:
       if (stash_all_or_confirm(app)) app.running = false;
       break;
-    case C::NewDocument:
     case C::NewTab: {
-      // Both open a blank, editable document in a new tab, never over the
-      // page in view. New Tab leaves it to the address bar (type a URL, or
-      // click into the page and write); New Document puts it in Local
-      // documents at once and selects the title to type over.
-      const bool document = cmd == C::NewDocument;
-      const BufferId bi =
+      const BufferId id = add_buffer(app, xanatoo::parse_document("", {}), {});
+      buf(app, id).blank_tab = true;
+      app.tab_order.push_back(id);
+      focus_view(app, app.centre_focus);
+      select_view_tab(app, app.centre_focus, id);
+      leave_prompt(app);
+      app.ui.release_input_capture();
+      app.ui.focus_url_bar();
+      break;
+    }
+    case C::NewDocument: {
+      const BufferId id =
           add_buffer(app, xanatoo::parse_document("# Untitled\n", {}), {});
-      app.tab_order.push_back(bi);
+      app.tab_order.push_back(id);
+      focus_view(app, app.centre_focus);
+      select_view_tab(app, app.centre_focus, id);
       Pane& np = app.panes[app.centre_focus];
-      if (app.focus != app.centre_focus) focus_view(app, app.centre_focus);
-      select_view_tab(app, app.centre_focus, bi);
-      np.sel = {};
-      np.scroll_y = 0.f;
-      np.layout = {};
-      xanatoo::Document& nd = buf(app, bi).doc;
-      xanatoo::ensure_valid_caret(nd, np.sel.focus);
-      np.sel.anchor = np.sel.focus;
-      if (document && np.sel.focus.node != xanatoo::INVALID_NODE)
-        xanatoo::select_node(nd, np.sel, np.sel.focus.node);
-      buf(app, bi).history.reset(nd, np.sel);
-      app.needs_layout = true;
-      if (document) {
-        const bool stored = save_stored_buffer(app, bi);
-        app.key_focus = KeyFocus::Document;
-        flash_status(app, stored ? "New local document — type its title"
-                                 : "Local database unavailable; document "
-                                   "remains in memory");
-      } else {
-        app.ui.focus_url_bar();
-        flash_status(app, "New tab — type an address, or write here");
-      }
+      DocBuffer& b = buf(app, id);
+      if (np.sel.focus.node != xanatoo::INVALID_NODE)
+        xanatoo::select_node(b.doc, np.sel, np.sel.focus.node);
+      b.history.reset(b.doc, np.sel);
+      const bool stored = save_stored_buffer(app, id);
+      app.key_focus = KeyFocus::Document;
+      flash_status(app, stored ? "New local document — type its title"
+                               : "Local database unavailable; document "
+                                 "remains in memory");
       update_title(app);
       break;
     }
@@ -2102,6 +2097,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::Save: {
+      if (buf(app, p.buf).blank_tab) break;
       if (p.source_buf == p.buf && p.source_doc) {
         flash_status(app, "Source view is read-only — return to the document to save");
         break;
@@ -2139,6 +2135,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     case C::ViewSourceRendered:
     case C::ViewSourceRaw:
     case C::ViewSourceXml: {
+      if (buf(app, p.buf).blank_tab) break;
       // These are pane-local representations of the already loaded buffer.
       // Do not re-open draft:/db:/remote pages just to change projection.
       const std::string previous = pane_address(app, p);
@@ -2189,6 +2186,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       }
       break;
     case C::SaveAs: {
+      if (buf(app, p.buf).blank_tab) break;
       const std::string path = path_of(app, p);
       std::string suggested = "untitled.md";
       if (is_in_app_remote_url(path)) {
@@ -2204,6 +2202,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     }
     case C::ExportXml:
     case C::ExportMarkdown: {
+      if (buf(app, p.buf).blank_tab) break;
       const char* ext = cmd == C::ExportXml ? ".xml" : ".md";
       std::string cur = path_of(app, p);
       std::string target;

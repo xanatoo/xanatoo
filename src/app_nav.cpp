@@ -946,6 +946,7 @@ void show_doc_in_pane(App& app, int pi, xanatoo::Document doc,
   b.origin_visit = 0;
   b.dirty = false;
   b.placeholder = false;
+  b.blank_tab = false;
   attach_draft(app, p.buf);
   xanatoo::Document& nd = b.doc;
   p.sel = {};

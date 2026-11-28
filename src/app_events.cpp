@@ -2179,8 +2179,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
     return;
   }
 
-  if (ctrl && shift && !alt && key == SDLK_t) {
-    if (!ev.key.repeat) execute_command(app, UiCommand::RestoreClosedTab);
+  if (ctrl && !alt && key == SDLK_t) {
+    if (!ev.key.repeat)
+      execute_command(app, shift ? UiCommand::RestoreClosedTab
+                                 : UiCommand::NewTab);
     return;
   }
 
@@ -2318,11 +2320,10 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         k == SDLK_TAB || k == SDLK_RETURN || k == SDLK_KP_ENTER ||
         k == SDLK_SPACE || k == SDLK_LEFTBRACKET || k == SDLK_RIGHTBRACKET ||
         // Ctrl+C / A / S: copy, select, save an editable Markdown copy.
-        // Ctrl+T / W: new / close tab (not document edits); Ctrl+N a new
-        // document in a new tab. Ctrl+R reload.
+        // Ctrl+W closes the tab, Ctrl+N opens a new document, Ctrl+R reloads.
         (ctrl && (k == SDLK_q || k == SDLK_o || k == SDLK_f || k == SDLK_g ||
                   k == SDLK_c || k == SDLK_a || k == SDLK_s || k == SDLK_r ||
-                  k == SDLK_t || k == SDLK_w || k == SDLK_n ||
+                  k == SDLK_w || k == SDLK_n ||
                   k == SDLK_BACKSLASH || k == SDLK_l ||
                   k == SDLK_EQUALS || k == SDLK_MINUS || k == SDLK_PLUS ||
                   k == SDLK_KP_PLUS || k == SDLK_KP_MINUS)) ||
@@ -2882,22 +2883,6 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
           app.needs_layout = true;
           reset_blink(app);
         }
-      } else if (ctrl) {
-        // New tab
-        const BufferId bi = add_buffer(
-            app, xanatoo::parse_document(xanatoo::fallback_document(), {}), {});
-        app.tab_order.push_back(bi);
-        p.buf = bi;
-        p.sel = {};
-        xanatoo::ensure_valid_caret(buf(app, bi).doc,
-                                    p.sel.focus);
-        p.sel.anchor = p.sel.focus;
-        p.scroll_y = 0.f;
-        buf(app, bi).history.reset(
-            buf(app, bi).doc, p.sel);
-        app.needs_layout = true;
-        update_title(app);
-        flash_status(app, "New tab");
       }
       break;
 

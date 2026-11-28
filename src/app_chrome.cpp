@@ -408,6 +408,9 @@ StatusLine compute_status(App& app) {
   } else if (app.dragging_col_gap) {
     label = "Resizing columns — drag to adjust relative widths";
     tone = StatusTone::Info;
+  } else if (buf(app, focused_pane(app).buf).blank_tab) {
+    label = "Enter an address or search";
+    tone = StatusTone::Hint;
   } else if (app.diff_mode) {
     label =
         "Diff marks on — orange bars mark passages that differ · "
@@ -598,7 +601,8 @@ StatusLine compute_status(App& app) {
 
   // Selection / document statistics shown in the right-hand panel
   // (idle status only).
-  if (!prompt_shown && !app.help_mode && !app.outline_mode) {
+  if (!prompt_shown && !app.help_mode && !app.outline_mode &&
+      !buf(app, focused_pane(app).buf).blank_tab) {
     Pane& fp = focused_pane(app);
     StatsCache& sc = fp.stats;
     // Both counts walk the selection / whole document: once per layout.

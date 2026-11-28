@@ -113,6 +113,9 @@ by the displayed title (ignoring the unsaved marker). Bulk closes use
 `stash_or_confirm` for each buffer and stop if confirmation is needed.
 Application order changes are copied into ImGui before tab layout;
 the selected buffer stays selected. Tab menu items use the shared icon renderer.
+New Tab uses an addressless, read-only buffer with a blank canvas and URL
+bar. Navigation replaces its contents in the same tab. Empty tabs are
+transient and omitted from session files.
 Opening a link in a new tab records the source buffer as its parent and inserts
 the tab after the opener's contiguous descendants. Blank tabs and documents
 opened independently start their own trees. The horizontal strip adds space

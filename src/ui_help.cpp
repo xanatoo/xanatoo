@@ -101,7 +101,7 @@ const std::vector<UiHelpTopic> kTopics = {
      "Puts the keyboard into the address field to type an address, a path "
      "or a search. **Ctrl+L**."},
     {"new tab", "New tab",
-     "Opens a new tab in the centre view. **Ctrl+T**."},
+     "Opens a blank tab and focuses the address bar. **Ctrl+T**."},
     {"close tab", "Close tab",
      "Closes the current tab. Unsaved edits are kept as a draft. "
      "**Ctrl+W**."},
@@ -522,7 +522,7 @@ const std::vector<UiHelpTopic> kTopics = {
     {"tab", "Tab",
      "A document in the centre view. Click to show it, drag to reorder or "
      "out of the strip to turn it into a window; right-click for more."},
-    {"+|new-tab", "New tab", "Opens a new tab. **Ctrl+T**."},
+    {"+|new-tab", "New tab", "Opens a blank tab and focuses the address bar. **Ctrl+T**."},
 
     // ---- Native window frames ----
     {"@float-title", "Window title bar",

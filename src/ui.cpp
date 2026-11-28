@@ -2565,7 +2565,7 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       const float row_y = ImGui::GetCursorPosY();
       const float button_h = 32.f * scale_ + 6.f;
       const float field_h = 32.f * scale_;
-      std::string want = state.doc_label.empty() ? "untitled" : state.doc_label;
+      const std::string& want = state.doc_label;
       if (state.dirty) {
         ImGui::SetCursorPosY(row_y +
                              (button_h - ImGui::GetTextLineHeight()) * 0.5f);
@@ -2605,7 +2605,13 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
           !focus_url_bar_ && imgui.NavActivateId == url_id;
       url_context_resume_ = false;
       if (focus_url_bar_) {
-        ImGui::SetKeyboardFocusHere();
+        // The new location supersedes text left by the previous activation.
+        if (imgui.InputTextDeactivatedState.ID == url_id)
+          imgui.InputTextDeactivatedState.ID = 0;
+        if (imgui.ActiveId == url_id && imgui.InputTextState.ID == url_id)
+          imgui.InputTextState.ReloadUserBufAndSelectAll();
+        else
+          ImGui::SetKeyboardFocusHere();
         std::snprintf(url_input_, sizeof(url_input_), "%s", want.c_str());
         url_synced_from_ = want;
         focus_url_bar_ = false;
@@ -3824,16 +3830,16 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
       menu_item_cmd("Move Window to Tab", UiCommand::PopIn, cmd, state.has_floating,
                     "Ctrl+Shift+P");
       ImGui::Separator();
-      menu_item_cmd("Save", UiCommand::Save, cmd, true, "Ctrl+S");
+      menu_item_cmd("Save", UiCommand::Save, cmd, !state.doc_label.empty(), "Ctrl+S");
       menu_item_cmd("Publish locally", UiCommand::Publish, cmd,
                     state.can_publish);
       menu_item_cmd("Edit local copy", UiCommand::EditLocalCopy, cmd,
                     state.can_make_local_copy);
       menu_item_cmd("View original", UiCommand::ViewOriginal, cmd,
                     state.can_publish);
-      menu_item_cmd("Export a copy…", UiCommand::SaveAs, cmd, true, "Ctrl+Shift+S");
-      menu_item_cmd("Export as XML…", UiCommand::ExportXml, cmd, true);
-      menu_item_cmd("Export as Markdown…", UiCommand::ExportMarkdown, cmd, true);
+      menu_item_cmd("Export a copy…", UiCommand::SaveAs, cmd, !state.doc_label.empty(), "Ctrl+Shift+S");
+      menu_item_cmd("Export as XML…", UiCommand::ExportXml, cmd, !state.doc_label.empty());
+      menu_item_cmd("Export as Markdown…", UiCommand::ExportMarkdown, cmd, !state.doc_label.empty());
       ImGui::Separator();
       menu_item_cmd("Reload", UiCommand::Reload, cmd, state.has_path, "Ctrl+R / F5");
       menu_item_cmd("Force Reload", UiCommand::ForceReload, cmd, state.has_path,
@@ -3923,7 +3929,7 @@ UiFrameResult Ui::begin_frame(const UiState& state) {
         }
         ImGui::EndMenu();
       }
-      if (ImGui::BeginMenu("View Source")) {
+      if (ImGui::BeginMenu("View Source", !state.doc_label.empty())) {
         if (ImGui::MenuItem("Rendered Document", nullptr,
                             state.source_mode.empty()))
           cmd = UiCommand::ViewSourceRendered;
