@@ -2136,9 +2136,10 @@ static bool handle_nav_key(App& app, const SDL_Event& ev, bool ctrl, bool shift,
             for (const auto& g : p.layout.glyphs) {
               if (g.node != p.sel.focus.node) continue;
               if (std::abs(g.y - (cpos.y + p.scroll_y)) > 2.f) continue;
-              if (g.x >= best_x) {
+              if (g.x > best_x || (g.x == best_x && !g.caret_only)) {
                 best_x = g.x;
-                best = {g.node, g.span_index, g.char_index + 1};
+                best = {g.node, g.span_index,
+                        g.char_index + (g.caret_only ? 0 : 1)};
               }
             }
             p.sel.focus = best;

@@ -3753,6 +3753,56 @@ void test_glyphs_in_band() {
   EXPECT(indexed.empty());
 }
 
+void test_code_block_caret_movement() {
+  using namespace xanatoo;
+  FontSet fonts;
+  std::string path = fontconfig_find("DejaVu Sans", 0, 0);
+  if (path.empty()) path = fontconfig_find("Liberation Sans", 0, 0);
+  if (path.empty() || !fonts.load(nullptr, path, 18, 24)) {
+    std::fprintf(stderr, "SKIP test_code_block_caret_movement (no font)\n");
+    return;
+  }
+
+  Document doc;
+  const NodeId root = doc.create(NodeKind::Document);
+  const NodeId code = doc.create(NodeKind::CodeBlock, root);
+  doc.append_text(code, "xyz\n\nq\r\n");
+  LayoutEngine engine(fonts, nullptr);
+  const auto layout = engine.layout(doc, 800.f);
+  auto pos = [&](size_t index) {
+    return caret_screen_pos(layout, {code, 0, index}, 0.f, 20.f);
+  };
+  const auto start = pos(0);
+  const auto end = pos(3);
+  const auto blank = pos(4);
+  const auto last_text = pos(6);
+  const auto trailing = pos(8);
+  EXPECT(start.valid && end.valid && blank.valid && last_text.valid &&
+         trailing.valid);
+  EXPECT(start.y == end.y && end.x > start.x);
+  EXPECT(end.y < blank.y && blank.y < last_text.y && last_text.y < trailing.y);
+  EXPECT(blank.x == start.x && trailing.x == start.x);
+  EXPECT(pos(7).x == last_text.x && pos(7).y == last_text.y);
+
+  Caret caret{code, 0, 3};
+  EXPECT(move_down(layout, caret, end.x) && caret.char_index == 4);
+  EXPECT(move_down(layout, caret, end.x) && caret.char_index == 6);
+  EXPECT(move_down(layout, caret, end.x) && caret.char_index == 8);
+  EXPECT(!move_down(layout, caret, end.x));
+  EXPECT(move_up(layout, caret, end.x) && caret.char_index == 6);
+  EXPECT(move_up(layout, caret, end.x) && caret.char_index == 4);
+  EXPECT(move_up(layout, caret, end.x) && caret.char_index == 3);
+
+  const auto clicked = hit_test(layout, trailing.x + 8.f, trailing.y - 6.f, 0.f);
+  EXPECT(clicked && clicked->node == code && clicked->char_index == 8);
+
+  doc.get(code).spans[0].text = "xyz\nabc";
+  const auto without_trailing_break = engine.layout(doc, 800.f);
+  caret = {code, 0, 7};
+  EXPECT(!move_down(without_trailing_break, caret, end.x));
+  EXPECT(move_up(without_trailing_break, caret, end.x) && caret.char_index == 3);
+}
+
 void test_layout_skips_lines_outside_band() {
   using namespace xanatoo;
   FontSet fonts;
@@ -10145,6 +10195,7 @@ int main() {
   test_epub_native();
   test_office_import();
   test_hit_test_wrapped_link();
+  test_code_block_caret_movement();
   test_layout_skips_lines_outside_band();
   test_layout_line_table_matches_fresh();
   test_layout_column_auto_links();

@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Code block caret movement
+
+- Map code block line endings to their own rows so arrow keys, Home, End
+  and clicks can reach the correct position, including on blank lines.
+- Cover hard line endings, CRLF, blank lines and block ends in unit tests.
+- Passed 15,197 unit checks and all 33 CTest targets in Nix.
+
 ## Status (2026-11-28) — Desktop file dialogs
 
 - Use SDL3 file dialogs for Insert Image / Figure, Open, Open in Window,

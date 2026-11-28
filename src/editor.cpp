@@ -146,8 +146,8 @@ std::optional<Caret> hit_test(const LayoutResult& layout,
       gw = layout.glyphs[i + 1].x - g.x;
       if (gw < 1.f) gw = g.advance > 0.f ? g.advance : 8.f;
     }
-    float mid = gx + gw * 0.5f;
-    size_t ch = g.char_index + (sx >= mid ? 1 : 0);
+    float mid = g.caret_only ? gx : gx + gw * 0.5f;
+    size_t ch = g.char_index + (!g.caret_only && sx >= mid ? 1 : 0);
     float dx = sx - mid;
     float cy = gy - 6.f;  // mid of typical body ink band
     float dy = sy - cy;
@@ -2674,106 +2674,42 @@ std::optional<std::string> hit_test_timestamp(const Document& doc,
   return std::nullopt;
 }
 
-bool move_up(const LayoutResult& layout, Caret& caret, float preferred_x) {
-  // Find current baseline
-  float cur_y = -1.f;
-  for (const auto& g : layout.glyphs) {
-    if (g.node == caret.node && g.span_index == caret.span_index &&
-        g.char_index == caret.char_index) {
-      cur_y = g.y;
-      break;
-    }
-  }
-  if (cur_y < 0.f) {
-    // Try nearest glyph of this node
-    for (const auto& g : layout.glyphs) {
-      if (g.node == caret.node) {
-        cur_y = g.y;
-        break;
-      }
-    }
-  }
-  if (cur_y < 0.f) return false;
+static bool move_vertical(const LayoutResult& layout, Caret& caret,
+                          float preferred_x, int direction) {
+  const auto pos = caret_screen_pos(layout, caret, 0.f, 0.f);
+  if (!pos.valid) return false;
 
-  // Find the highest baseline strictly above cur_y
-  float target_y = -1.f;
-  for (const auto& g : layout.glyphs) {
-    if (g.y < cur_y - 0.5f) {
-      if (target_y < 0.f || g.y > target_y) target_y = g.y;
-    }
-  }
-  if (target_y < 0.f) return false;
-
-  // Pick glyph on that baseline closest in x to preferred_x
-  float best_dx = std::numeric_limits<float>::max();
-  Caret best = caret;
-  bool found = false;
+  float target_distance = std::numeric_limits<float>::max();
   for (const auto& g : layout.glyphs) {
     if (g.node == INVALID_NODE) continue;
-    if (std::abs(g.y - target_y) > 0.5f) continue;
-    float dx = std::abs(g.x - preferred_x);
+    const float distance = direction * (g.y - pos.y);
+    if (distance > 0.5f && distance < target_distance)
+      target_distance = distance;
+  }
+
+  float best_dx = std::numeric_limits<float>::max();
+  std::optional<Caret> best;
+  for (const auto& g : layout.glyphs) {
+    if (g.node == INVALID_NODE) continue;
+    const float distance = direction * (g.y - pos.y);
+    if (std::abs(distance - target_distance) > 0.5f) continue;
+    const float dx = std::abs(g.x - preferred_x);
     if (dx < best_dx) {
       best_dx = dx;
-      best.node = g.node;
-      best.span_index = g.span_index;
-      best.char_index = g.char_index;
-      found = true;
+      best = Caret{g.node, g.span_index, g.char_index};
     }
   }
-  if (found) {
-    caret = best;
-    return true;
-  }
-  return false;
+  if (!best) return false;
+  caret = *best;
+  return true;
+}
+
+bool move_up(const LayoutResult& layout, Caret& caret, float preferred_x) {
+  return move_vertical(layout, caret, preferred_x, -1);
 }
 
 bool move_down(const LayoutResult& layout, Caret& caret, float preferred_x) {
-  float cur_y = -1.f;
-  for (const auto& g : layout.glyphs) {
-    if (g.node == caret.node && g.span_index == caret.span_index &&
-        g.char_index == caret.char_index) {
-      cur_y = g.y;
-      break;
-    }
-  }
-  if (cur_y < 0.f) {
-    for (const auto& g : layout.glyphs) {
-      if (g.node == caret.node) {
-        cur_y = g.y;
-        break;
-      }
-    }
-  }
-  if (cur_y < 0.f) return false;
-
-  float target_y = -1.f;
-  for (const auto& g : layout.glyphs) {
-    if (g.y > cur_y + 0.5f) {
-      if (target_y < 0.f || g.y < target_y) target_y = g.y;
-    }
-  }
-  if (target_y < 0.f) return false;
-
-  float best_dx = std::numeric_limits<float>::max();
-  Caret best = caret;
-  bool found = false;
-  for (const auto& g : layout.glyphs) {
-    if (g.node == INVALID_NODE) continue;
-    if (std::abs(g.y - target_y) > 0.5f) continue;
-    float dx = std::abs(g.x - preferred_x);
-    if (dx < best_dx) {
-      best_dx = dx;
-      best.node = g.node;
-      best.span_index = g.span_index;
-      best.char_index = g.char_index;
-      found = true;
-    }
-  }
-  if (found) {
-    caret = best;
-    return true;
-  }
-  return false;
+  return move_vertical(layout, caret, preferred_x, 1);
 }
 
 bool move_to_prev_node(Document& doc, Caret& caret) {

@@ -3366,6 +3366,11 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     float rise = 0.f;  // baseline lift (footnote marks without superscripts)
     uint32_t atom = 0;  // 1 + index into `atoms`; 0 = text
   };
+  constexpr uint32_t kCodeEnd = 0x110000;  // synthetic end-of-block caret
+  const bool code_block = block == BlockRole::CodeBlock;
+  auto code_caret_only = [&](uint32_t cp) {
+    return code_block && (cp == '\n' || cp == '\r' || cp == kCodeEnd);
+  };
   std::vector<Atom> atoms;
   std::vector<CharInfo> chars;
   auto atom_of = [&](const CharInfo& c) -> const Atom* {
@@ -3560,6 +3565,11 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       }
       chars.push_back(c);
     }
+    if (code_block && si + 1 == node.spans.size() &&
+        flat0 + chars.size() < flat_end) {
+      chars.push_back({kCodeEnd, si32, static_cast<uint32_t>(ch0 + cps.size()),
+                       InlineKind::Text, r});
+    }
   }
 
   // Plain-text URLs become links for this layout only (the span stays Text).
@@ -3690,7 +3700,9 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     record(chars[lo], lo, true);
     // Trim trailing spaces from the measured/justified run.
     size_t content_hi = hi;
-    while (content_hi > lo && chars[content_hi - 1].cp == ' ') --content_hi;
+    while (content_hi > lo && (chars[content_hi - 1].cp == ' ' ||
+                               code_caret_only(chars[content_hi - 1].cp)))
+      --content_hi;
 
     float natural = 0.f;
     int gaps = 0;
@@ -3820,6 +3832,13 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
         lx += atom->w;
         continue;
       }
+      if (code_caret_only(c.cp)) {
+        pg.codepoint = ' ';
+        pg.x = lx;
+        pg.caret_only = true;
+        out.glyphs.push_back(pg);
+        continue;
+      }
       Font& font = fonts_.pick(c.role);
       const Glyph& g = font.glyph(c.cp);
       const float adv = g.advance_px();
@@ -3897,6 +3916,14 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
 
   for (size_t i = 0; i < chars.size(); ++i) {
     const uint32_t cp = chars[i].cp;
+
+    if (code_caret_only(cp)) {
+      // The break occupies the end of this row, even when the row is empty.
+      end_word();
+      if (cp == '\r' && i + 1 < chars.size() && chars[i + 1].cp == '\n') ++i;
+      flush_line(i + 1, true);
+      continue;
+    }
 
     if (cp == '\n' || cp == '\r') {
       // Commit any partial word, then hard-break.
@@ -3989,7 +4016,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
     auto measure_rest = [&](size_t from) {
       word_full_w = 0.f;
       for (size_t j = from; j < chars.size(); ++j) {
-        if (chars[j].cp == ' ' || chars[j].cp == '\n' || chars[j].cp == '\r' ||
+        if (chars[j].cp == ' ' || chars[j].cp == '\n' ||
+            chars[j].cp == '\r' || chars[j].cp == kCodeEnd ||
             atom_w(chars[j]) > 0.f) break;
         word_full_w += char_adv(chars[j]);
         if (word_full_w > lw) break;
@@ -4010,7 +4038,8 @@ void LayoutEngine::layout_paragraph(const Document& doc, const Node& node,
       float remaining_word_w = 0.f;
       for (size_t j = i; j < chars.size(); ++j) {
         if (chars[j].cp == ' ' || chars[j].cp == '\n' ||
-            chars[j].cp == '\r' || atom_w(chars[j]) > 0.f) break;
+            chars[j].cp == '\r' || chars[j].cp == kCodeEnd ||
+            atom_w(chars[j]) > 0.f) break;
         remaining_word_w += char_adv(chars[j]);
         if (line_w + remaining_word_w > lw) break;
       }

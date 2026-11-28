@@ -19,6 +19,9 @@ HTML mapping, tables, images, collections, imports and style sheet details.
   `draw`. Marks / bookmarks / quote washes are overlays after the text.
 - Block quote bars and code block frames span the laid-out text. The role's
   `space-after` advances the next block below the decoration.
+- Code block layout keeps zero-width caret positions at hard line endings
+  and at the end of the block. Empty lines, including the one after a
+  trailing newline, have their own visual rows.
 - Shipped sheets keep text ≥ 4.5:1 on its background (metadata, meta,
   footnotes included — dark sheets must override the default's dark
   footnote / strike colours), a selection that differs from `mark`, every

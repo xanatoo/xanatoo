@@ -344,7 +344,7 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
     };
     for (uint32_t gi : near) {
       const PositionedGlyph& pg = layout.glyphs[gi];
-      if (pg.kind != InlineKind::Code) {
+      if (pg.caret_only || pg.kind != InlineKind::Code) {
         flush_run();
         continue;
       }
@@ -389,6 +389,7 @@ void Renderer::draw(const LayoutResult& layout, float scroll_y, float origin_x,
   const auto& glyphs = layout.glyphs;
   for (uint32_t i : near) {
     const PositionedGlyph& pg = glyphs[i];
+    if (pg.caret_only) continue;
     if (pg.kind == InlineKind::Image) continue;  // drawn with the images
     // The caret slot of a formula (its fallback text is drawn as code).
     if (pg.kind == InlineKind::Math && pg.codepoint == kInlineImageCp) continue;

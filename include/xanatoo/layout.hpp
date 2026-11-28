@@ -35,6 +35,7 @@ struct PositionedGlyph {
   uint8_t marks = 0;  // InlineSpan::marks (a struck-through link, …)
   FontRole font = FontRole::Body;
   Rgba color;  // computed from the style sheet (block role + inline kind)
+  bool caret_only = false;  // zero-width code line ending
 };
 
 // Start of a line laid out but not materialised (LayoutResult::skipped_lines).
