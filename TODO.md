@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — URL suggestions on empty input
+
+- Show suggestions once the URL bar contains text. Hide them again when
+  the field is cleared.
+- Passed 15,182 unit checks in Nix. Xvfb verified opening, clearing,
+  and reopening the suggestions by typing.
+
 ## Status (2026-11-28) — Blank New Tab
 
 - Give New Tab a blank canvas and focus the empty URL bar. Keep document

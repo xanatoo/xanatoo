@@ -193,7 +193,8 @@ adds normal visits to the persistent `minibuf_hist_url` ring
 `state_dir()/xanatoo.sqlite` by `statedb.hpp`; `poll_shared_state` reloads
 both when another process changed them), shared with the
 location bar's local suggestions (`urlbar_suggestions.hpp`, also matches open
-tabs and bookmarks). Only in Trail mode do the
+tabs and bookmarks). The URL bar closes the suggestion list and clears its
+selection when the input becomes empty. Only in Trail mode do the
 centre panes share one trail instead (`App::split_history`, levels = left
 page + pages opened from it on the right): `push_nav_history` forwards to
 it and `nav_step` / `can_nav_step` walk it (`app_split.cpp`). The split trail

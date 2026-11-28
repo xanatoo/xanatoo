@@ -2695,7 +2695,11 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
       url_suggestion_x_ = field_pos.x;
       url_suggestion_y_ = field_end.y + 2.f * scale_;
       url_suggestion_w_ = field_w;
-      if (url_active) {
+      if (url_input_[0] == '\0') {
+        url_suggestions_open_ = false;
+        url_suggestion_selected_ = -1;
+        url_suggestion_query_.clear();
+      } else if (url_active) {
         if (ImGui::IsItemActivated() || ImGui::IsItemEdited()) {
           if (!resume_context || ImGui::IsItemEdited())
             url_suggestions_dismissed_ = false;

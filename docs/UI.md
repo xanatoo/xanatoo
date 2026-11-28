@@ -157,10 +157,11 @@ navigation rows any more.
 
 ## URL bar suggestions
 
-- Focusing the location field (including **Ctrl+L**) opens a list of up to
-  eight matches from open tabs, bookmarks and recently visited addresses.
-  Selecting all the location text presents recent suggestions; typing filters
-  addresses and bookmark/tab titles case-insensitively. Matching and ranking
+- The suggestion list opens when the location field has text. It shows up
+  to eight matches from open tabs, bookmarks and recently visited addresses.
+  Selecting a populated address (including with **Ctrl+L**) shows recent
+  suggestions. Typing filters addresses and bookmark/tab titles
+  case-insensitively. Matching and ranking
   are local; typing does not contact a search engine.
 - **Up/Down** chooses a suggestion, **Enter** opens it (or switches to its
   existing tab), and clicking a result does the same. Without a selected
