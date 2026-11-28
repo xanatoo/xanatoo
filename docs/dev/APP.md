@@ -215,6 +215,12 @@ path/URL kinds edit through `App::minibuf` (`prompt_uses_minibuf`), and
 `last_search`/`last_replace` keep a closed or displaced find for F3 /
 Replace All.
 
+Open, Open in Window, Export, Save PDF, and Insert Image / Figure use
+SDL3 file dialogs on desktop. The SDL callback captures the result and
+the frame loop applies it through the existing path handlers. SDL2 and
+non-desktop ports keep the path prompts. Include / Transclude still
+accepts a document address in the status bar.
+
 The kinds Search and Replace are not in the status bar but in the find bar,
 an ImGui strip (`Ui::find_bar`) below the text of `app.focus`, which takes its
 height from the view (`pane_foot_h` = page bar + find bar, wherever a view's
@@ -259,8 +265,8 @@ source in a new gallery tab. Linked images also keep their link actions.
 Copy image uses SDL3's bitmap clipboard. The address and tab actions
 are available in SDL2 builds as well.
 
-The context menu of a downloaded PDF offers **Save PDF…**. The save
-prompt captures the cached file from the clicked view and suggests the
+The context menu of a downloaded PDF offers **Save PDF…**. The file
+dialog captures the cached file from the clicked view and suggests the
 server's filename in Downloads.
 
 Ctrl+A expands the selection in document views and laid-out Context pages.

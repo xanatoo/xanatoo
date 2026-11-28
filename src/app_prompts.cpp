@@ -27,6 +27,12 @@
 #include "xanatoo/statedb.hpp"
 #include "xanatoo/util.hpp"
 
+#if XANATOO_SDL3 && (defined(SDL_PLATFORM_LINUX) || \
+                    defined(SDL_PLATFORM_WIN32) || defined(SDL_PLATFORM_MACOS))
+#include <SDL3/SDL_dialog.h>
+#define XANATOO_NATIVE_FILE_DIALOGS 1
+#endif
+
 namespace fs = std::filesystem;
 
 namespace xanatoo::app {
@@ -77,6 +83,125 @@ void open_prompt(App& app, PromptKind kind, std::string initial) {
   app.prompt.kind = kind;
   app.prompt.text = std::move(initial);
   if (prompt_uses_minibuf(kind)) minibuf_begin(app, app.prompt.text);
+}
+
+#if XANATOO_NATIVE_FILE_DIALOGS
+struct FileDialog {
+  PromptKind kind;
+  std::string initial;
+  std::string source_path;
+  int view;
+  BufferId buffer;
+  xanatoo::Caret caret;
+  uint64_t doc_gen;
+
+  std::mutex mutex;
+  bool done = false;
+  std::string path;
+  std::string error;
+};
+
+namespace {
+
+bool inserts_image(PromptKind kind) {
+  return kind == PromptKind::InsertImage || kind == PromptKind::InsertFigure;
+}
+
+void SDLCALL file_dialog_callback(void* userdata, const char* const* files,
+                                  int /*filter*/) {
+  // SDL can complete on another thread, even after App has been destroyed.
+  const std::unique_ptr<std::shared_ptr<FileDialog>> owner(
+      static_cast<std::shared_ptr<FileDialog>*>(userdata));
+  FileDialog& dialog = **owner;
+  std::lock_guard lock(dialog.mutex);
+  if (!files) {
+    dialog.error = SDL_GetError();
+    if (dialog.error.empty()) dialog.error = "No file dialog available";
+  } else if (files[0]) {
+    dialog.path = files[0];
+  }
+  dialog.done = true;
+}
+
+}  // namespace
+#endif
+
+void open_file_dialog(App& app, PromptKind kind, std::string initial,
+                      std::string source_path) {
+#if XANATOO_NATIVE_FILE_DIALOGS
+  const char* driver = SDL_GetCurrentVideoDriver();
+  if (driver && std::string_view(driver) != "kmsdrm") {
+    if (app.file_dialog) return;
+    const Pane& pane = focused_pane(app);
+    if (inserts_image(kind) && browsing(app)) return;
+
+    auto dialog = std::make_shared<FileDialog>();
+    dialog->kind = kind;
+    if (!initial.empty()) {
+      std::error_code ec;
+      const fs::path absolute = fs::absolute(initial, ec);
+      dialog->initial = ec ? std::move(initial) : absolute.string();
+    }
+    dialog->source_path = std::move(source_path);
+    dialog->view = app.focus;
+    dialog->buffer = pane.buf;
+    dialog->caret = pane.sel.focus;
+    if (inserts_image(kind)) dialog->doc_gen = buf(app, pane.buf).doc_gen;
+
+    app.file_dialog = dialog;
+    auto* userdata = new std::shared_ptr<FileDialog>(dialog);
+    const char* location = dialog->initial.empty() ? nullptr
+                                                   : dialog->initial.c_str();
+    if (kind == PromptKind::SaveAs || kind == PromptKind::SavePdf) {
+      SDL_ShowSaveFileDialog(file_dialog_callback, userdata, app.window, nullptr,
+                             0, location);
+    } else {
+      SDL_ShowOpenFileDialog(file_dialog_callback, userdata, app.window,
+                             nullptr, 0, location, false);
+    }
+    return;
+  }
+#endif
+  open_prompt(app, kind, std::move(initial));
+  app.prompt.source_path = std::move(source_path);
+}
+
+void poll_file_dialog(App& app) {
+#if XANATOO_NATIVE_FILE_DIALOGS
+  const auto dialog = app.file_dialog;
+  if (!dialog) return;
+  {
+    std::lock_guard lock(dialog->mutex);
+    if (!dialog->done) return;
+  }
+  app.file_dialog.reset();
+  if (!dialog->error.empty()) {
+    flash_status(app, "File dialog: " + dialog->error);
+    return;
+  }
+  if (dialog->path.empty()) return;
+
+  const Pane& pane = focused_pane(app);
+  if (dialog->kind != PromptKind::SavePdf &&
+      (app.focus != dialog->view || pane.buf != dialog->buffer)) {
+    flash_status(app, "File selection cancelled because the active view changed");
+    return;
+  }
+  if (inserts_image(dialog->kind) &&
+      (browsing(app) || pane.sel.focus != dialog->caret ||
+       buf(app, pane.buf).doc_gen != dialog->doc_gen)) {
+    flash_status(app, "Image insertion cancelled because the document or caret changed");
+    return;
+  }
+
+  // Apply the same import, export and insertion rules as the path prompt.
+  open_prompt(app, dialog->kind, std::move(dialog->path));
+  app.prompt.source_path = std::move(dialog->source_path);
+  commit_prompt(app, false, false);
+  close_prompt(app);
+#else
+  (void)app;
+#endif
 }
 
 void open_search(App& app, bool replace, bool focus) {

@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Desktop file dialogs
+
+- Use SDL3 file dialogs for Insert Image / Figure, Open, Open in Window,
+  Export, and Save PDF. Keep address entry for Include / Transclude and
+  retain path prompts on ports without desktop dialogs.
+- Passed 15,182 unit checks in Nix. Xvfb with simulated chooser results
+  verified image and figure insertion, cancellation, export, and opening.
+  The live SDL3 desktop portal also verified Insert → Image under Xvfb.
+
 ## Status (2026-11-28) — URL suggestions on empty input
 
 - Show suggestions once the URL bar contains text. Hide them again when

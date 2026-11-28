@@ -1126,6 +1126,8 @@ struct Prompt {
   size_t span = 0;
 };
 
+struct FileDialog;
+
 // A Gemini server's certificate as last seen this session (app_certs.cpp),
 // shown by the address bar's site icon and the Certificates panel.
 struct GeminiSiteCert {
@@ -1382,6 +1384,7 @@ struct App {
   bool right_dock_hidden = false;
   int dock_w[4] = {280, 360, 200, 200};  // Left / Right width, Top / Bottom height
   Prompt prompt;
+  std::shared_ptr<FileDialog> file_dialog;
   // Last find / replace text, kept when another prompt displaces a search
   // so F3 / Replace All keep working.
   std::string last_search, last_replace;
@@ -2122,6 +2125,10 @@ inline bool prompt_has_keys(const App& app) {
 bool prompt_uses_minibuf(PromptKind k);
 // Opens `kind` (closing any prompt that was open); `initial` seeds the text.
 void open_prompt(App& app, PromptKind kind, std::string initial = {});
+// Pick a local file using SDL, or use a path prompt on ports without dialogs.
+void open_file_dialog(App& app, PromptKind kind, std::string initial = {},
+                      std::string source_path = {});
+void poll_file_dialog(App& app);
 // Closes the prompt and clears its text. Search text survives in last_search.
 void close_prompt(App& app);
 // The keys go elsewhere (document click, URL bar): closes status-bar

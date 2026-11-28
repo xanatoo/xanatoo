@@ -95,8 +95,8 @@ Sizing per format:
   stops the transfer (`FetchShared::abandoned`); the size limit is 2 GiB.
 - Right-click a displayed web PDF and choose **Save PDF…** to copy the
   cached original to a path of your choice without fetching it again.
-  The prompt suggests the server's filename in Downloads and refuses
-  to overwrite an existing file.
+  The file dialog suggests the server's filename in Downloads. The save
+  action refuses to overwrite an existing file.
 - `load_doc` (tabs, session restore) reads synchronously.
 - Without thumtoo (minimal ports) the file shows an error page, and
   `app_pagetiles.cpp` is a stub. Android's thumtoo has MuPDF (PDF, EPUB),

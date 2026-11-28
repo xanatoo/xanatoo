@@ -1266,7 +1266,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::OpenDocument:
-      open_prompt(app, PromptKind::OpenFile);
+      open_file_dialog(app, PromptKind::OpenFile);
       break;
     case C::OpenUrlBar:
       leave_prompt(app);
@@ -2197,7 +2197,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         suggested = (fp.parent_path() /
                      (fp.stem().string() + "-export.md")).string();
       }
-      open_prompt(app, PromptKind::SaveAs, std::move(suggested));
+      open_file_dialog(app, PromptKind::SaveAs, std::move(suggested));
       break;
     }
     case C::ExportXml:
@@ -2215,7 +2215,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
         if (fp.has_parent_path() && !fp.parent_path().empty())
           target = (fp.parent_path() / (fp.stem().string() + "-export" + ext)).string();
       }
-      open_prompt(app, PromptKind::SaveAs, std::move(target));
+      open_file_dialog(app, PromptKind::SaveAs, std::move(target));
       break;
     }
     case C::Reload:
@@ -2341,9 +2341,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       fs::path name = fs::path(app.context_pdf_name).filename();
       if (!xanatoo::ends_with(xanatoo::ascii_lower(name.string()), ".pdf"))
         name = "document.pdf";
-      open_prompt(app, PromptKind::SavePdf,
-                  (fs::path(xanatoo::downloads_dir()) / name).string());
-      app.prompt.source_path = app.context_pdf_path;
+      open_file_dialog(app, PromptKind::SavePdf,
+                       (fs::path(xanatoo::downloads_dir()) / name).string(),
+                       app.context_pdf_path);
       break;
     }
     case C::ConfirmDownload:
@@ -2639,10 +2639,10 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::InsertImage:
-      open_prompt(app, PromptKind::InsertImage);
+      open_file_dialog(app, PromptKind::InsertImage);
       break;
     case C::InsertFigure:
-      open_prompt(app, PromptKind::InsertFigure);
+      open_file_dialog(app, PromptKind::InsertFigure);
       break;
     case C::Heading1:
       edit(app);
@@ -3105,7 +3105,7 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::OpenInWindow:
-      open_prompt(app, PromptKind::OpenInWindow);
+      open_file_dialog(app, PromptKind::OpenInWindow);
       break;
     case C::OpenExample: {
       std::string name = arg;
@@ -5951,6 +5951,7 @@ void run_frame(App& app) {
   sync_nav_history(app);  // capture scroll before a completed fetch swaps pages
   poll_fetches(app);
   poll_download_folder_picks(app);
+  poll_file_dialog(app);
   poll_subscriptions(app);
   update_audio(app);
   sync_nav_history(app);  // apply Back/Forward restore after remote loads

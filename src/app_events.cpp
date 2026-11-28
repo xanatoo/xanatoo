@@ -2825,7 +2825,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
         break;
       }
       if (ctrl) {
-        open_prompt(app, PromptKind::OpenFile);
+        execute_command(app, UiCommand::OpenDocument);
       }
       break;
 
@@ -2924,8 +2924,7 @@ static void on_keydown(App& app, SDL_Event& ev, bool imgui_mouse,
 
     case SDLK_i:
       if (ctrl && shift) {
-        // Insert image — prompt for path in status bar
-        open_prompt(app, PromptKind::InsertImage);
+        execute_command(app, UiCommand::InsertImage);
         break;
       }
       if (ctrl && !p.sel.empty()) {
