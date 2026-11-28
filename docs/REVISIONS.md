@@ -74,6 +74,7 @@ to that node, so you can still return to the previous branch. A stale
 writer or selection cannot overwrite another editor's selection.
 
 Day dividers use local dates and follow the graph's existing revision order.
+Each revision shows the size of its serialized document snapshot.
 Visible rows gain a label by comparing each snapshot with its parent.
 The panel compares at most one uncached row per frame, displays **Changed**
 for snapshots over 64 KiB, and keeps the labels in memory for the session.

@@ -153,6 +153,7 @@ struct DocumentRevision {
   std::string parent;
   bool original = false;
   int64_t time = 0;
+  int64_t bytes = -1; // Serialized snapshot size, or -1 if unavailable.
 };
 
 std::vector<DocumentRevision> stored_document_history(std::string_view key);

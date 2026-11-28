@@ -529,13 +529,14 @@ std::vector<DocumentRevision> stored_document_history(std::string_view key) {
   sqlite3* d = db();
   if (!d || !native_document_key(key)) return {};
   // Insertion order breaks timestamp ties and puts children before parents.
-  Stmt rows(d, "SELECT id, parent, kind, time FROM revisions "
-               "WHERE doc_key = ? AND kind IN ('working', 'original') "
-               "ORDER BY rowid DESC;", {key});
+  Stmt rows(d, "SELECT r.id, r.parent, r.kind, r.time, COALESCE(length(o.data), -1) "
+               "FROM revisions r LEFT JOIN objects o ON o.id = r.content "
+               "WHERE r.doc_key = ? AND r.kind IN ('working', 'original') "
+               "ORDER BY r.rowid DESC;", {key});
   std::vector<DocumentRevision> out;
   while (rows.row())
     out.push_back({rows.text(0), rows.text(1), rows.text(2) == "original",
-                   rows.int64(3)});
+                   rows.int64(3), rows.int64(4)});
   return out;
 }
 

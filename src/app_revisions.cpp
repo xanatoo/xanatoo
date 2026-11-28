@@ -5,6 +5,7 @@
 #include "xanatoo/parse.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/theme.hpp"
+#include "xanatoo/transfer_meter.hpp"
 
 #include <algorithm>
 #include <ctime>
@@ -152,16 +153,17 @@ void draw_revision_panel(App& app) {
   xanatoo::sdl::set_clip_rect(app.sdl, &clip);
   const auto& pal = xanatoo::theme::palette();
   const int step = row_height(app);
-  auto draw_label = [&](int x, int y, const std::string& label,
+  const int text_right = cx + cw - 16;
+  auto draw_label = [&](int x, int y, int right, const std::string& label,
                         const theme::Rgb& ink) {
     const int baseline = y + (step - app.ui_font.line_height()) / 2 +
                          app.ui_font.ascender();
     app.renderer.draw_text(app.ui_font, static_cast<float>(x),
         static_cast<float>(baseline), fit_text(app.ui_font, label,
-        std::max(0, cx + cw - 16 - x)), ink.r, ink.g, ink.b);
+        std::max(0, right - x)), ink.r, ink.g, ink.b);
   };
   if (!b) {
-    draw_label(cx + 7, cy, "No revisions for this document", pal.text_dim);
+    draw_label(cx + 7, cy, text_right, "No revisions for this document", pal.text_dim);
     xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
     return;
   }
@@ -212,7 +214,7 @@ void draw_revision_panel(App& app) {
   for (int slot = first_slot; slot < last_slot; ++slot) {
     const auto& [row, stamp] = rows[slot];
     if (row < 0) {
-      draw_label(label_x, slot_y(slot), stamp, pal.text_dim);
+      draw_label(label_x, slot_y(slot), text_right, stamp, pal.text_dim);
       continue;
     }
     const bool current = history[row].id == b->stored_working;
@@ -234,7 +236,16 @@ void draw_revision_panel(App& app) {
       if (cached != app.revision_labels.end()) label += cached->second;
     }
     label += "  " + revision.id.substr(7, 8);
-    draw_label(label_x, y_of(row), label, pal.text);
+    int label_right = text_right;
+    if (revision.bytes >= 0) {
+      const auto size = transfer_bytes_label(static_cast<uint64_t>(revision.bytes));
+      const int size_x = text_right - app.ui_font.measure(size);
+      if (size_x >= label_x) {
+        draw_label(size_x, y_of(row), text_right, size, pal.text_dim);
+        label_right = size_x - 8;
+      }
+    }
+    draw_label(label_x, y_of(row), label_right, label, pal.text);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
   draw_client_scrollbar(app, w, revision_panel_max_scroll(app, ch));

@@ -449,7 +449,9 @@ void test_stored_documents() {
     EXPECT(imported_history.size() == 2);
     EXPECT(imported_history.size() >= 2 &&
            imported_history[0].id == imported->working &&
-           imported_history[1].original);
+           imported_history[1].original &&
+           imported_history[0].bytes == 21 &&
+           imported_history[1].bytes == 15);
     if (provenance) {
       auto selected_original = select_stored_document_revision(
           imported->key, provenance->revision, imported->working,

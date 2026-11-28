@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Document size in revision rows
+
+- Show the serialized snapshot size on the right of each revision.
+  Read the byte count with the history metadata.
+- Passed 15,207 unit checks and all 33 CTest targets in Nix. Xvfb verified
+  byte and KiB labels alongside change labels.
+
 ## Status (2026-11-28) — Revision labels and day dividers
 
 - Group revision rows by local day. Mouse and keyboard selection skip
