@@ -4794,6 +4794,25 @@ void test_image_address() {
     EXPECT_EQ(items[0].src, "https://x.org/c/a_1200.jpg?x=1");
 }
 
+void test_data_addresses() {
+  using xanatoo::data_address;
+  using xanatoo::data_address_path;
+  EXPECT_EQ(data_address("examples/services/../welcome.md"),
+            "datadir:examples/welcome.md");
+  EXPECT_EQ(data_address("examples/.."), "datadir:");
+  EXPECT(data_address("../../welcome.md").empty());
+  EXPECT(data_address("/etc/passwd").empty());
+  EXPECT(data_address("C:/Windows").empty());
+  EXPECT(data_address("..\\welcome.md").empty());
+  EXPECT(data_address_path("datadir:../welcome.md").empty());
+  EXPECT(data_address_path("file:///etc/passwd").empty());
+
+  const auto loc = xanatoo::parse_locator(
+      "datadir:examples/services/gemini.md//source-raw#id:gemini");
+  EXPECT_EQ(loc.base, "datadir:examples/services/gemini.md");
+  EXPECT(loc.has_selectors());
+}
+
 void test_locator() {
   using xanatoo::format_locator;
   using xanatoo::Locator;
@@ -10250,6 +10269,7 @@ int main() {
   test_style_sheets_shipped();
   test_style_assignments();
   test_footnotes();
+  test_data_addresses();
   test_locator();
   test_gallery();
   test_gallery_linked_inline_thumb();

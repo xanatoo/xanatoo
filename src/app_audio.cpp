@@ -820,6 +820,13 @@ bool play_audio(App& app, const std::string& address, std::string_view mime,
       return false;
     }
   }
+  if (xanatoo::is_data_address(url)) {
+    url = xanatoo::data_address_path(url);
+    if (url.empty()) {
+      flash_status(app, "Bundled media unavailable: " + url_in);
+      return false;
+    }
+  }
   AudioPlayer& a = app.audio;
   // The file in the player already: only go to the position (no reload).
   if (split.start && a.url == url && have_media(a) && a.state != AudioState::Failed) {

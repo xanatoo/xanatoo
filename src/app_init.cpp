@@ -17,6 +17,7 @@
 #include "xanatoo/lemmy.hpp"
 #include "xanatoo/nostr.hpp"
 #include "xanatoo/parse.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/platform.hpp"
 #include "xanatoo/reddit.hpp"
 #include "xanatoo/revstore.hpp"
@@ -33,7 +34,7 @@ namespace xanatoo::app {
 static void add_startup_document(App& app, xanatoo::Document doc,
                                  std::string path,
                                  std::string content_path = {}) {
-  if (!path.empty()) {
+  if (!path.empty() && !xanatoo::is_data_address(path)) {
     const std::string source = is_in_app_remote_url(path)
         ? path : xanatoo::file_doc_key(path);
     if (const auto stored = xanatoo::find_imported_document(source)) {
@@ -212,7 +213,8 @@ bool app_init(App& app) {
         !xanatoo::parse_locator(xanatoo::split_media_address(p0).base).has_selectors()) {
       media_arg = p0;
       p0.clear();
-      if (!xanatoo::starts_with_ci(media_arg, "http://") &&
+      if (!xanatoo::is_data_address(media_arg) &&
+          !xanatoo::starts_with_ci(media_arg, "http://") &&
           !xanatoo::starts_with_ci(media_arg, "https://")) {
         std::error_code ec;
         fs::path dir = fs::absolute(media_arg, ec).parent_path();

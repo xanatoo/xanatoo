@@ -7,6 +7,7 @@
 
 #include "xanatoo/app.hpp"
 #include "xanatoo/file_url.hpp"
+#include "xanatoo/paths.hpp"
 #include "xanatoo/html_page.hpp"
 #include "xanatoo/native.hpp"
 #include "xanatoo/parse.hpp"
@@ -176,8 +177,10 @@ std::optional<std::string> raw_source_of(const DocBuffer& b) {
   // document's possibly edited semantic tree. For fetched pages, use the
   // saved response body instead of making a second network request.
   std::error_code ec;
-  if (!std::filesystem::is_regular_file(b.path, ec)) return std::nullopt;
-  std::ifstream in(b.path, std::ios::binary);
+  const std::string file = xanatoo::is_data_address(b.path)
+      ? xanatoo::data_address_path(b.path) : b.path;
+  if (!std::filesystem::is_regular_file(file, ec)) return std::nullopt;
+  std::ifstream in(file, std::ios::binary);
   if (!in) return std::nullopt;
   return std::string(std::istreambuf_iterator<char>(in),
                      std::istreambuf_iterator<char>());

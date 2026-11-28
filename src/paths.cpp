@@ -188,6 +188,25 @@ std::string data_file(std::string_view rel) {
   return !ec && fs::exists(p, ec) ? p.string() : std::string();
 }
 
+std::string data_address(std::string_view relative) {
+  // Use portable slash-separated names. Reject drive paths, alternate
+  // separators and embedded NULs before passing them to the filesystem.
+  if (relative.starts_with('/') || relative.find_first_of("\\:") != relative.npos ||
+      relative.find('\0') != relative.npos)
+    return {};
+  const fs::path normalized = fs::path(relative).lexically_normal();
+  if (!normalized.empty() && *normalized.begin() == "..") return {};
+  const std::string path = normalized.generic_string();
+  return std::string(kDataScheme) + (path == "." ? "" : path);
+}
+
+std::string data_address_path(std::string_view address) {
+  if (!is_data_address(address)) return {};
+  const std::string normalized = data_address(address.substr(kDataScheme.size()));
+  if (normalized.empty()) return {};
+  return data_file(std::string_view(normalized).substr(kDataScheme.size()));
+}
+
 std::string executable_dir() {
 #if defined(__linux__) && !defined(__ANDROID__)
   std::error_code ec;

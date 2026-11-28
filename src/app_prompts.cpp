@@ -354,7 +354,7 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       if (!pr.text.empty()) {
         std::string path = xanatoo::expand_user_path(pr.text);
         if (!fs::exists(path)) {
-          std::string found = find_data_file(app, path.c_str());
+          std::string found = find_data_address(app, path.c_str());
           if (!found.empty()) path = found;
         }
         open_browse(app, path, path);
@@ -383,8 +383,16 @@ bool commit_prompt(App& app, bool ctrl, bool shift) {
       }
       std::string path = xanatoo::expand_user_path(pr.text);
       if (!fs::exists(path)) {
-        std::string found = find_data_file(app, path.c_str());
+        std::string found = find_data_address(app, path.c_str());
         if (!found.empty()) path = found;
+      }
+      if (xanatoo::is_data_address(path) &&
+          !xanatoo::data_address_path(path).empty()) {
+        if (navigate_pane(app, app.focus, path)) {
+          minibuf_commit_path_hist(app);
+          close_prompt(app);
+        }
+        return true;
       }
       if (!fs::exists(path)) {
         flash_status(app, "Open: file not found");

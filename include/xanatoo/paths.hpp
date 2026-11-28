@@ -69,6 +69,14 @@ std::string data_dir();
 // <data dir>/<rel> when it exists, else empty.
 std::string data_file(std::string_view rel);
 
+inline constexpr std::string_view kDataScheme = "datadir:";
+inline bool is_data_address(std::string_view address) {
+  return address.starts_with(kDataScheme);
+}
+// Normalize a path within the installed-data mount, or return empty if invalid.
+std::string data_address(std::string_view relative);
+std::string data_address_path(std::string_view address);
+
 // Directory of the running executable; empty where unknown.
 std::string executable_dir();
 

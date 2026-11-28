@@ -3104,13 +3104,12 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       break;
     }
     case C::OpenFormatDoc: {
-      std::string path = find_data_file(app, "FORMAT.md");
-      if (path.empty()) path = find_data_file(app, "FORMAT.md");
+      std::string path = find_data_address(app, "FORMAT.md");
       open_browse(app, path, "FORMAT.md — format spec");
       break;
     }
     case C::OpenSemanticDoc: {
-      open_browse(app, find_data_file(app, "examples/semantic.xml"),
+      open_browse(app, find_data_address(app, "examples/semantic.xml"),
                   "semantic.xml — demo");
       break;
     }
@@ -3121,10 +3120,8 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
       std::string name = arg;
       if (name.empty()) break;
       // examples/<name> under the data dir (paths.hpp).
-      std::string path = find_data_file(app, name.c_str());
-      if (path.empty())
-        path = find_data_file(app, (std::string("examples/") + name).c_str());
-      if (path.empty() || !fs::exists(path)) {
+      std::string path = find_data_address(app, name.c_str());
+      if (path.empty()) {
         flash_status(app, "Example not found: " + name);
         std::cerr << "Example not found: " << name
                   << " (see --data-dir)\n";
@@ -3148,11 +3145,9 @@ void execute_command(App& app, xanatoo::UiCommand cmd, const std::string& arg) {
     }
     case C::LoadDiffDemo: {
       if (!stash_all_or_confirm(app)) break;
-      std::string p0 = find_data_file(app, "diff-v1.md");
-      std::string p1 = find_data_file(app, "diff-v2.md");
-      if (p0.empty()) p0 = find_data_file(app, "examples/diff-v1.md");
-      if (p1.empty()) p1 = find_data_file(app, "examples/diff-v2.md");
-      if (p0.empty() || p1.empty() || !fs::exists(p0) || !fs::exists(p1)) {
+      std::string p0 = find_data_address(app, "diff-v1.md");
+      std::string p1 = find_data_address(app, "diff-v2.md");
+      if (p0.empty() || p1.empty()) {
         flash_status(app,
                      "Diff demo files not found (diff-v1.md / diff-v2.md)");
         std::cerr << "Diff demo: examples/diff-v1.md and diff-v2.md required\n";

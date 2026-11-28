@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/audio.hpp"
+#include "xanatoo/paths.hpp"
 
 #include "xanatoo/util.hpp"
 
@@ -236,6 +237,7 @@ const char* audio_format_name(AudioFormat f) {
 }
 
 bool url_has_extension(std::string_view url, std::initializer_list<std::string_view> exts) {
+  if (is_data_address(url)) url.remove_prefix(kDataScheme.size());
   const size_t colon = url.find(':');
   const size_t slash = url.find('/');
   if (colon != std::string_view::npos &&

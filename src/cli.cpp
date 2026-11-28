@@ -35,7 +35,8 @@ const char* fallback_document() {
 }
 
 std::string find_default_document() {
-  return data_file("examples/welcome.md");
+  const std::string address = data_address("examples/welcome.md");
+  return data_address_path(address).empty() ? std::string() : address;
 }
 
 void print_usage(std::ostream& out, const char* argv0) {

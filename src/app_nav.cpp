@@ -512,6 +512,7 @@ void update_playing_links(App& app, int pi) {
       continue;
     std::string target = xanatoo::parse_locator(t.url).base;
     if (xanatoo::is_file_url(target)) target = xanatoo::file_url_path(target);
+    if (xanatoo::is_data_address(target)) target = xanatoo::data_address_path(target);
     if (target == url) pl.spans.push_back(k);
   }
 }
@@ -808,11 +809,19 @@ bool is_inapp_doc_href(App& app, const std::string& href) {
 
 std::string resolve_doc_href(App& app, const std::string& href,
                              const std::string& base_path) {
-  if (href.empty()) return {};
+  if (href.empty() || xanatoo::is_data_address(href)) return href;
   fs::path hp(href);
   if (hp.is_absolute()) return href;
   std::string base =
       base_path.empty() ? path_of(app, focused_pane(app)) : base_path;
+  if (xanatoo::is_data_address(base) && xanatoo::looks_like_local_path(href)) {
+    const auto page = xanatoo::parse_locator(base);
+    const std::string relative = page.base.substr(xanatoo::kDataScheme.size());
+    auto target = xanatoo::parse_locator(href);
+    const fs::path joined = fs::path(relative).parent_path() / target.base;
+    target.base = xanatoo::data_address(joined.generic_string());
+    return target.base.empty() ? std::string() : xanatoo::format_locator(target);
+  }
   if (!base.empty() && !is_smallnet_url(base)) {
     fs::path parent = fs::path(base).parent_path();
     if (!parent.empty()) {
@@ -823,7 +832,7 @@ std::string resolve_doc_href(App& app, const std::string& href,
     }
   }
   // Fall back to the installed data (examples/, …).
-  std::string found = find_data_file(app, href.c_str());
+  std::string found = find_data_address(app, href.c_str());
   if (!found.empty()) return found;
   return href;
 }
@@ -886,12 +895,14 @@ LinkTarget resolve_link(App& app, int pi, const std::string& href) {
     // files (extracted media) beside the derived Markdown it was read from.
     const DocBuffer& pb = buf(app, p.buf);
     std::string resolved = resolve_doc_href(app, loc.base, pb.path);
-    if (!pb.content_path.empty()) {
+    if (!xanatoo::is_data_address(resolved) && !resolved.empty() &&
+        !pb.content_path.empty()) {
       std::error_code ec;
       std::string derived = resolve_doc_href(app, loc.base, pb.content_path);
       if (!fs::exists(resolved, ec) && fs::exists(derived, ec))
         resolved = std::move(derived);
     }
+    if (resolved.empty()) return t;
     loc.base = std::move(resolved);
     t.kind = LinkKind::Doc;
     t.url = xanatoo::format_locator(loc);
@@ -1165,7 +1176,7 @@ BufferId open_link_in_tab(App& app, int pi, const std::string& href,
 
 std::string home_page(App& app) {
   // Fixed for now; a user-chosen home page will be looked up here first.
-  std::string p = find_data_file(app, "welcome.md");
+  std::string p = find_data_address(app, "welcome.md");
   if (p.empty()) p = xanatoo::find_default_document();
   return p;
 }
@@ -1176,6 +1187,7 @@ std::string complete_location(App& app, const std::string& text) {
   xanatoo::trim_ascii(trimmed);
   std::string t(trimmed);
   if (t.starts_with("~")) t = xanatoo::expand_user_path(t);
+  if (xanatoo::is_data_address(t)) return t;
   std::error_code ec;
   const fs::path cwd = fs::current_path(ec);
   const std::string web = xanatoo::complete_typed_address(t, cwd.string());
@@ -1189,7 +1201,7 @@ std::string complete_location(App& app, const std::string& text) {
   }
   // A bare name still opens the file or bundled example it names
   // ("notes.md", "welcome.md"); otherwise it is a web host.
-  if (fs::exists(t, ec) || !find_data_file(app, t.c_str()).empty()) return t;
+  if (fs::exists(t, ec) || !find_data_address(app, t.c_str()).empty()) return t;
   return web;
 }
 
@@ -1202,6 +1214,13 @@ std::string page_up_url(App& app) {
     return xanatoo::format_locator(loc);
   std::string page = path_of(app, fp);
   if (page.empty()) return {};
+  if (xanatoo::is_data_address(page)) {
+    const fs::path relative = page.substr(xanatoo::kDataScheme.size());
+    if (relative.empty()) return {};
+    const fs::path item = relative.has_filename() ? relative : relative.parent_path();
+    const fs::path parent = item.parent_path();
+    return xanatoo::data_address(parent.empty() ? "" : parent.generic_string() + "/");
+  }
   // Local paths go up through absolute directories.
   if (!is_in_app_remote_url(page) && page.find("://") == std::string::npos &&
       page.find(':') == std::string::npos) {
@@ -1382,7 +1401,8 @@ static bool open_page(App& app, int pi, std::string target,
   // immutable original is always available under db-original:doc:<id>.
   const bool remote_source = is_in_app_remote_url(target);
   std::error_code source_ec;
-  if (remote_source || fs::is_regular_file(target, source_ec)) {
+  if (remote_source || (!xanatoo::is_data_address(target) &&
+                        fs::is_regular_file(target, source_ec))) {
     const std::string source = remote_source ? target : file_doc_key(target);
     if (const auto stored = find_imported_document(source)) {
       const std::string local_ref = "db:" + stored->key;
@@ -1438,8 +1458,7 @@ static bool open_page(App& app, int pi, std::string target,
     flash_status(app, why);
     if (!xanatoo::is_gemini_url(target)) return false;
     // No TLS client in this build — still offer the local gemtext sample.
-    std::string sample = find_data_file(app, "gemini-sample.gmi");
-    if (sample.empty()) sample = find_data_file(app, "examples/gemini-sample.gmi");
+    std::string sample = find_data_address(app, "gemini-sample.gmi");
     if (sample.empty()) return false;
     target = sample;
   }
@@ -1447,12 +1466,28 @@ static bool open_page(App& app, int pi, std::string target,
   // Local path (or offline fallback for gemini:// when TLS is disabled)
   std::string path = target;
   std::error_code ec;
-  bool exists = fs::exists(path, ec);
-  if (!exists && !ec) {
-    std::string found = find_data_file(app, path.c_str());
-    if (!found.empty()) {
-      path = std::move(found);
-      exists = fs::exists(path, ec);
+  bool exists = !xanatoo::is_data_address(path) && fs::exists(path, ec);
+  if (!exists && !ec && !xanatoo::is_data_address(path)) {
+    std::string found = find_data_address(app, path.c_str());
+    if (!found.empty()) path = std::move(found);
+  }
+  if (xanatoo::is_data_address(path)) {
+    const std::string file = xanatoo::data_address_path(path);
+    if (!file.empty()) {
+      path = xanatoo::data_address(path.substr(xanatoo::kDataScheme.size()));
+      if (fs::is_directory(file, ec) && path != xanatoo::kDataScheme &&
+          !path.ends_with('/'))
+        path += '/';
+      app.gemini_current_url.clear();
+      if (same_page(path, path_of(app, p))) {
+        reset_pane_locator(p);
+      } else {
+        if (!stash_or_confirm(app, p.buf)) return false;
+        show_doc_in_pane(app, pi, load_doc(app, path), path);
+      }
+      if (record_history) push_nav_history(app, pi, pane_address(app, p));
+      flash_status(app, "Opened " + path);
+      return true;
     }
   }
   if (!exists) {

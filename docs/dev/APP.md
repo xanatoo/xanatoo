@@ -157,6 +157,14 @@ An address is `base//selector#selector` (`locator.hpp`, `docs/PASSAGES.md`):
 pipes cut the view to a passage, `#` marks one in the whole page. Only the base
 reaches buffers, caches and fetches. Use `pane_address` for what a view shows,
 never `path_of`, where the address is shown or stored.
+
+Bundled documents use read-only `datadir:examples/welcome.md`-style
+addresses backed by the installed data directory (`--data-dir` can override
+it). Service directories, the default home page, and Help examples use this
+mount. Relative document links and directory listings stay within the mount.
+`data_address_path` resolves an address for document I/O, and
+`DocBuffer::content_path` supplies the backing path for relative assets.
+Explicit filesystem paths still open through the normal file navigator.
 Back / Forward follow the tab (`DocBuffer::tab_nav`) or floating document
 window (`Pane::nav`). Use `view_nav` to get the trail for a view;
 `select_view_tab` restores its current entry when switching tabs.

@@ -57,7 +57,9 @@ namespace fs = std::filesystem;
 namespace xanatoo::app {
 
 std::string resolve_open_path(App& app, std::string path) {
-  if (path.empty() || !xanatoo::is_pandoc_path(path)) return path;
+  if (path.empty() || xanatoo::is_data_address(path) ||
+      !xanatoo::is_pandoc_path(path))
+    return path;
   auto imp = xanatoo::import_via_pandoc(path);
   if (!imp.ok) {
     std::cerr << "Import failed: " << imp.error << "\n";
@@ -66,10 +68,9 @@ std::string resolve_open_path(App& app, std::string path) {
   return imp.markdown_path;
 }
 
-// Read-only Markdown index of directory `dir`: parent link, then
-// sub-directories and files (dot files hidden), each linked by absolute path
-// so the links resolve whatever the buffer path looks like.
-static std::string directory_listing(const fs::path& dir) {
+// Read-only Markdown index with a parent link, directories and visible files.
+static std::string directory_listing(const fs::path& dir,
+                                     const std::string& address) {
   std::vector<std::pair<std::string, bool>> entries;  // name, is directory
   std::error_code ec;
   for (auto it = fs::directory_iterator(dir, ec);
@@ -83,14 +84,26 @@ static std::string directory_listing(const fs::path& dir) {
     if (a.second != b.second) return a.second;
     return xanatoo::ascii_lower(a.first) < xanatoo::ascii_lower(b.first);
   });
-  std::string md = "# " + dir.string() + "\n\n";
+  std::string md = "# " + address + "\n\n";
   if (ec) md += "Cannot read directory: " + ec.message() + "\n\n";
-  const fs::path parent = dir.parent_path();
-  if (!parent.empty() && parent != dir)
-    md += "- [../](" + parent.string() + "/)\n";
+  const bool bundled = xanatoo::is_data_address(address);
+  std::string prefix = address;
+  if (bundled) {
+    if (prefix != xanatoo::kDataScheme) {
+      if (!prefix.ends_with('/')) prefix += '/';
+      const std::string parent = xanatoo::data_address(
+          prefix.substr(xanatoo::kDataScheme.size()) + "..");
+      md += "- [../](" + parent + ")\n";
+    }
+  } else {
+    const fs::path parent = dir.parent_path();
+    if (!parent.empty() && parent != dir)
+      md += "- [../](" + parent.string() + "/)\n";
+  }
   for (const auto& [name, is_dir] : entries) {
     const std::string label = is_dir ? name + "/" : name;
-    const std::string target = (dir / name).string() + (is_dir ? "/" : "");
+    const std::string target = bundled ? prefix + label
+        : (dir / name).string() + (is_dir ? "/" : "");
     // The link syntax has no escapes: such names are listed unlinked.
     if (target.find_first_of("()[]") != std::string::npos)
       md += "- `" + label + "`\n";
@@ -103,7 +116,8 @@ static std::string directory_listing(const fs::path& dir) {
 
 std::string path_title(const std::string& path) {
   try {
-    fs::path p(path);
+    fs::path p(xanatoo::is_data_address(path)
+        ? path.substr(xanatoo::kDataScheme.size()) : path);
     if (p.has_filename()) return p.filename().string();
     p = p.parent_path();
     if (p.has_filename()) return p.filename().string() + "/";
@@ -119,6 +133,12 @@ xanatoo::Document load_doc(App& app, std::string path) {
   if (is_stored_revision_ref(path)) {
     if (auto doc = load_stored_revision_ref(path)) return std::move(*doc);
     return xanatoo::parse_document("# Revision unavailable\n", {});
+  }
+  const std::string address = path;
+  if (xanatoo::is_data_address(path)) {
+    path = xanatoo::data_address_path(path);
+    if (path.empty())
+      return xanatoo::parse_document("# Bundled page unavailable\n", {});
   }
   if (opens_as_image(path)) return xanatoo::image_url_document(path);
   if (xanatoo::is_pandoc_path(path)) {
@@ -146,7 +166,8 @@ xanatoo::Document load_doc(App& app, std::string path) {
     fs::path dir = fs::weakly_canonical(path, ec);
     if (ec) dir = fs::absolute(path);
     std::cout << "Listed: " << dir.string() << "\n";
-    return xanatoo::parse_document(directory_listing(dir), {});
+    return xanatoo::parse_document(directory_listing(
+        dir, xanatoo::is_data_address(address) ? address : dir.string()), {});
   }
   std::ifstream in(path);
   if (!in) {
@@ -233,6 +254,8 @@ bool may_be_image(std::string_view url) {
 }
 
 bool opens_as_image(std::string_view url) {
+  if (xanatoo::is_data_address(url))
+    return xanatoo::is_image_url(url.substr(xanatoo::kDataScheme.size()));
   if (!xanatoo::is_image_address(url)) return false;
   const bool http = xanatoo::starts_with_ci(url, "http://") ||
                     xanatoo::starts_with_ci(url, "https://");
@@ -247,8 +270,8 @@ bool opens_as_image(std::string_view url) {
 
 bool is_foreign_path(std::string_view path) {
   if (path.empty()) return false;
-  if (is_in_app_remote_url(path) || xanatoo::starts_with(path, "http://") ||
-      xanatoo::starts_with(path, "https://"))
+  if (xanatoo::is_data_address(path) || is_in_app_remote_url(path) ||
+      xanatoo::starts_with(path, "http://") || xanatoo::starts_with(path, "https://"))
     return true;
   if (xanatoo::path_uses_html(path) || xanatoo::is_pandoc_path(path) ||
       xanatoo::is_fixed_layout_path(path))
@@ -594,6 +617,10 @@ xanatoo::Document& doc_of(App& app, Pane& p) {
 std::string& path_of(App& app, Pane& p) { return buf(app, p.buf).path; }
 
 std::string derived_content_path(const std::string& path) {
+  if (xanatoo::is_data_address(path)) {
+    const std::string file = xanatoo::data_address_path(path);
+    return xanatoo::is_pandoc_path(file) ? xanatoo::import_markdown_path(file) : file;
+  }
   if (!xanatoo::looks_like_local_path(path) || !xanatoo::is_pandoc_path(path))
     return {};
   return xanatoo::import_markdown_path(path);
@@ -713,14 +740,16 @@ void edit(App& app) {
 }
 
 std::string find_help_path(App& app) {
-  return xanatoo::data_file("examples/help.md");
+  return find_data_address(app, "examples/help.md");
 }
 
-std::string find_data_file(App& app, const char* name) {
+std::string find_data_address(App& app, const char* name) {
   // Installed data only (gamepkgstd DIR-3), never the working directory:
   // <data dir>/<name>, then <data dir>/examples/<name>.
   for (const std::string& rel : {std::string(name), "examples/" + std::string(name)})
-    if (std::string p = xanatoo::data_file(rel); !p.empty()) return p;
+    if (std::string address = xanatoo::data_address(rel);
+        !xanatoo::data_address_path(address).empty())
+      return address;
   return {};
 }
 
@@ -969,7 +998,9 @@ void pop_in_soft(App& app, size_t si) {
 }
 
 void open_browse(App& app, const std::string& path, const std::string& title) {
-  if (path.empty() || !fs::exists(path)) {
+  const std::string file = xanatoo::is_data_address(path)
+      ? xanatoo::data_address_path(path) : path;
+  if (file.empty() || !fs::exists(file)) {
     std::cerr << "Cannot open in window: " << path << "\n";
     return;
   }

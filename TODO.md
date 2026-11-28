@@ -2,6 +2,14 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Bundled document addresses
+
+- Open built-in pages through the read-only `datadir:` mount. Keep
+  relative document links and navigation history on stable addresses.
+- Resolve document and media reads through the installed data directory.
+- Passed all 33 CTest targets in Nix. Xvfb verified a custom data
+  directory, relative Gemini and home links, Back, and Up.
+
 ## Status (2026-11-28) — Snapshot lock in the URL bar
 
 - Move the editable/snapshot switch into the address field and show an
