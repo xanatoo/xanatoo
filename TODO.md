@@ -2,6 +2,11 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Man page lint
+
+- Start the second sentence in the Matrix credentials entry on its own
+  source line. The man page passes mandoc lint with warnings enabled.
+
 ## Status (2026-11-28) — Bundled document addresses
 
 - Open built-in pages through the read-only `datadir:` mount. Keep
