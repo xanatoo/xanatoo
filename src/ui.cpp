@@ -2483,7 +2483,9 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
   // sized to their contents with only a small gap between them.
   const float field_row_h = 32.f * scale_ + 6.f;
   const float field_row_y = 4.f + tool_button_h + 2.f * scale_;
-  const int url_extras = (state.alternate_url.empty() ? 0 : 1) +
+  const bool revision_switch = state.autosaved_document || state.revision_snapshot;
+  const int url_extras = (revision_switch ? 1 : 0) +
+                         (state.alternate_url.empty() ? 0 : 1) +
                          (state.page_feeds.empty() ? 0 : 1) +
                          (state.page_languages.empty() ? 0 : 1) +
                          (state.has_chrome ? 1 : 0) +
@@ -2925,6 +2927,12 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
         if (pressed) cmd = action;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("%s", tip);
       };
+      if (revision_switch)
+        extra("url_revision_snapshot", state.revision_snapshot ? "lock" : "lock-open",
+              state.revision_snapshot ? "R" : "E",
+              state.revision_snapshot ? "Open editable document"
+                                      : "View current revision (read-only)",
+              UiCommand::ToggleRevisionSnapshot, state.revision_snapshot);
       if (!state.alternate_url.empty())
         // Pressed while showing the native form; a click flips to the other.
         extra("url_native", "native", "W",
@@ -3256,12 +3264,6 @@ void Ui::toolbars(const UiState& state, UiFrameResult& result, UiCommand& cmd) {
                                            : UiCommand::AddBookmark,
                   cmd, state.has_path || !state.doc_label.empty());
     }
-    if (state.autosaved_document || state.revision_snapshot)
-      tool_button("tb_revision_snapshot",
-                  state.revision_snapshot ? "lock-open" : "revisions",
-                  state.revision_snapshot ? "Open editable document"
-                                          : "View current revision (read-only)",
-                  UiCommand::ToggleRevisionSnapshot, cmd);
     // The same tools whatever the page: editing has its strip on the page.
     tool_button("tb_find", "find", "Find (Ctrl+F)", UiCommand::Find, cmd);
     tool_button("tb_split", state.split && !state.trail && !state.diff
