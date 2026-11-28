@@ -69,9 +69,14 @@ Click any node to show that version immediately in all views of the same
 document. With the panel focused, Up and Down step through rows. Left
 goes to the parent and Right goes to the newest direct child. Home and End
 jump to the newest and oldest rows. Escape returns focus to the document.
-Selection persists across reopening. Editing an older node adds
-a child to that node, so you can still return to the previous branch.
-A stale writer or selection cannot overwrite another editor's selection.
+Selection persists across reopening. Editing an older node adds a child
+to that node, so you can still return to the previous branch. A stale
+writer or selection cannot overwrite another editor's selection.
+
+Day dividers use local dates and follow the graph's existing revision order.
+Visible rows gain a label by comparing each snapshot with its parent.
+The panel compares at most one uncached row per frame, displays **Changed**
+for snapshots over 64 KiB, and keeps the labels in memory for the session.
 
 File → **Local documents** or `documents:` lists these documents. Each opens
 at its stable `db:doc:<64 hex>` address. The tab shows the selected revision's

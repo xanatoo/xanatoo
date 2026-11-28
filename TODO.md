@@ -2,6 +2,15 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Revision labels and day dividers
+
+- Group revision rows by local day. Mouse and keyboard selection skip
+  dividers while branch lines continue through them.
+- Compare visible snapshots with their parents one row per frame, cache
+  the labels for the session, and skip comparisons over 64 KiB.
+- Passed 15,207 unit checks and all 33 CTest targets in Nix. Xvfb verified
+  labels, the large-snapshot fallback, date dividers and branch navigation.
+
 ## Status (2026-11-28) — Revision panel keyboard navigation
 
 - Keep focus on the revision tree during selection. Use arrows to move

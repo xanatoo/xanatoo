@@ -513,14 +513,16 @@ std::optional<StoredDocument> publish_stored_document(
 }
 
 std::optional<std::string> load_stored_document_revision(
-    std::string_view key, std::string_view revision) {
-  if (!native_document_key(key) || revision.empty()) return std::nullopt;
-  const auto record = load_object_revision(revision);
-  if (!record || record->key != key ||
-      (record->kind != "working" && record->kind != "published" &&
-       record->kind != "original"))
-    return std::nullopt;
-  return record->data;
+    std::string_view key, std::string_view revision, int64_t max_bytes) {
+  sqlite3* d = db();
+  if (!d || !native_document_key(key) || revision.empty()) return std::nullopt;
+  Stmt body(d, "SELECT o.data FROM revisions r JOIN objects o ON o.id = r.content "
+               "WHERE r.id = ? AND r.doc_key = ? "
+               "AND r.kind IN ('working', 'published', 'original') "
+               "AND (?3 < 0 OR length(o.data) <= ?3);");
+  body.bind(1, revision).bind(2, key).bind(3, max_bytes);
+  if (!body.row()) return std::nullopt;
+  return body.blob(0);
 }
 
 std::vector<DocumentRevision> stored_document_history(std::string_view key) {
@@ -603,7 +605,7 @@ std::optional<StoredDocument> publish_stored_document(
   return std::nullopt;
 }
 std::optional<std::string> load_stored_document_revision(
-    std::string_view, std::string_view) {
+    std::string_view, std::string_view, int64_t) {
   return std::nullopt;
 }
 std::vector<DocumentRevision> stored_document_history(std::string_view) {

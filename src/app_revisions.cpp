@@ -2,12 +2,14 @@
 // Copyright (C) 2026 Ingo Ruhnke <grumbel@gmail.com>
 
 #include "xanatoo/app.hpp"
+#include "xanatoo/parse.hpp"
 #include "xanatoo/revstore.hpp"
 #include "xanatoo/theme.hpp"
 
 #include <algorithm>
 #include <ctime>
 #include <set>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace xanatoo::app {
@@ -17,6 +19,52 @@ int row_height(const App& app) {
   return std::max(20, app.ui_font.line_height() + 8);
 }
 
+std::tm revision_local_time(int64_t time) {
+  const std::time_t seconds = static_cast<std::time_t>(time);
+  std::tm result{};
+#if defined(_WIN32)
+  localtime_s(&result, &seconds);
+#else
+  localtime_r(&seconds, &result);
+#endif
+  return result;
+}
+
+bool is_subsequence(std::string_view shorter, std::string_view longer) {
+  size_t matched = 0;
+  for (char byte : longer) {
+    if (matched == shorter.size()) break;
+    if (byte == shorter[matched]) ++matched;
+  }
+  return matched == shorter.size();
+}
+
+std::string_view summarize_revision(std::string_view key,
+                                    const DocumentRevision& revision) {
+  constexpr int64_t max_snapshot_bytes = 64 * 1024;
+  const auto before = load_stored_document_revision(
+      key, revision.parent, max_snapshot_bytes);
+  if (!before) return "Changed";
+  const auto after = load_stored_document_revision(
+      key, revision.id, max_snapshot_bytes);
+  if (!after) return "Changed";
+  if (*before == *after) return "Same content";
+
+  std::string old_text, new_text;
+  try {
+    old_text = serialize_plain_text(parse_stored_document(*before));
+    new_text = serialize_plain_text(parse_stored_document(*after));
+  } catch (const std::invalid_argument&) {
+    return "Changed";
+  }
+  if (old_text == new_text) return "Non-text change";
+  if (old_text.size() < new_text.size() && is_subsequence(old_text, new_text))
+    return "Text inserted";
+  if (new_text.size() < old_text.size() && is_subsequence(new_text, old_text))
+    return "Text deleted";
+  return "Text edited";
+}
+
 void layout_revision_graph(App& app) {
   const auto& history = app.revision_history;
   app.revision_lanes.resize(history.size());
@@ -24,8 +72,22 @@ void layout_revision_graph(App& app) {
   app.revision_lane_count = 0;
   std::unordered_map<std::string_view, int> rows, active;
   std::set<int> free_lanes;
-  for (int i = 0; i < static_cast<int>(history.size()); ++i)
+  app.revision_rows.clear();
+  app.revision_slots.resize(history.size());
+  std::string last_day;
+  for (int i = 0; i < static_cast<int>(history.size()); ++i) {
     rows.emplace(history[i].id, i);
+    const auto time = revision_local_time(history[i].time);
+    char day[32]{}, clock[16]{};
+    std::strftime(day, sizeof day, "%Y-%m-%d", &time);
+    std::strftime(clock, sizeof clock, "%H:%M:%S", &time);
+    if (last_day != day) {
+      app.revision_rows.emplace_back(-1, day);
+      last_day = day;
+    }
+    app.revision_slots[i] = static_cast<int>(app.revision_rows.size());
+    app.revision_rows.emplace_back(i, clock);
+  }
 
   // Reserve each lane until its pending parent is reached. Siblings merge
   // into the lane already reserved for their shared parent.
@@ -71,25 +133,11 @@ const DocBuffer* refresh_revision_panel(App& app) {
   return head ? b : nullptr;
 }
 
-std::string revision_label(const DocumentRevision& revision) {
-  const std::time_t seconds = static_cast<std::time_t>(revision.time);
-  std::tm tm{};
-#if defined(_WIN32)
-  localtime_s(&tm, &seconds);
-#else
-  localtime_r(&seconds, &tm);
-#endif
-  char date[32] = {};
-  std::strftime(date, sizeof date, "%Y-%m-%d %H:%M:%S", &tm);
-  return std::string(revision.original ? "Original  " : "") + date + "  " +
-         revision.id.substr(7, 8);
-}
-
 }  // namespace
 
 float revision_panel_max_scroll(App& app, int client_h) {
   return std::max(0.f, static_cast<float>(
-      app.revision_history.size() * row_height(app)) - client_h);
+      app.revision_rows.size() * row_height(app)) - client_h);
 }
 
 void draw_revision_panel(App& app) {
@@ -120,15 +168,26 @@ void draw_revision_panel(App& app) {
 
   const auto& history = app.revision_history;
   const int scroll = static_cast<int>(w.scroll);
-  const int first = scroll / step;
-  const int last = std::min(static_cast<int>(history.size()),
-                            (scroll + ch) / step + 1);
+  const auto& slots = app.revision_slots;
+  const auto& rows = app.revision_rows;
+  const int first_slot = scroll / step;
+  const int last_slot = std::min(static_cast<int>(rows.size()),
+                                 (scroll + ch + step - 1) / step);
+  const int first = static_cast<int>(
+      std::lower_bound(slots.begin(), slots.end(), first_slot) - slots.begin());
+  const int last = static_cast<int>(
+      std::lower_bound(slots.begin(), slots.end(), last_slot) - slots.begin());
   const float spacing = std::min(14.f, static_cast<float>(cw) /
       (2.f * std::max(1, app.revision_lane_count)));
   auto x_of = [&](int row) {
     return cx + 9 + static_cast<int>(spacing * app.revision_lanes[row]);
   };
-  auto y_of = [&](int row) { return cy + row * step - scroll; };
+  auto slot_y = [&](int slot) { return cy + slot * step - scroll; };
+  auto y_of = [&](int row) { return slot_y(slots[row]); };
+
+  for (int slot = first_slot; slot < last_slot; ++slot)
+    if (rows[slot].revision < 0)
+      theme::fill(app.sdl, {cx + 1, slot_y(slot), cw - 12, step}, pal.face);
 
   for (int row = first; row < last; ++row)
     if (history[row].id == b->stored_working)
@@ -147,14 +206,35 @@ void draw_revision_panel(App& app) {
     sdl::draw_line(app.sdl, parent_x, std::max(cy, y + step / 2), parent_x,
                    std::min(cy + ch, y_of(parent) + step / 2));
   }
-  for (int row = first; row < last; ++row) {
+  const int label_x = cx + 16 +
+      static_cast<int>(spacing * app.revision_lane_count);
+  bool classify = true;
+  for (int slot = first_slot; slot < last_slot; ++slot) {
+    const auto& [row, stamp] = rows[slot];
+    if (row < 0) {
+      draw_label(label_x, slot_y(slot), stamp, pal.text_dim);
+      continue;
+    }
     const bool current = history[row].id == b->stored_working;
     const int radius = current ? 4 : 3;
     theme::fill(app.sdl, {x_of(row) - radius, y_of(row) + step / 2 - radius,
                           2 * radius + 1, 2 * radius + 1},
                 current ? pal.accent : pal.text_dim);
-    draw_label(cx + 16 + static_cast<int>(spacing * app.revision_lane_count),
-               y_of(row), revision_label(history[row]), pal.text);
+    const auto& revision = history[row];
+    std::string label = stamp + "  ";
+    if (revision.original) label += "Original";
+    else if (revision.parent.empty()) label += "Created";
+    else {
+      auto cached = app.revision_labels.find(revision.id);
+      if (cached == app.revision_labels.end() && classify) {
+        classify = false; // At most one bounded comparison per frame.
+        cached = app.revision_labels.emplace(
+            revision.id, summarize_revision(b->doc_key, revision)).first;
+      }
+      if (cached != app.revision_labels.end()) label += cached->second;
+    }
+    label += "  " + revision.id.substr(7, 8);
+    draw_label(label_x, y_of(row), label, pal.text);
   }
   xanatoo::sdl::set_clip_rect(app.sdl, nullptr);
   draw_client_scrollbar(app, w, revision_panel_max_scroll(app, ch));
@@ -165,9 +245,11 @@ void click_revision_panel(App& app, int mx, int my) {
   if (!b || b->doc_key != app.revision_document_key) return;
   auto [cx, cy, cw, ch] = float_client_rect(app, app.revision_win);
   if (mx < cx || mx >= cx + cw - 12 || my < cy || my >= cy + ch) return;
-  const int row = (my - cy + static_cast<int>(app.revision_win.scroll)) /
-                  row_height(app);
-  if (row >= static_cast<int>(app.revision_history.size())) return;
+  const int slot = (my - cy + static_cast<int>(app.revision_win.scroll)) /
+                   row_height(app);
+  if (slot >= static_cast<int>(app.revision_rows.size())) return;
+  const int row = app.revision_rows[slot].revision;
+  if (row < 0) return;
   const std::string revision = app.revision_history[row].id;
   if (b->dirty || revision != b->stored_working)
     select_buffer_revision(app, b->id, revision);
@@ -220,7 +302,8 @@ bool revision_panel_key(App& app, SDL_Keycode key) {
   if (selected == history.end()) return true;
   FloatWindow& w = app.revision_win;
   const int client_h = std::get<3>(float_client_rect(app, w));
-  const float top = static_cast<float>((selected - history.begin()) * row_height(app));
+  const float top = static_cast<float>(
+      app.revision_slots[selected - history.begin()] * row_height(app));
   const float bottom = top + row_height(app);
   if (top < w.scroll) w.scroll = top;
   else if (bottom > w.scroll + client_h) w.scroll = bottom - client_h;

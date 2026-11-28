@@ -141,9 +141,10 @@ std::optional<StoredDocument> publish_stored_document(
     std::string_view expected_published);
 
 // For opening a head or inspecting a historical working/published snapshot.
-// Always verifies that the revision belongs to this document identity.
+// Always verifies document identity. A nonnegative max_bytes limits the
+// snapshot size before copying the body from SQLite.
 std::optional<std::string> load_stored_document_revision(
-    std::string_view key, std::string_view revision);
+    std::string_view key, std::string_view revision, int64_t max_bytes = -1);
 
 // Working revisions and the import root, newest inserts first. Metadata
 // only: snapshot bodies are loaded individually when selected.

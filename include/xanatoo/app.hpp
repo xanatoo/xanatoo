@@ -1248,6 +1248,11 @@ struct PendingScroll {
   std::string base;
 };
 
+struct RevisionPanelRow {
+  int revision = -1; // Day dividers have no revision.
+  std::string label;
+};
+
 struct App {
   App(SDL_Window* w, SDL_Renderer* r)
       : window(w),
@@ -1451,7 +1456,11 @@ struct App {
   NostrPost nostr_reply;  // a Reply panel answer to a Nostr note
   std::string revision_document_key, revision_working;
   std::vector<xanatoo::DocumentRevision> revision_history;
-  std::vector<int> revision_lanes, revision_parents;
+  // Visual rows include day dividers. Revision indices still drive edges
+  // and keyboard navigation, and map back to visual rows through slots.
+  std::vector<RevisionPanelRow> revision_rows;
+  std::vector<int> revision_slots, revision_lanes, revision_parents;
+  std::unordered_map<std::string, std::string_view> revision_labels;
   int revision_lane_count = 0;
   std::string annotation_history_cached_layer;
   std::string annotation_history_cached_head;

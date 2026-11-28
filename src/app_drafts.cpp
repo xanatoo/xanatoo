@@ -301,6 +301,11 @@ bool select_buffer_revision(App& app, BufferId id, const std::string& revision) 
     flash_status(app, "Document changed elsewhere. Reload to see its current revision.");
     return false;
   }
+  // Selection alone leaves the graph intact. Autosave clears the cache
+  // marker if stashing the previous selection added a child.
+  if (key == app.revision_document_key &&
+      app.revision_working == b.stored_working)
+    app.revision_working = head->working;
   const std::string base = content_id(text);
   clear_interaction_hover(app);
   for (DocBuffer& copy : app.buffers) {

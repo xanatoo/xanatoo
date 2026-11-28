@@ -470,6 +470,9 @@ void test_stored_documents() {
     EXPECT(!first->working.empty());
     EXPECT_EQ(load_stored_document_revision(key, first->working),
               std::optional<std::string>("(document one)"));
+    EXPECT(!load_stored_document_revision(key, first->working, 13));
+    EXPECT_EQ(load_stored_document_revision(key, first->working, 14),
+              std::optional<std::string>("(document one)"));
     EXPECT(!save_stored_document(key, "overwrite", "", "wrong head"));
     EXPECT(!load_stored_document_revision(other, first->working));
     EXPECT(stored_document_history(other).empty());
