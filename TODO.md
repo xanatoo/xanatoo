@@ -2,6 +2,13 @@
 
 > **Rename (2026-10-10):** project moved from `glyphtoo` to **xanatoo** (`https://github.com/xanatoo/xanatoo.git`). Namespace, includes, binary, env vars (`XANATOO_FONT`), and docs updated. Historical bundle names below still use the `glyphtoo-NNN` prefix from before the rename.
 
+## Status (2026-11-28) — Scroll position when switching revisions
+
+- Keep the visible text block in place across revision switches. Fall
+  back to the previous scroll offset when the block has changed.
+- Passed all 33 CTest targets in Nix. Xvfb verified text added above the
+  viewport, replacement of the visible block, and a much shorter revision.
+
 ## Status (2026-11-28) — Document size in revision rows
 
 - Show the serialized snapshot size on the right of each revision.

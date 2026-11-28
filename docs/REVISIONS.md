@@ -69,7 +69,9 @@ Click any node to show that version immediately in all views of the same
 document. With the panel focused, Up and Down step through rows. Left
 goes to the parent and Right goes to the newest direct child. Home and End
 jump to the newest and oldest rows. Escape returns focus to the document.
-Selection persists across reopening. Editing an older node adds a child
+When switching revisions, each view keeps the visible text block in place
+when it still exists. Otherwise it keeps the previous scroll offset within
+the new document’s bounds. Selection persists across reopening. Editing an older node adds a child
 to that node, so you can still return to the previous branch. A stale
 writer or selection cannot overwrite another editor's selection.
 

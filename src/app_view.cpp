@@ -735,6 +735,12 @@ void layout_panes(App& app) {
   for (int pi : live_views(app)) {
     Pane& p = app.panes[pi];
     layout_one(p);
+    if (p.layout.virtualized && p.scroll_y > pane_max_scroll(app, p)) {
+      // If the new document is shorter, materialise the fallback position
+      // too. The first pass may have laid out a band past the new end.
+      p.scroll_y = pane_max_scroll(app, p);
+      layout_one(p);
+    }
     // A far move leaves the materialised band: lay out there and look again.
     for (int pass = 0; pass < kAnchorPasses && restore_view_anchor(app, p);
          ++pass)

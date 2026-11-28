@@ -308,9 +308,46 @@ bool select_buffer_revision(App& app, BufferId id, const std::string& revision) 
     app.revision_working = head->working;
   const std::string base = content_id(text);
   clear_interaction_hover(app);
+  keep_views(app);
   for (DocBuffer& copy : app.buffers) {
     if (copy.doc_key != key || !is_stored_document_ref(copy.path)) continue;
+    for (int pi : live_views(app)) {
+      Pane& p = app.panes[pi];
+      if (p.buf != copy.id) continue;
+      p.height_cache.clear();
+      if (!p.view_anchor) continue;
+      const NodeId node = p.view_anchor->pos.node;
+      const Node& previous = copy.doc.get(node);
+      // Stored XML can renumber nodes. Find the same text block, preferring
+      // the nearest occurrence by node order if the text appears twice.
+      const std::string anchor_text = p.source_buf == p.buf || previous.id != node
+          ? std::string{} : plain_text(copy.doc, node);
+      NodeId match = INVALID_NODE;
+      if (!anchor_text.empty() && is_text_node_kind(previous.kind)) {
+        if (doc.get(node).id == node && doc.get(node).kind == previous.kind &&
+            plain_text(doc, node) == anchor_text) {
+          match = node;
+        } else {
+          auto distance = [node](NodeId other) {
+            return node > other ? node - other : other - node;
+          };
+          for (const Node& candidate : doc.nodes) {
+            if (candidate.id == INVALID_NODE || candidate.kind != previous.kind ||
+                (match != INVALID_NODE && distance(candidate.id) >= distance(match)))
+              continue;
+            if (plain_text(doc, candidate.id) == anchor_text) match = candidate.id;
+          }
+        }
+      }
+      if (match == INVALID_NODE) {
+        p.view_anchor.reset();
+      } else {
+        p.view_anchor->pos.node = match;
+        ensure_valid_caret(doc, p.view_anchor->pos);
+      }
+    }
     copy.doc = doc;
+    copy.folds.clear();
     copy.stored_working = head->working;
     copy.stored_title = head->title;
     copy.base_id = base;
@@ -322,10 +359,8 @@ bool select_buffer_revision(App& app, BufferId id, const std::string& revision) 
       Pane& p = app.panes[pi];
       if (p.buf != copy.id) continue;
       p.sel = caret;
-      p.height_cache.clear();
-      p.view_anchor.reset();
     }
-    refresh_views_of_buf(app, copy.id, -1, true);
+    refresh_views_of_buf(app, copy.id, -1, false);
   }
   app.needs_layout = true;
   update_title(app);
